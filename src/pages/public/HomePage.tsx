@@ -1,3 +1,5 @@
+import { motion } from 'framer-motion';
+
 const homeSections = [1, 2, 3, 4, 5, 6];
 
 export default function HomePage() {
@@ -5,12 +7,17 @@ export default function HomePage() {
         <div className="bg-white pt-[73px] lg:pt-[104px]">
             {homeSections.map((sectionNumber, index) => {
                 const isFirstSection = index === 0;
+                const isLastSection = index === homeSections.length - 1;
 
                 return (
-                    <section
+                    <motion.section
                         key={sectionNumber}
                         className="relative w-full overflow-hidden"
                         aria-label={`Sección principal ${sectionNumber}`}
+                        initial={isFirstSection ? false : { opacity: 0, y: 18 }}
+                        whileInView={{ opacity: 1, y: 0 }}
+                        viewport={{ once: true, amount: 0.18 }}
+                        transition={{ duration: 0.55, ease: 'easeOut' }}
                     >
                         <picture>
                             <source
@@ -27,7 +34,14 @@ export default function HomePage() {
                                 sizes="100vw"
                             />
                         </picture>
-                    </section>
+
+                        {!isLastSection && (
+                            <div
+                                className="pointer-events-none absolute inset-x-0 bottom-0 z-10 h-10 bg-gradient-to-b from-transparent via-white/10 to-white/18 sm:h-14 lg:h-20"
+                                aria-hidden="true"
+                            />
+                        )}
+                    </motion.section>
                 );
             })}
         </div>
