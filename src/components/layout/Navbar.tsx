@@ -89,26 +89,26 @@ export default function Navbar() {
             <div className="relative bg-brand-yellow">
                 <nav className="mx-auto max-w-[1480px] px-3 sm:px-7 lg:px-7">
                     <div className="flex h-[73px] items-center justify-between gap-2 lg:h-[104px]">
-                        <Link to="/" className="group flex min-w-0 items-center gap-2 sm:gap-4 lg:gap-5" aria-label="BRIZ Centro de la Bicicleta">
+                        <Link to="/" className="group flex min-w-0 items-center gap-1 sm:gap-2 lg:gap-3" aria-label="BRIZ Centro de la Bicicleta">
                             <img
                                 src="/logo_bicicleta_principal.png"
                                 alt="Bicicleta BRIZ"
-                                className="h-[60px] w-20 shrink-0 object-contain brightness-0 invert transition-transform duration-200 group-hover:scale-[1.03] sm:h-16 sm:w-24 lg:h-[82px] lg:w-[132px]"
+                                className="h-[66px] w-[92px] shrink-0 object-contain brightness-0 invert transition-transform duration-200 group-hover:scale-[1.03] sm:h-[74px] sm:w-[110px] lg:h-[98px] lg:w-[158px]"
                             />
                             <img
                                 src="/logo_briz_principal.png"
                                 alt="BRIZ"
-                                className="h-9 w-auto max-w-[62px] shrink-0 object-contain brightness-0 invert sm:h-10 sm:max-w-[76px] lg:h-[52px] lg:max-w-[100px]"
+                                className="-ml-1 h-[42px] w-auto max-w-[78px] shrink-0 object-contain brightness-0 invert sm:h-12 sm:max-w-[88px] lg:-ml-2 lg:h-[62px] lg:max-w-[122px]"
                             />
-                            <span className="h-11 w-[3px] shrink-0 bg-white/95 sm:h-14 lg:h-[86px]" aria-hidden="true" />
-                            <span className="block max-w-[112px] text-[10px] font-black uppercase leading-none tracking-normal text-white drop-shadow-sm sm:max-w-[164px] sm:text-xs lg:max-w-[292px] lg:text-2xl">
+                            <span className="mx-1 h-11 w-[3px] shrink-0 bg-white/95 sm:mx-3 sm:h-14 lg:mx-5 lg:h-[86px]" aria-hidden="true" />
+                            <span className="block whitespace-nowrap text-[9px] font-black uppercase leading-none tracking-normal text-white drop-shadow-sm sm:text-xs lg:text-xl 2xl:text-2xl">
                                 Centro de la Bicicleta
                             </span>
                         </Link>
 
                         <span className="hidden h-[86px] w-[3px] shrink-0 bg-white/95 lg:block" aria-hidden="true" />
 
-                        <div className="hidden min-w-0 flex-1 items-stretch justify-end gap-0 lg:flex">
+                        <div className="hidden min-w-0 flex-1 items-stretch justify-end gap-0 pl-8 lg:flex">
                             {navLinks.filter((link) => link.href !== '/').map((link) => {
                                 const Icon = link.icon;
                                 const active = isActive(link.href);
@@ -119,7 +119,7 @@ export default function Navbar() {
                                         <Link
                                             to={link.href}
                                             onClick={(event) => handleNavClick(event, link.href)}
-                                            className={`group flex min-w-[86px] max-w-[142px] flex-1 flex-col items-center justify-center gap-1 rounded-sm px-1 py-2 text-center font-cocon text-[14px] font-black leading-[1.05] tracking-normal text-brand-black transition-colors duration-200 xl:text-lg ${active ? 'bg-white/20' : 'hover:bg-white/16'}`}
+                                            className={`group flex min-w-[78px] max-w-[132px] flex-1 flex-col items-center justify-center gap-1 rounded-sm px-1 py-2 text-center font-cocon text-[13px] font-black leading-[1.05] tracking-normal text-brand-black transition-colors duration-200 xl:text-lg ${active ? 'bg-white/20' : 'hover:bg-white/16'}`}
                                         >
                                             <Icon className="h-6 w-6 text-brand-black transition-transform duration-200 group-hover:-translate-y-0.5 xl:h-8 xl:w-8" strokeWidth={2.3} />
                                             <span className="max-w-[118px] text-balance">{link.label}</span>
@@ -140,9 +140,10 @@ export default function Navbar() {
                     </div>
                 </nav>
 
-                <div className="pointer-events-none absolute -bottom-[11px] left-0 right-0 h-6 overflow-hidden" aria-hidden="true">
-                    <svg viewBox="0 0 1440 32" className="h-full w-full" preserveAspectRatio="none">
-                        <path d="M0 10 C205 30 390 29 590 13 C770 -1 920 2 1090 13 C1245 24 1352 24 1440 12" fill="none" stroke="#FFFFFF" strokeWidth="4" strokeLinecap="round" />
+                <div className="pointer-events-none absolute -bottom-[25px] left-0 right-0 h-[34px] overflow-hidden" aria-hidden="true">
+                    <svg viewBox="0 0 1440 38" className="h-full w-full" preserveAspectRatio="none">
+                        <path d="M0 0H1440V12C1210 8 1032 9 862 17C680 26 505 33 314 28C182 25 86 18 0 10V0Z" fill="#FFD200" />
+                        <path d="M0 10C86 18 182 25 314 28C505 33 680 26 862 17C1032 9 1210 8 1440 12" fill="none" stroke="#FFFFFF" strokeWidth="4" strokeLinecap="round" />
                     </svg>
                 </div>
             </div>

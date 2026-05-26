@@ -35,9 +35,10 @@ function TikTokIcon({ className }: { className?: string }) {
 export default function Footer() {
     return (
         <footer className="relative mt-auto bg-brand-yellow text-brand-black font-cocon">
-            <div className="pointer-events-none absolute -top-[18px] left-0 right-0 h-8 overflow-hidden" aria-hidden="true">
-                <svg viewBox="0 0 1440 42" className="h-full w-full" preserveAspectRatio="none">
-                    <path d="M0 17 C210 42 410 36 620 20 C810 5 960 4 1140 18 C1270 29 1372 27 1440 18" fill="none" stroke="#FFFFFF" strokeWidth="5" strokeLinecap="round" />
+            <div className="pointer-events-none absolute -top-[30px] left-0 right-0 h-[38px] overflow-hidden" aria-hidden="true">
+                <svg viewBox="0 0 1440 44" className="h-full w-full" preserveAspectRatio="none">
+                    <path d="M0 16C180 33 358 37 552 28C754 18 914 5 1116 11C1256 15 1362 23 1440 30V44H0V16Z" fill="#FFD200" />
+                    <path d="M0 16C180 33 358 37 552 28C754 18 914 5 1116 11C1256 15 1362 23 1440 30" fill="none" stroke="#FFFFFF" strokeWidth="5" strokeLinecap="round" />
                 </svg>
             </div>
 
@@ -79,12 +80,12 @@ export default function Footer() {
                     <img
                         src="/logo_bicicleta_principal.png"
                         alt="Bicicleta BRIZ"
-                        className="h-10 w-16 object-contain brightness-0 invert sm:h-16 sm:w-24 lg:h-[82px] lg:w-[132px]"
+                        className="h-12 w-20 object-contain brightness-0 invert sm:h-[82px] sm:w-[126px] lg:h-[104px] lg:w-[166px]"
                     />
                     <img
                         src="/logo_briz_principal.png"
                         alt="BRIZ"
-                        className="-mt-1 h-5 w-auto max-w-[46px] object-contain brightness-0 invert sm:h-8 sm:max-w-[72px]"
+                        className="-mt-2 h-6 w-auto max-w-[56px] object-contain brightness-0 invert sm:-mt-3 sm:h-10 sm:max-w-[88px] lg:h-11 lg:max-w-[102px]"
                     />
                 </Link>
             </div>
