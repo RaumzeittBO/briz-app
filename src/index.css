@@ -383,6 +383,191 @@
 .marker-highlight-yellow::after { background-color: #FFD200; }
 .marker-highlight-orange::after { background-color: #FD7B2C; }
 
+/* ===== HOME SERVICES HOTSPOTS ===== */
+.services-home-layer {
+  --briz-depth-x: 0;
+  --briz-depth-y: 0;
+}
+
+.services-home-depth {
+  transform: translate3d(
+    calc(var(--briz-depth-x) * 10px),
+    calc(var(--briz-depth-y) * 8px),
+    0
+  );
+  transition: transform 220ms ease-out;
+}
+
+.service-hotspot {
+  position: absolute;
+  left: var(--mobile-left);
+  top: var(--mobile-top);
+  display: inline-flex;
+  align-items: center;
+  gap: clamp(0.25rem, 1vw, 0.7rem);
+  min-height: 2rem;
+  max-width: min(58vw, 17rem);
+  padding: 0.28rem 0.52rem 0.28rem 0.32rem;
+  border: 2px solid rgba(255, 255, 255, 0.92);
+  border-radius: 999px;
+  color: #ffffff;
+  background:
+    linear-gradient(110deg, transparent 0%, rgba(255,255,255,0.2) 42%, transparent 54%) -160% 0 / 220% 100%,
+    color-mix(in srgb, var(--hotspot-color) 86%, white 14%);
+  box-shadow:
+    0 8px 18px color-mix(in srgb, var(--hotspot-color) 30%, transparent),
+    0 2px 0 rgba(255, 255, 255, 0.45) inset;
+  text-decoration: none;
+  transform: translateY(-50%);
+  transition: transform 180ms ease, box-shadow 180ms ease, filter 180ms ease, background-position 420ms ease;
+  will-change: transform;
+}
+
+.service-hotspot:hover,
+.service-hotspot:focus-visible {
+  background-position: 60% 0, 0 0;
+  box-shadow:
+    0 0 22px color-mix(in srgb, var(--hotspot-color) 52%, transparent),
+    0 10px 22px rgba(0, 0, 0, 0.11),
+    0 2px 0 rgba(255, 255, 255, 0.55) inset;
+  filter: saturate(1.06);
+  transform: translateY(-50%) scale(1.03);
+}
+
+.service-hotspot:focus-visible {
+  outline: 3px solid #ffffff;
+  outline-offset: 3px;
+}
+
+.service-hotspot-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: clamp(1.35rem, 4.8vw, 2.7rem);
+  height: clamp(1.35rem, 4.8vw, 2.7rem);
+  flex: 0 0 auto;
+  padding: 0.22rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.18);
+  color: #ffffff;
+}
+
+.service-hotspot:hover .service-hotspot-icon,
+.service-hotspot:focus-visible .service-hotspot-icon {
+  animation: service-icon-nudge 780ms ease-in-out;
+}
+
+.service-hotspot-label {
+  font-family: 'TAN Songbird', serif;
+  font-size: clamp(0.78rem, 3.1vw, 1.05rem);
+  line-height: 1;
+  color: #ffffff;
+  text-shadow:
+    1px 1px 0 rgba(0, 0, 0, 0.3),
+    0 0 8px rgba(255, 255, 255, 0.25);
+  white-space: nowrap;
+}
+
+.services-title-cue {
+  transform: translate3d(
+    calc(var(--briz-depth-x) * -8px),
+    calc(var(--briz-depth-y) * -5px),
+    0
+  );
+  transition: transform 220ms ease-out;
+}
+
+.services-title-arrow {
+  animation: service-arrow-drift 1.8s ease-in-out infinite;
+  filter: drop-shadow(2px 2px 0 rgba(0, 0, 0, 0.4));
+}
+
+.services-home-spark {
+  position: absolute;
+  width: clamp(0.35rem, 0.8vw, 0.8rem);
+  height: clamp(0.35rem, 0.8vw, 0.8rem);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--spark-color, #FFD200) 72%, white 28%);
+  opacity: 0.55;
+  box-shadow: 0 0 18px color-mix(in srgb, var(--spark-color, #FFD200) 45%, transparent);
+  animation: service-spark-float 4.8s ease-in-out infinite;
+}
+
+.service-spark-1 { --spark-color: #FFD200; left: 9%; top: 17%; }
+.service-spark-2 { --spark-color: #FA0E95; left: 23%; top: 58%; animation-delay: 0.7s; }
+.service-spark-3 { --spark-color: #24A9C5; left: 39%; top: 22%; animation-delay: 1.2s; }
+
+@keyframes service-arrow-drift {
+  0%, 100% { transform: translateX(0); opacity: 0.92; }
+  50% { transform: translateX(8px); opacity: 1; }
+}
+
+@keyframes service-icon-nudge {
+  0%, 100% { transform: translateX(0) rotate(0deg); }
+  45% { transform: translateX(2px) rotate(-3deg); }
+}
+
+@keyframes service-spark-float {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+  50% { transform: translate3d(6px, -8px, 0) scale(1.18); }
+}
+
+@media (min-width: 768px) {
+  .service-hotspot {
+    left: var(--desktop-left);
+    top: var(--desktop-top);
+    min-height: 3rem;
+    padding: 0.38rem 0.9rem 0.38rem 0.42rem;
+    max-width: 22rem;
+    transform: translate3d(
+      calc(var(--briz-depth-x) * -8px),
+      calc(-50% + (var(--briz-depth-y) * -5px)),
+      0
+    );
+  }
+
+  .service-hotspot:hover,
+  .service-hotspot:focus-visible {
+    transform: translate3d(
+      calc(var(--briz-depth-x) * -8px),
+      calc(-50% + (var(--briz-depth-y) * -5px)),
+      0
+    ) scale(1.03);
+  }
+
+  .service-hotspot-label {
+    font-size: clamp(1.1rem, 2vw, 2.25rem);
+  }
+}
+
+@media (max-width: 767px) {
+  .services-home-depth {
+    transform: none;
+  }
+
+  .services-home-spark {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .services-home-depth,
+  .services-title-cue,
+  .service-hotspot,
+  .service-hotspot:hover,
+  .service-hotspot:focus-visible {
+    transition: none;
+    transform: translateY(-50%);
+  }
+
+  .services-title-arrow,
+  .service-hotspot:hover .service-hotspot-icon,
+  .service-hotspot:focus-visible .service-hotspot-icon,
+  .services-home-spark {
+    animation: none;
+  }
+}
+
 /* ===== RESERVATION MODAL OPTIMIZATION ===== */
 @media (max-width: 640px) {
   .reservation-modal {
