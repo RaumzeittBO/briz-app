@@ -1,10 +1,13 @@
 import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
 import {
+    ArrowRight,
     Bike,
     ChevronsRight,
     HeartHandshake,
+    MapPinned,
     Route,
+    Sparkles,
     ShoppingBasket,
     Wrench,
     type LucideIcon,
@@ -48,6 +51,16 @@ type HomeSectionEffect = {
     glowPosition: { x: string; y: string };
     particles: AmbientParticle[];
     trails?: AmbientTrail[];
+};
+
+type HeroWidget = {
+    label: string;
+    sublabel?: string;
+    href: string;
+    variant: 'explore' | 'routes' | 'primary';
+    icon: LucideIcon;
+    desktopPosition: { left: string; top: string };
+    mobilePosition: { left: string; top: string };
 };
 
 const servicesHotspots: ServicesHotspot[] = [
@@ -101,6 +114,35 @@ const servicesHotspots: ServicesHotspot[] = [
 type HotspotStyle = CSSProperties & Record<'--hotspot-color' | '--desktop-left' | '--desktop-top' | '--mobile-left' | '--mobile-top' | '--glow-x' | '--glow-y', string>;
 type AmbientStyle = CSSProperties & Record<'--ambient-color' | '--ambient-left' | '--ambient-top' | '--ambient-size' | '--ambient-delay' | '--ambient-duration', string>;
 type TrailStyle = CSSProperties & Record<'--trail-color' | '--trail-left' | '--trail-top' | '--trail-width' | '--trail-rotate' | '--trail-delay', string>;
+type HeroWidgetStyle = CSSProperties & Record<'--hero-widget-desktop-left' | '--hero-widget-desktop-top' | '--hero-widget-mobile-left' | '--hero-widget-mobile-top', string>;
+
+const heroWidgets: HeroWidget[] = [
+    {
+        label: 'Explora BRIZ',
+        sublabel: 'alquiler · tienda · ciclotours',
+        href: '#servicios',
+        variant: 'explore',
+        icon: Bike,
+        desktopPosition: { left: '25%', top: '19%' },
+        mobilePosition: { left: '31%', top: '15%' },
+    },
+    {
+        label: 'Cochabamba sobre ruedas',
+        href: '/routes',
+        variant: 'routes',
+        icon: MapPinned,
+        desktopPosition: { left: '73%', top: '21.5%' },
+        mobilePosition: { left: '74%', top: '35%' },
+    },
+    {
+        label: 'Empieza tu experiencia',
+        href: '/rentals',
+        variant: 'primary',
+        icon: Sparkles,
+        desktopPosition: { left: '50%', top: '72%' },
+        mobilePosition: { left: '50%', top: '70%' },
+    },
+];
 
 const homeSectionEffects: HomeSectionEffect[] = [
     {
@@ -185,6 +227,64 @@ const homeSectionEffects: HomeSectionEffect[] = [
         ],
     },
 ];
+
+function HeroInteractiveWidgets() {
+    return (
+        <div className="hero-widget-layer pointer-events-none absolute inset-0 z-20" aria-hidden={false}>
+            <span className="hero-route-trace hero-route-trace-1" aria-hidden="true" />
+            <span className="hero-route-trace hero-route-trace-2" aria-hidden="true" />
+            <span className="hero-route-trace hero-route-trace-3" aria-hidden="true" />
+
+            {heroWidgets.map((widget) => {
+                const Icon = widget.icon;
+                const widgetStyle: HeroWidgetStyle = {
+                    '--hero-widget-desktop-left': widget.desktopPosition.left,
+                    '--hero-widget-desktop-top': widget.desktopPosition.top,
+                    '--hero-widget-mobile-left': widget.mobilePosition.left,
+                    '--hero-widget-mobile-top': widget.mobilePosition.top,
+                };
+                const content = (
+                    <>
+                        <span className="hero-widget-icon">
+                            <Icon className="h-full w-full" strokeWidth={2.35} />
+                        </span>
+                        <span className="hero-widget-copy">
+                            <span className="hero-widget-label">{widget.label}</span>
+                            {widget.sublabel && <span className="hero-widget-subtitle">{widget.sublabel}</span>}
+                        </span>
+                        {widget.variant === 'primary' && <ArrowRight className="hero-widget-arrow" strokeWidth={2.8} />}
+                    </>
+                );
+
+                if (widget.href.startsWith('#')) {
+                    return (
+                        <a
+                            key={widget.label}
+                            href={widget.href}
+                            className={`hero-widget hero-widget-${widget.variant} pointer-events-auto`}
+                            style={widgetStyle}
+                            aria-label={widget.label}
+                        >
+                            {content}
+                        </a>
+                    );
+                }
+
+                return (
+                    <Link
+                        key={widget.label}
+                        to={widget.href}
+                        className={`hero-widget hero-widget-${widget.variant} pointer-events-auto`}
+                        style={widgetStyle}
+                        aria-label={widget.label}
+                    >
+                        {content}
+                    </Link>
+                );
+            })}
+        </div>
+    );
+}
 
 function HomeOrganicDivider({ variant }: { variant: 'a' | 'b' }) {
     const isVariantA = variant === 'a';
@@ -348,6 +448,7 @@ export default function HomePage() {
                 return (
                     <motion.section
                         key={sectionNumber}
+                        id={sectionNumber === 2 ? 'servicios' : undefined}
                         className={`home-section-scene relative w-full overflow-visible ${sectionNumber === 2 ? 'services-home-scene' : ''}`}
                         aria-label={`Sección principal ${sectionNumber}`}
                         onMouseMove={hasMouseDepth ? handleServicesMouseMove : undefined}
@@ -375,6 +476,7 @@ export default function HomePage() {
                         </picture>
 
                         {sectionEffect && <AmbientLayer effect={sectionEffect} />}
+                        {sectionNumber === 1 && <HeroInteractiveWidgets />}
                         {sectionNumber === 2 && <ServicesInteractiveLayer />}
 
                         {!isLastSection && (
