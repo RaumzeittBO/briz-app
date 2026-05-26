@@ -396,7 +396,7 @@ export default function HomePage() {
 
 
             {/* ===== WHY BRIZ ===== */}
-            <section className="py-24 sm:py-32 bg-brand-beige relative overflow-hidden">
+            <section id="preguntas-frecuentes" className="scroll-mt-28 py-24 sm:py-32 bg-brand-beige relative overflow-hidden">
                 <div className="absolute -top-20 -right-20 w-80 h-80 bg-brand-yellow/20 rounded-full blur-[80px] pointer-events-none" />
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
                     <motion.div {...fadeUp} className="text-center mb-16 sm:mb-20">

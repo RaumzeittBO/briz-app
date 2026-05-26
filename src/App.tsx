@@ -12,6 +12,7 @@ import ServicePage from '@/pages/public/ServicePage';
 import RoutesPage from '@/pages/public/RoutesPage';
 import AboutPage from '@/pages/public/AboutPage';
 import ContactPage from '@/pages/public/ContactPage';
+import CommunityPage from '@/pages/public/CommunityPage';
 
 // Admin pages
 import LoginPage from '@/pages/admin/LoginPage';
@@ -43,6 +44,7 @@ function AppRoutes() {
         <Route path="/shop" element={<ShopPage />} />
         <Route path="/service" element={<ServicePage />} />
         <Route path="/routes" element={<RoutesPage />} />
+        <Route path="/community" element={<CommunityPage />} />
         <Route path="/about" element={<AboutPage />} />
         <Route path="/contact" element={<ContactPage />} />
       </Route>
