@@ -384,54 +384,88 @@
 .marker-highlight-orange::after { background-color: #FD7B2C; }
 
 /* ===== HOME SERVICES HOTSPOTS ===== */
-.services-home-layer {
+.services-home-scene {
   --briz-depth-x: 0;
   --briz-depth-y: 0;
 }
 
-.services-home-depth {
+.services-home-image {
   transform: translate3d(
-    calc(var(--briz-depth-x) * 10px),
-    calc(var(--briz-depth-y) * 8px),
+    calc(var(--briz-depth-x) * -8px),
+    calc(var(--briz-depth-y) * -6px),
     0
   );
-  transition: transform 220ms ease-out;
+  transition: transform 260ms ease-out;
+  will-change: transform;
+}
+
+.services-home-depth {
+  transform: translate3d(
+    calc(var(--briz-depth-x) * 12px),
+    calc(var(--briz-depth-y) * 9px),
+    0
+  );
+  transition: transform 260ms ease-out;
+}
+
+.services-ambient-light {
+  background:
+    radial-gradient(circle at var(--glow-x, 24%) var(--glow-y, 32%), rgba(255, 210, 0, 0.16), transparent 24%),
+    radial-gradient(circle at 78% 32%, rgba(36, 169, 197, 0.1), transparent 22%),
+    linear-gradient(115deg, rgba(255, 210, 0, 0.06), transparent 42%, rgba(250, 14, 149, 0.05));
+  opacity: 0.65;
+  transform: translate3d(
+    calc(var(--briz-depth-x) * 8px),
+    calc(var(--briz-depth-y) * 6px),
+    0
+  );
+  transition: transform 420ms ease-out, opacity 220ms ease;
+  animation: services-ambient-breathe 8s ease-in-out infinite;
 }
 
 .service-hotspot {
   position: absolute;
   left: var(--mobile-left);
   top: var(--mobile-top);
+  box-sizing: border-box;
   display: inline-flex;
   align-items: center;
-  gap: clamp(0.25rem, 1vw, 0.7rem);
-  min-height: 2rem;
-  max-width: min(58vw, 17rem);
-  padding: 0.28rem 0.52rem 0.28rem 0.32rem;
+  justify-content: flex-start;
+  gap: clamp(0.22rem, 0.75vw, 0.55rem);
+  width: clamp(9.4rem, 42vw, 11.2rem);
+  min-height: clamp(2.15rem, 7vw, 2.55rem);
+  padding: 0.34rem 0.62rem 0.34rem 0.34rem;
   border: 2px solid rgba(255, 255, 255, 0.92);
   border-radius: 999px;
   color: #ffffff;
+  overflow: visible;
   background:
-    linear-gradient(110deg, transparent 0%, rgba(255,255,255,0.2) 42%, transparent 54%) -160% 0 / 220% 100%,
+    radial-gradient(circle at var(--glow-x) var(--glow-y), rgba(255,255,255,0.34), transparent 38%),
+    linear-gradient(110deg, transparent 0%, rgba(255,255,255,0.28) 42%, transparent 54%) -165% 0 / 220% 100%,
     color-mix(in srgb, var(--hotspot-color) 86%, white 14%);
   box-shadow:
     0 8px 18px color-mix(in srgb, var(--hotspot-color) 30%, transparent),
     0 2px 0 rgba(255, 255, 255, 0.45) inset;
   text-decoration: none;
   transform: translateY(-50%);
-  transition: transform 180ms ease, box-shadow 180ms ease, filter 180ms ease, background-position 420ms ease;
+  transition: transform 180ms ease, box-shadow 180ms ease, filter 180ms ease, background-position 460ms ease;
   will-change: transform;
 }
 
 .service-hotspot:hover,
-.service-hotspot:focus-visible {
-  background-position: 60% 0, 0 0;
+.service-hotspot:focus-visible,
+.service-hotspot:active {
+  background-position: 0 0, 58% 0, 0 0;
   box-shadow:
     0 0 22px color-mix(in srgb, var(--hotspot-color) 52%, transparent),
     0 10px 22px rgba(0, 0, 0, 0.11),
     0 2px 0 rgba(255, 255, 255, 0.55) inset;
   filter: saturate(1.06);
   transform: translateY(-50%) scale(1.03);
+}
+
+.service-hotspot:active {
+  transform: translateY(-50%) scale(1.02);
 }
 
 .service-hotspot:focus-visible {
@@ -443,10 +477,10 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: clamp(1.35rem, 4.8vw, 2.7rem);
-  height: clamp(1.35rem, 4.8vw, 2.7rem);
+  width: clamp(1.22rem, 4.5vw, 1.7rem);
+  height: clamp(1.22rem, 4.5vw, 1.7rem);
   flex: 0 0 auto;
-  padding: 0.22rem;
+  padding: 0.18rem;
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.18);
   color: #ffffff;
@@ -459,8 +493,12 @@
 
 .service-hotspot-label {
   font-family: 'TAN Songbird', serif;
-  font-size: clamp(0.78rem, 3.1vw, 1.05rem);
-  line-height: 1;
+  display: block;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  font-size: clamp(0.62rem, 2.45vw, 0.78rem);
+  line-height: 1.35;
   color: #ffffff;
   text-shadow:
     1px 1px 0 rgba(0, 0, 0, 0.3),
@@ -474,11 +512,11 @@
     calc(var(--briz-depth-y) * -5px),
     0
   );
-  transition: transform 220ms ease-out;
+  transition: transform 260ms ease-out;
 }
 
 .services-title-arrow {
-  animation: service-arrow-drift 1.8s ease-in-out infinite;
+  animation: service-arrow-drift 1.35s ease-in-out infinite;
   filter: drop-shadow(2px 2px 0 rgba(0, 0, 0, 0.4));
 }
 
@@ -493,13 +531,25 @@
   animation: service-spark-float 4.8s ease-in-out infinite;
 }
 
-.service-spark-1 { --spark-color: #FFD200; left: 9%; top: 17%; }
-.service-spark-2 { --spark-color: #FA0E95; left: 23%; top: 58%; animation-delay: 0.7s; }
+.service-spark-1 { --spark-color: #FFD200; left: 8%; top: 16%; }
+.service-spark-2 { --spark-color: #FA0E95; left: 24%; top: 56%; animation-delay: 0.7s; }
 .service-spark-3 { --spark-color: #24A9C5; left: 39%; top: 22%; animation-delay: 1.2s; }
+.service-spark-4 { --spark-color: #52CD7B; left: 18%; top: 73%; animation-delay: 1.8s; }
+.service-spark-5 { --spark-color: #FFFFFF; left: 44%; top: 12%; animation-delay: 2.1s; }
+.service-spark-6 { --spark-color: #FFD200; left: 57%; top: 68%; animation-delay: 2.5s; }
+.service-spark-7 { --spark-color: #24A9C5; left: 74%; top: 20%; animation-delay: 3s; }
+.service-spark-8 { --spark-color: #FA0E95; left: 84%; top: 52%; animation-delay: 3.4s; }
+.service-spark-9 { --spark-color: #FFFFFF; left: 67%; top: 38%; animation-delay: 3.8s; }
+.service-spark-10 { --spark-color: #52CD7B; left: 33%; top: 82%; animation-delay: 4.2s; }
+
+@keyframes services-ambient-breathe {
+  0%, 100% { opacity: 0.52; }
+  50% { opacity: 0.74; }
+}
 
 @keyframes service-arrow-drift {
   0%, 100% { transform: translateX(0); opacity: 0.92; }
-  50% { transform: translateX(8px); opacity: 1; }
+  50% { transform: translateX(12px); opacity: 1; }
 }
 
 @keyframes service-icon-nudge {
@@ -516,9 +566,9 @@
   .service-hotspot {
     left: var(--desktop-left);
     top: var(--desktop-top);
-    min-height: 3rem;
-    padding: 0.38rem 0.9rem 0.38rem 0.42rem;
-    max-width: 22rem;
+    width: clamp(15.8rem, 20vw, 22rem);
+    min-height: clamp(3.4rem, 4.7vw, 4.9rem);
+    padding: 0.52rem clamp(1rem, 1.35vw, 1.3rem) 0.52rem 0.58rem;
     transform: translate3d(
       calc(var(--briz-depth-x) * -8px),
       calc(-50% + (var(--briz-depth-y) * -5px)),
@@ -527,7 +577,8 @@
   }
 
   .service-hotspot:hover,
-  .service-hotspot:focus-visible {
+  .service-hotspot:focus-visible,
+  .service-hotspot:active {
     transform: translate3d(
       calc(var(--briz-depth-x) * -8px),
       calc(-50% + (var(--briz-depth-y) * -5px)),
@@ -535,24 +586,62 @@
     ) scale(1.03);
   }
 
+  .service-hotspot-icon {
+    width: clamp(2.4rem, 3.4vw, 3.4rem);
+    height: clamp(2.4rem, 3.4vw, 3.4rem);
+    padding: 0.38rem;
+  }
+
   .service-hotspot-label {
-    font-size: clamp(1.1rem, 2vw, 2.25rem);
+    font-size: clamp(1.12rem, 1.5vw, 1.58rem);
   }
 }
 
 @media (max-width: 767px) {
+  .services-home-image {
+    transform: none;
+  }
+
+  .services-ambient-light {
+    opacity: 0.42;
+    animation-duration: 10s;
+  }
+
   .services-home-depth {
     transform: none;
   }
 
-  .services-home-spark {
+  .services-home-spark:nth-child(n + 7) {
     display: none;
+  }
+
+  .service-spark-1 { left: 9%; top: 12%; }
+  .service-spark-2 { left: 36%; top: 19%; }
+  .service-spark-3 { left: 12%; top: 42%; }
+  .service-spark-4 { left: 82%; top: 28%; }
+  .service-spark-5 { left: 68%; top: 50%; }
+  .service-spark-6 { left: 24%; top: 72%; }
+
+  .service-hotspot {
+    box-shadow:
+      0 0 13px color-mix(in srgb, var(--hotspot-color) 26%, transparent),
+      0 2px 0 rgba(255, 255, 255, 0.42) inset;
+  }
+
+  .service-hotspot-label {
+    letter-spacing: 0.01em;
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .services-home-image,
   .services-home-depth,
-  .services-title-cue,
+  .services-ambient-light,
+  .services-title-cue {
+    transition: none;
+    transform: none;
+  }
+
   .service-hotspot,
   .service-hotspot:hover,
   .service-hotspot:focus-visible {
@@ -563,6 +652,7 @@
   .services-title-arrow,
   .service-hotspot:hover .service-hotspot-icon,
   .service-hotspot:focus-visible .service-hotspot-icon,
+  .services-ambient-light,
   .services-home-spark {
     animation: none;
   }

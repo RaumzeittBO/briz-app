@@ -20,6 +20,7 @@ type ServicesHotspot = {
     icon: LucideIcon;
     desktopPosition: { left: string; top: string };
     mobilePosition: { left: string; top: string };
+    glowPosition: { x: string; y: string };
 };
 
 const servicesHotspots: ServicesHotspot[] = [
@@ -30,6 +31,7 @@ const servicesHotspots: ServicesHotspot[] = [
         icon: Bike,
         desktopPosition: { left: '12.5%', top: '20%' },
         mobilePosition: { left: '6%', top: '9%' },
+        glowPosition: { x: '18%', y: '24%' },
     },
     {
         label: 'Tienda',
@@ -38,6 +40,7 @@ const servicesHotspots: ServicesHotspot[] = [
         icon: ShoppingBasket,
         desktopPosition: { left: '12.5%', top: '30.5%' },
         mobilePosition: { left: '6%', top: '15.5%' },
+        glowPosition: { x: '20%', y: '34%' },
     },
     {
         label: 'Ciclotours',
@@ -46,6 +49,7 @@ const servicesHotspots: ServicesHotspot[] = [
         icon: Route,
         desktopPosition: { left: '12.5%', top: '41%' },
         mobilePosition: { left: '6%', top: '22%' },
+        glowPosition: { x: '24%', y: '44%' },
     },
     {
         label: 'Mecánica',
@@ -54,6 +58,7 @@ const servicesHotspots: ServicesHotspot[] = [
         icon: Wrench,
         desktopPosition: { left: '12.5%', top: '51.5%' },
         mobilePosition: { left: '6%', top: '28.5%' },
+        glowPosition: { x: '20%', y: '54%' },
     },
     {
         label: 'Comunidad',
@@ -62,10 +67,11 @@ const servicesHotspots: ServicesHotspot[] = [
         icon: HeartHandshake,
         desktopPosition: { left: '12.5%', top: '62%' },
         mobilePosition: { left: '6%', top: '35%' },
+        glowPosition: { x: '23%', y: '64%' },
     },
 ];
 
-type HotspotStyle = CSSProperties & Record<'--hotspot-color' | '--desktop-left' | '--desktop-top' | '--mobile-left' | '--mobile-top', string>;
+type HotspotStyle = CSSProperties & Record<'--hotspot-color' | '--desktop-left' | '--desktop-top' | '--mobile-left' | '--mobile-top' | '--glow-x' | '--glow-y', string>;
 
 function HomeOrganicDivider({ variant }: { variant: 'a' | 'b' }) {
     const isVariantA = variant === 'a';
@@ -92,31 +98,23 @@ function HomeOrganicDivider({ variant }: { variant: 'a' | 'b' }) {
 }
 
 function ServicesInteractiveLayer() {
-    const handleMouseMove = (event: MouseEvent<HTMLDivElement>) => {
-        const bounds = event.currentTarget.getBoundingClientRect();
-        const x = ((event.clientX - bounds.left) / bounds.width - 0.5).toFixed(3);
-        const y = ((event.clientY - bounds.top) / bounds.height - 0.5).toFixed(3);
-
-        event.currentTarget.style.setProperty('--briz-depth-x', x);
-        event.currentTarget.style.setProperty('--briz-depth-y', y);
-    };
-
-    const handleMouseLeave = (event: MouseEvent<HTMLDivElement>) => {
-        event.currentTarget.style.setProperty('--briz-depth-x', '0');
-        event.currentTarget.style.setProperty('--briz-depth-y', '0');
-    };
-
     return (
         <div
             className="services-home-layer pointer-events-none absolute inset-0 z-10"
-            onMouseMove={handleMouseMove}
-            onMouseLeave={handleMouseLeave}
             aria-hidden={false}
         >
+            <div className="services-ambient-light absolute inset-0" aria-hidden="true" />
             <div className="services-home-depth absolute inset-0">
                 <div className="services-home-spark service-spark-1" />
                 <div className="services-home-spark service-spark-2" />
                 <div className="services-home-spark service-spark-3" />
+                <div className="services-home-spark service-spark-4" />
+                <div className="services-home-spark service-spark-5" />
+                <div className="services-home-spark service-spark-6" />
+                <div className="services-home-spark service-spark-7" />
+                <div className="services-home-spark service-spark-8" />
+                <div className="services-home-spark service-spark-9" />
+                <div className="services-home-spark service-spark-10" />
             </div>
 
             <div className="services-title-cue pointer-events-none absolute left-[5.8%] top-[7%] hidden items-center gap-3 text-white md:flex">
@@ -134,6 +132,8 @@ function ServicesInteractiveLayer() {
                     '--desktop-top': hotspot.desktopPosition.top,
                     '--mobile-left': hotspot.mobilePosition.left,
                     '--mobile-top': hotspot.mobilePosition.top,
+                    '--glow-x': hotspot.glowPosition.x,
+                    '--glow-y': hotspot.glowPosition.y,
                 };
 
                 return (
@@ -155,6 +155,20 @@ function ServicesInteractiveLayer() {
     );
 }
 
+function handleServicesMouseMove(event: MouseEvent<HTMLElement>) {
+    const bounds = event.currentTarget.getBoundingClientRect();
+    const x = ((event.clientX - bounds.left) / bounds.width - 0.5).toFixed(3);
+    const y = ((event.clientY - bounds.top) / bounds.height - 0.5).toFixed(3);
+
+    event.currentTarget.style.setProperty('--briz-depth-x', x);
+    event.currentTarget.style.setProperty('--briz-depth-y', y);
+}
+
+function handleServicesMouseLeave(event: MouseEvent<HTMLElement>) {
+    event.currentTarget.style.setProperty('--briz-depth-x', '0');
+    event.currentTarget.style.setProperty('--briz-depth-y', '0');
+}
+
 export default function HomePage() {
     return (
         <div className="bg-white pt-[73px] lg:pt-[104px]">
@@ -165,8 +179,10 @@ export default function HomePage() {
                 return (
                     <motion.section
                         key={sectionNumber}
-                        className="relative w-full overflow-visible"
+                        className={`relative w-full overflow-visible ${sectionNumber === 2 ? 'services-home-scene' : ''}`}
                         aria-label={`Sección principal ${sectionNumber}`}
+                        onMouseMove={sectionNumber === 2 ? handleServicesMouseMove : undefined}
+                        onMouseLeave={sectionNumber === 2 ? handleServicesMouseLeave : undefined}
                         initial={isFirstSection ? false : { opacity: 0, y: 18 }}
                         whileInView={{ opacity: 1, y: 0 }}
                         viewport={{ once: true, amount: 0.18 }}
@@ -181,7 +197,7 @@ export default function HomePage() {
                             <img
                                 src={`/menu-principal-web/${sectionNumber}.webp`}
                                 alt=""
-                                className="block h-auto w-full"
+                                className={`block h-auto w-full ${sectionNumber === 2 ? 'services-home-image' : ''}`}
                                 decoding="async"
                                 fetchPriority={isFirstSection ? 'high' : 'auto'}
                                 loading={isFirstSection ? 'eager' : 'lazy'}
