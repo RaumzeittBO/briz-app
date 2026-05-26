@@ -23,6 +23,33 @@ type ServicesHotspot = {
     glowPosition: { x: string; y: string };
 };
 
+type AmbientParticle = {
+    color: string;
+    left: string;
+    top: string;
+    size: string;
+    delay?: string;
+    duration?: string;
+};
+
+type AmbientTrail = {
+    left: string;
+    top: string;
+    width: string;
+    rotate: string;
+    color: string;
+    delay?: string;
+};
+
+type HomeSectionEffect = {
+    section: number;
+    intensity: 'hero' | 'service' | 'soft';
+    colors: string[];
+    glowPosition: { x: string; y: string };
+    particles: AmbientParticle[];
+    trails?: AmbientTrail[];
+};
+
 const servicesHotspots: ServicesHotspot[] = [
     {
         label: 'Alquiler',
@@ -72,6 +99,92 @@ const servicesHotspots: ServicesHotspot[] = [
 ];
 
 type HotspotStyle = CSSProperties & Record<'--hotspot-color' | '--desktop-left' | '--desktop-top' | '--mobile-left' | '--mobile-top' | '--glow-x' | '--glow-y', string>;
+type AmbientStyle = CSSProperties & Record<'--ambient-color' | '--ambient-left' | '--ambient-top' | '--ambient-size' | '--ambient-delay' | '--ambient-duration', string>;
+type TrailStyle = CSSProperties & Record<'--trail-color' | '--trail-left' | '--trail-top' | '--trail-width' | '--trail-rotate' | '--trail-delay', string>;
+
+const homeSectionEffects: HomeSectionEffect[] = [
+    {
+        section: 1,
+        intensity: 'hero',
+        colors: ['#FFD200', '#FFFFFF', '#22B8C7', '#FF3FA4'],
+        glowPosition: { x: '50%', y: '41%' },
+        particles: [
+            { color: '#FFD200', left: '14%', top: '16%', size: '10px' },
+            { color: '#FFFFFF', left: '18%', top: '21%', size: '6px', delay: '0.5s' },
+            { color: '#FFD200', left: '33%', top: '27%', size: '8px', delay: '1s' },
+            { color: '#FFFFFF', left: '38%', top: '20%', size: '5px', delay: '1.4s' },
+            { color: '#FFD200', left: '52%', top: '32%', size: '7px', delay: '0.8s' },
+            { color: '#22B8C7', left: '59%', top: '43%', size: '6px', delay: '1.8s' },
+            { color: '#FF3FA4', left: '45%', top: '62%', size: '7px', delay: '2.2s' },
+            { color: '#FFD200', left: '72%', top: '25%', size: '8px', delay: '2.8s' },
+            { color: '#FFFFFF', left: '78%', top: '52%', size: '5px', delay: '3.2s' },
+            { color: '#FFD200', left: '86%', top: '38%', size: '6px', delay: '3.6s' },
+            { color: '#22B8C7', left: '24%', top: '73%', size: '5px', delay: '4s' },
+            { color: '#FFFFFF', left: '66%', top: '70%', size: '6px', delay: '4.4s' },
+        ],
+        trails: [
+            { left: '4%', top: '55%', width: '22%', rotate: '-8deg', color: '#FFD200' },
+            { left: '58%', top: '36%', width: '18%', rotate: '15deg', color: '#22B8C7', delay: '0.9s' },
+            { left: '68%', top: '61%', width: '24%', rotate: '-12deg', color: '#FFD200', delay: '1.5s' },
+            { left: '34%', top: '66%', width: '15%', rotate: '9deg', color: '#FF3FA4', delay: '2.1s' },
+        ],
+    },
+    {
+        section: 2,
+        intensity: 'service',
+        colors: ['#FFD200', '#FA0E95', '#52CD7B', '#24A9C5'],
+        glowPosition: { x: '26%', y: '38%' },
+        particles: [],
+    },
+    {
+        section: 3,
+        intensity: 'soft',
+        colors: ['#52CD7B', '#FFD200', '#FFFFFF'],
+        glowPosition: { x: '24%', y: '34%' },
+        particles: [
+            { color: '#52CD7B', left: '18%', top: '20%', size: '7px' },
+            { color: '#FFD200', left: '58%', top: '18%', size: '6px', delay: '1.1s' },
+            { color: '#FFFFFF', left: '78%', top: '48%', size: '5px', delay: '2s' },
+            { color: '#52CD7B', left: '36%', top: '76%', size: '5px', delay: '2.8s' },
+        ],
+    },
+    {
+        section: 4,
+        intensity: 'soft',
+        colors: ['#24A9C5', '#FFD200', '#FFFFFF'],
+        glowPosition: { x: '64%', y: '42%' },
+        particles: [
+            { color: '#24A9C5', left: '20%', top: '30%', size: '6px' },
+            { color: '#FFFFFF', left: '44%', top: '18%', size: '5px', delay: '1.2s' },
+            { color: '#FFD200', left: '70%', top: '62%', size: '7px', delay: '2.4s' },
+            { color: '#24A9C5', left: '86%', top: '34%', size: '5px', delay: '3s' },
+        ],
+    },
+    {
+        section: 5,
+        intensity: 'soft',
+        colors: ['#FA0E95', '#FFD200', '#FFFFFF'],
+        glowPosition: { x: '50%', y: '44%' },
+        particles: [
+            { color: '#FA0E95', left: '15%', top: '42%', size: '6px' },
+            { color: '#FFD200', left: '35%', top: '24%', size: '5px', delay: '1.3s' },
+            { color: '#FFFFFF', left: '62%', top: '66%', size: '5px', delay: '2.1s' },
+            { color: '#FA0E95', left: '82%', top: '38%', size: '6px', delay: '3.1s' },
+        ],
+    },
+    {
+        section: 6,
+        intensity: 'soft',
+        colors: ['#FFD200', '#24A9C5', '#FFFFFF'],
+        glowPosition: { x: '42%', y: '42%' },
+        particles: [
+            { color: '#FFD200', left: '20%', top: '24%', size: '6px' },
+            { color: '#24A9C5', left: '48%', top: '18%', size: '5px', delay: '1.2s' },
+            { color: '#FFFFFF', left: '74%', top: '56%', size: '5px', delay: '2.2s' },
+            { color: '#FFD200', left: '58%', top: '78%', size: '6px', delay: '3s' },
+        ],
+    },
+];
 
 function HomeOrganicDivider({ variant }: { variant: 'a' | 'b' }) {
     const isVariantA = variant === 'a';
@@ -93,6 +206,60 @@ function HomeOrganicDivider({ variant }: { variant: 'a' | 'b' }) {
                 <path d={linePath} fill="none" stroke="#FFFFFF" strokeWidth="6" strokeLinecap="round" />
                 <path d={linePath} fill="none" stroke="#FFFFFF" strokeWidth="2" strokeOpacity="0.45" strokeLinecap="round" transform="translate(0 9)" />
             </svg>
+        </div>
+    );
+}
+
+function AmbientLayer({ effect }: { effect: HomeSectionEffect }) {
+    const ambientStyle = {
+        '--ambient-primary': effect.colors[0],
+        '--ambient-secondary': effect.colors[1],
+        '--ambient-accent': effect.colors[2] ?? effect.colors[0],
+        '--ambient-glow-x': effect.glowPosition.x,
+        '--ambient-glow-y': effect.glowPosition.y,
+    } as CSSProperties;
+
+    return (
+        <div
+            className={`home-ambient-layer home-ambient-${effect.intensity} pointer-events-none absolute inset-0 z-10`}
+            style={ambientStyle}
+            aria-hidden="true"
+        >
+            <div className="home-ambient-glow" />
+            {effect.section === 1 && (
+                <>
+                    <div className="hero-sun-orbit hero-sun-orbit-left" />
+                    <div className="hero-sun-orbit hero-sun-orbit-center" />
+                    <div className="hero-word-glow" />
+                </>
+            )}
+            <div className="home-ambient-depth">
+                {effect.particles.map((particle, particleIndex) => {
+                    const particleStyle: AmbientStyle = {
+                        '--ambient-color': particle.color,
+                        '--ambient-left': particle.left,
+                        '--ambient-top': particle.top,
+                        '--ambient-size': particle.size,
+                        '--ambient-delay': particle.delay ?? `${particleIndex * 0.35}s`,
+                        '--ambient-duration': particle.duration ?? (effect.intensity === 'hero' ? '6.8s' : '8.8s'),
+                    };
+
+                    return <span key={`${effect.section}-particle-${particleIndex}`} className="home-ambient-particle" style={particleStyle} />;
+                })}
+
+                {effect.trails?.map((trail, trailIndex) => {
+                    const trailStyle: TrailStyle = {
+                        '--trail-color': trail.color,
+                        '--trail-left': trail.left,
+                        '--trail-top': trail.top,
+                        '--trail-width': trail.width,
+                        '--trail-rotate': trail.rotate,
+                        '--trail-delay': trail.delay ?? `${trailIndex * 0.45}s`,
+                    };
+
+                    return <span key={`${effect.section}-trail-${trailIndex}`} className="home-motion-trail" style={trailStyle} />;
+                })}
+            </div>
         </div>
     );
 }
@@ -175,14 +342,16 @@ export default function HomePage() {
             {homeSections.map((sectionNumber, index) => {
                 const isFirstSection = index === 0;
                 const isLastSection = index === homeSections.length - 1;
+                const sectionEffect = homeSectionEffects.find((effect) => effect.section === sectionNumber);
+                const hasMouseDepth = sectionNumber === 1 || sectionNumber === 2;
 
                 return (
                     <motion.section
                         key={sectionNumber}
-                        className={`relative w-full overflow-visible ${sectionNumber === 2 ? 'services-home-scene' : ''}`}
+                        className={`home-section-scene relative w-full overflow-visible ${sectionNumber === 2 ? 'services-home-scene' : ''}`}
                         aria-label={`Sección principal ${sectionNumber}`}
-                        onMouseMove={sectionNumber === 2 ? handleServicesMouseMove : undefined}
-                        onMouseLeave={sectionNumber === 2 ? handleServicesMouseLeave : undefined}
+                        onMouseMove={hasMouseDepth ? handleServicesMouseMove : undefined}
+                        onMouseLeave={hasMouseDepth ? handleServicesMouseLeave : undefined}
                         initial={isFirstSection ? false : { opacity: 0, y: 18 }}
                         whileInView={{ opacity: 1, y: 0 }}
                         viewport={{ once: true, amount: 0.18 }}
@@ -197,7 +366,7 @@ export default function HomePage() {
                             <img
                                 src={`/menu-principal-web/${sectionNumber}.webp`}
                                 alt=""
-                                className={`block h-auto w-full ${sectionNumber === 2 ? 'services-home-image' : ''}`}
+                                className={`block h-auto w-full ${hasMouseDepth ? 'home-depth-image' : ''}`}
                                 decoding="async"
                                 fetchPriority={isFirstSection ? 'high' : 'auto'}
                                 loading={isFirstSection ? 'eager' : 'lazy'}
@@ -205,6 +374,7 @@ export default function HomePage() {
                             />
                         </picture>
 
+                        {sectionEffect && <AmbientLayer effect={sectionEffect} />}
                         {sectionNumber === 2 && <ServicesInteractiveLayer />}
 
                         {!isLastSection && (
