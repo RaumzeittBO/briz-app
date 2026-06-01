@@ -3,14 +3,12 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
     Bike,
-    CircleHelp,
-    HeartHandshake,
+    Compass,
     Home,
-    Info,
-    MapPinned,
+    Map,
     Menu,
-    Store,
-    Wrench,
+    Sparkles,
+    Users,
     X,
     type LucideIcon,
 } from 'lucide-react';
@@ -24,12 +22,10 @@ type NavLinkItem = {
 const navLinks: NavLinkItem[] = [
     { label: 'Inicio', href: '/', icon: Home },
     { label: 'Alquiler', href: '/rentals', icon: Bike },
-    { label: 'Tienda', href: '/shop', icon: Store },
-    { label: 'Ciclotours', href: '/routes', icon: MapPinned },
-    { label: 'Mecánica', href: '/service', icon: Wrench },
-    { label: 'Comunidad', href: '/community', icon: HeartHandshake },
-    { label: 'Conócenos', href: '/about', icon: Info },
-    { label: 'Preguntas frecuentes', href: '/#preguntas-frecuentes', icon: CircleHelp },
+    { label: 'Rutas', href: '/routes', icon: Map },
+    { label: 'Ciclotours', href: '/routes', icon: Compass },
+    { label: 'Experiencias', href: '/#experiencias', icon: Sparkles },
+    { label: 'Nosotros', href: '/about', icon: Users },
 ];
 
 export default function Navbar() {
@@ -50,31 +46,31 @@ export default function Navbar() {
     }, [location.pathname, location.hash]);
 
     useEffect(() => {
-        if (location.hash === '#preguntas-frecuentes') {
+        if (location.hash === '#experiencias') {
             window.setTimeout(() => {
-                document.getElementById('preguntas-frecuentes')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                document.getElementById('experiencias')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
             }, 80);
         }
     }, [location.pathname, location.hash]);
 
     const handleNavClick = (event: MouseEvent<HTMLAnchorElement>, href: string) => {
-        if (href === '/#preguntas-frecuentes' && location.pathname === '/') {
+        if (href === '/#experiencias' && location.pathname === '/') {
             event.preventDefault();
-            document.getElementById('preguntas-frecuentes')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            document.getElementById('experiencias')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
             window.history.replaceState(null, '', href);
             setMobileOpen(false);
             return;
         }
 
-        if (href === '/#preguntas-frecuentes') {
+        if (href === '/#experiencias') {
             event.preventDefault();
             navigate(href);
         }
     };
 
     const isActive = (href: string) => {
-        if (href === '/#preguntas-frecuentes') {
-            return location.hash === '#preguntas-frecuentes';
+        if (href === '/#experiencias') {
+            return location.hash === '#experiencias';
         }
         return location.pathname === href;
     };
@@ -88,58 +84,55 @@ export default function Navbar() {
         >
             <div className="relative bg-brand-yellow">
                 <nav className="mx-auto max-w-[1480px] px-3 sm:px-7 lg:px-7">
-                    <div className="flex h-[73px] items-center justify-between gap-2 lg:h-[104px]">
+                    <div className="flex h-[73px] items-center justify-between gap-2 lg:h-[88px]">
+                        {/* Logo */}
                         <Link to="/" className="group flex min-w-0 items-center gap-1 sm:gap-2 lg:gap-3" aria-label="BRIZ Centro de la Bicicleta">
                             <img
                                 src="/logo_bicicleta_principal.png"
                                 alt="Bicicleta BRIZ"
-                                className="h-[66px] w-[92px] shrink-0 object-contain brightness-0 invert transition-transform duration-200 group-hover:scale-[1.03] sm:h-[74px] sm:w-[110px] lg:h-[98px] lg:w-[158px]"
+                                className="h-[56px] w-[78px] shrink-0 object-contain brightness-0 invert transition-transform duration-200 group-hover:scale-[1.03] sm:h-[64px] sm:w-[96px] lg:h-[78px] lg:w-[120px]"
                             />
                             <img
                                 src="/logo_briz_principal.png"
                                 alt="BRIZ"
-                                className="-ml-1 h-[42px] w-auto max-w-[78px] shrink-0 object-contain brightness-0 invert sm:h-12 sm:max-w-[88px] lg:-ml-2 lg:h-[62px] lg:max-w-[122px]"
+                                className="-ml-1 h-[36px] w-auto max-w-[68px] shrink-0 object-contain brightness-0 invert sm:h-10 sm:max-w-[78px] lg:-ml-2 lg:h-[52px] lg:max-w-[104px]"
                             />
-                            <span className="mx-1 h-11 w-[3px] shrink-0 bg-white/95 sm:mx-3 sm:h-14 lg:mx-5 lg:h-[86px]" aria-hidden="true" />
-                            <span className="block whitespace-nowrap text-[9px] font-black uppercase leading-none tracking-normal text-white drop-shadow-sm sm:text-xs lg:text-xl 2xl:text-2xl">
+                            <span className="mx-1 hidden h-10 w-[2px] shrink-0 bg-white/80 sm:block sm:mx-2 sm:h-11 lg:mx-3 lg:h-14" aria-hidden="true" />
+                            <span className="hidden font-maiandra text-[10px] font-bold uppercase leading-tight tracking-wider text-white drop-shadow-sm sm:block sm:text-xs lg:text-sm">
                                 Centro de la Bicicleta
                             </span>
                         </Link>
 
-                        <span className="hidden h-[86px] w-[3px] shrink-0 bg-white/95 lg:block" aria-hidden="true" />
-
-                        <div className="hidden min-w-0 flex-1 items-stretch justify-end gap-0 pl-8 lg:flex">
-                            {navLinks.filter((link) => link.href !== '/').map((link) => {
-                                const Icon = link.icon;
+                        {/* Desktop nav links — horizontal text-based layout */}
+                        <div className="hidden items-center gap-1 lg:flex">
+                            {navLinks.map((link) => {
                                 const active = isActive(link.href);
-
                                 return (
-                                    <div key={link.href} className="contents">
-                                        {link.href === '/about' && <span className="mx-2 my-2 w-[3px] shrink-0 bg-white/95" aria-hidden="true" />}
-                                        <Link
-                                            to={link.href}
-                                            onClick={(event) => handleNavClick(event, link.href)}
-                                            className={`group flex min-w-[78px] max-w-[132px] flex-1 flex-col items-center justify-center gap-1 rounded-sm px-1 py-2 text-center font-cocon text-[13px] font-black leading-[1.05] tracking-normal text-brand-black transition-colors duration-200 xl:text-lg ${active ? 'bg-white/20' : 'hover:bg-white/16'}`}
-                                        >
-                                            <Icon className="h-6 w-6 text-brand-black transition-transform duration-200 group-hover:-translate-y-0.5 xl:h-8 xl:w-8" strokeWidth={2.3} />
-                                            <span className="max-w-[118px] text-balance">{link.label}</span>
-                                        </Link>
-                                    </div>
+                                    <Link
+                                        key={link.label}
+                                        to={link.href}
+                                        onClick={(event) => handleNavClick(event, link.href)}
+                                        className={`relative rounded-full px-4 py-2 font-cocon text-sm font-bold tracking-wide text-brand-black transition-all duration-200 hover:bg-white/25 ${active ? 'bg-white/30' : ''}`}
+                                    >
+                                        {link.label}
+                                    </Link>
                                 );
                             })}
                         </div>
 
+                        {/* Mobile hamburger */}
                         <button
                             onClick={() => setMobileOpen((open) => !open)}
-                            className="ml-auto inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-sm text-white transition-transform active:scale-95 lg:hidden"
+                            className="ml-auto inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-white/15 text-brand-black transition-transform active:scale-95 lg:hidden"
                             aria-label={mobileOpen ? 'Cerrar menu' : 'Abrir menu'}
                             aria-expanded={mobileOpen}
                         >
-                            {mobileOpen ? <X className="h-9 w-9" strokeWidth={3} /> : <Menu className="h-10 w-10" strokeWidth={3} />}
+                            {mobileOpen ? <X className="h-7 w-7" strokeWidth={2.5} /> : <Menu className="h-7 w-7" strokeWidth={2.5} />}
                         </button>
                     </div>
                 </nav>
 
+                {/* Wavy white divider at bottom of navbar */}
                 <div className="pointer-events-none absolute -bottom-[25px] left-0 right-0 h-[34px] overflow-hidden" aria-hidden="true">
                     <svg viewBox="0 0 1440 38" className="h-full w-full" preserveAspectRatio="none">
                         <path d="M0 0H1440V12C1210 8 1032 9 862 17C680 26 505 33 314 28C182 25 86 18 0 10V0Z" fill="#FFD200" />
@@ -148,6 +141,7 @@ export default function Navbar() {
                 </div>
             </div>
 
+            {/* Mobile menu panel */}
             <AnimatePresence>
                 {mobileOpen && (
                     <motion.div
@@ -157,19 +151,18 @@ export default function Navbar() {
                         transition={{ duration: 0.2 }}
                         className="lg:hidden bg-brand-yellow px-4 pb-5 pt-3 shadow-[0_16px_30px_rgba(0,0,0,0.14)]"
                     >
-                        <div className="grid grid-cols-2 gap-2">
+                        <div className="flex flex-col gap-1">
                             {navLinks.map((link) => {
                                 const Icon = link.icon;
                                 const active = isActive(link.href);
-
                                 return (
                                     <Link
-                                        key={link.href}
+                                        key={link.label}
                                         to={link.href}
                                         onClick={(event) => handleNavClick(event, link.href)}
-                                        className={`flex min-h-16 items-center gap-3 rounded-sm px-3 py-3 text-sm font-black uppercase leading-tight text-brand-black transition-colors ${active ? 'bg-white/25' : 'bg-white/10 hover:bg-white/20'}`}
+                                        className={`flex items-center gap-3 rounded-2xl px-4 py-3.5 font-cocon text-base font-bold text-brand-black transition-colors ${active ? 'bg-white/30' : 'bg-white/10 hover:bg-white/20'}`}
                                     >
-                                        <Icon className="h-6 w-6 shrink-0" strokeWidth={2.4} />
+                                        <Icon className="h-5 w-5 shrink-0" strokeWidth={2.2} />
                                         <span>{link.label}</span>
                                     </Link>
                                 );

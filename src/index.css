@@ -1,5 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap');
-@import url('https://fonts.googleapis.com/css2?family=Gochi+Hand&display=swap');
+/* All brand fonts loaded locally from /public/fonts — no external Google Fonts */
 
 @import "tailwindcss";
 @import "tw-animate-css";
@@ -48,6 +47,15 @@
 @font-face {
   font-family: 'Scripter';
   src: url('/fonts/Scripter-Regular.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* Gochi Hand — Mensajes emocionales y decorativos (cargado localmente) */
+@font-face {
+  font-family: 'Gochi Hand';
+  src: url('/fonts/GochiHand-Regular.ttf') format('truetype');
   font-weight: normal;
   font-style: normal;
   font-display: swap;
@@ -125,7 +133,7 @@
 }
 
 @theme inline {
-  --font-sans: 'Poppins', 'Cocon', sans-serif;
+  --font-sans: 'Cocon', 'Maiandra GD', sans-serif;
   --font-primary: 'TAN Songbird', serif;
   --font-secondary: 'Cocon', sans-serif;
   --font-handwritten: 'Gochi Hand', cursive;

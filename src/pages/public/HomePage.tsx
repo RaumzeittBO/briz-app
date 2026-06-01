@@ -3,488 +3,438 @@ import { Link } from 'react-router-dom';
 import {
     ArrowRight,
     Bike,
-    ChevronsRight,
-    HeartHandshake,
-    MapPinned,
+    ChevronLeft,
+    ChevronRight,
+    Headphones,
+    Map,
     Route,
+    Shield,
     Sparkles,
-    ShoppingBasket,
-    Wrench,
-    type LucideIcon,
+    Star,
+    Users,
 } from 'lucide-react';
-import type { CSSProperties, MouseEvent } from 'react';
 
-const homeSections = [1, 2, 3, 4, 5, 6];
-
-type ServicesHotspot = {
-    label: string;
-    href: string;
-    color: string;
-    icon: LucideIcon;
-    desktopPosition: { left: string; top: string };
-    mobilePosition: { left: string; top: string };
-    glowPosition: { x: string; y: string };
+/* ───────── animation presets ───────── */
+const fadeUp = {
+    initial: { opacity: 0, y: 28 },
+    whileInView: { opacity: 1, y: 0 },
+    viewport: { once: true, amount: 0.18 },
+    transition: { duration: 0.6, ease: 'easeOut' as const },
 };
 
-type AmbientParticle = {
-    color: string;
-    left: string;
-    top: string;
-    size: string;
-    delay?: string;
-    duration?: string;
+const stagger = {
+    initial: { opacity: 0, y: 22 },
+    whileInView: { opacity: 1, y: 0 },
+    viewport: { once: true, amount: 0.12 },
 };
 
-type AmbientTrail = {
-    left: string;
-    top: string;
-    width: string;
-    rotate: string;
-    color: string;
-    delay?: string;
-};
 
-type HomeSectionEffect = {
-    section: number;
-    intensity: 'hero' | 'service' | 'soft';
-    colors: string[];
-    glowPosition: { x: string; y: string };
-    particles: AmbientParticle[];
-    trails?: AmbientTrail[];
-};
+/* ───────── data ───────── */
+const services = [
+    { icon: Bike, title: 'Alquiler', subtitle: 'de bicicletas', color: '#FFD200', bg: 'bg-[#FFF6D0]' },
+    { icon: Route, title: 'Rutas', subtitle: 'para todos', color: '#52CD7B', bg: 'bg-[#E3F9EB]' },
+    { icon: Sparkles, title: 'Experiencias', subtitle: 'únicas', color: '#FD7B2C', bg: 'bg-[#FFF0E4]' },
+    { icon: Shield, title: 'Seguridad', subtitle: 'garantizada', color: '#24A9C5', bg: 'bg-[#E0F5FA]' },
+    { icon: Headphones, title: 'Soporte 24/7', subtitle: 'estamos contigo', color: '#FA0E95', bg: 'bg-[#FDE6F3]' },
+];
 
-type HeroWidget = {
-    label: string;
-    sublabel?: string;
-    href: string;
-    variant: 'explore' | 'routes' | 'primary';
-    icon: LucideIcon;
-    desktopPosition: { left: string; top: string };
-    mobilePosition: { left: string; top: string };
-};
-
-const servicesHotspots: ServicesHotspot[] = [
+const experiences = [
     {
-        label: 'Alquiler',
-        href: '/rentals',
+        title: 'Ciclotours',
+        subtitle: 'Aventura y naturaleza',
+        image: '/images/cristo.jpg',
         color: '#FFD200',
-        icon: Bike,
-        desktopPosition: { left: '12.5%', top: '20%' },
-        mobilePosition: { left: '6%', top: '9%' },
-        glowPosition: { x: '18%', y: '24%' },
-    },
-    {
-        label: 'Tienda',
-        href: '/shop',
-        color: '#FA0E95',
-        icon: ShoppingBasket,
-        desktopPosition: { left: '12.5%', top: '30.5%' },
-        mobilePosition: { left: '6%', top: '15.5%' },
-        glowPosition: { x: '20%', y: '34%' },
-    },
-    {
-        label: 'Ciclotours',
         href: '/routes',
+    },
+    {
+        title: 'En familia',
+        subtitle: 'Diversión para todos',
+        image: '/hero-nosotros-computadora.jpg',
         color: '#52CD7B',
-        icon: Route,
-        desktopPosition: { left: '12.5%', top: '41%' },
-        mobilePosition: { left: '6%', top: '22%' },
-        glowPosition: { x: '24%', y: '44%' },
-    },
-    {
-        label: 'Mecánica',
-        href: '/service',
-        color: '#9B5A32',
-        icon: Wrench,
-        desktopPosition: { left: '12.5%', top: '51.5%' },
-        mobilePosition: { left: '6%', top: '28.5%' },
-        glowPosition: { x: '20%', y: '54%' },
-    },
-    {
-        label: 'Comunidad',
-        href: '/community',
-        color: '#24A9C5',
-        icon: HeartHandshake,
-        desktopPosition: { left: '12.5%', top: '62%' },
-        mobilePosition: { left: '6%', top: '35%' },
-        glowPosition: { x: '23%', y: '64%' },
-    },
-];
-
-type HotspotStyle = CSSProperties & Record<'--hotspot-color' | '--desktop-left' | '--desktop-top' | '--mobile-left' | '--mobile-top' | '--glow-x' | '--glow-y', string>;
-type AmbientStyle = CSSProperties & Record<'--ambient-color' | '--ambient-left' | '--ambient-top' | '--ambient-size' | '--ambient-delay' | '--ambient-duration', string>;
-type TrailStyle = CSSProperties & Record<'--trail-color' | '--trail-left' | '--trail-top' | '--trail-width' | '--trail-rotate' | '--trail-delay', string>;
-type HeroWidgetStyle = CSSProperties & Record<'--hero-widget-desktop-left' | '--hero-widget-desktop-top' | '--hero-widget-mobile-left' | '--hero-widget-mobile-top', string>;
-
-const heroWidgets: HeroWidget[] = [
-    {
-        label: 'Explora BRIZ',
-        sublabel: 'alquiler · tienda · ciclotours',
-        href: '#servicios',
-        variant: 'explore',
-        icon: Bike,
-        desktopPosition: { left: '25%', top: '19%' },
-        mobilePosition: { left: '31%', top: '15%' },
-    },
-    {
-        label: 'Cochabamba sobre ruedas',
         href: '/routes',
-        variant: 'routes',
-        icon: MapPinned,
-        desktopPosition: { left: '73%', top: '21.5%' },
-        mobilePosition: { left: '74%', top: '35%' },
     },
     {
-        label: 'Empieza tu experiencia',
+        title: 'Paseos urbanos',
+        subtitle: 'Descubre la ciudad',
+        image: '/hero-tienda-computadora.jpg',
+        color: '#FD7B2C',
+        href: '/routes',
+    },
+    {
+        title: 'Para todos',
+        subtitle: 'Sin límites de edad',
+        image: '/hero-alquiler-computadora.jpg',
+        color: '#24A9C5',
         href: '/rentals',
-        variant: 'primary',
-        icon: Sparkles,
-        desktopPosition: { left: '50%', top: '72%' },
-        mobilePosition: { left: '50%', top: '70%' },
     },
 ];
 
-const homeSectionEffects: HomeSectionEffect[] = [
-    {
-        section: 1,
-        intensity: 'hero',
-        colors: ['#FFD200', '#FFFFFF', '#22B8C7', '#FF3FA4'],
-        glowPosition: { x: '50%', y: '41%' },
-        particles: [
-            { color: '#FFD200', left: '14%', top: '16%', size: '10px' },
-            { color: '#FFFFFF', left: '18%', top: '21%', size: '6px', delay: '0.5s' },
-            { color: '#FFD200', left: '33%', top: '27%', size: '8px', delay: '1s' },
-            { color: '#FFFFFF', left: '38%', top: '20%', size: '5px', delay: '1.4s' },
-            { color: '#FFD200', left: '52%', top: '32%', size: '7px', delay: '0.8s' },
-            { color: '#22B8C7', left: '59%', top: '43%', size: '6px', delay: '1.8s' },
-            { color: '#FF3FA4', left: '45%', top: '62%', size: '7px', delay: '2.2s' },
-            { color: '#FFD200', left: '72%', top: '25%', size: '8px', delay: '2.8s' },
-            { color: '#FFFFFF', left: '78%', top: '52%', size: '5px', delay: '3.2s' },
-            { color: '#FFD200', left: '86%', top: '38%', size: '6px', delay: '3.6s' },
-            { color: '#22B8C7', left: '24%', top: '73%', size: '5px', delay: '4s' },
-            { color: '#FFFFFF', left: '66%', top: '70%', size: '6px', delay: '4.4s' },
-        ],
-        trails: [
-            { left: '4%', top: '55%', width: '22%', rotate: '-8deg', color: '#FFD200' },
-            { left: '58%', top: '36%', width: '18%', rotate: '15deg', color: '#22B8C7', delay: '0.9s' },
-            { left: '68%', top: '61%', width: '24%', rotate: '-12deg', color: '#FFD200', delay: '1.5s' },
-            { left: '34%', top: '66%', width: '15%', rotate: '9deg', color: '#FF3FA4', delay: '2.1s' },
-        ],
-    },
-    {
-        section: 2,
-        intensity: 'service',
-        colors: ['#FFD200', '#FA0E95', '#52CD7B', '#24A9C5'],
-        glowPosition: { x: '26%', y: '38%' },
-        particles: [],
-    },
-    {
-        section: 3,
-        intensity: 'soft',
-        colors: ['#52CD7B', '#FFD200', '#FFFFFF'],
-        glowPosition: { x: '24%', y: '34%' },
-        particles: [
-            { color: '#52CD7B', left: '18%', top: '20%', size: '7px' },
-            { color: '#FFD200', left: '58%', top: '18%', size: '6px', delay: '1.1s' },
-            { color: '#FFFFFF', left: '78%', top: '48%', size: '5px', delay: '2s' },
-            { color: '#52CD7B', left: '36%', top: '76%', size: '5px', delay: '2.8s' },
-        ],
-    },
-    {
-        section: 4,
-        intensity: 'soft',
-        colors: ['#24A9C5', '#FFD200', '#FFFFFF'],
-        glowPosition: { x: '64%', y: '42%' },
-        particles: [
-            { color: '#24A9C5', left: '20%', top: '30%', size: '6px' },
-            { color: '#FFFFFF', left: '44%', top: '18%', size: '5px', delay: '1.2s' },
-            { color: '#FFD200', left: '70%', top: '62%', size: '7px', delay: '2.4s' },
-            { color: '#24A9C5', left: '86%', top: '34%', size: '5px', delay: '3s' },
-        ],
-    },
-    {
-        section: 5,
-        intensity: 'soft',
-        colors: ['#FA0E95', '#FFD200', '#FFFFFF'],
-        glowPosition: { x: '50%', y: '44%' },
-        particles: [
-            { color: '#FA0E95', left: '15%', top: '42%', size: '6px' },
-            { color: '#FFD200', left: '35%', top: '24%', size: '5px', delay: '1.3s' },
-            { color: '#FFFFFF', left: '62%', top: '66%', size: '5px', delay: '2.1s' },
-            { color: '#FA0E95', left: '82%', top: '38%', size: '6px', delay: '3.1s' },
-        ],
-    },
-    {
-        section: 6,
-        intensity: 'soft',
-        colors: ['#FFD200', '#24A9C5', '#FFFFFF'],
-        glowPosition: { x: '42%', y: '42%' },
-        particles: [
-            { color: '#FFD200', left: '20%', top: '24%', size: '6px' },
-            { color: '#24A9C5', left: '48%', top: '18%', size: '5px', delay: '1.2s' },
-            { color: '#FFFFFF', left: '74%', top: '56%', size: '5px', delay: '2.2s' },
-            { color: '#FFD200', left: '58%', top: '78%', size: '6px', delay: '3s' },
-        ],
-    },
+const stats = [
+    { icon: Bike, value: '+1,500', label: 'Bicicletas disponibles', color: '#FFD200' },
+    { icon: Map, value: '25+', label: 'Rutas increíbles', color: '#52CD7B' },
+    { icon: Users, value: '10K+', label: 'Personas felices', color: '#FD7B2C' },
+    { icon: Shield, value: '100%', label: 'Seguridad garantizada', color: '#24A9C5' },
 ];
 
-function HeroInteractiveWidgets() {
+/* ═══════════════════════════════════════ */
+/*            HERO SECTION                 */
+/* ═══════════════════════════════════════ */
+function HeroSection() {
     return (
-        <div className="hero-widget-layer pointer-events-none absolute inset-0 z-20" aria-hidden={false}>
-            <span className="hero-route-trace hero-route-trace-1" aria-hidden="true" />
-            <span className="hero-route-trace hero-route-trace-2" aria-hidden="true" />
-            <span className="hero-route-trace hero-route-trace-3" aria-hidden="true" />
+        <section className="relative min-h-[92vh] w-full overflow-hidden bg-brand-beige pt-[73px] lg:pt-[88px]">
+            {/* Background artwork image — the brand collage */}
+            <div className="absolute inset-0 pt-[73px] lg:pt-[88px]">
+                <picture>
+                    <source media="(max-width: 767px)" srcSet="/menu-principal-celular/1.webp" />
+                    <img
+                        src="/menu-principal-web/1.webp"
+                        alt="Briz — Una bicicleta. Un ciclo de expresiones infinitas."
+                        className="h-full w-full object-cover object-top"
+                        decoding="async"
+                        fetchPriority="high"
+                        loading="eager"
+                    />
+                </picture>
+            </div>
 
-            {heroWidgets.map((widget) => {
-                const Icon = widget.icon;
-                const widgetStyle: HeroWidgetStyle = {
-                    '--hero-widget-desktop-left': widget.desktopPosition.left,
-                    '--hero-widget-desktop-top': widget.desktopPosition.top,
-                    '--hero-widget-mobile-left': widget.mobilePosition.left,
-                    '--hero-widget-mobile-top': widget.mobilePosition.top,
-                };
-                const content = (
-                    <>
-                        <span className="hero-widget-icon">
-                            <Icon className="h-full w-full" strokeWidth={2.35} />
-                        </span>
-                        <span className="hero-widget-copy">
-                            <span className="hero-widget-label">{widget.label}</span>
-                            {widget.sublabel && <span className="hero-widget-subtitle">{widget.sublabel}</span>}
-                        </span>
-                        {widget.variant === 'primary' && <ArrowRight className="hero-widget-arrow" strokeWidth={2.8} />}
-                    </>
-                );
+            {/* Gradient overlays for text legibility */}
+            <div className="pointer-events-none absolute inset-0 bg-gradient-to-r from-brand-beige/90 via-brand-beige/50 to-transparent md:via-brand-beige/30" />
+            <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-brand-beige via-transparent to-transparent" />
 
-                if (widget.href.startsWith('#')) {
-                    return (
-                        <a
-                            key={widget.label}
-                            href={widget.href}
-                            className={`hero-widget hero-widget-${widget.variant} pointer-events-auto`}
-                            style={widgetStyle}
-                            aria-label={widget.label}
+            {/* Hero content overlay */}
+            <div className="relative z-10 mx-auto flex min-h-[calc(92vh-73px)] max-w-[1480px] items-end px-5 pb-16 sm:items-center sm:px-8 lg:min-h-[calc(92vh-88px)] lg:px-12">
+                <motion.div
+                    initial={{ opacity: 0, y: 30 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.7, ease: 'easeOut' }}
+                    className="max-w-xl space-y-6 lg:max-w-lg"
+                >
+                    {/* Badge */}
+                    <motion.span
+                        initial={{ opacity: 0, scale: 0.85 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        transition={{ delay: 0.25, duration: 0.4 }}
+                        className="inline-flex items-center gap-2 rounded-full border-2 border-brand-yellow bg-white/80 px-4 py-1.5 font-maiandra text-xs font-bold uppercase tracking-wider text-brand-black shadow-sm backdrop-blur-sm"
+                    >
+                        <Bike className="h-4 w-4 text-brand-yellow" strokeWidth={2.5} />
+                        Centro de la Bicicleta
+                    </motion.span>
+
+                    {/* Supporting text */}
+                    <div className="rounded-2xl bg-brand-beige/60 p-4 backdrop-blur-sm sm:bg-transparent sm:p-0 sm:backdrop-blur-none">
+                        <p className="font-cocon text-lg font-bold leading-relaxed text-brand-black/80 sm:text-xl lg:text-2xl">
+                            Alquila, recorre y vive experiencias únicas sobre dos ruedas.
+                        </p>
+                    </div>
+
+                    {/* CTA buttons */}
+                    <div className="flex flex-wrap gap-3">
+                        <Link
+                            to="/rentals"
+                            className="group inline-flex items-center gap-2 rounded-full border-2 border-brand-black bg-brand-yellow px-6 py-3 font-cocon text-sm font-bold text-brand-black shadow-[3px_3px_0px_rgba(0,0,0,0.9)] transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[4px_5px_0px_rgba(0,0,0,0.9)] active:translate-x-[2px] active:translate-y-[2px] active:shadow-none sm:px-7 sm:py-3.5 sm:text-base"
                         >
-                            {content}
-                        </a>
-                    );
-                }
+                            Alquilar bicicleta
+                            <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" strokeWidth={2.5} />
+                        </Link>
+                        <Link
+                            to="/routes"
+                            className="group inline-flex items-center gap-2 rounded-full border-2 border-brand-black bg-white px-6 py-3 font-cocon text-sm font-bold text-brand-black shadow-[3px_3px_0px_rgba(0,0,0,0.9)] transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[4px_5px_0px_rgba(0,0,0,0.9)] active:translate-x-[2px] active:translate-y-[2px] active:shadow-none sm:px-7 sm:py-3.5 sm:text-base"
+                        >
+                            Explorar rutas
+                            <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" strokeWidth={2.5} />
+                        </Link>
+                    </div>
 
-                return (
-                    <Link
-                        key={widget.label}
-                        to={widget.href}
-                        className={`hero-widget hero-widget-${widget.variant} pointer-events-auto`}
-                        style={widgetStyle}
-                        aria-label={widget.label}
-                    >
-                        {content}
-                    </Link>
-                );
-            })}
-        </div>
+                    {/* Social proof */}
+                    <div className="flex items-center gap-3 pt-2">
+                        {/* Overlapping avatars */}
+                        <div className="flex -space-x-2.5">
+                            {[
+                                'bg-brand-yellow',
+                                'bg-brand-cyan',
+                                'bg-[#52CD7B]',
+                                'bg-brand-orange',
+                            ].map((bg, i) => (
+                                <div
+                                    key={i}
+                                    className={`flex h-9 w-9 items-center justify-center rounded-full border-2 border-white text-xs font-bold text-white shadow-sm ${bg}`}
+                                >
+                                    {['MF', 'CQ', 'AB', 'RM'][i]}
+                                </div>
+                            ))}
+                        </div>
+                        <div className="flex flex-col">
+                            <div className="flex gap-0.5">
+                                {[...Array(5)].map((_, i) => (
+                                    <Star key={i} className="h-3.5 w-3.5 fill-brand-yellow text-brand-yellow" strokeWidth={0} />
+                                ))}
+                            </div>
+                            <span className="font-maiandra text-xs font-bold text-brand-black/60">
+                                +1,250 aventureros felices
+                            </span>
+                        </div>
+                    </div>
+                </motion.div>
+            </div>
+        </section>
     );
 }
 
-function HomeOrganicDivider({ variant }: { variant: 'a' | 'b' }) {
-    const isVariantA = variant === 'a';
-    const bandPath = isVariantA
-        ? 'M0 36C185 82 370 86 568 54C756 24 912 7 1110 34C1256 54 1352 76 1440 48L1440 82C1352 110 1256 88 1110 68C912 41 756 58 568 88C370 120 185 116 0 70Z'
-        : 'M0 54C160 28 332 20 528 44C744 70 918 98 1114 64C1266 38 1360 26 1440 42L1440 76C1360 60 1266 72 1114 98C918 132 744 104 528 78C332 54 160 62 0 88Z';
-    const linePath = isVariantA
-        ? 'M0 36C185 82 370 86 568 54C756 24 912 7 1110 34C1256 54 1352 76 1440 48'
-        : 'M0 54C160 28 332 20 528 44C744 70 918 98 1114 64C1266 38 1360 26 1440 42';
-
+/* ═══════════════════════════════════════ */
+/*         SERVICE FEATURE STRIP           */
+/* ═══════════════════════════════════════ */
+function ServiceStrip() {
     return (
-        <div className="pointer-events-none absolute inset-x-0 -bottom-7 z-20 h-14 sm:-bottom-10 sm:h-20 lg:-bottom-14 lg:h-28" aria-hidden="true">
-            <svg
-                viewBox="0 0 1440 128"
-                className="h-full w-full drop-shadow-[0_-6px_14px_rgba(0,0,0,0.08)]"
-                preserveAspectRatio="none"
+        <section className="relative z-20 -mt-12 px-4 sm:-mt-16 sm:px-6 lg:-mt-20 lg:px-8">
+            <motion.div
+                {...fadeUp}
+                className="mx-auto max-w-[1200px] rounded-3xl bg-white p-4 shadow-[0_8px_40px_rgba(0,0,0,0.08)] sm:p-6 lg:rounded-[2rem] lg:p-8"
             >
-                <path d={bandPath} fill="#FFD200" fillOpacity="0.76" />
-                <path d={linePath} fill="none" stroke="#FFFFFF" strokeWidth="6" strokeLinecap="round" />
-                <path d={linePath} fill="none" stroke="#FFFFFF" strokeWidth="2" strokeOpacity="0.45" strokeLinecap="round" transform="translate(0 9)" />
-            </svg>
-        </div>
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5 lg:gap-4">
+                    {services.map((service, i) => {
+                        const Icon = service.icon;
+                        return (
+                            <motion.div
+                                key={service.title}
+                                initial={{ opacity: 0, y: 18 }}
+                                whileInView={{ opacity: 1, y: 0 }}
+                                viewport={{ once: true }}
+                                transition={{ delay: i * 0.08, duration: 0.45 }}
+                                className="group flex flex-col items-center gap-2.5 rounded-2xl p-4 text-center transition-all duration-200 hover:bg-brand-beige/50 sm:p-5"
+                            >
+                                <div
+                                    className={`flex h-14 w-14 items-center justify-center rounded-full ${service.bg} transition-transform duration-200 group-hover:scale-110 sm:h-16 sm:w-16`}
+                                >
+                                    <Icon className="h-7 w-7 sm:h-8 sm:w-8" style={{ color: service.color }} strokeWidth={2} />
+                                </div>
+                                <div>
+                                    <p className="font-tangkiwood text-sm font-bold text-brand-black sm:text-base">
+                                        {service.title}
+                                    </p>
+                                    <p className="font-maiandra text-xs text-brand-black/50">
+                                        {service.subtitle}
+                                    </p>
+                                </div>
+                            </motion.div>
+                        );
+                    })}
+                </div>
+            </motion.div>
+        </section>
     );
 }
 
-function AmbientLayer({ effect }: { effect: HomeSectionEffect }) {
-    const ambientStyle = {
-        '--ambient-primary': effect.colors[0],
-        '--ambient-secondary': effect.colors[1],
-        '--ambient-accent': effect.colors[2] ?? effect.colors[0],
-        '--ambient-glow-x': effect.glowPosition.x,
-        '--ambient-glow-y': effect.glowPosition.y,
-    } as CSSProperties;
-
+/* ═══════════════════════════════════════ */
+/*         EXPERIENCE SECTION              */
+/* ═══════════════════════════════════════ */
+function ExperienceSection() {
     return (
-        <div
-            className={`home-ambient-layer home-ambient-${effect.intensity} pointer-events-none absolute inset-0 z-10`}
-            style={ambientStyle}
-            aria-hidden="true"
-        >
-            <div className="home-ambient-glow" />
-            {effect.section === 1 && (
-                <>
-                    <div className="hero-sun-orbit hero-sun-orbit-left" />
-                    <div className="hero-sun-orbit hero-sun-orbit-center" />
-                    <div className="hero-word-glow" />
-                </>
-            )}
-            <div className="home-ambient-depth">
-                {effect.particles.map((particle, particleIndex) => {
-                    const particleStyle: AmbientStyle = {
-                        '--ambient-color': particle.color,
-                        '--ambient-left': particle.left,
-                        '--ambient-top': particle.top,
-                        '--ambient-size': particle.size,
-                        '--ambient-delay': particle.delay ?? `${particleIndex * 0.35}s`,
-                        '--ambient-duration': particle.duration ?? (effect.intensity === 'hero' ? '6.8s' : '8.8s'),
-                    };
+        <section id="experiencias" className="bg-brand-beige py-16 sm:py-20 lg:py-24">
+            <div className="mx-auto max-w-[1280px] px-5 sm:px-8 lg:px-12">
+                {/* Header */}
+                <motion.div {...fadeUp} className="mb-10 flex items-end justify-between gap-4 sm:mb-14">
+                    <div className="relative">
+                        {/* Decorative dotted arc */}
+                        <svg
+                            className="absolute -right-12 -top-4 hidden h-10 w-24 text-brand-yellow/50 sm:block"
+                            viewBox="0 0 96 40"
+                            fill="none"
+                        >
+                            <path
+                                d="M2 38C20 10 50 2 94 8"
+                                stroke="currentColor"
+                                strokeWidth="2.5"
+                                strokeDasharray="5 5"
+                                strokeLinecap="round"
+                            />
+                        </svg>
+                        <h2 className="font-tan text-3xl text-brand-black sm:text-4xl lg:text-5xl">
+                            Elige tu experiencia
+                        </h2>
+                    </div>
+                    <div className="hidden gap-2 sm:flex">
+                        <button
+                            className="flex h-10 w-10 items-center justify-center rounded-full border-2 border-brand-yellow bg-white text-brand-black transition-colors hover:bg-brand-yellow"
+                            aria-label="Anterior"
+                        >
+                            <ChevronLeft className="h-5 w-5" strokeWidth={2.5} />
+                        </button>
+                        <button
+                            className="flex h-10 w-10 items-center justify-center rounded-full border-2 border-brand-yellow bg-brand-yellow text-brand-black transition-colors hover:bg-brand-yellow/80"
+                            aria-label="Siguiente"
+                        >
+                            <ChevronRight className="h-5 w-5" strokeWidth={2.5} />
+                        </button>
+                    </div>
+                </motion.div>
 
-                    return <span key={`${effect.section}-particle-${particleIndex}`} className="home-ambient-particle" style={particleStyle} />;
-                })}
+                {/* Cards grid */}
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 lg:gap-5">
+                    {experiences.map((exp, i) => (
+                        <motion.div
+                            key={exp.title}
+                            {...stagger}
+                            transition={{ delay: i * 0.1, duration: 0.5 }}
+                        >
+                            <Link
+                                to={exp.href}
+                                className="group relative block aspect-[3/4] overflow-hidden rounded-3xl shadow-lg transition-transform duration-300 hover:scale-[1.02] hover:shadow-xl sm:aspect-[4/5]"
+                            >
+                                {/* Image */}
+                                <img
+                                    src={exp.image}
+                                    alt={exp.title}
+                                    className="absolute inset-0 h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
+                                    loading="lazy"
+                                    decoding="async"
+                                />
+                                {/* Gradient overlay */}
+                                <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />
 
-                {effect.trails?.map((trail, trailIndex) => {
-                    const trailStyle: TrailStyle = {
-                        '--trail-color': trail.color,
-                        '--trail-left': trail.left,
-                        '--trail-top': trail.top,
-                        '--trail-width': trail.width,
-                        '--trail-rotate': trail.rotate,
-                        '--trail-delay': trail.delay ?? `${trailIndex * 0.45}s`,
-                    };
+                                {/* Top-left icon badge */}
+                                <div
+                                    className="absolute left-3 top-3 flex h-10 w-10 items-center justify-center rounded-full border-2 border-white/30 sm:left-4 sm:top-4 sm:h-11 sm:w-11"
+                                    style={{ backgroundColor: exp.color }}
+                                >
+                                    <Route className="h-5 w-5 text-white" strokeWidth={2} />
+                                </div>
 
-                    return <span key={`${effect.section}-trail-${trailIndex}`} className="home-motion-trail" style={trailStyle} />;
-                })}
+                                {/* Bottom content */}
+                                <div className="absolute inset-x-0 bottom-0 p-4 sm:p-5">
+                                    <h3 className="font-tangkiwood text-xl font-bold text-white drop-shadow-md sm:text-2xl">
+                                        {exp.title}
+                                    </h3>
+                                    <p className="font-cocon text-sm text-white/80">
+                                        {exp.subtitle}
+                                    </p>
+                                </div>
+
+                                {/* Bottom-right arrow */}
+                                <div className="absolute bottom-4 right-4 flex h-9 w-9 items-center justify-center rounded-full bg-white/20 text-white backdrop-blur-sm transition-all group-hover:bg-white group-hover:text-brand-black sm:bottom-5 sm:right-5">
+                                    <ArrowRight className="h-4 w-4" strokeWidth={2.5} />
+                                </div>
+                            </Link>
+                        </motion.div>
+                    ))}
+                </div>
             </div>
-        </div>
+        </section>
     );
 }
 
-function ServicesInteractiveLayer() {
+/* ═══════════════════════════════════════ */
+/*            STATS STRIP                  */
+/* ═══════════════════════════════════════ */
+function StatsStrip() {
     return (
-        <div
-            className="services-home-layer pointer-events-none absolute inset-0 z-10"
-            aria-hidden={false}
-        >
-            <div className="services-ambient-light absolute inset-0" aria-hidden="true" />
-            <div className="services-home-depth absolute inset-0">
-                <div className="services-home-spark service-spark-1" />
-                <div className="services-home-spark service-spark-2" />
-                <div className="services-home-spark service-spark-3" />
-                <div className="services-home-spark service-spark-4" />
-                <div className="services-home-spark service-spark-5" />
-                <div className="services-home-spark service-spark-6" />
-                <div className="services-home-spark service-spark-7" />
-                <div className="services-home-spark service-spark-8" />
-                <div className="services-home-spark service-spark-9" />
-                <div className="services-home-spark service-spark-10" />
-            </div>
+        <section className="bg-brand-beige px-4 py-12 sm:px-6 sm:py-16 lg:px-8">
+            <motion.div
+                {...fadeUp}
+                className="mx-auto max-w-[1100px] rounded-3xl border border-brand-yellow/20 bg-white p-6 shadow-sm sm:p-8 lg:rounded-[2rem] lg:p-10"
+            >
+                <div className="grid grid-cols-2 gap-6 lg:grid-cols-4 lg:gap-8">
+                    {stats.map((stat, i) => {
+                        const Icon = stat.icon;
+                        return (
+                            <motion.div
+                                key={stat.label}
+                                initial={{ opacity: 0, scale: 0.9 }}
+                                whileInView={{ opacity: 1, scale: 1 }}
+                                viewport={{ once: true }}
+                                transition={{ delay: i * 0.1, duration: 0.45 }}
+                                className="flex items-center gap-3 sm:gap-4"
+                            >
+                                <div
+                                    className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full sm:h-14 sm:w-14"
+                                    style={{ backgroundColor: `${stat.color}20` }}
+                                >
+                                    <Icon className="h-6 w-6 sm:h-7 sm:w-7" style={{ color: stat.color }} strokeWidth={2} />
+                                </div>
+                                <div>
+                                    <p className="font-cocon text-xl font-bold text-brand-black sm:text-2xl lg:text-3xl">
+                                        {stat.value}
+                                    </p>
+                                    <p className="font-maiandra text-xs text-brand-black/50 sm:text-sm">
+                                        {stat.label}
+                                    </p>
+                                </div>
+                            </motion.div>
+                        );
+                    })}
+                </div>
+            </motion.div>
+        </section>
+    );
+}
 
-            <div className="services-title-cue pointer-events-none absolute left-[5.8%] top-[7%] hidden items-center gap-3 text-white md:flex">
-                <ChevronsRight className="services-title-arrow h-14 w-14 lg:h-16 lg:w-16" strokeWidth={4} />
-                <span className="font-tan text-xl uppercase leading-none text-white drop-shadow-[2px_2px_0_rgba(0,0,0,0.75)] lg:text-3xl">
-                    Nuestros servicios:
-                </span>
-            </div>
+/* ═══════════════════════════════════════ */
+/*            CTA BANNER                   */
+/* ═══════════════════════════════════════ */
+function CTABanner() {
+    return (
+        <section className="bg-brand-beige px-4 pb-16 sm:px-6 sm:pb-20 lg:px-8 lg:pb-24">
+            <motion.div
+                {...fadeUp}
+                className="relative mx-auto max-w-[1200px] overflow-hidden rounded-3xl bg-brand-yellow p-8 sm:p-12 lg:rounded-[2rem] lg:p-16"
+            >
+                {/* Decorative SVG route illustration */}
+                <svg
+                    className="absolute bottom-0 right-0 h-full w-1/2 text-brand-yellow opacity-30 sm:opacity-40"
+                    viewBox="0 0 400 300"
+                    fill="none"
+                    aria-hidden="true"
+                >
+                    <path
+                        d="M50 280C80 200 150 180 200 160C260 136 280 80 320 50C340 36 370 30 390 28"
+                        stroke="currentColor"
+                        strokeWidth="3"
+                        strokeDasharray="8 6"
+                        strokeLinecap="round"
+                        filter="brightness(0.7)"
+                    />
+                    <circle cx="50" cy="280" r="6" fill="#111" opacity="0.3" />
+                    <circle cx="200" cy="160" r="5" fill="#111" opacity="0.2" />
+                    <circle cx="390" cy="28" r="6" fill="#111" opacity="0.3" />
+                    {/* Stylized sun */}
+                    <circle cx="340" cy="30" r="20" fill="#FFF" opacity="0.2" />
+                    <circle cx="340" cy="30" r="12" fill="#FFF" opacity="0.15" />
+                    {/* Trees */}
+                    <path d="M100 240L108 210L116 240Z" fill="#52CD7B" opacity="0.3" />
+                    <path d="M260 120L268 90L276 120Z" fill="#52CD7B" opacity="0.25" />
+                    <path d="M300 100L306 78L312 100Z" fill="#52CD7B" opacity="0.2" />
+                </svg>
 
-            {servicesHotspots.map((hotspot) => {
-                const Icon = hotspot.icon;
-                const style: HotspotStyle = {
-                    '--hotspot-color': hotspot.color,
-                    '--desktop-left': hotspot.desktopPosition.left,
-                    '--desktop-top': hotspot.desktopPosition.top,
-                    '--mobile-left': hotspot.mobilePosition.left,
-                    '--mobile-top': hotspot.mobilePosition.top,
-                    '--glow-x': hotspot.glowPosition.x,
-                    '--glow-y': hotspot.glowPosition.y,
-                };
-
-                return (
+                <div className="relative z-10 max-w-lg">
+                    <h2 className="font-tan text-2xl text-brand-black sm:text-3xl lg:text-4xl">
+                        Tu aventura comienza aquí
+                    </h2>
+                    <p className="mt-3 font-cocon text-base text-brand-black/70 sm:text-lg">
+                        Reserva en minutos y comienza a pedalear.
+                    </p>
                     <Link
-                        key={hotspot.href}
-                        to={hotspot.href}
-                        className="service-hotspot group pointer-events-auto"
-                        style={style}
-                        aria-label={`Ir a ${hotspot.label}`}
+                        to="/rentals"
+                        className="group mt-6 inline-flex items-center gap-2 rounded-full border-2 border-brand-black bg-brand-black px-7 py-3.5 font-cocon text-sm font-bold text-white shadow-[3px_3px_0px_rgba(0,0,0,0.3)] transition-all duration-200 hover:-translate-y-0.5 hover:bg-brand-charcoal hover:shadow-[4px_5px_0px_rgba(0,0,0,0.3)] active:translate-x-[2px] active:translate-y-[2px] active:shadow-none sm:text-base"
                     >
-                        <span className="service-hotspot-icon">
-                            <Icon className="h-full w-full" strokeWidth={2.2} />
-                        </span>
-                        <span className="service-hotspot-label">{hotspot.label}</span>
+                        Reservar ahora
+                        <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" strokeWidth={2.5} />
                     </Link>
-                );
-            })}
-        </div>
+                </div>
+            </motion.div>
+        </section>
     );
 }
 
-function handleServicesMouseMove(event: MouseEvent<HTMLElement>) {
-    const bounds = event.currentTarget.getBoundingClientRect();
-    const x = ((event.clientX - bounds.left) / bounds.width - 0.5).toFixed(3);
-    const y = ((event.clientY - bounds.top) / bounds.height - 0.5).toFixed(3);
-
-    event.currentTarget.style.setProperty('--briz-depth-x', x);
-    event.currentTarget.style.setProperty('--briz-depth-y', y);
-}
-
-function handleServicesMouseLeave(event: MouseEvent<HTMLElement>) {
-    event.currentTarget.style.setProperty('--briz-depth-x', '0');
-    event.currentTarget.style.setProperty('--briz-depth-y', '0');
-}
-
+/* ═══════════════════════════════════════ */
+/*            MAIN PAGE EXPORT             */
+/* ═══════════════════════════════════════ */
 export default function HomePage() {
     return (
-        <div className="bg-white pt-[73px] lg:pt-[104px]">
-            {homeSections.map((sectionNumber, index) => {
-                const isFirstSection = index === 0;
-                const isLastSection = index === homeSections.length - 1;
-                const sectionEffect = homeSectionEffects.find((effect) => effect.section === sectionNumber);
-                const hasMouseDepth = sectionNumber === 1 || sectionNumber === 2;
-
-                return (
-                    <motion.section
-                        key={sectionNumber}
-                        id={sectionNumber === 2 ? 'servicios' : undefined}
-                        className={`home-section-scene relative w-full overflow-visible ${sectionNumber === 2 ? 'services-home-scene' : ''}`}
-                        aria-label={`Sección principal ${sectionNumber}`}
-                        onMouseMove={hasMouseDepth ? handleServicesMouseMove : undefined}
-                        onMouseLeave={hasMouseDepth ? handleServicesMouseLeave : undefined}
-                        initial={isFirstSection ? false : { opacity: 0, y: 18 }}
-                        whileInView={{ opacity: 1, y: 0 }}
-                        viewport={{ once: true, amount: 0.18 }}
-                        transition={{ duration: 0.55, ease: 'easeOut' }}
-                        style={{ zIndex: homeSections.length - index }}
-                    >
-                        <picture>
-                            <source
-                                media="(max-width: 767px)"
-                                srcSet={`/menu-principal-celular/${sectionNumber}.webp`}
-                            />
-                            <img
-                                src={`/menu-principal-web/${sectionNumber}.webp`}
-                                alt=""
-                                className={`block h-auto w-full ${hasMouseDepth ? 'home-depth-image' : ''}`}
-                                decoding="async"
-                                fetchPriority={isFirstSection ? 'high' : 'auto'}
-                                loading={isFirstSection ? 'eager' : 'lazy'}
-                                sizes="100vw"
-                            />
-                        </picture>
-
-                        {sectionEffect && <AmbientLayer effect={sectionEffect} />}
-                        {sectionNumber === 1 && <HeroInteractiveWidgets />}
-                        {sectionNumber === 2 && <ServicesInteractiveLayer />}
-
-                        {!isLastSection && (
-                            <HomeOrganicDivider variant={index % 2 === 0 ? 'a' : 'b'} />
-                        )}
-                    </motion.section>
-                );
-            })}
+        <div className="bg-brand-beige">
+            <HeroSection />
+            <ServiceStrip />
+            <ExperienceSection />
+            <StatsStrip />
+            <CTABanner />
         </div>
     );
 }
