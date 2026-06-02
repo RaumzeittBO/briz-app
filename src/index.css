@@ -138,7 +138,7 @@
   --font-secondary: 'Cocon', sans-serif;
   --font-handwritten: 'Gochi Hand', cursive;
   --font-tangkiwood: 'TAN Tangkiwood', serif;
-  --font-maiandra: 'Maiandra GD', 'Poppins', sans-serif;
+  --font-maiandra: 'Maiandra GD', sans-serif;
   --font-scripter: 'Scripter', cursive;
   
   --color-brand-yellow: #FFD200;
@@ -308,7 +308,7 @@
 }
 
 .font-maiandra {
-  font-family: 'Maiandra GD', 'Poppins', sans-serif;
+  font-family: 'Maiandra GD', sans-serif;
 }
 
 .font-cocon {
@@ -601,7 +601,7 @@
 }
 
 .hero-widget-label {
-  font-family: 'Cocon', 'Poppins', sans-serif;
+  font-family: 'Cocon', sans-serif;
   font-size: clamp(0.78rem, 2.85vw, 1rem);
   font-weight: 900;
   letter-spacing: 0;
@@ -611,7 +611,7 @@
 
 .hero-widget-subtitle {
   margin-top: 0.08rem;
-  font-family: 'Maiandra GD', 'Poppins', sans-serif;
+  font-family: 'Maiandra GD', sans-serif;
   font-size: clamp(0.56rem, 2vw, 0.72rem);
   font-weight: 700;
   white-space: nowrap;

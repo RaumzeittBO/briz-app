@@ -1,3 +1,4 @@
+import { createContext, useContext, useEffect, useState, type ComponentType, type CSSProperties, type ReactNode } from 'react';
 import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
 import {
@@ -5,412 +6,1215 @@ import {
     Bike,
     ChevronLeft,
     ChevronRight,
-    Headphones,
+    HeartHandshake,
     Map,
+    MapPinned,
     Route,
-    Shield,
+    ShieldCheck,
     Sparkles,
     Star,
-    Users,
+    Store,
+    Wrench,
+    UsersRound,
+    type LucideIcon,
 } from 'lucide-react';
 
-/* ───────── animation presets ───────── */
-const fadeUp = {
-    initial: { opacity: 0, y: 28 },
-    whileInView: { opacity: 1, y: 0 },
-    viewport: { once: true, amount: 0.18 },
-    transition: { duration: 0.6, ease: 'easeOut' as const },
+const assetBase = '/menu-principal-web';
+const designStorageKey = 'briz-home-design-editor-v1';
+
+type DesignViewport = 'desktop' | 'mobile';
+type EditableElementId =
+    | 'heroLettering'
+    | 'heroCollage'
+    | 'heroButtons'
+    | 'servicesTitle'
+    | 'servicesImage'
+    | 'whyTitle'
+    | 'whyLeftText'
+    | 'purposeTitle'
+    | 'purposeText'
+    | 'brandTitle'
+    | 'brandLeftText'
+    | 'brandLogo'
+    | 'brandIllustration'
+    | 'brandRightText'
+    | 'brandComingSoon';
+
+type EditableTransform = {
+    x: number;
+    y: number;
+    scale: number;
 };
 
-const stagger = {
-    initial: { opacity: 0, y: 22 },
-    whileInView: { opacity: 1, y: 0 },
-    viewport: { once: true, amount: 0.12 },
+type DesignConfig = Record<DesignViewport, Record<EditableElementId, EditableTransform>>;
+
+const editableLabels: Record<EditableElementId, string> = {
+    heroLettering: 'Hero lettering',
+    heroCollage: 'Hero collage',
+    heroButtons: 'Hero botones',
+    servicesTitle: 'Servicios titulo',
+    servicesImage: 'Servicios imagen',
+    whyTitle: 'Por que elegir',
+    whyLeftText: 'Texto izquierdo',
+    purposeTitle: 'Proposito',
+    purposeText: 'Texto proposito',
+    brandTitle: 'Marca titulo',
+    brandLeftText: 'Marca texto izq.',
+    brandLogo: 'Marca logo',
+    brandIllustration: 'Marca ilustracion',
+    brandRightText: 'Marca texto der.',
+    brandComingSoon: 'Proximamente',
 };
 
-/* ───────── data ───────── */
-const services = [
-    { icon: Bike, title: 'Alquiler', subtitle: 'de bicicletas', color: '#FFD200', bg: 'bg-[#FFF6D0]' },
-    { icon: Route, title: 'Rutas', subtitle: 'para todos', color: '#52CD7B', bg: 'bg-[#E3F9EB]' },
-    { icon: Sparkles, title: 'Experiencias', subtitle: 'únicas', color: '#FD7B2C', bg: 'bg-[#FFF0E4]' },
-    { icon: Shield, title: 'Seguridad', subtitle: 'garantizada', color: '#24A9C5', bg: 'bg-[#E0F5FA]' },
-    { icon: Headphones, title: 'Soporte 24/7', subtitle: 'estamos contigo', color: '#FA0E95', bg: 'bg-[#FDE6F3]' },
+const defaultTransform: EditableTransform = { x: 0, y: 0, scale: 1 };
+
+const defaultDesignConfig: DesignConfig = {
+    desktop: {
+        heroLettering: { x: 0, y: 0, scale: 1.33 },
+        heroCollage: { x: 0, y: 0, scale: 0.92 },
+        heroButtons: { x: 0, y: 0, scale: 0.98 },
+        servicesTitle: { x: 0, y: 0, scale: 1 },
+        servicesImage: { x: 164, y: 0, scale: 1.19 },
+        whyTitle: { x: -184, y: 10, scale: 1 },
+        whyLeftText: { x: -132, y: 0, scale: 1 },
+        purposeTitle: { x: 105, y: -95, scale: 1 },
+        purposeText: { x: 138, y: -257, scale: 1.21 },
+        brandTitle: { x: 0, y: 0, scale: 1 },
+        brandLeftText: { x: 0, y: 0, scale: 1 },
+        brandLogo: { x: 0, y: 0, scale: 1 },
+        brandIllustration: { x: 0, y: 0, scale: 1 },
+        brandRightText: { x: 0, y: 0, scale: 1 },
+        brandComingSoon: { x: 0, y: 0, scale: 1 },
+    },
+    mobile: {
+        heroLettering: { x: 0, y: 0, scale: 1.2 },
+        heroCollage: { x: 0, y: 46, scale: 1 },
+        heroButtons: { x: 0, y: 0, scale: 1 },
+        servicesTitle: { x: 0, y: 0, scale: 1 },
+        servicesImage: { x: 0, y: 0, scale: 1 },
+        whyTitle: { x: 0, y: 0, scale: 1 },
+        whyLeftText: { x: 0, y: 0, scale: 1 },
+        purposeTitle: { x: 3, y: 72, scale: 1 },
+        purposeText: { x: 0, y: -112, scale: 1 },
+        brandTitle: { x: 0, y: 0, scale: 1 },
+        brandLeftText: { x: 0, y: 0, scale: 1 },
+        brandLogo: { x: 0, y: 0, scale: 1 },
+        brandIllustration: { x: 0, y: 0, scale: 1 },
+        brandRightText: { x: 0, y: 0, scale: 1 },
+        brandComingSoon: { x: 0, y: 0, scale: 1 },
+    },
+};
+
+type DesignEditorContextValue = {
+    activeViewport: DesignViewport;
+    config: DesignConfig;
+    editorOpen: boolean;
+    selectedId: EditableElementId;
+    setSelectedId: (id: EditableElementId) => void;
+    updateTransform: (viewport: DesignViewport, id: EditableElementId, patch: Partial<EditableTransform>) => void;
+};
+
+const DesignEditorContext = createContext<DesignEditorContextValue | null>(null);
+
+function cloneDefaultDesignConfig(): DesignConfig {
+    return {
+        desktop: { ...defaultDesignConfig.desktop },
+        mobile: { ...defaultDesignConfig.mobile },
+    };
+}
+
+function mergeDesignConfig(saved: unknown): DesignConfig {
+    const base = cloneDefaultDesignConfig();
+    if (!saved || typeof saved !== 'object') return base;
+
+    for (const viewport of ['desktop', 'mobile'] as const) {
+        const savedViewport = (saved as Partial<DesignConfig>)[viewport];
+        if (!savedViewport || typeof savedViewport !== 'object') continue;
+
+        for (const id of Object.keys(editableLabels) as EditableElementId[]) {
+            const value = savedViewport[id];
+            if (!value || typeof value !== 'object') continue;
+            base[viewport][id] = {
+                x: Number.isFinite(value.x) ? value.x : 0,
+                y: Number.isFinite(value.y) ? value.y : 0,
+                scale: Number.isFinite(value.scale) ? value.scale : 1,
+            };
+        }
+    }
+
+    return base;
+}
+
+function useCurrentViewport(): DesignViewport {
+    const [viewport, setViewport] = useState<DesignViewport>(() => {
+        if (typeof window === 'undefined') return 'desktop';
+        return window.innerWidth >= 1024 ? 'desktop' : 'mobile';
+    });
+
+    useEffect(() => {
+        const update = () => setViewport(window.innerWidth >= 1024 ? 'desktop' : 'mobile');
+        update();
+        window.addEventListener('resize', update);
+        return () => window.removeEventListener('resize', update);
+    }, []);
+
+    return viewport;
+}
+
+function useDesignConfig() {
+    const [config, setConfig] = useState<DesignConfig>(() => {
+        if (typeof window === 'undefined') return cloneDefaultDesignConfig();
+        try {
+            return mergeDesignConfig(JSON.parse(window.localStorage.getItem(designStorageKey) || 'null'));
+        } catch {
+            return cloneDefaultDesignConfig();
+        }
+    });
+
+    useEffect(() => {
+        window.localStorage.setItem(designStorageKey, JSON.stringify(config));
+    }, [config]);
+
+    const updateTransform = (viewport: DesignViewport, id: EditableElementId, patch: Partial<EditableTransform>) => {
+        setConfig((current) => ({
+            ...current,
+            [viewport]: {
+                ...current[viewport],
+                [id]: {
+                    ...current[viewport][id],
+                    ...patch,
+                },
+            },
+        }));
+    };
+
+    const reset = () => setConfig(cloneDefaultDesignConfig());
+
+    return { config, updateTransform, reset };
+}
+
+function editableStyle(transform: EditableTransform): CSSProperties {
+    return {
+        transform: `translate3d(${transform.x}px, ${transform.y}px, 0) scale(${transform.scale})`,
+        transformOrigin: 'center',
+    };
+}
+
+function EditableLayer({ id, className = '', children }: { id: EditableElementId; className?: string; children: ReactNode }) {
+    const editor = useContext(DesignEditorContext);
+    const [dragStart, setDragStart] = useState<{ pointerX: number; pointerY: number; x: number; y: number } | null>(null);
+
+    if (!editor) return <>{children}</>;
+
+    const transform = editor.config[editor.activeViewport][id];
+    const selected = editor.selectedId === id;
+
+    return (
+        <div
+            className={`relative ${editor.editorOpen ? 'cursor-move' : ''} ${selected && editor.editorOpen ? 'outline outline-2 outline-brand-pink/80 outline-offset-4' : ''} ${className}`}
+            style={editableStyle(transform)}
+            onClick={(event) => {
+                if (!editor.editorOpen) return;
+                event.preventDefault();
+                event.stopPropagation();
+                editor.setSelectedId(id);
+            }}
+            onPointerDown={(event) => {
+                if (!editor.editorOpen) return;
+                event.preventDefault();
+                event.stopPropagation();
+                editor.setSelectedId(id);
+                setDragStart({ pointerX: event.clientX, pointerY: event.clientY, x: transform.x, y: transform.y });
+                event.currentTarget.setPointerCapture(event.pointerId);
+            }}
+            onPointerMove={(event) => {
+                if (!editor.editorOpen || !dragStart) return;
+                editor.updateTransform(editor.activeViewport, id, {
+                    x: Math.round(dragStart.x + event.clientX - dragStart.pointerX),
+                    y: Math.round(dragStart.y + event.clientY - dragStart.pointerY),
+                });
+            }}
+            onPointerUp={() => setDragStart(null)}
+        >
+            {editor.editorOpen && (
+                <span className="pointer-events-none absolute -left-1 -top-7 z-50 rounded-full bg-brand-pink px-2 py-1 font-maiandra text-[10px] text-white shadow">
+                    {editableLabels[id]}
+                </span>
+            )}
+            {children}
+        </div>
+    );
+}
+
+function DesignEditorPanel({
+    config,
+    selectedId,
+    setSelectedId,
+    editViewport,
+    setEditViewport,
+    editorOpen,
+    setEditorOpen,
+    updateTransform,
+    reset,
+}: {
+    config: DesignConfig;
+    selectedId: EditableElementId;
+    setSelectedId: (id: EditableElementId) => void;
+    editViewport: DesignViewport;
+    setEditViewport: (viewport: DesignViewport) => void;
+    editorOpen: boolean;
+    setEditorOpen: (open: boolean) => void;
+    updateTransform: (viewport: DesignViewport, id: EditableElementId, patch: Partial<EditableTransform>) => void;
+    reset: () => void;
+}) {
+    const value = config[editViewport][selectedId];
+
+    const copyConfig = async () => {
+        const json = JSON.stringify(config, null, 2);
+        try {
+            await navigator.clipboard.writeText(json);
+            window.alert('Configuracion copiada.');
+        } catch {
+            window.prompt('Copia esta configuracion:', json);
+        }
+    };
+
+    if (!editorOpen) {
+        return (
+            <button
+                type="button"
+                onClick={() => setEditorOpen(true)}
+                className="fixed bottom-5 right-5 z-[120] rounded-full bg-brand-black px-5 py-3 font-cocon text-sm font-bold text-white shadow-[0_14px_28px_rgba(0,0,0,0.22)] transition hover:scale-105"
+            >
+                Editar diseño
+            </button>
+        );
+    }
+
+    return (
+        <aside className="fixed bottom-4 right-4 z-[120] w-[min(92vw,22rem)] rounded-2xl bg-white/96 p-4 shadow-[0_18px_50px_rgba(0,0,0,0.24)] ring-1 ring-brand-yellow/30 backdrop-blur">
+            <div className="mb-3 flex items-center justify-between gap-3">
+                <div>
+                    <p className="font-tan text-base leading-tight text-brand-black">Editor visual</p>
+                    <p className="font-maiandra text-xs text-brand-black/55">Se guarda en este navegador</p>
+                </div>
+                <button
+                    type="button"
+                    onClick={() => setEditorOpen(false)}
+                    className="rounded-full bg-brand-black px-3 py-1.5 font-cocon text-xs font-bold text-white"
+                >
+                    Cerrar
+                </button>
+            </div>
+
+            <div className="mb-3 grid grid-cols-2 gap-2">
+                {(['desktop', 'mobile'] as const).map((viewport) => (
+                    <button
+                        key={viewport}
+                        type="button"
+                        onClick={() => setEditViewport(viewport)}
+                        className={`rounded-full px-3 py-2 font-cocon text-sm font-bold ${editViewport === viewport ? 'bg-brand-yellow text-brand-black' : 'bg-[#FFF8DF] text-brand-black/65'}`}
+                    >
+                        {viewport === 'desktop' ? 'PC' : 'Móvil'}
+                    </button>
+                ))}
+            </div>
+
+            <label className="mb-3 block">
+                <span className="mb-1 block font-maiandra text-xs text-brand-black/60">Elemento</span>
+                <select
+                    value={selectedId}
+                    onChange={(event) => setSelectedId(event.target.value as EditableElementId)}
+                    className="w-full rounded-xl border border-brand-yellow/30 bg-white px-3 py-2 font-cocon text-sm text-brand-black"
+                >
+                    {(Object.keys(editableLabels) as EditableElementId[]).map((id) => (
+                        <option key={id} value={id}>
+                            {editableLabels[id]}
+                        </option>
+                    ))}
+                </select>
+            </label>
+
+            {[
+                { key: 'x', label: 'Mover X', min: -500, max: 500, step: 1 },
+                { key: 'y', label: 'Mover Y', min: -500, max: 500, step: 1 },
+                { key: 'scale', label: 'Tamaño', min: 0.35, max: 2.2, step: 0.01 },
+            ].map((control) => (
+                <label key={control.key} className="mb-3 block">
+                    <span className="mb-1 flex justify-between font-maiandra text-xs text-brand-black/60">
+                        <span>{control.label}</span>
+                        <span>{value[control.key as keyof EditableTransform]}</span>
+                    </span>
+                    <input
+                        type="range"
+                        min={control.min}
+                        max={control.max}
+                        step={control.step}
+                        value={value[control.key as keyof EditableTransform]}
+                        onChange={(event) => updateTransform(editViewport, selectedId, { [control.key]: Number(event.target.value) } as Partial<EditableTransform>)}
+                        className="w-full accent-brand-yellow"
+                    />
+                </label>
+            ))}
+
+            <div className="grid grid-cols-3 gap-2">
+                <button
+                    type="button"
+                    onClick={() => updateTransform(editViewport, selectedId, defaultTransform)}
+                    className="rounded-xl bg-[#FFF8DF] px-3 py-2 font-cocon text-xs font-bold text-brand-black"
+                >
+                    Reset elem.
+                </button>
+                <button
+                    type="button"
+                    onClick={reset}
+                    className="rounded-xl bg-[#FFE8E8] px-3 py-2 font-cocon text-xs font-bold text-brand-black"
+                >
+                    Reset todo
+                </button>
+                <button
+                    type="button"
+                    onClick={copyConfig}
+                    className="rounded-xl bg-brand-black px-3 py-2 font-cocon text-xs font-bold text-white"
+                >
+                    Copiar JSON
+                </button>
+            </div>
+        </aside>
+    );
+}
+
+type SmartImageProps = {
+    src: string;
+    fallbackSrcs?: string[];
+    alt: string;
+    className?: string;
+    placeholderClassName?: string;
+    placeholderLabel: string;
+    loading?: 'eager' | 'lazy';
+    fetchPriority?: 'high' | 'low' | 'auto';
+};
+
+function SmartImage({
+    src,
+    fallbackSrcs = [],
+    alt,
+    className = '',
+    placeholderClassName = '',
+    placeholderLabel,
+    loading = 'lazy',
+    fetchPriority,
+}: SmartImageProps) {
+    const sources = [src, ...fallbackSrcs];
+    const [sourceIndex, setSourceIndex] = useState(0);
+    const missing = sourceIndex >= sources.length;
+
+    if (missing) {
+        return (
+            <div className={`flex h-full w-full items-center justify-center ${placeholderClassName}`}>
+                <div className="max-w-[18rem] px-5 text-center">
+                    <p className="font-tangkiwood text-base text-brand-black sm:text-lg">Espacio reservado</p>
+                    <p className="mt-2 break-words font-maiandra text-xs leading-relaxed text-brand-black/55">
+                        Sube <span className="font-cocon text-brand-black">{placeholderLabel}</span>
+                    </p>
+                </div>
+            </div>
+        );
+    }
+
+    return (
+        <img
+            src={sources[sourceIndex]}
+            alt={alt}
+            className={className}
+            loading={loading}
+            decoding="async"
+            fetchPriority={fetchPriority}
+            onError={() => setSourceIndex((index) => index + 1)}
+        />
+    );
+}
+
+const serviceMenu: Array<{ icon: LucideIcon; label: string; color: string; href: string }> = [
+    { icon: Bike, label: 'Alquiler', color: '#FFD200', href: '/rentals' },
+    { icon: Store, label: 'Tienda', color: '#FA0E95', href: '/shop' },
+    { icon: Route, label: 'Ciclotours', color: '#62B851', href: '/routes' },
+    { icon: Wrench, label: 'Mecánica', color: '#9A653C', href: '/service' },
+    { icon: UsersRound, label: 'Comunidad', color: '#24A9C5', href: '/community' },
 ];
 
-const experiences = [
+const experiences: Array<{
+    title: string;
+    subtitle: string;
+    image: string;
+    file: string;
+    icon: LucideIcon;
+    color: string;
+    href: string;
+}> = [
     {
         title: 'Ciclotours',
         subtitle: 'Aventura y naturaleza',
-        image: '/images/cristo.jpg',
+        image: `${assetBase}/card-ciclotours.webp`,
+        file: 'card-ciclotours.webp',
+        icon: Bike,
         color: '#FFD200',
         href: '/routes',
     },
     {
         title: 'En familia',
         subtitle: 'Diversión para todos',
-        image: '/hero-nosotros-computadora.jpg',
-        color: '#52CD7B',
+        image: `${assetBase}/card-familia.webp`,
+        file: 'card-familia.webp',
+        icon: HeartHandshake,
+        color: '#62B851',
         href: '/routes',
     },
     {
         title: 'Paseos urbanos',
         subtitle: 'Descubre la ciudad',
-        image: '/hero-tienda-computadora.jpg',
+        image: `${assetBase}/card-urbanos.webp`,
+        file: 'card-urbanos.webp',
+        icon: UsersRound,
         color: '#FD7B2C',
         href: '/routes',
     },
     {
         title: 'Para todos',
         subtitle: 'Sin límites de edad',
-        image: '/hero-alquiler-computadora.jpg',
-        color: '#24A9C5',
+        image: `${assetBase}/card-todos.webp`,
+        file: 'card-todos.webp',
+        icon: ShieldCheck,
+        color: '#247EBC',
         href: '/rentals',
     },
 ];
 
 const stats = [
     { icon: Bike, value: '+1,500', label: 'Bicicletas disponibles', color: '#FFD200' },
-    { icon: Map, value: '25+', label: 'Rutas increíbles', color: '#52CD7B' },
-    { icon: Users, value: '10K+', label: 'Personas felices', color: '#FD7B2C' },
-    { icon: Shield, value: '100%', label: 'Seguridad garantizada', color: '#24A9C5' },
+    { icon: MapPinned, value: '25+', label: 'Rutas increíbles', color: '#67B852' },
+    { icon: UsersRound, value: '10K+', label: 'Personas felices', color: '#FD7B2C' },
+    { icon: ShieldCheck, value: '100%', label: 'Seguridad garantizada', color: '#247EBC' },
 ];
 
-/* ═══════════════════════════════════════ */
-/*            HERO SECTION                 */
-/* ═══════════════════════════════════════ */
+const fadeUp = {
+    initial: { opacity: 0, y: 24 },
+    whileInView: { opacity: 1, y: 0 },
+    viewport: { once: true, amount: 0.2 },
+    transition: { duration: 0.55, ease: 'easeOut' as const },
+};
+
+function LeafStem({ className = '' }: { className?: string }) {
+    return (
+        <svg className={className} viewBox="0 0 90 170" fill="none" aria-hidden="true">
+            <path d="M42 164C30 113 36 62 68 8" stroke="#D8BE3C" strokeWidth="2" strokeLinecap="round" />
+            {[18, 36, 58, 82, 108, 132].map((y, index) => (
+                <path
+                    key={y}
+                    d={index % 2 ? `M43 ${y + 18}C24 ${y + 9} 18 ${y - 2} 22 ${y - 14}` : `M48 ${y + 12}C66 ${y + 5} 74 ${y - 8} 72 ${y - 18}`}
+                    stroke="#D8BE3C"
+                    strokeWidth="1.7"
+                    strokeLinecap="round"
+                />
+            ))}
+        </svg>
+    );
+}
+
+const heroParticles = [
+    { left: '7%', top: '18%', size: 10, color: '#FFD200', delay: 0, duration: 6.5 },
+    { left: '14%', top: '58%', size: 7, color: '#24A9C5', delay: 0.9, duration: 7.8 },
+    { left: '23%', top: '28%', size: 6, color: '#FA0E95', delay: 1.3, duration: 6.9 },
+    { left: '35%', top: '72%', size: 9, color: '#67B852', delay: 0.4, duration: 8.2 },
+    { left: '48%', top: '16%', size: 12, color: '#FFD200', delay: 1.8, duration: 7.4 },
+    { left: '62%', top: '78%', size: 7, color: '#FD7B2C', delay: 0.7, duration: 6.8 },
+    { left: '72%', top: '21%', size: 8, color: '#24A9C5', delay: 1.1, duration: 8.1 },
+    { left: '84%', top: '55%', size: 11, color: '#FFD200', delay: 0.2, duration: 7.2 },
+    { left: '92%', top: '32%', size: 6, color: '#FA0E95', delay: 1.6, duration: 6.4 },
+    { left: '54%', top: '44%', size: 5, color: '#67B852', delay: 2.1, duration: 7.6 },
+];
+
+function HeroParticles() {
+    return (
+        <div className="pointer-events-none absolute inset-0 -z-[1] overflow-hidden" aria-hidden="true">
+            {heroParticles.map((particle) => (
+                <motion.span
+                    key={`${particle.left}-${particle.top}`}
+                    className="absolute rounded-full blur-[0.5px]"
+                    style={{
+                        left: particle.left,
+                        top: particle.top,
+                        width: particle.size,
+                        height: particle.size,
+                        backgroundColor: particle.color,
+                        boxShadow: `0 0 ${particle.size * 2.8}px ${particle.color}`,
+                    }}
+                    initial={{ opacity: 0, scale: 0.4, x: 0, y: 0 }}
+                    animate={{
+                        opacity: [0.18, 0.82, 0.28],
+                        scale: [0.7, 1.35, 0.9],
+                        x: [0, particle.size * 1.8, particle.size * -1.2, 0],
+                        y: [0, particle.size * -2.2, particle.size * 1.1, 0],
+                    }}
+                    transition={{
+                        duration: particle.duration,
+                        delay: particle.delay,
+                        repeat: Infinity,
+                        ease: 'easeInOut',
+                    }}
+                />
+            ))}
+            <motion.svg
+                className="absolute left-[-8%] top-[38%] h-44 w-[42rem] max-w-none text-brand-yellow/45 sm:left-[2%] sm:top-[46%]"
+                viewBox="0 0 680 170"
+                fill="none"
+                initial={{ opacity: 0, pathLength: 0 }}
+                animate={{ opacity: 1, pathLength: 1 }}
+                transition={{ duration: 1.3, delay: 0.6, ease: 'easeOut' }}
+            >
+                <motion.path
+                    d="M8 128C98 55 166 154 258 86C344 22 408 143 506 78C566 38 612 45 674 22"
+                    stroke="currentColor"
+                    strokeWidth="3"
+                    strokeDasharray="9 10"
+                    strokeLinecap="round"
+                    initial={{ pathLength: 0 }}
+                    animate={{ pathLength: 1 }}
+                    transition={{ duration: 1.8, delay: 0.35, ease: 'easeOut' }}
+                />
+            </motion.svg>
+        </div>
+    );
+}
+
+function HeroCollage({ variant }: { variant: 'mobile' | 'desktop' }) {
+    const isMobile = variant === 'mobile';
+
+    return (
+        <EditableLayer
+            id="heroCollage"
+            className={
+                isMobile
+                    ? 'relative mx-auto -mt-12 mb-0 block w-[122%] max-w-[44rem] translate-x-[-4%] lg:hidden'
+                    : 'relative mx-auto hidden w-full max-w-none lg:ml-[-4.5rem] lg:mr-[-6rem] lg:mt-[-1rem] lg:block'
+            }
+        >
+        <motion.div
+            initial={{ opacity: 0, scale: 0.96, x: isMobile ? 0 : 20 }}
+            animate={{ opacity: 1, scale: 1, x: 0 }}
+            transition={{ duration: 0.85, delay: 0.08, ease: 'easeOut' }}
+        >
+            <motion.div
+                className="absolute left-[20%] top-[-6%] h-28 w-28 rounded-full border-2 border-brand-yellow/35 opacity-80 sm:h-48 sm:w-48"
+                animate={{ rotate: 360, scale: [1, 1.06, 1] }}
+                transition={{ rotate: { duration: 22, repeat: Infinity, ease: 'linear' }, scale: { duration: 5, repeat: Infinity, ease: 'easeInOut' } }}
+            />
+            <div className="absolute left-[25%] top-[-2%] h-20 w-20 rounded-full bg-brand-yellow/35 blur-2xl sm:h-32 sm:w-32" />
+            <svg className="absolute left-[4%] top-[2%] hidden h-44 w-36 text-[#C69F08]/45 sm:block" viewBox="0 0 120 160" fill="none" aria-hidden="true">
+                <path d="M58 154C43 104 47 55 84 8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                <path d="M60 88C30 77 18 58 23 35" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                <path d="M66 69C89 61 101 43 102 20" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+            </svg>
+            <motion.div
+                whileHover={{ scale: 1.025, y: -5, rotate: 0.25 }}
+                animate={{ y: [0, -10, 0], rotate: [0.35, -0.25, 0.35] }}
+                transition={{
+                    y: { duration: 6.2, repeat: Infinity, ease: 'easeInOut' },
+                    rotate: { duration: 6.2, repeat: Infinity, ease: 'easeInOut' },
+                    scale: { duration: 0.25 },
+                }}
+                className={isMobile ? 'relative mx-auto w-full' : 'relative ml-auto w-[min(74vw,1040px)] xl:w-[min(72vw,1120px)]'}
+            >
+                <SmartImage
+                    src={`${assetBase}/hero-collage-principal.webp`}
+                    fallbackSrcs={[`/menu-principal-celular/hero-collage-principal.webp`]}
+                    alt="Collage principal de bicicletas y experiencias Briz"
+                    placeholderLabel="hero-collage-principal.webp"
+                    loading="eager"
+                    fetchPriority="high"
+                    className="block h-auto w-full object-contain drop-shadow-[0_30px_40px_rgba(82,57,0,0.22)]"
+                    placeholderClassName="aspect-[1.25/1] rounded-[2.4rem] bg-[linear-gradient(135deg,#FFF4B8,#FFFDF3_48%,#DFF3EF)] shadow-[0_28px_70px_rgba(106,74,0,0.16)]"
+                />
+                <motion.span
+                    className="absolute bottom-[5%] left-[18%] -z-10 h-[34%] w-[70%] rounded-full bg-brand-yellow/35 blur-3xl"
+                    animate={{ scale: [0.9, 1.08, 0.9], opacity: [0.32, 0.64, 0.32] }}
+                    transition={{ duration: 5.8, repeat: Infinity, ease: 'easeInOut' }}
+                    aria-hidden="true"
+                />
+            </motion.div>
+            <motion.div
+                animate={{ y: [0, -9, 0], rotate: [0, -6, 0] }}
+                transition={{ duration: 4.4, repeat: Infinity, ease: 'easeInOut' }}
+                className="absolute bottom-[8%] left-[4%] grid h-12 w-12 place-items-center rounded-full bg-brand-yellow text-white shadow-[0_12px_26px_rgba(135,97,0,0.2)] ring-4 ring-white sm:h-14 sm:w-14"
+            >
+                <Bike className="h-6 w-6 sm:h-7 sm:w-7" />
+            </motion.div>
+            <motion.div
+                animate={{ y: [0, 8, 0], rotate: [0, 8, 0] }}
+                transition={{ duration: 4.9, repeat: Infinity, ease: 'easeInOut', delay: 0.3 }}
+                className="absolute right-[5%] top-[14%] grid h-11 w-11 place-items-center rounded-full bg-[#67B852] text-white shadow-[0_12px_24px_rgba(39,104,28,0.2)] ring-4 ring-white sm:h-12 sm:w-12"
+            >
+                <Sparkles className="h-5 w-5 sm:h-6 sm:w-6" />
+            </motion.div>
+        </motion.div>
+        </EditableLayer>
+    );
+}
+
 function HeroSection() {
     return (
-        <section className="relative w-full overflow-hidden bg-brand-beige pt-[73px] lg:pt-[88px]">
-            {/* Subtle decorative organic shapes in the background */}
-            <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden="true">
-                <div className="absolute -left-20 top-[20%] h-[300px] w-[300px] rounded-full bg-brand-yellow/10 blur-[80px]" />
-                <div className="absolute -right-10 bottom-[10%] h-[250px] w-[250px] rounded-full bg-brand-yellow/8 blur-[60px]" />
-            </div>
+        <section className="relative isolate overflow-hidden bg-[#FFF8DF] pt-[86px] lg:pt-[104px]">
+            <SmartImage
+                src={`${assetBase}/fondo-textura.webp`}
+                alt=""
+                placeholderLabel="fondo-textura.webp"
+                className="pointer-events-none absolute inset-0 -z-10 h-full w-full object-cover opacity-[0.13] mix-blend-multiply"
+                placeholderClassName="hidden"
+            />
+            <div className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(circle_at_24%_20%,rgba(255,210,0,0.18),transparent_30%),radial-gradient(circle_at_82%_36%,rgba(36,169,197,0.12),transparent_28%),linear-gradient(180deg,#FFF9E8_0%,#FFFDF3_100%)]" />
+            <HeroParticles />
+            <LeafStem className="pointer-events-none absolute left-2 top-[34rem] hidden h-36 w-20 text-brand-yellow/50 lg:block" />
+            <LeafStem className="pointer-events-none absolute right-2 top-40 hidden h-44 w-24 scale-x-[-1] text-brand-yellow/50 lg:block" />
 
-            <div className="relative z-10 mx-auto max-w-[1400px] px-5 sm:px-8 lg:px-12">
-                {/* Two-column hero layout */}
-                <div className="grid min-h-[calc(100vh-88px)] grid-cols-1 items-center gap-8 py-10 lg:grid-cols-2 lg:gap-12 lg:py-16">
-
-                    {/* ── LEFT COLUMN: Text content ── */}
+            <div className="mx-auto max-w-[1400px] px-4 pb-8 sm:px-6 lg:px-10">
+                <div className="grid min-h-[690px] items-center gap-0 py-7 sm:gap-7 lg:grid-cols-[0.42fr_0.58fr] lg:gap-0 lg:py-8">
                     <motion.div
-                        initial={{ opacity: 0, x: -30 }}
+                        initial={{ opacity: 0, x: -26 }}
                         animate={{ opacity: 1, x: 0 }}
-                        transition={{ duration: 0.7, ease: 'easeOut' as const }}
-                        className="order-2 flex flex-col gap-5 lg:order-1 lg:gap-6"
+                        transition={{ duration: 0.7, ease: 'easeOut' }}
+                        className="relative z-10 mx-auto flex w-full max-w-[560px] flex-col items-center text-center lg:mx-0 lg:max-w-[680px] lg:items-start lg:text-left"
                     >
-                        {/* Badge */}
-                        <motion.span
-                            initial={{ opacity: 0, scale: 0.85 }}
-                            animate={{ opacity: 1, scale: 1 }}
-                            transition={{ delay: 0.2, duration: 0.4 }}
-                            className="inline-flex w-fit items-center gap-2 rounded-full border-2 border-brand-yellow bg-white/80 px-4 py-1.5 font-maiandra text-xs font-bold uppercase tracking-wider text-brand-yellow shadow-sm"
-                        >
-                            <Bike className="h-4 w-4" strokeWidth={2.5} />
-                            Centro de la Bicicleta
-                        </motion.span>
-
-                        {/* Placeholder space for the brand artwork lettering */}
-                        {/* This area is reserved for the artistic "Una bicicleta. Un ciclo de expresiones infinitas." lettering */}
-                        <div className="hero-brand-artwork-placeholder min-h-[180px] sm:min-h-[220px] lg:min-h-[260px]">
-                            {/* The brand artwork lettering will be placed here as an image asset */}
-                            {/* For now, using decorative placeholder text in brand fonts */}
-                            <h1 className="font-tan text-4xl leading-[1.15] text-brand-black sm:text-5xl lg:text-[3.5rem]">
-                                <span className="text-brand-yellow">Una</span>
-                                {' '}
-                                <span className="font-gochi text-5xl text-brand-black sm:text-6xl lg:text-7xl">
-                                    Bicicleta.
-                                </span>
-                                <br />
-                                <span className="text-brand-black">Un ciclo de</span>
-                                <br />
-                                <span className="font-gochi text-brand-pink">expresiones</span>
-                                <br />
-                                <span className="text-brand-yellow">infinitas.</span>
-                            </h1>
+                        <div className="inline-flex items-center gap-2 rounded-full bg-white/68 px-4 py-2 font-maiandra text-xs uppercase tracking-[0.04em] text-[#9A7B00] shadow-[0_10px_30px_rgba(143,104,0,0.08)] ring-1 ring-brand-yellow/25">
+                            <Bike className="h-4 w-4 text-brand-yellow" strokeWidth={2.3} />
+                            Centro de la bicicleta
                         </div>
 
-                        {/* Subtitle */}
-                        <p className="max-w-md font-cocon text-base leading-relaxed text-brand-black/70 sm:text-lg">
+                        <EditableLayer id="heroLettering" className="relative mt-4 w-[min(100%,34rem)] sm:mt-5 lg:ml-[-1.5rem] lg:w-[43rem]">
+                            <motion.div
+                                initial={{ opacity: 0, y: 18, rotate: -1.2, scale: 0.92 }}
+                                animate={{
+                                    opacity: 1,
+                                    y: [0, -7, 0],
+                                    rotate: [-0.7, 0.45, -0.7],
+                                    scale: 1,
+                                }}
+                                transition={{
+                                    opacity: { duration: 0.5, delay: 0.15 },
+                                    scale: { duration: 0.7, delay: 0.15, ease: 'easeOut' },
+                                    y: { duration: 5.2, repeat: Infinity, ease: 'easeInOut' },
+                                    rotate: { duration: 5.2, repeat: Infinity, ease: 'easeInOut' },
+                                }}
+                            >
+                                <SmartImage
+                                    src={`${assetBase}/lettering-una-bicicleta.webp`}
+                                    fallbackSrcs={[`/menu-principal-celular/lettering-una-bicicleta.webp`]}
+                                    alt="Una bicicleta. Un ciclo de expresiones infinitas."
+                                    placeholderLabel="lettering-una-bicicleta.webp"
+                                    loading="eager"
+                                    fetchPriority="high"
+                                    className="block h-auto w-full object-contain drop-shadow-[0_18px_24px_rgba(55,35,0,0.18)]"
+                                    placeholderClassName="aspect-[1.35/1] rounded-[1.6rem] border border-dashed border-brand-yellow/60 bg-[#FFF6CC]/70"
+                                />
+                                <motion.span
+                                    className="absolute left-[8%] top-[8%] -z-10 h-[64%] w-[72%] rounded-full bg-brand-yellow/24 blur-3xl"
+                                    animate={{ scale: [0.92, 1.08, 0.92], opacity: [0.38, 0.68, 0.38] }}
+                                    transition={{ duration: 4.8, repeat: Infinity, ease: 'easeInOut' }}
+                                    aria-hidden="true"
+                                />
+                            </motion.div>
+                        </EditableLayer>
+
+                        <HeroCollage variant="mobile" />
+
+                        <p className="-mt-4 max-w-[25rem] font-cocon text-lg leading-relaxed text-brand-black/72 sm:mt-6 sm:text-xl lg:mt-6 lg:max-w-[33rem] lg:text-2xl">
                             Alquila, recorre y vive experiencias únicas sobre dos ruedas.
                         </p>
 
-                        {/* CTA Buttons */}
-                        <div className="flex flex-wrap gap-3">
-                            <Link
-                                to="/rentals"
-                                className="group inline-flex items-center gap-2 rounded-full border-2 border-brand-black bg-brand-yellow px-6 py-3 font-cocon text-sm font-bold text-brand-black shadow-[3px_3px_0px_rgba(0,0,0,0.9)] transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[4px_5px_0px_rgba(0,0,0,0.9)] active:translate-x-[2px] active:translate-y-[2px] active:shadow-none sm:px-7 sm:py-3.5 sm:text-base"
-                            >
+                        <EditableLayer id="heroButtons" className="mt-5 flex w-full max-w-[34rem] flex-row gap-2 sm:mt-7 sm:gap-3 lg:max-w-[42rem] lg:justify-start lg:gap-4">
+                            <HomeButton to="/rentals" icon={Bike} variant="yellow">
                                 Alquilar bicicleta
-                                <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" strokeWidth={2.5} />
-                            </Link>
-                            <Link
-                                to="/routes"
-                                className="group inline-flex items-center gap-2 rounded-full border-2 border-brand-black bg-white px-6 py-3 font-cocon text-sm font-bold text-brand-black shadow-[3px_3px_0px_rgba(0,0,0,0.9)] transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[4px_5px_0px_rgba(0,0,0,0.9)] active:translate-x-[2px] active:translate-y-[2px] active:shadow-none sm:px-7 sm:py-3.5 sm:text-base"
-                            >
+                            </HomeButton>
+                            <HomeButton to="/routes" icon={Map} variant="white">
                                 Explorar rutas
-                                <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" strokeWidth={2.5} />
-                            </Link>
-                        </div>
+                            </HomeButton>
+                        </EditableLayer>
 
-                        {/* Social proof */}
-                        <div className="flex items-center gap-3 pt-1">
-                            <div className="flex -space-x-2.5">
-                                {[
-                                    'bg-brand-yellow',
-                                    'bg-brand-cyan',
-                                    'bg-[#52CD7B]',
-                                    'bg-brand-orange',
-                                ].map((bg, i) => (
-                                    <div
-                                        key={i}
-                                        className={`flex h-9 w-9 items-center justify-center rounded-full border-2 border-white text-xs font-bold text-white shadow-sm ${bg}`}
+                        <div className="mt-6 hidden items-center gap-3 sm:flex">
+                            <div className="flex -space-x-2">
+                                {['#FFD200', '#67B852', '#247EBC', '#FD7B2C'].map((color, index) => (
+                                    <span
+                                        key={color}
+                                        className="grid h-9 w-9 place-items-center rounded-full border-2 border-white font-maiandra text-[10px] font-bold text-white shadow-sm"
+                                        style={{ backgroundColor: color }}
                                     >
-                                        {['MF', 'CQ', 'AB', 'RM'][i]}
-                                    </div>
+                                        {index + 1}
+                                    </span>
                                 ))}
                             </div>
-                            <div className="flex flex-col">
+                            <div>
                                 <div className="flex gap-0.5">
-                                    {[...Array(5)].map((_, i) => (
-                                        <Star key={i} className="h-3.5 w-3.5 fill-brand-yellow text-brand-yellow" strokeWidth={0} />
+                                    {Array.from({ length: 5 }).map((_, index) => (
+                                        <Star key={index} className="h-3.5 w-3.5 fill-brand-yellow text-brand-yellow" strokeWidth={0} />
                                     ))}
                                 </div>
-                                <span className="font-maiandra text-xs font-bold text-brand-black/50">
-                                    +1,250 aventureros felices
-                                </span>
+                                <p className="font-maiandra text-xs text-brand-black/55">+1,250 aventureros felices</p>
                             </div>
                         </div>
                     </motion.div>
 
-                    {/* ── RIGHT COLUMN: Featured hero image composition ── */}
-                    <motion.div
-                        initial={{ opacity: 0, x: 30, scale: 0.97 }}
-                        animate={{ opacity: 1, x: 0, scale: 1 }}
-                        transition={{ duration: 0.8, ease: 'easeOut' as const, delay: 0.15 }}
-                        className="relative order-1 flex items-center justify-center lg:order-2"
-                    >
-                        {/* Decorative yellow blob behind the image */}
-                        <div className="absolute -bottom-6 -right-6 h-[85%] w-[85%] rounded-[2.5rem] bg-brand-yellow/20 blur-[2px] sm:rounded-[3rem]" aria-hidden="true" />
-                        <div className="absolute -left-4 -top-4 h-20 w-20 rounded-full bg-brand-yellow/30 blur-sm sm:h-28 sm:w-28" aria-hidden="true" />
-
-                        {/* Main hero image in a rounded frame */}
-                        <div className="relative w-full overflow-hidden rounded-[2rem] border-4 border-white shadow-[0_12px_50px_rgba(0,0,0,0.12)] sm:rounded-[2.5rem] lg:rounded-[3rem]">
-                            <picture>
-                                <source media="(max-width: 767px)" srcSet="/menu-principal-celular/1.webp" />
-                                <img
-                                    src="/menu-principal-web/1.webp"
-                                    alt="Briz — experiencias sobre dos ruedas en Cochabamba"
-                                    className="block h-auto w-full object-cover"
-                                    decoding="async"
-                                    fetchPriority="high"
-                                    loading="eager"
-                                />
-                            </picture>
-
-                            {/* Soft gradient overlay at the bottom edge for organic blending */}
-                            <div className="pointer-events-none absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-brand-beige/40 to-transparent" />
-                        </div>
-
-                        {/* Small decorative floating elements */}
-                        <div className="absolute -bottom-3 -left-3 flex h-14 w-14 items-center justify-center rounded-full border-3 border-white bg-brand-yellow shadow-lg sm:h-16 sm:w-16" aria-hidden="true">
-                            <Bike className="h-7 w-7 text-white sm:h-8 sm:w-8" strokeWidth={2.2} />
-                        </div>
-                        <div className="absolute -right-2 top-[15%] flex h-10 w-10 items-center justify-center rounded-full border-2 border-white bg-[#52CD7B] shadow-md sm:h-12 sm:w-12" aria-hidden="true">
-                            <Sparkles className="h-5 w-5 text-white sm:h-6 sm:w-6" strokeWidth={2} />
-                        </div>
-                    </motion.div>
+                    <HeroCollage variant="desktop" />
                 </div>
-            </div>
-
-            {/* Bottom wavy separator */}
-            <div className="pointer-events-none absolute -bottom-1 left-0 right-0 h-12 sm:h-16 lg:h-20" aria-hidden="true">
-                <svg viewBox="0 0 1440 80" className="h-full w-full" preserveAspectRatio="none">
-                    <path d="M0 40C240 70 480 80 720 60C960 40 1200 20 1440 40V80H0Z" fill="#FFFDF3" />
-                </svg>
             </div>
         </section>
     );
 }
 
-/* ═══════════════════════════════════════ */
-/*         SERVICE FEATURE STRIP           */
-/* ═══════════════════════════════════════ */
+function HomeButton({
+    to,
+    icon: Icon,
+    variant,
+    children,
+}: {
+    to: string;
+    icon: ComponentType<{ className?: string; strokeWidth?: number }>;
+    variant: 'yellow' | 'white';
+    children: string;
+}) {
+    const classes =
+        variant === 'yellow'
+            ? 'bg-brand-yellow text-brand-black shadow-[0_12px_24px_rgba(125,91,0,0.18)]'
+            : 'bg-white/90 text-brand-black shadow-[0_12px_24px_rgba(0,0,0,0.08)] ring-1 ring-brand-yellow/20';
+
+    return (
+        <Link
+            to={to}
+            className={`group inline-flex min-h-[3.25rem] flex-1 items-center justify-center gap-2 rounded-full px-3 font-cocon text-xs font-bold transition duration-200 hover:-translate-y-0.5 hover:scale-[1.03] hover:shadow-[0_16px_28px_rgba(84,60,0,0.18)] sm:min-h-14 sm:gap-3 sm:px-6 sm:text-sm lg:min-h-16 lg:px-8 lg:text-base ${classes}`}
+        >
+            <Icon className="h-4 w-4 sm:h-5 sm:w-5 lg:h-6 lg:w-6" strokeWidth={2.2} />
+            <span>{children}</span>
+            <ArrowRight className="h-4 w-4 shrink-0 transition-transform group-hover:translate-x-1 lg:h-5 lg:w-5" strokeWidth={2.6} />
+        </Link>
+    );
+}
+
 function ServiceStrip() {
     return (
-        <section className="relative z-20 bg-brand-beige px-4 pb-8 sm:px-6 lg:px-8">
-            <motion.div
-                {...fadeUp}
-                className="mx-auto max-w-[1200px] rounded-3xl bg-white p-4 shadow-[0_8px_40px_rgba(0,0,0,0.06)] ring-1 ring-brand-yellow/10 sm:p-6 lg:rounded-[2rem] lg:p-8"
-            >
-                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5 lg:gap-4">
-                    {services.map((service, i) => {
-                        const Icon = service.icon;
-                        return (
-                            <motion.div
-                                key={service.title}
-                                initial={{ opacity: 0, y: 18 }}
-                                whileInView={{ opacity: 1, y: 0 }}
-                                viewport={{ once: true }}
-                                transition={{ delay: i * 0.08, duration: 0.45 }}
-                                className="group flex flex-col items-center gap-2.5 rounded-2xl p-4 text-center transition-all duration-200 hover:bg-brand-beige/60 sm:p-5"
-                            >
-                                <div
-                                    className={`flex h-14 w-14 items-center justify-center rounded-full ${service.bg} ring-2 ring-transparent transition-all duration-200 group-hover:scale-110 group-hover:ring-current/10 sm:h-16 sm:w-16`}
+        <section className="relative isolate overflow-hidden bg-[#FFFDF3] px-4 py-8 sm:px-6 lg:px-8 lg:py-10">
+            <div className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(circle_at_78%_18%,rgba(255,210,0,0.16),transparent_28%),radial-gradient(circle_at_16%_75%,rgba(36,169,197,0.08),transparent_22%)]" />
+            <div className="mx-auto grid max-w-[1400px] items-center gap-2 lg:grid-cols-[0.31fr_0.69fr] lg:gap-0">
+                <motion.div
+                    {...fadeUp}
+                    className="relative z-10 mx-auto w-full max-w-[26rem] py-3 text-left lg:mx-0 lg:py-10"
+                >
+                    <EditableLayer id="servicesTitle" className="mb-5 flex items-center gap-3 sm:mb-7">
+                        <span className="font-tan text-3xl leading-none text-brand-yellow drop-shadow-[2px_2px_0_rgba(255,255,255,0.9)] sm:text-4xl">&gt;&gt;</span>
+                        <h2 className="font-tan text-xl uppercase leading-[1.35] text-[#15243A] drop-shadow-[2px_2px_0_rgba(255,255,255,0.95)] sm:text-2xl lg:text-3xl">
+                            Nuestros servicios:
+                        </h2>
+                    </EditableLayer>
+
+                    <div className="grid gap-3 sm:gap-4">
+                        {serviceMenu.map((service, index) => {
+                            const Icon = service.icon;
+                            return (
+                                <motion.div
+                                    key={service.label}
+                                    initial={{ opacity: 0, x: -22 }}
+                                    whileInView={{ opacity: 1, x: 0 }}
+                                    viewport={{ once: true, amount: 0.35 }}
+                                    transition={{ delay: index * 0.08, duration: 0.45, ease: 'easeOut' }}
                                 >
-                                    <Icon className="h-7 w-7 sm:h-8 sm:w-8" style={{ color: service.color }} strokeWidth={2} />
-                                </div>
-                                <div>
-                                    <p className="font-tangkiwood text-sm font-bold text-brand-black sm:text-base">
-                                        {service.title}
-                                    </p>
-                                    <p className="font-maiandra text-xs text-brand-black/50">
-                                        {service.subtitle}
-                                    </p>
-                                </div>
-                            </motion.div>
-                        );
-                    })}
-                </div>
-            </motion.div>
+                                    <Link
+                                        to={service.href}
+                                        className="group flex w-full items-center gap-4 rounded-[1.4rem] px-2 py-1.5 transition duration-200 hover:-translate-y-0.5 hover:bg-white/58 hover:shadow-[0_14px_28px_rgba(86,61,0,0.08)] sm:gap-5"
+                                    >
+                                        <span
+                                            className="grid h-14 w-14 shrink-0 place-items-center rounded-full text-white shadow-[0_10px_20px_rgba(60,38,0,0.12)] ring-4 ring-white transition duration-200 group-hover:scale-110 sm:h-16 sm:w-16"
+                                            style={{ backgroundColor: service.color }}
+                                        >
+                                            <Icon className="h-7 w-7 sm:h-8 sm:w-8" strokeWidth={2} />
+                                        </span>
+                                        <span
+                                            className="font-tangkiwood text-3xl leading-none drop-shadow-[2px_2px_0_rgba(255,255,255,0.95)] transition duration-200 group-hover:translate-x-1 sm:text-4xl"
+                                            style={{ color: service.color }}
+                                        >
+                                            {service.label}
+                                        </span>
+                                        <ArrowRight className="ml-auto h-5 w-5 text-brand-black/35 opacity-0 transition duration-200 group-hover:translate-x-1 group-hover:opacity-100" />
+                                    </Link>
+                                </motion.div>
+                            );
+                        })}
+                    </div>
+                </motion.div>
+
+                <EditableLayer
+                    id="servicesImage"
+                    className="relative mx-auto -mt-3 w-[118%] max-w-[58rem] translate-x-[-5%] lg:ml-[-5rem] lg:mr-[-5rem] lg:mt-0 lg:w-[min(78vw,1080px)] lg:max-w-none"
+                >
+                <motion.div
+                    initial={{ opacity: 0, x: 34, scale: 0.96 }}
+                    whileInView={{ opacity: 1, x: 0, scale: 1 }}
+                    viewport={{ once: true, amount: 0.25 }}
+                    transition={{ duration: 0.75, ease: 'easeOut' }}
+                >
+                    <motion.div
+                        animate={{ y: [0, -9, 0], rotate: [0.2, -0.25, 0.2] }}
+                        transition={{ duration: 6.4, repeat: Infinity, ease: 'easeInOut' }}
+                    >
+                        <SmartImage
+                            src={`${assetBase}/web2.webp`}
+                            fallbackSrcs={[`${assetBase}/Web2.webp`]}
+                            alt="Vive la experiencia Briz en Cochabamba"
+                            placeholderLabel="web2.webp"
+                            loading="lazy"
+                            className="block h-auto w-full object-contain drop-shadow-[0_30px_42px_rgba(82,57,0,0.2)]"
+                            placeholderClassName="aspect-[1.25/1] rounded-[2.4rem] bg-[linear-gradient(135deg,#FFF4B8,#FFFDF3_48%,#DFF3EF)] shadow-[0_28px_70px_rgba(106,74,0,0.16)]"
+                        />
+                    </motion.div>
+                    <RouteLine className="pointer-events-none absolute left-[-18%] top-[18%] hidden h-40 w-80 rotate-90 text-brand-yellow/50 sm:block" />
+                    <motion.span
+                        className="absolute bottom-[7%] left-[20%] -z-10 h-[28%] w-[68%] rounded-full bg-brand-yellow/30 blur-3xl"
+                        animate={{ opacity: [0.35, 0.7, 0.35], scale: [0.92, 1.08, 0.92] }}
+                        transition={{ duration: 5.5, repeat: Infinity, ease: 'easeInOut' }}
+                    />
+                </motion.div>
+                </EditableLayer>
+            </div>
         </section>
     );
 }
 
-/* ═══════════════════════════════════════ */
-/*         EXPERIENCE SECTION              */
-/* ═══════════════════════════════════════ */
+function WheelWatermark({ className = '' }: { className?: string }) {
+    return (
+        <svg className={className} viewBox="0 0 260 260" fill="none" aria-hidden="true">
+            <circle cx="130" cy="130" r="116" stroke="currentColor" strokeWidth="7" opacity="0.7" />
+            <circle cx="130" cy="130" r="18" stroke="currentColor" strokeWidth="6" opacity="0.8" />
+            {Array.from({ length: 24 }).map((_, index) => {
+                const angle = (index * Math.PI * 2) / 24;
+                const x = 130 + Math.cos(angle) * 112;
+                const y = 130 + Math.sin(angle) * 112;
+                return <line key={index} x1="130" y1="130" x2={x} y2={y} stroke="currentColor" strokeWidth="2" opacity="0.58" />;
+            })}
+            <circle cx="130" cy="130" r="92" stroke="currentColor" strokeWidth="2" strokeDasharray="8 8" opacity="0.45" />
+        </svg>
+    );
+}
+
+function OptionalSticker({
+    src,
+    alt,
+    className = '',
+}: {
+    src: string;
+    alt: string;
+    className?: string;
+}) {
+    const [hidden, setHidden] = useState(false);
+
+    if (hidden) {
+        return <span className={className} aria-hidden="true" />;
+    }
+
+    return (
+        <img
+            src={src}
+            alt={alt}
+            className={className}
+            loading="lazy"
+            decoding="async"
+            onError={() => setHidden(true)}
+        />
+    );
+}
+
+function WhyChooseBrizSection() {
+    return (
+        <section className="relative isolate overflow-hidden scroll-mt-28 bg-[#50C879] pt-24 sm:pt-28 lg:pt-[112px]">
+            <div className="absolute inset-y-0 right-0 -z-10 hidden w-[54%] rounded-l-[48%] border-y-2 border-l-2 border-white/80 bg-[#A45D33] lg:block" />
+            <div className="pointer-events-none absolute inset-x-0 bottom-0 -z-10 h-[48%] rounded-t-[58%] border-t-2 border-white/80 bg-[#A45D33] lg:hidden" />
+
+            <WheelWatermark className="pointer-events-none absolute -bottom-20 left-[-9rem] h-[30rem] w-[30rem] text-white/17 sm:left-[4%] lg:bottom-[-8rem] lg:left-[10%] lg:h-[34rem] lg:w-[34rem]" />
+            <WheelWatermark className="pointer-events-none absolute right-[-5rem] top-24 hidden h-[34rem] w-[34rem] text-white/14 lg:block" />
+            <div className="pointer-events-none absolute right-0 top-0 hidden h-72 w-72 rotate-12 border-[18px] border-white/8 lg:block" aria-hidden="true" />
+
+            <div className="mx-auto grid max-w-[1500px] gap-8 px-5 pb-12 sm:px-8 lg:min-h-[740px] lg:grid-cols-2 lg:gap-0 lg:px-12 lg:pb-14">
+                <motion.div
+                    initial={{ opacity: 0, x: -26 }}
+                    whileInView={{ opacity: 1, x: 0 }}
+                    viewport={{ once: true, amount: 0.25 }}
+                    transition={{ duration: 0.65, ease: 'easeOut' }}
+                    className="relative z-10 w-full min-w-0 lg:max-w-[760px]"
+                >
+                    <OptionalSticker
+                        src={`${assetBase}/sticker-porque-tape.webp`}
+                        alt=""
+                        className="pointer-events-none absolute left-[11%] top-0 h-20 w-[22rem] rotate-[-3deg] object-contain opacity-100 sm:h-28 sm:w-[32rem]"
+                    />
+                    <OptionalSticker
+                        src={`${assetBase}/sticker-splash-rojo.webp`}
+                        alt=""
+                        className="pointer-events-none absolute left-[-2rem] top-[17rem] h-28 w-36 rotate-[-12deg] object-contain sm:top-[24rem]"
+                    />
+                    <OptionalSticker
+                        src={`${assetBase}/sticker-splash-amarillo.webp`}
+                        alt=""
+                        className="pointer-events-none absolute right-[4%] top-[9rem] h-24 w-28 rotate-12 object-contain sm:top-[12rem] sm:h-32 sm:w-36"
+                    />
+
+                    <EditableLayer id="whyTitle" className="relative mx-auto w-full max-w-[43rem] lg:mx-0">
+                        <span className="absolute left-[9%] top-[3%] -z-10 h-[18%] w-[67%] rotate-[-3deg] rounded-sm bg-brand-yellow shadow-[0_7px_0_rgba(0,0,0,0.04)]" />
+                        <span className="absolute left-[3%] top-[-5%] -z-10 h-[15%] w-[35%] rotate-[-8deg] rounded-[70%_42%_66%_46%] bg-[#75DFA2]/70" />
+                        <h2 className="font-tan uppercase leading-[0.98] tracking-normal">
+                            <span className="block whitespace-nowrap text-[clamp(2.35rem,8vw,6.3rem)] text-white [-webkit-text-stroke:2px_#203253] drop-shadow-[5px_5px_0_rgba(32,50,83,0.2)] lg:text-[4.75rem] xl:text-[5.15rem]">
+                                ¿Por qué
+                            </span>
+                            <span className="ml-[18%] mt-3 block whitespace-nowrap text-[clamp(2.8rem,8.2vw,6.8rem)] text-[#8E0909] [-webkit-text-stroke:3px_#ffffff] drop-shadow-[5px_6px_0_rgba(0,0,0,0.18)] lg:text-[5.05rem] xl:text-[5.45rem]">
+                                elegir
+                            </span>
+                            <span className="ml-[14%] mt-3 block whitespace-nowrap text-[clamp(2.7rem,7.8vw,6.2rem)] text-brand-yellow [-webkit-text-stroke:2px_#203253] drop-shadow-[5px_6px_0_rgba(32,50,83,0.22)] lg:text-[4.8rem] xl:text-[5.2rem]">
+                                Briz?
+                            </span>
+                        </h2>
+                    </EditableLayer>
+
+                    <EditableLayer id="whyLeftText" className="relative z-10 mt-9 w-full max-w-[50rem] sm:mt-12 lg:mt-8">
+                        <p className="font-cocon text-[1.1rem] leading-[1.48] text-[#101010] drop-shadow-[1px_1px_0_rgba(255,255,255,0.24)] sm:text-[1.55rem] lg:text-[1.42rem] xl:text-[1.52rem]">
+                            Porque somos una iniciativa que hace que una bicicleta pueda hacer mucho más que llevarte de un punto a otro.
+                            <span className="font-gochi text-[1.28rem] text-white drop-shadow-[2px_2px_0_rgba(0,0,0,0.16)] sm:text-[1.9rem]"> Puede sanar cuerpos, aliviar emociones, cuidar el planeta y activar economías locales.</span>
+                            {' '}Pero también pueda contar historias, conservar memorias, unir comunidades y revelar el alma de una ciudad.
+                        </p>
+                    </EditableLayer>
+                </motion.div>
+
+                <motion.div
+                    initial={{ opacity: 0, x: 26 }}
+                    whileInView={{ opacity: 1, x: 0 }}
+                    viewport={{ once: true, amount: 0.25 }}
+                    transition={{ duration: 0.65, ease: 'easeOut' }}
+                    className="relative z-10 flex min-h-[34rem] min-w-0 flex-col items-center justify-start pt-24 text-center sm:pt-28 lg:min-h-0 lg:justify-start lg:pt-40"
+                >
+                    <OptionalSticker
+                        src={`${assetBase}/sticker-proposito-bici.webp`}
+                        alt=""
+                        className="pointer-events-none absolute left-[5%] top-[10%] h-36 w-40 object-contain sm:h-44 sm:w-52 lg:left-[2%] lg:top-[14%]"
+                    />
+                    <OptionalSticker
+                        src={`${assetBase}/sticker-manos-corazon.webp`}
+                        alt=""
+                        className="pointer-events-none absolute left-1/2 top-[39%] h-28 w-44 -translate-x-1/2 object-contain sm:h-36 sm:w-56 lg:top-[37%]"
+                    />
+
+                    <EditableLayer id="purposeTitle" className="mt-10 lg:mt-0">
+                        <h3 className="rotate-[7deg] font-tan text-[clamp(3.4rem,8vw,6.4rem)] uppercase leading-none text-transparent [-webkit-text-stroke:2px_#FFD200] drop-shadow-[3px_3px_0_rgba(0,0,0,0.12)] lg:translate-x-8 lg:text-[4.35rem] xl:text-[4.9rem]">
+                            Propósito
+                        </h3>
+                    </EditableLayer>
+
+                    <div className="mt-24 h-24 w-44 sm:mt-28 sm:h-32 sm:w-56 lg:mt-28" aria-hidden="true" />
+
+                    <EditableLayer id="purposeText" className="max-w-[37rem]">
+                        <p className="font-cocon text-[1.06rem] font-bold leading-[1.2] text-white drop-shadow-[3px_3px_0_#173C45] sm:text-[1.55rem] lg:text-[1.36rem] xl:text-[1.48rem]">
+                            <span className="text-brand-cyan">Nuestro propósito es hacer de la bicicleta una herramienta de bienestar integral,</span>
+                            {' '}desde una visión holística que reconecta lo físico con lo emocional, lo ambiental con lo cultural, y lo cotidiano con lo extraordinario,
+                            <span className="block pt-2 font-gochi text-[1.25rem] text-brand-cyan sm:text-[1.9rem]">a través de nuestras unidades de negocios.</span>
+                        </p>
+                    </EditableLayer>
+                </motion.div>
+            </div>
+        </section>
+    );
+}
+
+function BrandSection() {
+    return (
+        <section className="relative isolate overflow-hidden bg-[#FFD957] pt-20 lg:pt-24">
+            <div className="pointer-events-none absolute inset-x-0 top-0 z-10 h-16 text-[#50C879]" aria-hidden="true">
+                <svg viewBox="0 0 1440 90" className="h-full w-full" preserveAspectRatio="none">
+                    <path d="M0 0H1440V34C1194 84 946 12 717 42C471 74 239 94 0 38V0Z" fill="currentColor" />
+                    <path d="M0 40C239 94 471 74 717 42C946 12 1194 84 1440 34" fill="none" stroke="#FFFDF3" strokeWidth="5" strokeLinecap="round" />
+                </svg>
+            </div>
+
+            <div className="absolute inset-y-0 right-0 -z-10 hidden w-[54%] rounded-l-[46%] border-y-2 border-l-2 border-white/80 bg-[#06465A] lg:block" />
+            <div className="pointer-events-none absolute inset-x-0 bottom-0 -z-10 h-[50%] rounded-t-[54%] border-t-2 border-white/80 bg-[#06465A] lg:hidden" />
+
+            <WheelWatermark className="pointer-events-none absolute -bottom-16 left-[-8rem] h-[30rem] w-[30rem] text-white/22 sm:left-[6%] lg:bottom-[-6rem] lg:left-[11%] lg:h-[34rem] lg:w-[34rem]" />
+            <WheelWatermark className="pointer-events-none absolute right-[-4rem] top-20 hidden h-[34rem] w-[34rem] text-white/13 lg:block" />
+            <div className="pointer-events-none absolute left-[10%] top-20 h-16 w-48 rotate-[-6deg] rounded-[60%_44%_72%_48%] bg-white/15" aria-hidden="true" />
+
+            <div className="mx-auto grid max-w-[1500px] gap-8 px-5 pb-14 sm:px-8 lg:min-h-[740px] lg:grid-cols-2 lg:gap-0 lg:px-12 lg:pb-16">
+                <motion.div
+                    initial={{ opacity: 0, x: -26 }}
+                    whileInView={{ opacity: 1, x: 0 }}
+                    viewport={{ once: true, amount: 0.25 }}
+                    transition={{ duration: 0.65, ease: 'easeOut' }}
+                    className="relative z-10 flex min-w-0 flex-col justify-center"
+                >
+                    <EditableLayer id="brandTitle" className="w-full max-w-[44rem]">
+                        <h2 className="font-tan text-[clamp(3.5rem,8vw,7rem)] uppercase leading-none text-transparent [-webkit-text-stroke:2px_#174A35] drop-shadow-[3px_3px_0_rgba(255,255,255,0.35)] lg:text-[6rem] xl:text-[6.6rem]">
+                            La marca
+                        </h2>
+                    </EditableLayer>
+
+                    <EditableLayer id="brandLeftText" className="mt-10 max-w-[34rem] lg:mt-14">
+                        <p className="font-cocon text-[1.08rem] font-bold leading-[1.42] text-[#0B3D3C] sm:text-[1.55rem] lg:text-[1.45rem] xl:text-[1.6rem]">
+                            Bri3 es un ecosistema de movilidad y bienestar sostenible, donde la bicicleta es el eje central para transformar la salud, la comunidad y la ciudad. A través de un modelo de economía circular y regenerativa, Bri3 integra servicios innovadores que abarcan desde el alquiler y personalización de bicicletas, ciclotours temáticos y programas de salud, actualmente.
+                        </p>
+                    </EditableLayer>
+
+                    <EditableLayer id="brandLogo" className="pointer-events-none absolute bottom-[3%] left-[28%] hidden w-[23rem] opacity-80 sm:block lg:w-[28rem]">
+                        <OptionalSticker
+                            src="/logo de briz.png"
+                            alt="Logo Briz"
+                            className="h-auto w-full object-contain brightness-0 invert opacity-90 drop-shadow-[0_18px_28px_rgba(0,0,0,0.08)]"
+                        />
+                    </EditableLayer>
+                </motion.div>
+
+                <motion.div
+                    initial={{ opacity: 0, x: 26 }}
+                    whileInView={{ opacity: 1, x: 0 }}
+                    viewport={{ once: true, amount: 0.25 }}
+                    transition={{ duration: 0.65, ease: 'easeOut' }}
+                    className="relative z-10 flex min-h-[38rem] min-w-0 flex-col items-center justify-start pt-8 text-center lg:min-h-0 lg:pt-10"
+                >
+                    <EditableLayer id="brandIllustration" className="relative mb-10 h-56 w-64 sm:h-64 sm:w-80 lg:h-72 lg:w-[25rem]">
+                        <motion.div
+                            animate={{ y: [0, -8, 0], rotate: [-1.5, 1.2, -1.5] }}
+                            transition={{ duration: 6, repeat: Infinity, ease: 'easeInOut' }}
+                            className="relative h-full w-full"
+                        >
+                            <div className="absolute inset-4 rounded-[45%_55%_48%_52%] bg-[#FFF7D0]/95 shadow-[0_22px_45px_rgba(0,0,0,0.16)]" />
+                            <div className="absolute left-8 top-8 grid h-20 w-20 place-items-center rounded-full bg-brand-yellow text-[#06465A] shadow-lg">
+                                <Bike className="h-11 w-11" strokeWidth={1.8} />
+                            </div>
+                            <div className="absolute right-8 top-9 grid h-16 w-16 place-items-center rounded-full bg-[#EF3E47] text-white shadow-lg">
+                                <HeartHandshake className="h-9 w-9" strokeWidth={1.8} />
+                            </div>
+                            <div className="absolute bottom-9 left-1/2 h-20 w-32 -translate-x-1/2 rounded-[50%_44%_55%_40%] bg-[#67B852] shadow-lg" />
+                            <RouteLine className="absolute bottom-4 left-7 h-24 w-56 text-brand-yellow" />
+                            <Sparkles className="absolute right-14 bottom-20 h-10 w-10 text-brand-orange" strokeWidth={1.8} />
+                        </motion.div>
+                    </EditableLayer>
+
+                    <EditableLayer id="brandRightText" className="max-w-[36rem]">
+                        <p className="font-cocon text-[1.06rem] font-bold leading-[1.25] text-white drop-shadow-[3px_3px_0_rgba(0,0,0,0.22)] sm:text-[1.55rem] lg:text-[1.55rem] xl:text-[1.72rem]">
+                            Implementaremos por etapas soluciones de publicidad creativa, mecánica integral y formación en ingeniería aplicada a la bicicleta. Bri3 potencia el uso de la bicicleta como herramienta de bienestar integral, contribuyendo a una ciudad más saludable y sostenible.
+                        </p>
+                    </EditableLayer>
+
+                    <EditableLayer id="brandComingSoon" className="mt-12 lg:mt-16">
+                        <p className="font-tan text-[clamp(2.8rem,7vw,5.6rem)] uppercase leading-none text-transparent [-webkit-text-stroke:2px_#DDE44D] drop-shadow-[3px_3px_0_rgba(0,0,0,0.12)]">
+                            Próximamente...
+                        </p>
+                    </EditableLayer>
+                </motion.div>
+            </div>
+        </section>
+    );
+}
+
 function ExperienceSection() {
     return (
-        <section id="experiencias" className="bg-brand-beige py-16 sm:py-20 lg:py-24">
-            <div className="mx-auto max-w-[1280px] px-5 sm:px-8 lg:px-12">
-                {/* Header */}
-                <motion.div {...fadeUp} className="mb-10 flex items-end justify-between gap-4 sm:mb-14">
-                    <div className="relative">
-                        {/* Decorative dotted arc */}
-                        <svg
-                            className="absolute -right-12 -top-4 hidden h-10 w-24 text-brand-yellow/50 sm:block"
-                            viewBox="0 0 96 40"
-                            fill="none"
-                        >
-                            <path
-                                d="M2 38C20 10 50 2 94 8"
-                                stroke="currentColor"
-                                strokeWidth="2.5"
-                                strokeDasharray="5 5"
-                                strokeLinecap="round"
-                            />
-                        </svg>
-                        <h2 className="font-tan text-3xl text-brand-black sm:text-4xl lg:text-5xl">
-                            Elige tu experiencia
-                        </h2>
+        <section id="experiencias" className="relative overflow-hidden bg-[#FFFDF3] px-4 py-8 sm:px-6 sm:py-12 lg:px-8">
+            <div className="mx-auto max-w-[1200px]">
+                <motion.div {...fadeUp} className="mb-5 flex items-center justify-between gap-4 sm:mb-7">
+                    <div className="flex min-w-0 flex-1 items-center gap-4">
+                        <h2 className="shrink-0 font-tan text-2xl text-brand-black sm:text-3xl lg:text-4xl">Elige tu experiencia</h2>
+                        <RouteLine className="hidden h-12 flex-1 text-brand-yellow sm:block" />
                     </div>
                     <div className="hidden gap-2 sm:flex">
-                        <button
-                            className="flex h-10 w-10 items-center justify-center rounded-full border-2 border-brand-yellow bg-white text-brand-black transition-colors hover:bg-brand-yellow"
-                            aria-label="Anterior"
-                        >
-                            <ChevronLeft className="h-5 w-5" strokeWidth={2.5} />
+                        <button className="grid h-11 w-11 place-items-center rounded-full bg-white text-brand-black shadow-sm ring-1 ring-brand-yellow/25 transition hover:bg-brand-yellow" aria-label="Anterior">
+                            <ChevronLeft className="h-5 w-5" />
                         </button>
-                        <button
-                            className="flex h-10 w-10 items-center justify-center rounded-full border-2 border-brand-yellow bg-brand-yellow text-brand-black transition-colors hover:bg-brand-yellow/80"
-                            aria-label="Siguiente"
-                        >
-                            <ChevronRight className="h-5 w-5" strokeWidth={2.5} />
+                        <button className="grid h-11 w-11 place-items-center rounded-full bg-brand-yellow text-brand-black shadow-sm transition hover:scale-105" aria-label="Siguiente">
+                            <ChevronRight className="h-5 w-5" />
                         </button>
                     </div>
                 </motion.div>
 
-                {/* Cards grid */}
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 lg:gap-5">
-                    {experiences.map((exp, i) => (
-                        <motion.div
-                            key={exp.title}
-                            {...stagger}
-                            transition={{ delay: i * 0.1, duration: 0.5 }}
-                        >
-                            <Link
-                                to={exp.href}
-                                className="group relative block aspect-[3/4] overflow-hidden rounded-3xl shadow-lg transition-transform duration-300 hover:scale-[1.02] hover:shadow-xl sm:aspect-[4/5]"
+                <div className="-mx-4 flex snap-x gap-4 overflow-x-auto px-4 pb-3 sm:mx-0 sm:grid sm:grid-cols-2 sm:overflow-visible sm:px-0 lg:grid-cols-4">
+                    {experiences.map((experience, index) => {
+                        const Icon = experience.icon;
+                        return (
+                            <motion.div
+                                key={experience.title}
+                                initial={{ opacity: 0, y: 20 }}
+                                whileInView={{ opacity: 1, y: 0 }}
+                                viewport={{ once: true, amount: 0.25 }}
+                                transition={{ delay: index * 0.08, duration: 0.45 }}
+                                className="w-[78vw] min-w-[16rem] snap-center sm:w-auto sm:min-w-0"
                             >
-                                {/* Image */}
-                                <img
-                                    src={exp.image}
-                                    alt={exp.title}
-                                    className="absolute inset-0 h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
-                                    loading="lazy"
-                                    decoding="async"
-                                />
-                                {/* Gradient overlay */}
-                                <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />
-
-                                {/* Top-left icon badge */}
-                                <div
-                                    className="absolute left-3 top-3 flex h-10 w-10 items-center justify-center rounded-full border-2 border-white/30 sm:left-4 sm:top-4 sm:h-11 sm:w-11"
-                                    style={{ backgroundColor: exp.color }}
+                                <Link
+                                    to={experience.href}
+                                    className="group relative block aspect-[0.82/1] overflow-hidden rounded-[1.55rem] bg-[#F5ECCE] shadow-[0_16px_32px_rgba(74,50,0,0.12)] transition duration-300 hover:-translate-y-1 hover:scale-[1.02]"
                                 >
-                                    <Route className="h-5 w-5 text-white" strokeWidth={2} />
-                                </div>
-
-                                {/* Bottom content */}
-                                <div className="absolute inset-x-0 bottom-0 p-4 sm:p-5">
-                                    <h3 className="font-tangkiwood text-xl font-bold text-white drop-shadow-md sm:text-2xl">
-                                        {exp.title}
-                                    </h3>
-                                    <p className="font-cocon text-sm text-white/80">
-                                        {exp.subtitle}
-                                    </p>
-                                </div>
-
-                                {/* Bottom-right arrow */}
-                                <div className="absolute bottom-4 right-4 flex h-9 w-9 items-center justify-center rounded-full bg-white/20 text-white backdrop-blur-sm transition-all group-hover:bg-white group-hover:text-brand-black sm:bottom-5 sm:right-5">
-                                    <ArrowRight className="h-4 w-4" strokeWidth={2.5} />
-                                </div>
-                            </Link>
-                        </motion.div>
-                    ))}
+                                    <SmartImage
+                                        src={experience.image}
+                                        alt={experience.title}
+                                        placeholderLabel={experience.file}
+                                        className="absolute inset-0 h-full w-full object-cover transition duration-500 group-hover:scale-105"
+                                        placeholderClassName="absolute inset-0 bg-[linear-gradient(135deg,#FFF4B8,#F6EACB,#DFF3EF)]"
+                                    />
+                                    <div className="absolute inset-0 bg-gradient-to-t from-black/74 via-black/16 to-transparent" />
+                                    <span
+                                        className="absolute bottom-[5.2rem] left-4 grid h-12 w-12 place-items-center rounded-full text-white shadow-lg ring-3 ring-white/80"
+                                        style={{ backgroundColor: experience.color }}
+                                    >
+                                        <Icon className="h-6 w-6" strokeWidth={2.1} />
+                                    </span>
+                                    <div className="absolute inset-x-0 bottom-0 p-4 pr-16">
+                                        <h3 className="font-tangkiwood text-2xl leading-none text-white drop-shadow">{experience.title}</h3>
+                                        <p className="mt-1 font-cocon text-sm text-white/88">{experience.subtitle}</p>
+                                    </div>
+                                    <span className="absolute bottom-4 right-4 grid h-11 w-11 place-items-center rounded-full bg-white text-brand-black transition group-hover:bg-brand-yellow">
+                                        <ArrowRight className="h-5 w-5" />
+                                    </span>
+                                </Link>
+                            </motion.div>
+                        );
+                    })}
                 </div>
             </div>
         </section>
     );
 }
 
-/* ═══════════════════════════════════════ */
-/*            STATS STRIP                  */
-/* ═══════════════════════════════════════ */
+function RouteLine({ className = '' }: { className?: string }) {
+    return (
+        <svg className={className} viewBox="0 0 620 70" fill="none" aria-hidden="true">
+            <motion.path
+                d="M4 36C96 21 119 58 190 43C253 30 262 13 324 31C390 50 411 55 478 33C536 14 566 19 616 29"
+                stroke="currentColor"
+                strokeWidth="3"
+                strokeDasharray="7 9"
+                strokeLinecap="round"
+                initial={{ pathLength: 0.4, opacity: 0.45 }}
+                whileInView={{ pathLength: 1, opacity: 1 }}
+                viewport={{ once: true }}
+                transition={{ duration: 1.2, ease: 'easeOut' }}
+            />
+            <Bike x="292" y="22" width="26" height="26" />
+        </svg>
+    );
+}
+
 function StatsStrip() {
     return (
-        <section className="bg-brand-beige px-4 py-12 sm:px-6 sm:py-16 lg:px-8">
-            <motion.div
-                {...fadeUp}
-                className="mx-auto max-w-[1100px] rounded-3xl border border-brand-yellow/20 bg-white p-6 shadow-sm sm:p-8 lg:rounded-[2rem] lg:p-10"
-            >
-                <div className="grid grid-cols-2 gap-6 lg:grid-cols-4 lg:gap-8">
-                    {stats.map((stat, i) => {
+        <section className="bg-[#FFFDF3] px-4 py-4 sm:px-6 lg:px-8">
+            <motion.div {...fadeUp} className="mx-auto max-w-[1200px] rounded-[1.7rem] bg-white/74 p-4 shadow-sm ring-1 ring-brand-yellow/18 sm:p-6">
+                <div className="grid grid-cols-2 gap-4 lg:grid-cols-4 lg:divide-x lg:divide-brand-black/10">
+                    {stats.map((stat) => {
                         const Icon = stat.icon;
                         return (
-                            <motion.div
-                                key={stat.label}
-                                initial={{ opacity: 0, scale: 0.9 }}
-                                whileInView={{ opacity: 1, scale: 1 }}
-                                viewport={{ once: true }}
-                                transition={{ delay: i * 0.1, duration: 0.45 }}
-                                className="flex items-center gap-3 sm:gap-4"
-                            >
-                                <div
-                                    className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full sm:h-14 sm:w-14"
-                                    style={{ backgroundColor: `${stat.color}20` }}
-                                >
-                                    <Icon className="h-6 w-6 sm:h-7 sm:w-7" style={{ color: stat.color }} strokeWidth={2} />
+                            <div key={stat.label} className="flex items-center gap-3 px-1 sm:gap-4 lg:px-6">
+                                <Icon className="h-9 w-9 shrink-0 sm:h-10 sm:w-10" style={{ color: stat.color }} strokeWidth={1.8} />
+                                <div className="min-w-0">
+                                    <p className="font-cocon text-2xl font-bold leading-none text-brand-black sm:text-3xl">{stat.value}</p>
+                                    <p className="mt-1 font-maiandra text-xs text-brand-black/58">{stat.label}</p>
                                 </div>
-                                <div>
-                                    <p className="font-cocon text-xl font-bold text-brand-black sm:text-2xl lg:text-3xl">
-                                        {stat.value}
-                                    </p>
-                                    <p className="font-maiandra text-xs text-brand-black/50 sm:text-sm">
-                                        {stat.label}
-                                    </p>
-                                </div>
-                            </motion.div>
+                            </div>
                         );
                     })}
                 </div>
@@ -419,71 +1223,89 @@ function StatsStrip() {
     );
 }
 
-/* ═══════════════════════════════════════ */
-/*            CTA BANNER                   */
-/* ═══════════════════════════════════════ */
 function CTABanner() {
     return (
-        <section className="bg-brand-beige px-4 pb-16 sm:px-6 sm:pb-20 lg:px-8 lg:pb-24">
+        <section className="bg-[#FFFDF3] px-4 pb-16 pt-4 sm:px-6 lg:px-8">
             <motion.div
                 {...fadeUp}
-                className="relative mx-auto max-w-[1200px] overflow-hidden rounded-3xl bg-brand-yellow p-8 sm:p-12 lg:rounded-[2rem] lg:p-16"
+                className="relative mx-auto grid max-w-[1200px] overflow-hidden rounded-[2rem] bg-brand-yellow p-7 shadow-[0_18px_36px_rgba(120,87,0,0.14)] sm:p-9 lg:grid-cols-[0.52fr_0.48fr] lg:items-center"
             >
-                {/* Decorative SVG route illustration */}
-                <svg
-                    className="absolute bottom-0 right-0 h-full w-1/2 opacity-20 sm:opacity-30"
-                    viewBox="0 0 400 300"
-                    fill="none"
-                    aria-hidden="true"
-                >
-                    <path
-                        d="M50 280C80 200 150 180 200 160C260 136 280 80 320 50C340 36 370 30 390 28"
-                        stroke="#B8920A"
-                        strokeWidth="3"
-                        strokeDasharray="8 6"
-                        strokeLinecap="round"
-                    />
-                    <circle cx="50" cy="280" r="6" fill="#111" opacity="0.15" />
-                    <circle cx="200" cy="160" r="5" fill="#111" opacity="0.1" />
-                    <circle cx="390" cy="28" r="6" fill="#111" opacity="0.15" />
-                    <circle cx="340" cy="30" r="20" fill="#FFF" opacity="0.15" />
-                    <circle cx="340" cy="30" r="12" fill="#FFF" opacity="0.1" />
-                    <path d="M100 240L108 210L116 240Z" fill="#52CD7B" opacity="0.2" />
-                    <path d="M260 120L268 90L276 120Z" fill="#52CD7B" opacity="0.18" />
-                    <path d="M300 100L306 78L312 100Z" fill="#52CD7B" opacity="0.15" />
-                </svg>
-
-                <div className="relative z-10 max-w-lg">
-                    <h2 className="font-tan text-2xl text-brand-black sm:text-3xl lg:text-4xl">
-                        Tu aventura comienza aquí
-                    </h2>
-                    <p className="mt-3 font-cocon text-base text-brand-black/70 sm:text-lg">
-                        Reserva en minutos y comienza a pedalear.
-                    </p>
+                <LeafStem className="absolute -bottom-8 left-0 h-32 w-20 opacity-45" />
+                <div className="relative z-10">
+                    <h2 className="font-tan text-2xl leading-tight text-brand-black sm:text-3xl">Tu aventura comienza aquí</h2>
+                    <p className="mt-2 font-cocon text-sm text-brand-black/68 sm:text-base">Reserva en minutos y comienza a pedalear.</p>
                     <Link
                         to="/rentals"
-                        className="group mt-6 inline-flex items-center gap-2 rounded-full border-2 border-brand-black bg-brand-black px-7 py-3.5 font-cocon text-sm font-bold text-white shadow-[3px_3px_0px_rgba(0,0,0,0.2)] transition-all duration-200 hover:-translate-y-0.5 hover:bg-brand-charcoal hover:shadow-[4px_5px_0px_rgba(0,0,0,0.2)] active:translate-x-[2px] active:translate-y-[2px] active:shadow-none sm:text-base"
+                        className="group mt-5 inline-flex min-h-12 items-center gap-3 rounded-xl bg-[#07122B] px-6 font-cocon text-sm font-bold text-white transition hover:-translate-y-0.5 hover:scale-[1.03]"
                     >
                         Reservar ahora
-                        <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" strokeWidth={2.5} />
+                        <ArrowRight className="h-4 w-4 transition group-hover:translate-x-1" />
                     </Link>
                 </div>
+                <svg className="relative z-0 mt-8 h-32 w-full text-[#B98500] lg:mt-0 lg:h-44" viewBox="0 0 560 190" fill="none" aria-hidden="true">
+                    <path d="M0 162C94 96 140 177 229 105C290 55 333 76 389 48C449 18 500 26 552 8" stroke="currentColor" strokeWidth="10" strokeLinecap="round" opacity="0.18" />
+                    <motion.path
+                        d="M5 150C91 91 137 164 225 98C291 49 328 67 386 43C442 20 494 24 548 10"
+                        stroke="#FFF5BA"
+                        strokeWidth="4"
+                        strokeDasharray="12 12"
+                        strokeLinecap="round"
+                        initial={{ pathLength: 0.15 }}
+                        whileInView={{ pathLength: 1 }}
+                        viewport={{ once: true }}
+                        transition={{ duration: 1.4, ease: 'easeOut' }}
+                    />
+                    <Bike x="118" y="102" width="46" height="46" strokeWidth={1.8} />
+                    <MapPinned x="480" y="3" width="48" height="48" color="#FD7B2C" />
+                    <path d="M66 166H378" stroke="#C89500" strokeWidth="42" strokeLinecap="round" opacity="0.1" />
+                </svg>
             </motion.div>
         </section>
     );
 }
 
-/* ═══════════════════════════════════════ */
-/*            MAIN PAGE EXPORT             */
-/* ═══════════════════════════════════════ */
 export default function HomePage() {
+    const activeViewport = useCurrentViewport();
+    const { config, updateTransform, reset } = useDesignConfig();
+    const [editorOpen, setEditorOpen] = useState(false);
+    const [selectedId, setSelectedId] = useState<EditableElementId>('heroLettering');
+    const [editViewport, setEditViewport] = useState<DesignViewport>(activeViewport);
+
+    useEffect(() => {
+        setEditViewport(activeViewport);
+    }, [activeViewport]);
+
     return (
-        <div className="bg-brand-beige">
+        <DesignEditorContext.Provider
+            value={{
+                activeViewport,
+                config,
+                editorOpen,
+                selectedId,
+                setSelectedId,
+                updateTransform,
+            }}
+        >
+            <div className="overflow-hidden bg-[#FFFDF3]">
             <HeroSection />
             <ServiceStrip />
+            <WhyChooseBrizSection />
+            <BrandSection />
             <ExperienceSection />
-            <StatsStrip />
-            <CTABanner />
-        </div>
+                <StatsStrip />
+                <CTABanner />
+                <DesignEditorPanel
+                    config={config}
+                    selectedId={selectedId}
+                    setSelectedId={setSelectedId}
+                    editViewport={editViewport}
+                    setEditViewport={setEditViewport}
+                    editorOpen={editorOpen}
+                    setEditorOpen={setEditorOpen}
+                    updateTransform={updateTransform}
+                    reset={reset}
+                />
+            </div>
+        </DesignEditorContext.Provider>
     );
 }
