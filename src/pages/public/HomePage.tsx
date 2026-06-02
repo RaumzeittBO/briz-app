@@ -21,6 +21,7 @@ import {
 
 const assetBase = '/menu-principal-web';
 const designStorageKey = 'briz-home-design-editor-v1';
+const designEditorEnabled = import.meta.env.DEV;
 
 type DesignViewport = 'desktop' | 'mobile';
 type EditableElementId =
@@ -79,12 +80,12 @@ const defaultDesignConfig: DesignConfig = {
         whyLeftText: { x: -132, y: 0, scale: 1 },
         purposeTitle: { x: 105, y: -95, scale: 1 },
         purposeText: { x: 138, y: -257, scale: 1.21 },
-        brandTitle: { x: 0, y: 0, scale: 1 },
-        brandLeftText: { x: 0, y: 0, scale: 1 },
+        brandTitle: { x: -138, y: 7, scale: 1 },
+        brandLeftText: { x: -86, y: 7, scale: 1.15 },
         brandLogo: { x: 0, y: 0, scale: 1 },
         brandIllustration: { x: 0, y: 0, scale: 1 },
-        brandRightText: { x: 0, y: 0, scale: 1 },
-        brandComingSoon: { x: 0, y: 0, scale: 1 },
+        brandRightText: { x: 158, y: -56, scale: 1.2 },
+        brandComingSoon: { x: 197, y: 257, scale: 0.59 },
     },
     mobile: {
         heroLettering: { x: 0, y: 0, scale: 1.2 },
@@ -97,11 +98,11 @@ const defaultDesignConfig: DesignConfig = {
         purposeTitle: { x: 3, y: 72, scale: 1 },
         purposeText: { x: 0, y: -112, scale: 1 },
         brandTitle: { x: 0, y: 0, scale: 1 },
-        brandLeftText: { x: 0, y: 0, scale: 1 },
+        brandLeftText: { x: 49, y: 7, scale: 1.2 },
         brandLogo: { x: 0, y: 0, scale: 1 },
         brandIllustration: { x: 0, y: 0, scale: 1 },
-        brandRightText: { x: 0, y: 0, scale: 1 },
-        brandComingSoon: { x: 0, y: 0, scale: 1 },
+        brandRightText: { x: 0, y: -82, scale: 1.3 },
+        brandComingSoon: { x: 0, y: 36, scale: 0.81 },
     },
 };
 
@@ -163,7 +164,7 @@ function useCurrentViewport(): DesignViewport {
 
 function useDesignConfig() {
     const [config, setConfig] = useState<DesignConfig>(() => {
-        if (typeof window === 'undefined') return cloneDefaultDesignConfig();
+        if (!designEditorEnabled || typeof window === 'undefined') return cloneDefaultDesignConfig();
         try {
             return mergeDesignConfig(JSON.parse(window.localStorage.getItem(designStorageKey) || 'null'));
         } catch {
@@ -172,6 +173,7 @@ function useDesignConfig() {
     });
 
     useEffect(() => {
+        if (!designEditorEnabled) return;
         window.localStorage.setItem(designStorageKey, JSON.stringify(config));
     }, [config]);
 
@@ -1058,8 +1060,8 @@ function BrandSection() {
                     </EditableLayer>
 
                     <EditableLayer id="brandLeftText" className="mt-10 max-w-[34rem] lg:mt-14">
-                        <p className="font-cocon text-[1.08rem] font-bold leading-[1.42] text-[#0B3D3C] sm:text-[1.55rem] lg:text-[1.45rem] xl:text-[1.6rem]">
-                            Bri3 es un ecosistema de movilidad y bienestar sostenible, donde la bicicleta es el eje central para transformar la salud, la comunidad y la ciudad. A través de un modelo de economía circular y regenerativa, Bri3 integra servicios innovadores que abarcan desde el alquiler y personalización de bicicletas, ciclotours temáticos y programas de salud, actualmente.
+                        <p className="font-gochi text-[1.18rem] font-bold leading-[1.24] text-[#0B3D3C] sm:text-[1.75rem] lg:text-[1.62rem] xl:text-[1.78rem]">
+                            Briz es un ecosistema de movilidad y bienestar sostenible, donde la bicicleta es el eje central para transformar la salud, la comunidad y la ciudad. A través de un modelo de economía circular y regenerativa, Briz integra servicios innovadores que abarcan desde el alquiler y personalización de bicicletas, ciclotours temáticos y programas de salud, actualmente.
                         </p>
                     </EditableLayer>
 
@@ -1080,27 +1082,16 @@ function BrandSection() {
                     className="relative z-10 flex min-h-[38rem] min-w-0 flex-col items-center justify-start pt-8 text-center lg:min-h-0 lg:pt-10"
                 >
                     <EditableLayer id="brandIllustration" className="relative mb-10 h-56 w-64 sm:h-64 sm:w-80 lg:h-72 lg:w-[25rem]">
-                        <motion.div
-                            animate={{ y: [0, -8, 0], rotate: [-1.5, 1.2, -1.5] }}
-                            transition={{ duration: 6, repeat: Infinity, ease: 'easeInOut' }}
-                            className="relative h-full w-full"
-                        >
-                            <div className="absolute inset-4 rounded-[45%_55%_48%_52%] bg-[#FFF7D0]/95 shadow-[0_22px_45px_rgba(0,0,0,0.16)]" />
-                            <div className="absolute left-8 top-8 grid h-20 w-20 place-items-center rounded-full bg-brand-yellow text-[#06465A] shadow-lg">
-                                <Bike className="h-11 w-11" strokeWidth={1.8} />
-                            </div>
-                            <div className="absolute right-8 top-9 grid h-16 w-16 place-items-center rounded-full bg-[#EF3E47] text-white shadow-lg">
-                                <HeartHandshake className="h-9 w-9" strokeWidth={1.8} />
-                            </div>
-                            <div className="absolute bottom-9 left-1/2 h-20 w-32 -translate-x-1/2 rounded-[50%_44%_55%_40%] bg-[#67B852] shadow-lg" />
-                            <RouteLine className="absolute bottom-4 left-7 h-24 w-56 text-brand-yellow" />
-                            <Sparkles className="absolute right-14 bottom-20 h-10 w-10 text-brand-orange" strokeWidth={1.8} />
-                        </motion.div>
+                        <OptionalSticker
+                            src="/menu-principal-web/sticker-marca.webp"
+                            alt="Sticker de marca Briz"
+                            className="block h-full w-full object-contain drop-shadow-[0_18px_35px_rgba(0,0,0,0.16)]"
+                        />
                     </EditableLayer>
 
                     <EditableLayer id="brandRightText" className="max-w-[36rem]">
-                        <p className="font-cocon text-[1.06rem] font-bold leading-[1.25] text-white drop-shadow-[3px_3px_0_rgba(0,0,0,0.22)] sm:text-[1.55rem] lg:text-[1.55rem] xl:text-[1.72rem]">
-                            Implementaremos por etapas soluciones de publicidad creativa, mecánica integral y formación en ingeniería aplicada a la bicicleta. Bri3 potencia el uso de la bicicleta como herramienta de bienestar integral, contribuyendo a una ciudad más saludable y sostenible.
+                        <p className="font-gochi text-[1.16rem] font-bold leading-[1.16] text-white drop-shadow-[3px_3px_0_rgba(0,0,0,0.22)] sm:text-[1.75rem] lg:text-[1.7rem] xl:text-[1.88rem]">
+                            Implementaremos por etapas soluciones de publicidad creativa, mecánica integral y formación en ingeniería aplicada a la bicicleta. Briz potencia el uso de la bicicleta como herramienta de bienestar integral, contribuyendo a una ciudad más saludable y sostenible.
                         </p>
                     </EditableLayer>
 
@@ -1294,17 +1285,19 @@ export default function HomePage() {
             <ExperienceSection />
                 <StatsStrip />
                 <CTABanner />
-                <DesignEditorPanel
-                    config={config}
-                    selectedId={selectedId}
-                    setSelectedId={setSelectedId}
-                    editViewport={editViewport}
-                    setEditViewport={setEditViewport}
-                    editorOpen={editorOpen}
-                    setEditorOpen={setEditorOpen}
-                    updateTransform={updateTransform}
-                    reset={reset}
-                />
+                {designEditorEnabled ? (
+                    <DesignEditorPanel
+                        config={config}
+                        selectedId={selectedId}
+                        setSelectedId={setSelectedId}
+                        editViewport={editViewport}
+                        setEditViewport={setEditViewport}
+                        editorOpen={editorOpen}
+                        setEditorOpen={setEditorOpen}
+                        updateTransform={updateTransform}
+                        reset={reset}
+                    />
+                ) : null}
             </div>
         </DesignEditorContext.Provider>
     );
