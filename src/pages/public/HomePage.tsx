@@ -597,7 +597,7 @@ function HeroCollage({ variant }: { variant: 'mobile' | 'desktop' }) {
             id="heroCollage"
             className={
                 isMobile
-                    ? 'relative mx-auto mt-4 mb-4 block w-full max-w-[92vw] sm:max-w-[28rem] px-2 lg:hidden'
+                    ? 'relative mx-auto mt-4 mb-4 block w-[108vw] max-w-[108vw] -ml-[4vw] sm:w-full sm:max-w-[28rem] sm:ml-0 px-2 lg:hidden'
                     : 'relative mx-auto hidden w-full max-w-none lg:ml-[-4.5rem] lg:mr-[-6rem] lg:mt-[-1rem] lg:block'
             }
         >
@@ -852,7 +852,7 @@ function ServiceStrip() {
 
                 <EditableLayer
                     id="servicesImage"
-                    className="relative mx-auto mt-6 mb-0 block w-full max-w-[92vw] sm:max-w-[32rem] px-2 lg:ml-[-5rem] lg:mr-[-5rem] lg:mt-0 lg:w-[min(78vw,1080px)] lg:max-w-none"
+                    className="relative mx-auto mt-6 mb-0 block w-[108vw] max-w-[108vw] -ml-[4vw] sm:w-full sm:max-w-[32rem] sm:ml-0 px-2 lg:ml-[-5rem] lg:mr-[-5rem] lg:mt-0 lg:w-[min(78vw,1080px)] lg:max-w-none"
                 >
                 <motion.div
                     initial={{ opacity: 0, x: 34, scale: 0.96 }}
@@ -1256,7 +1256,7 @@ function CommunitySection() {
                         whileInView={{ opacity: 1, x: 0, scale: 1, rotate: 2 }}
                         viewport={{ once: true, amount: 0.25 }}
                         transition={{ duration: 0.75, ease: 'easeOut' }}
-                        className="relative mx-auto bg-white p-3 pb-10 sm:p-4 sm:pb-14 border-3 border-brand-black shadow-[10px_10px_0_rgba(0,0,0,0.18)] sm:shadow-[16px_16px_0_rgba(0,0,0,0.18)] rounded-sm rotate-[2deg] group w-[82vw] sm:w-full sm:max-w-[420px] overflow-visible"
+                        className="relative mx-auto bg-white p-3 pb-10 sm:p-4 sm:pb-14 border-3 border-brand-black shadow-[10px_10px_0_rgba(0,0,0,0.18)] sm:shadow-[16px_16px_0_rgba(0,0,0,0.18)] rounded-sm rotate-[2deg] group w-[76vw] sm:w-full sm:max-w-[420px] overflow-visible"
                     >
                         {/* Writable tape tape-sticker effect */}
                         <div className="absolute -top-4 left-1/3 -translate-x-1/2 w-28 h-8 sm:w-36 sm:h-9 bg-[#FFFDF3]/88 border-x-2 border-dashed border-brand-black/20 backdrop-blur-sm shadow-sm rotate-[-6deg] z-20 flex items-center justify-center">
@@ -1266,10 +1266,10 @@ function CommunitySection() {
                         {/* Interactive Polaroid Image */}
                         <div className="overflow-hidden bg-[#E6F5F2] relative aspect-[1.15/1]">
                             <SmartImage
-                                src={`${assetBase}/comunidad-ciclista.webp`}
-                                fallbackSrcs={[`/menu-principal-celular/comunidad-ciclista.webp`, `${assetBase}/web2.webp`]}
+                                src={`${assetBase}/5.webp`}
+                                fallbackSrcs={[`/menu-principal-celular/5.webp`, `${assetBase}/web2.webp`]}
                                 alt="Ciclistas en la comunidad Briz"
-                                placeholderLabel="comunidad-ciclista.webp"
+                                placeholderLabel="5.webp"
                                 className="w-full h-full object-cover rounded-sm grayscale-[15%] group-hover:grayscale-0 transition-all duration-500 scale-102 group-hover:scale-105"
                             />
                         </div>
@@ -1285,7 +1285,7 @@ function CommunitySection() {
                         <motion.div
                             animate={{ scale: [1, 1.15, 1], rotate: [0, 90, 180, 270, 360] }}
                             transition={{ scale: { duration: 3.2, repeat: Infinity }, rotate: { duration: 15, repeat: Infinity, ease: "linear" } }}
-                            className="absolute -right-3 sm:-right-5 -top-3 sm:-top-5 w-10 h-10 sm:w-12 sm:h-12 bg-brand-pink border-3 border-brand-black rounded-xl flex items-center justify-center shadow-[4px_4px_0_rgba(0,0,0,1)] z-20 text-white cursor-default"
+                            className="absolute -right-1.5 sm:-right-5 -top-1.5 sm:-top-5 w-10 h-10 sm:w-12 sm:h-12 bg-brand-pink border-3 border-brand-black rounded-xl flex items-center justify-center shadow-[4px_4px_0_rgba(0,0,0,1)] z-20 text-white cursor-default"
                             title="Briz Sparkle!"
                         >
                             <Sparkles className="w-5 h-5 sm:w-6 sm:h-6" strokeWidth={2.5} />
@@ -1295,7 +1295,7 @@ function CommunitySection() {
                         <motion.div
                             animate={{ y: [0, -6, 0], rotate: [3, -3, 3] }}
                             transition={{ duration: 4.8, repeat: Infinity, ease: "easeInOut" }}
-                            className="absolute -left-3 sm:-left-7 -bottom-6 w-16 h-16 sm:w-20 sm:h-20 bg-brand-yellow border-3 border-brand-black rounded-full flex items-center justify-center shadow-[5px_5px_0_rgba(0,0,0,1)] z-20"
+                            className="absolute -left-1.5 sm:-left-7 -bottom-4 sm:-bottom-6 w-16 h-16 sm:w-20 sm:h-20 bg-brand-yellow border-3 border-brand-black rounded-full flex items-center justify-center shadow-[5px_5px_0_rgba(0,0,0,1)] z-20"
                         >
                             <img src="/logo_bicicleta_principal.png" alt="Bicicleta Briz Sticker" className="w-10 h-10 sm:w-12 sm:h-12 object-contain" />
                         </motion.div>
@@ -1475,10 +1475,10 @@ function FinalInspirationalSection() {
                         {/* Polaroid Image Area */}
                         <div className="overflow-hidden bg-[#FFEEC7] relative aspect-[1.12/1]">
                             <SmartImage
-                                src={`${assetBase}/final-chica-bici.webp`}
-                                fallbackSrcs={[`/menu-principal-celular/final-chica-bici.webp`, `${assetBase}/1.webp`]}
+                                src={`${assetBase}/6.webp`}
+                                fallbackSrcs={[`/menu-principal-celular/6.webp`, `${assetBase}/1.webp`]}
                                 alt="Experiencia Briz Feliz"
-                                placeholderLabel="final-chica-bici.webp"
+                                placeholderLabel="6.webp"
                                 className="w-full h-full object-cover scale-102 group-hover:scale-105 transition-transform duration-500 rounded-sm"
                             />
                         </div>
