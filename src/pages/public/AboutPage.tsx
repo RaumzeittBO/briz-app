@@ -157,11 +157,8 @@ function TiltCard({ webSrc, mobileSrc, alt, idx }: TiltCardProps) {
                 }}
                 whileHover={{ scale: 1.018 }}
                 transition={{ duration: 0.2 }}
-                className="relative bg-brand-yellow border-[6px] sm:border-[12px] border-brand-yellow outline outline-3 sm:outline-4 outline-brand-black shadow-[14px_14px_0_rgba(0,0,0,1)] sm:shadow-[20px_20px_0_rgba(0,0,0,1)] rounded-[1.8rem] sm:rounded-[2.4rem] overflow-hidden w-full max-w-[96vw] md:max-w-[1140px] group transition-all hover:translate-y-[-4px] hover:shadow-[24px_24px_0_rgba(0,0,0,1)] select-none z-10"
+                className="relative bg-brand-yellow border-[6px] sm:border-[12px] border-brand-yellow outline outline-3 sm:outline-4 outline-brand-black shadow-[14px_14px_0_rgba(0,0,0,1)] sm:shadow-[20px_20px_0_rgba(0,0,0,1)] rounded-[1.8rem] sm:rounded-[2.4rem] w-full max-w-[96vw] md:max-w-[1140px] group transition-all hover:translate-y-[-4px] hover:shadow-[24px_24px_0_rgba(0,0,0,1)] select-none z-10"
             >
-                {/* Visual mouse gloss shine overlay */}
-                <div className="pointer-events-none absolute inset-0 bg-gradient-to-tr from-transparent via-white/5 to-white/10 z-10 mix-blend-overlay" />
-                
                 {/* Scrapbook corner tapes */}
                 <WashiTape className="-top-3 left-6 sm:left-14 rotate-[-12deg]" />
                 <WashiTape className="-top-4 right-6 sm:right-14 rotate-[15deg]" />
@@ -172,12 +169,12 @@ function TiltCard({ webSrc, mobileSrc, alt, idx }: TiltCardProps) {
                         <motion.div 
                             animate={{ rotate: [0, 360] }}
                             transition={{ duration: 25, repeat: Infinity, ease: 'linear' }}
-                            className="absolute -bottom-4 -left-3 sm:-left-5 bg-brand-pink border-3 border-brand-black rounded-xl p-2.5 shadow-[4px_4px_0_rgba(0,0,0,1)] text-white z-20"
+                            className="absolute -bottom-6 sm:-bottom-8 -left-3 sm:-left-5 bg-brand-pink border-3 border-brand-black rounded-xl p-2.5 shadow-[4px_4px_0_rgba(0,0,0,1)] text-white z-20"
                             title="Sparkles!"
                         >
                             <Sparkles className="w-4 h-4 sm:w-5 sm:h-5" strokeWidth={2.5} />
                         </motion.div>
-                        <div className="absolute -bottom-5 -right-3 sm:-right-5 bg-[#67B852] border-3 border-brand-black rounded-full p-2.5 shadow-[4px_4px_0_rgba(0,0,0,1)] text-white z-20 rotate-[12deg] group-hover:scale-110 transition-transform duration-200">
+                        <div className="absolute -bottom-7 sm:-bottom-9 -right-3 sm:-right-5 bg-[#67B852] border-3 border-brand-black rounded-full p-2.5 shadow-[4px_4px_0_rgba(0,0,0,1)] text-white z-20 rotate-[12deg] group-hover:scale-110 transition-transform duration-200">
                             <Bike className="w-5 h-5" strokeWidth={2.3} />
                         </div>
                     </>
@@ -185,13 +182,13 @@ function TiltCard({ webSrc, mobileSrc, alt, idx }: TiltCardProps) {
 
                 {idx === 1 && (
                     <>
-                        <div className="absolute -bottom-4 -left-4 sm:-left-5 bg-brand-cyan border-3 border-brand-black rounded-xl p-2.5 shadow-[4px_4px_0_rgba(0,0,0,1)] text-white z-20 rotate-[-10deg] group-hover:-translate-x-1 transition-transform">
+                        <div className="absolute -bottom-6 sm:-bottom-8 -left-4 sm:-left-5 bg-brand-cyan border-3 border-brand-black rounded-xl p-2.5 shadow-[4px_4px_0_rgba(0,0,0,1)] text-white z-20 rotate-[-10deg] group-hover:-translate-x-1 transition-transform">
                             <Heart className="w-5 h-5 fill-current" strokeWidth={2} />
                         </div>
                         <motion.div 
                             animate={{ scale: [1, 1.15, 1] }}
                             transition={{ duration: 4.2, repeat: Infinity, ease: 'easeInOut' }}
-                            className="absolute -bottom-5 -right-3 bg-brand-orange border-3 border-brand-black rounded-full p-2.5 shadow-[4px_4px_0_rgba(0,0,0,1)] text-white z-20 rotate-[8deg]"
+                            className="absolute -bottom-7 sm:-bottom-9 -right-3 bg-brand-orange border-3 border-brand-black rounded-full p-2.5 shadow-[4px_4px_0_rgba(0,0,0,1)] text-white z-20 rotate-[8deg]"
                         >
                             <Sparkles className="w-4 h-4 sm:w-5 sm:h-5" strokeWidth={2.5} />
                         </motion.div>
@@ -200,26 +197,32 @@ function TiltCard({ webSrc, mobileSrc, alt, idx }: TiltCardProps) {
 
                 {idx === 2 && (
                     <>
-                        <div className="absolute -bottom-5 -left-3 sm:-left-4 bg-[#67B852] border-3 border-brand-black rounded-full p-2.5 shadow-[4px_4px_0_rgba(0,0,0,1)] text-white z-20 rotate-[-12deg] group-hover:scale-110 transition-transform duration-200">
+                        <div className="absolute -bottom-7 sm:-bottom-9 -left-3 sm:-left-4 bg-[#67B852] border-3 border-brand-black rounded-full p-2.5 shadow-[4px_4px_0_rgba(0,0,0,1)] text-white z-20 rotate-[-12deg] group-hover:scale-110 transition-transform duration-200">
                             <Bike className="w-5 h-5" strokeWidth={2.3} />
                         </div>
-                        <Link to="/contact" className="absolute -bottom-5 -right-4 sm:-right-5 bg-brand-pink border-3 border-brand-black rounded-xl p-2.5 shadow-[4px_4px_0_rgba(0,0,0,1)] text-white z-20 rotate-[6deg] hover:scale-105 transition-transform flex items-center gap-1.5 font-cocon text-xs font-black uppercase">
+                        <Link to="/contact" className="absolute -bottom-7 sm:-bottom-9 -right-4 sm:-right-5 bg-brand-pink border-3 border-brand-black rounded-xl p-2.5 shadow-[4px_4px_0_rgba(0,0,0,1)] text-white z-20 rotate-[6deg] hover:scale-105 transition-transform flex items-center gap-1.5 font-cocon text-xs font-black uppercase">
                             <span>Conocer</span>
                             <ArrowRight className="w-4 h-4" strokeWidth={2.5} />
                         </Link>
                     </>
                 )}
 
-                {/* Responsive picture structure to auto-switch web/mobile images */}
-                <picture className="w-full h-auto block select-none">
-                    <source media="(min-width: 768px)" srcSet={webSrc} />
-                    <img 
-                        src={mobileSrc} 
-                        alt={alt}
-                        className="w-full h-auto object-cover block border-b-2 border-brand-black"
-                        loading="lazy"
-                    />
-                </picture>
+                {/* Inner image container to handle corner cropping */}
+                <div className="w-full h-auto overflow-hidden rounded-[1.35rem] sm:rounded-[1.7rem] relative">
+                    {/* Visual mouse gloss shine overlay */}
+                    <div className="pointer-events-none absolute inset-0 bg-gradient-to-tr from-transparent via-white/5 to-white/10 z-10 mix-blend-overlay" />
+                    
+                    {/* Responsive picture structure to auto-switch web/mobile images */}
+                    <picture className="w-full h-auto block select-none">
+                        <source media="(min-width: 768px)" srcSet={webSrc} />
+                        <img 
+                            src={mobileSrc} 
+                            alt={alt}
+                            className="w-full h-auto object-cover block border-b-2 border-brand-black"
+                            loading="lazy"
+                        />
+                    </picture>
+                </div>
             </motion.div>
         </div>
     );

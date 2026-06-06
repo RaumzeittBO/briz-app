@@ -1583,12 +1583,12 @@ export default function HomePage() {
             }}
         >
             <div className="overflow-hidden bg-[#FFFDF3]">
-            <HeroSection />
-            <ServiceStrip />
-            <WhyChooseBrizSection />
-            <BrandSection />
-            <ExperienceSection />
+                <HeroSection />
+                <ServiceStrip />
+                <WhyChooseBrizSection />
+                <BrandSection />
                 <CommunitySection />
+                <ExperienceSection />
                 <FinalInspirationalSection />
                 <StatsStrip />
                 <CTABanner />
