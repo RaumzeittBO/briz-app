@@ -1317,6 +1317,242 @@ function CommunitySection() {
     );
 }
 
+function FinalInspirationalSection() {
+    return (
+        <section className="relative isolate overflow-hidden bg-[#0C4E40] py-20 sm:py-28 lg:py-32 px-4 sm:px-6 lg:px-8">
+            {/* Subtle paper texture overlay */}
+            <SmartImage
+                src={`${assetBase}/fondo-textura.webp`}
+                alt=""
+                placeholderLabel="fondo-textura.webp"
+                className="pointer-events-none absolute inset-0 -z-10 h-full w-full object-cover opacity-[0.11] mix-blend-multiply"
+                placeholderClassName="hidden"
+            />
+            {/* Background routes drawing effect */}
+            <div className="pointer-events-none absolute inset-0 -z-10 opacity-30">
+                <svg className="absolute left-[5%] top-[10%] w-[38rem] h-44 text-[#FFD200]/40" viewBox="0 0 680 170" fill="none" aria-hidden="true">
+                    <motion.path
+                        d="M10 80 Q 180 160, 340 90 T 670 120"
+                        stroke="currentColor"
+                        strokeWidth="3"
+                        strokeDasharray="9 11"
+                        strokeLinecap="round"
+                        initial={{ pathLength: 0 }}
+                        whileInView={{ pathLength: 1 }}
+                        viewport={{ once: true }}
+                        transition={{ duration: 2, ease: "easeInOut" }}
+                    />
+                </svg>
+            </div>
+
+            {/* Floating particles/stars in Briz colors */}
+            <div className="pointer-events-none absolute inset-0 -z-[1] overflow-hidden" aria-hidden="true">
+                {[
+                    { left: '12%', top: '22%', size: 12, color: '#FFD200', duration: 6.8 },
+                    { left: '44%', top: '78%', size: 9, color: '#FA0E95', duration: 7.2 },
+                    { left: '82%', top: '15%', size: 10, color: '#FD7B2C', duration: 8.0 },
+                    { left: '90%', top: '65%', size: 8, color: '#FFD200', duration: 6.4 },
+                ].map((particle, idx) => (
+                    <motion.span
+                        key={idx}
+                        className="absolute rounded-full"
+                        style={{
+                            left: particle.left,
+                            top: particle.top,
+                            width: particle.size,
+                            height: particle.size,
+                            backgroundColor: particle.color,
+                            boxShadow: `0 0 ${particle.size * 2.8}px ${particle.color}`,
+                        }}
+                        animate={{
+                            y: [0, -14, 0],
+                            scale: [0.8, 1.2, 0.8],
+                            opacity: [0.3, 0.85, 0.3],
+                        }}
+                        transition={{
+                            duration: particle.duration,
+                            repeat: Infinity,
+                            ease: 'easeInOut',
+                            delay: idx * 0.5,
+                        }}
+                    />
+                ))}
+            </div>
+
+            <div className="mx-auto grid max-w-[1400px] items-center gap-12 lg:grid-cols-2 lg:gap-16">
+                {/* Left Column: Scrapbook Card with Text & Overlapping Polaroids */}
+                <div className="flex flex-col items-center justify-center space-y-6 lg:space-y-8 z-10 w-full">
+                    {/* Main Collage Card */}
+                    <motion.div
+                        initial={{ opacity: 0, x: -38, scale: 0.97 }}
+                        whileInView={{ opacity: 1, x: 0, scale: 1 }}
+                        viewport={{ once: true, amount: 0.25 }}
+                        transition={{ duration: 0.75, ease: 'easeOut' }}
+                        className="bg-[#FFFDF3] border-3 border-brand-black p-8 sm:p-12 rounded-[2.5rem] shadow-[12px_12px_0_rgba(0,0,0,1)] relative w-full max-w-[560px] min-h-[380px] sm:min-h-[420px] flex items-center overflow-visible"
+                    >
+                        {/* Big stacked text */}
+                        <div className="flex flex-col text-left space-y-2 select-none z-10">
+                            <h3 className="font-tan text-[clamp(2.5rem,6.8vw,4.8rem)] font-black uppercase leading-[0.95] tracking-wide text-brand-orange drop-shadow-sm">
+                                Pedalea.
+                            </h3>
+                            <h3 className="font-tan text-[clamp(2.5rem,6.8vw,4.8rem)] font-black uppercase leading-[0.95] tracking-wide text-brand-pink drop-shadow-sm">
+                                Conecta.
+                            </h3>
+                            <h3 className="font-tan text-[clamp(2.5rem,6.8vw,4.8rem)] font-black uppercase leading-[0.95] tracking-wide text-brand-yellow drop-shadow-sm">
+                                Inspira.
+                            </h3>
+                        </div>
+
+                        {/* Overlapping Polaroid Placeholder 1 (Left Edge) */}
+                        <motion.div
+                            initial={{ opacity: 0, rotate: -15, scale: 0.8 }}
+                            whileInView={{ opacity: 1, rotate: -8, scale: 1 }}
+                            viewport={{ once: true }}
+                            transition={{ duration: 0.6, delay: 0.2, ease: 'easeOut' }}
+                            className="absolute left-[-2.2rem] top-1/4 w-28 h-24 sm:w-36 sm:h-32 bg-white border-2 border-brand-black p-1.5 pb-5 shadow-lg rounded-sm rotate-[-8deg] z-20 hover:scale-105 transition-transform duration-300"
+                        >
+                            <div className="w-full h-full overflow-hidden bg-[#FFF9CC] relative rounded-sm">
+                                <SmartImage
+                                    src={`${assetBase}/collage-pedalea-1.webp`}
+                                    fallbackSrcs={[`/menu-principal-celular/collage-pedalea-1.webp`, `${assetBase}/card-ciclotours.webp`]}
+                                    alt="Comunidad Briz"
+                                    placeholderLabel="collage-pedalea-1.webp"
+                                    className="w-full h-full object-cover"
+                                />
+                            </div>
+                        </motion.div>
+
+                        {/* Overlapping Polaroid Placeholder 2 (Top Right Edge) */}
+                        <motion.div
+                            initial={{ opacity: 0, rotate: 18, scale: 0.8 }}
+                            whileInView={{ opacity: 1, rotate: 10, scale: 1 }}
+                            viewport={{ once: true }}
+                            transition={{ duration: 0.6, delay: 0.3, ease: 'easeOut' }}
+                            className="absolute right-[-1.8rem] top-[-2rem] w-32 h-26 sm:w-40 sm:h-34 bg-white border-2 border-brand-black p-1.5 pb-6 shadow-lg rounded-sm rotate-[10deg] z-20 hover:scale-105 transition-transform duration-300"
+                        >
+                            <div className="w-full h-full overflow-hidden bg-[#DFF3EF] relative rounded-sm">
+                                <SmartImage
+                                    src={`${assetBase}/collage-pedalea-2.webp`}
+                                    fallbackSrcs={[`/menu-principal-celular/collage-pedalea-2.webp`, `${assetBase}/card-familia.webp`]}
+                                    alt="Aventuras Briz"
+                                    placeholderLabel="collage-pedalea-2.webp"
+                                    className="w-full h-full object-cover"
+                                />
+                            </div>
+                        </motion.div>
+
+                        {/* Overlapping Polaroid Placeholder 3 (Bottom Center-Right Edge) */}
+                        <motion.div
+                            initial={{ opacity: 0, rotate: -12, scale: 0.8 }}
+                            whileInView={{ opacity: 1, rotate: -5, scale: 1 }}
+                            viewport={{ once: true }}
+                            transition={{ duration: 0.6, delay: 0.4, ease: 'easeOut' }}
+                            className="absolute right-[10%] bottom-[-2.2rem] w-32 h-26 sm:w-40 sm:h-34 bg-white border-2 border-brand-black p-1.5 pb-6 shadow-lg rounded-sm rotate-[-5deg] z-20 hover:scale-105 transition-transform duration-300"
+                        >
+                            <div className="w-full h-full overflow-hidden bg-[#FFE5F2] relative rounded-sm">
+                                <SmartImage
+                                    src={`${assetBase}/collage-pedalea-3.webp`}
+                                    fallbackSrcs={[`/menu-principal-celular/collage-pedalea-3.webp`, `${assetBase}/card-urbanos.webp`]}
+                                    alt="Rutas Briz"
+                                    placeholderLabel="collage-pedalea-3.webp"
+                                    className="w-full h-full object-cover"
+                                />
+                            </div>
+                        </motion.div>
+                    </motion.div>
+
+                    {/* Secondary Paragraph Text below card */}
+                    <motion.p
+                        initial={{ opacity: 0, y: 20 }}
+                        whileInView={{ opacity: 1, y: 0 }}
+                        viewport={{ once: true }}
+                        transition={{ duration: 0.6, delay: 0.15, ease: 'easeOut' }}
+                        className="font-cocon text-[#FFFDF3]/95 text-center text-base sm:text-lg lg:text-xl max-w-[540px] mx-auto mt-6 leading-relaxed"
+                    >
+                        Experiencias personalizadas que fusionan la ingeniería creativa y dinámica con el espíritu de la bicicultura y el compromiso con el planeta.
+                    </motion.p>
+                </div>
+
+                {/* Right Column: Rip-Paper Sticker & Main Polaroid Image */}
+                <div className="relative mx-auto w-full max-w-[480px] lg:max-w-none px-4 sm:px-6 z-10 flex flex-col items-center justify-center space-y-10 lg:space-y-12">
+                    {/* Rip-Paper Header Sticker */}
+                    <motion.div
+                        initial={{ opacity: 0, y: -24, rotate: -4 }}
+                        whileInView={{ opacity: 1, y: 0, rotate: -2 }}
+                        viewport={{ once: true }}
+                        transition={{ duration: 0.6, ease: 'easeOut' }}
+                        className="bg-[#FFFDF3] border-3 border-brand-black px-8 py-5 shadow-[5px_5px_0_rgba(0,0,0,1)] rounded-md rotate-[-2deg] relative inline-block w-full max-w-[440px] z-20"
+                    >
+                        {/* Pink slash illustration (Left) */}
+                        <svg className="absolute -left-10 -top-8 w-16 h-16 text-brand-pink fill-current drop-shadow-sm select-none" viewBox="0 0 120 120">
+                            <path d="M30 60c0-10 15-25 25-15s5 20-5 25-20 0-20-10z M50 35c5-10 25-5 20 10s-15 10-20-10z M40 85c-10 5-20-15-5-20s15 15 5 20z" />
+                        </svg>
+
+                        {/* Orange splash illustration (Right) */}
+                        <svg className="absolute -right-9 -top-7 w-16 h-16 text-brand-orange fill-current drop-shadow-sm select-none" viewBox="0 0 120 120">
+                            <path d="M90 60c0 10-15 25-25 15s-5-20 5-25 20 0 20 10z M70 35c-5-10-25-5-20 10s15 10 20-10z M80 85c10 5 20-15 5-20s-15 15-5 20z" />
+                        </svg>
+
+                        {/* Sticker Content */}
+                        <div className="flex flex-col items-center justify-center text-center">
+                            <div className="flex items-center gap-1">
+                                <span 
+                                    className="font-tan uppercase text-xl sm:text-2xl text-brand-yellow-vibrant drop-shadow-[2px_2px_0_rgba(0,0,0,1)]"
+                                    style={{ WebkitTextStroke: '1px #000' }}
+                                >
+                                    ¡VIVE
+                                </span>
+                                <span className="font-gochi text-brand-black text-lg sm:text-xl font-bold ml-1 mr-1">
+                                    la experiencia
+                                </span>
+                                <span className="font-scripter text-brand-pink text-2xl sm:text-3xl leading-none font-bold">
+                                    Briz!
+                                </span>
+                            </div>
+                            <div className="relative inline-block mt-1.5 pb-1">
+                                <span className="font-gochi text-brand-charcoal text-base sm:text-lg font-bold">
+                                    porque con Briz, eres feliz.
+                                </span>
+                                {/* Doodled underline */}
+                                <svg className="absolute bottom-[-2px] left-1/4 w-1/2 h-2 text-brand-yellow" viewBox="0 0 100 10" preserveAspectRatio="none">
+                                    <path d="M0 5 Q 50 9, 100 3" stroke="currentColor" strokeWidth="3.5" fill="none" strokeLinecap="round" />
+                                </svg>
+                            </div>
+                        </div>
+                    </motion.div>
+
+                    {/* Main Polaroid Image Container */}
+                    <motion.div
+                        initial={{ opacity: 0, x: 38, scale: 0.96, rotate: 3 }}
+                        whileInView={{ opacity: 1, x: 0, scale: 1, rotate: -2 }}
+                        viewport={{ once: true, amount: 0.25 }}
+                        transition={{ duration: 0.75, ease: 'easeOut' }}
+                        className="relative bg-white p-4 pb-14 border-3 border-brand-black shadow-[16px_16px_0_rgba(0,0,0,0.3)] rounded-sm rotate-[-2deg] w-full max-w-[480px] group overflow-visible"
+                    >
+                        {/* Polaroid Image Area */}
+                        <div className="overflow-hidden bg-[#FFEEC7] relative aspect-[1.12/1]">
+                            <SmartImage
+                                src={`${assetBase}/final-chica-bici.webp`}
+                                fallbackSrcs={[`/menu-principal-celular/final-chica-bici.webp`, `${assetBase}/1.webp`]}
+                                alt="Experiencia Briz Feliz"
+                                placeholderLabel="final-chica-bici.webp"
+                                className="w-full h-full object-cover scale-102 group-hover:scale-105 transition-transform duration-500 rounded-sm"
+                            />
+                        </div>
+
+                        {/* Small hand-written sticker on Polaroid */}
+                        <div className="absolute right-4 bottom-4 rotate-[2deg] z-20">
+                            <span className="font-gochi text-lg text-brand-black/70 font-black">
+                                Briz Life 🚲✨
+                            </span>
+                        </div>
+                    </motion.div>
+                </div>
+            </div>
+        </section>
+    );
+}
+
 function StatsStrip() {
     return (
         <section className="bg-[#FFFDF3] px-4 py-4 sm:px-6 lg:px-8">
@@ -1410,6 +1646,7 @@ export default function HomePage() {
             <BrandSection />
             <ExperienceSection />
                 <CommunitySection />
+                <FinalInspirationalSection />
                 <StatsStrip />
                 <CTABanner />
                 {designEditorEnabled ? (
