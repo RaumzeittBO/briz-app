@@ -597,7 +597,7 @@ function HeroCollage({ variant }: { variant: 'mobile' | 'desktop' }) {
             id="heroCollage"
             className={
                 isMobile
-                    ? 'relative mx-auto mt-4 mb-4 block w-full max-w-[28rem] px-4 lg:hidden'
+                    ? 'relative mx-auto mt-4 mb-4 block w-full max-w-[92vw] sm:max-w-[28rem] px-2 lg:hidden'
                     : 'relative mx-auto hidden w-full max-w-none lg:ml-[-4.5rem] lg:mr-[-6rem] lg:mt-[-1rem] lg:block'
             }
         >
@@ -852,7 +852,7 @@ function ServiceStrip() {
 
                 <EditableLayer
                     id="servicesImage"
-                    className="relative mx-auto mt-6 mb-0 block w-full max-w-[32rem] px-4 lg:ml-[-5rem] lg:mr-[-5rem] lg:mt-0 lg:w-[min(78vw,1080px)] lg:max-w-none"
+                    className="relative mx-auto mt-6 mb-0 block w-full max-w-[92vw] sm:max-w-[32rem] px-2 lg:ml-[-5rem] lg:mr-[-5rem] lg:mt-0 lg:w-[min(78vw,1080px)] lg:max-w-none"
                 >
                 <motion.div
                     initial={{ opacity: 0, x: 34, scale: 0.96 }}
@@ -1256,7 +1256,7 @@ function CommunitySection() {
                         whileInView={{ opacity: 1, x: 0, scale: 1, rotate: 2 }}
                         viewport={{ once: true, amount: 0.25 }}
                         transition={{ duration: 0.75, ease: 'easeOut' }}
-                        className="relative mx-auto bg-white p-4 pb-14 border-3 border-brand-black shadow-[16px_16px_0_rgba(0,0,0,0.18)] rounded-sm rotate-[2deg] group w-full max-w-[88vw] sm:max-w-[420px]"
+                        className="relative mx-auto bg-white p-3 pb-10 sm:p-4 sm:pb-14 border-3 border-brand-black shadow-[10px_10px_0_rgba(0,0,0,0.18)] sm:shadow-[16px_16px_0_rgba(0,0,0,0.18)] rounded-sm rotate-[2deg] group w-[82vw] sm:w-full sm:max-w-[420px] overflow-visible"
                     >
                         {/* Writable tape tape-sticker effect */}
                         <div className="absolute -top-4 left-1/3 -translate-x-1/2 w-28 h-8 sm:w-36 sm:h-9 bg-[#FFFDF3]/88 border-x-2 border-dashed border-brand-black/20 backdrop-blur-sm shadow-sm rotate-[-6deg] z-20 flex items-center justify-center">
@@ -1588,10 +1588,10 @@ export default function HomePage() {
                 <WhyChooseBrizSection />
                 <BrandSection />
                 <CommunitySection />
-                <ExperienceSection />
                 <FinalInspirationalSection />
                 <StatsStrip />
                 <CTABanner />
+                <ExperienceSection />
                 {designEditorEnabled ? (
                     <DesignEditorPanel
                         config={config}
