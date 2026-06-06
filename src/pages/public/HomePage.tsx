@@ -1191,6 +1191,132 @@ function RouteLine({ className = '' }: { className?: string }) {
     );
 }
 
+function CommunitySection() {
+    return (
+        <section className="relative isolate overflow-hidden bg-[#62C5B0] py-20 sm:py-28 lg:py-32 px-4 sm:px-6 lg:px-8">
+            {/* Subtle grain texture overlay */}
+            <SmartImage
+                src={`${assetBase}/fondo-textura.webp`}
+                alt=""
+                placeholderLabel="fondo-textura.webp"
+                className="pointer-events-none absolute inset-0 -z-10 h-full w-full object-cover opacity-[0.12] mix-blend-multiply"
+                placeholderClassName="hidden"
+            />
+            {/* Organic ambient gradients */}
+            <div className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(circle_at_20%_20%,rgba(255,210,0,0.18),transparent_25%),radial-gradient(circle_at_80%_80%,rgba(250,14,149,0.12),transparent_30%)]" />
+            
+            <div className="mx-auto grid max-w-[1400px] items-center gap-12 lg:grid-cols-2 lg:gap-16">
+                {/* Left Column: Title, Description, Button */}
+                <div className="flex flex-col items-center text-center justify-center space-y-6 lg:space-y-8 max-w-[620px] mx-auto z-10">
+                    <motion.h2
+                        initial={{ opacity: 0, y: 24, scale: 0.96 }}
+                        whileInView={{ opacity: 1, y: 0, scale: 1 }}
+                        viewport={{ once: true }}
+                        transition={{ duration: 0.6, ease: 'easeOut' }}
+                        className="font-tan uppercase text-[clamp(2.5rem,7vw,5.5rem)] leading-[1.05] drop-shadow-[4px_4px_0_rgba(6,61,71,0.28)]"
+                        style={{ WebkitTextStroke: '2px #FFD200', color: '#063D47' }}
+                    >
+                        Comunidad
+                    </motion.h2>
+
+                    <motion.p
+                        initial={{ opacity: 0, y: 24 }}
+                        whileInView={{ opacity: 1, y: 0 }}
+                        viewport={{ once: true }}
+                        transition={{ duration: 0.6, delay: 0.12, ease: 'easeOut' }}
+                        className="font-cocon text-lg sm:text-2xl leading-relaxed text-[#063D47] font-bold"
+                    >
+                        Te invitamos a ser parte de una comunidad que celebra la vida en movimiento, que se enamora de cada pedaleada y que inspira cambio.
+                    </motion.p>
+
+                    <motion.div
+                        initial={{ opacity: 0, scale: 0.9 }}
+                        whileInView={{ opacity: 1, scale: 1 }}
+                        viewport={{ once: true }}
+                        transition={{ duration: 0.5, delay: 0.22 }}
+                        className="pt-4"
+                    >
+                        <Link to="/community">
+                            <motion.button
+                                whileHover={{ scale: 1.06, rotate: -1.5, y: -3 }}
+                                whileTap={{ scale: 0.94 }}
+                                className="group inline-flex items-center gap-3 px-10 py-5 bg-brand-yellow text-brand-black border-3 border-brand-black rounded-full font-cocon font-black text-base uppercase tracking-wider shadow-[6px_6px_0px_rgba(0,0,0,1)] hover:shadow-[2px_2px_0px_rgba(0,0,0,1)] transition-all cursor-pointer"
+                            >
+                                <span>Ir a comunidad</span>
+                                <ArrowRight className="w-5 h-5 shrink-0 transition-transform group-hover:translate-x-1" strokeWidth={2.5} />
+                            </motion.button>
+                        </Link>
+                    </motion.div>
+                </div>
+
+                {/* Right Column: Polaroid Scrapbook Collage */}
+                <div className="relative mx-auto w-full max-w-[480px] lg:max-w-none px-4 sm:px-6 z-10 mt-8 lg:mt-0">
+                    <motion.div
+                        initial={{ opacity: 0, x: 34, scale: 0.96, rotate: 4 }}
+                        whileInView={{ opacity: 1, x: 0, scale: 1, rotate: 2 }}
+                        viewport={{ once: true, amount: 0.25 }}
+                        transition={{ duration: 0.75, ease: 'easeOut' }}
+                        className="relative mx-auto bg-white p-4 pb-14 border-3 border-brand-black shadow-[16px_16px_0_rgba(0,0,0,0.18)] rounded-sm rotate-[2deg] group"
+                    >
+                        {/* Writable tape tape-sticker effect */}
+                        <div className="absolute -top-5 left-1/3 -translate-x-1/2 w-36 h-9 bg-[#FFFDF3]/88 border-x-2 border-dashed border-brand-black/20 backdrop-blur-sm shadow-sm rotate-[-6deg] z-20 flex items-center justify-center">
+                            <span className="font-maiandra text-[10px] text-brand-black/50 uppercase tracking-widest font-black">Comunidad Briz</span>
+                        </div>
+
+                        {/* Interactive Polaroid Image */}
+                        <div className="overflow-hidden bg-[#E6F5F2] relative aspect-[1.15/1]">
+                            <SmartImage
+                                src={`${assetBase}/comunidad-ciclista.webp`}
+                                fallbackSrcs={[`/menu-principal-celular/comunidad-ciclista.webp`, `${assetBase}/web2.webp`]}
+                                alt="Ciclistas en la comunidad Briz"
+                                placeholderLabel="comunidad-ciclista.webp"
+                                className="w-full h-full object-cover rounded-sm grayscale-[15%] group-hover:grayscale-0 transition-all duration-500 scale-102 group-hover:scale-105"
+                            />
+                        </div>
+
+                        {/* Caption in Gochi Hand */}
+                        <div className="absolute left-6 bottom-4">
+                            <p className="font-gochi text-xl text-brand-black/75 rotate-[-1deg] font-bold">
+                                #PedalearNosConecta 🌟
+                            </p>
+                        </div>
+
+                        {/* Sparkle sticker at top-right */}
+                        <motion.div
+                            animate={{ scale: [1, 1.15, 1], rotate: [0, 90, 180, 270, 360] }}
+                            transition={{ scale: { duration: 3.2, repeat: Infinity }, rotate: { duration: 15, repeat: Infinity, ease: "linear" } }}
+                            className="absolute -right-5 -top-5 w-12 h-12 bg-brand-pink border-3 border-brand-black rounded-xl flex items-center justify-center shadow-[4px_4px_0_rgba(0,0,0,1)] z-20 text-white cursor-default"
+                            title="Briz Sparkle!"
+                        >
+                            <Sparkles className="w-6 h-6" strokeWidth={2.5} />
+                        </motion.div>
+
+                        {/* Bicycle sticker at bottom-left */}
+                        <motion.div
+                            animate={{ y: [0, -6, 0], rotate: [3, -3, 3] }}
+                            transition={{ duration: 4.8, repeat: Infinity, ease: "easeInOut" }}
+                            className="absolute -left-7 -bottom-6 w-20 h-20 bg-brand-yellow border-3 border-brand-black rounded-full flex items-center justify-center shadow-[5px_5px_0_rgba(0,0,0,1)] z-20"
+                        >
+                            <img src="/logo_bicicleta_principal.png" alt="Bicicleta Briz Sticker" className="w-12 h-12 object-contain" />
+                        </motion.div>
+                    </motion.div>
+
+                    {/* Gochi Hand emotional message under polaroid */}
+                    <div className="absolute right-6 -bottom-10 rotate-[5deg] z-20 hidden sm:block">
+                        <motion.p 
+                            animate={{ y: [0, -3, 0] }}
+                            transition={{ duration: 3.5, repeat: Infinity, ease: "easeInOut" }}
+                            className="font-gochi text-2xl text-white drop-shadow-[2px_2px_0_rgba(6,61,71,0.7)]"
+                        >
+                            ¡Pedalear nos hace libres!
+                        </motion.p>
+                    </div>
+                </div>
+            </div>
+        </section>
+    );
+}
+
 function StatsStrip() {
     return (
         <section className="bg-[#FFFDF3] px-4 py-4 sm:px-6 lg:px-8">
@@ -1283,6 +1409,7 @@ export default function HomePage() {
             <WhyChooseBrizSection />
             <BrandSection />
             <ExperienceSection />
+                <CommunitySection />
                 <StatsStrip />
                 <CTABanner />
                 {designEditorEnabled ? (
