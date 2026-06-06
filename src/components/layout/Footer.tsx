@@ -42,11 +42,11 @@ export default function Footer() {
                 </svg>
             </div>
 
-            <div className="mx-auto flex min-h-[88px] max-w-[1480px] items-center justify-between gap-4 px-5 py-4 sm:min-h-[132px] sm:px-10 lg:px-12">
-                <div className="flex min-w-0 items-center gap-3 sm:gap-8">
+            <div className="mx-auto flex flex-col sm:flex-row min-h-[88px] max-w-[1480px] items-center justify-between gap-6 px-5 py-6 sm:px-10 lg:px-12">
+                <div className="flex flex-col sm:flex-row min-w-0 items-center gap-3 sm:gap-8 text-center sm:text-left">
                     <span className="shrink-0 text-sm font-black sm:text-2xl">Contáctanos:</span>
 
-                    <div className="flex items-center gap-2 sm:gap-9">
+                    <div className="flex items-center gap-3 sm:gap-9">
                         {contactLinks.map((link) => {
                             const Icon = link.icon;
 
