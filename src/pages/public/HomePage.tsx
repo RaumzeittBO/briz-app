@@ -939,6 +939,42 @@ function WhyChooseBrizSection() {
             <WheelWatermark className="pointer-events-none absolute right-[-5rem] top-24 hidden h-[34rem] w-[34rem] text-white/14 lg:block" />
             <div className="pointer-events-none absolute right-0 top-0 hidden h-72 w-72 rotate-12 border-[18px] border-white/8 lg:block" aria-hidden="true" />
 
+            {/* Ambient floating particles */}
+            <div className="pointer-events-none absolute inset-0 -z-[1] overflow-hidden" aria-hidden="true">
+                {[
+                    { left: '8%', top: '15%', size: 10, color: '#FFD200', duration: 6.2 },
+                    { left: '88%', top: '72%', size: 9, color: '#FFD200', duration: 7.5 },
+                    { left: '22%', top: '55%', size: 8, color: '#FFFFFF', duration: 6.8 },
+                    { left: '72%', top: '25%', size: 11, color: '#FFFFFF', duration: 8.1 },
+                    { left: '46%', top: '82%', size: 7, color: '#FA0E95', duration: 7.0 },
+                    { left: '82%', top: '42%', size: 10, color: '#FA0E95', duration: 6.4 },
+                ].map((particle, idx) => (
+                    <motion.span
+                        key={idx}
+                        className="absolute rounded-full"
+                        style={{
+                            left: particle.left,
+                            top: particle.top,
+                            width: particle.size,
+                            height: particle.size,
+                            backgroundColor: particle.color,
+                            boxShadow: `0 0 ${particle.size * 2.8}px ${particle.color}`,
+                        }}
+                        animate={{
+                            y: [0, -15, 0],
+                            scale: [0.8, 1.25, 0.8],
+                            opacity: [0.25, 0.8, 0.25],
+                        }}
+                        transition={{
+                            duration: particle.duration,
+                            repeat: Infinity,
+                            ease: 'easeInOut',
+                            delay: idx * 0.45,
+                        }}
+                    />
+                ))}
+            </div>
+
             <div className="mx-auto grid max-w-[1500px] gap-8 px-5 pb-12 sm:px-8 lg:min-h-[740px] lg:grid-cols-2 lg:gap-0 lg:px-12 lg:pb-14">
                 <motion.div
                     initial={{ opacity: 0, x: -26 }}
@@ -947,42 +983,77 @@ function WhyChooseBrizSection() {
                     transition={{ duration: 0.65, ease: 'easeOut' }}
                     className="relative z-10 w-full min-w-0 lg:max-w-[760px]"
                 >
-                    <OptionalSticker
-                        src={`${assetBase}/sticker-porque-tape.webp`}
-                        alt=""
-                        className="pointer-events-none absolute left-[11%] top-0 hidden sm:block h-20 w-[22rem] rotate-[-3deg] object-contain opacity-100 sm:h-28 sm:w-[32rem]"
-                    />
-                    <OptionalSticker
-                        src={`${assetBase}/sticker-splash-rojo.webp`}
-                        alt=""
-                        className="pointer-events-none absolute left-[-2rem] top-[17rem] hidden sm:block h-28 w-36 rotate-[-12deg] object-contain sm:top-[24rem]"
-                    />
-                    <OptionalSticker
-                        src={`${assetBase}/sticker-splash-amarillo.webp`}
-                        alt=""
-                        className="pointer-events-none absolute right-[4%] top-[9rem] hidden sm:block h-24 w-28 rotate-12 object-contain sm:top-[12rem] sm:h-32 sm:w-36"
-                    />
+                    <motion.div
+                        animate={{ y: [0, -5, 0], rotate: [-3, -1, -3] }}
+                        transition={{ duration: 5.5, repeat: Infinity, ease: 'easeInOut' }}
+                        className="pointer-events-none absolute left-[11%] top-0 hidden sm:block h-20 w-[22rem] sm:h-28 sm:w-[32rem] z-20"
+                    >
+                        <OptionalSticker
+                            src={`${assetBase}/sticker-porque-tape.webp`}
+                            alt=""
+                            className="w-full h-full object-contain"
+                        />
+                    </motion.div>
+                    <motion.div
+                        animate={{ y: [0, 6, 0], rotate: [-12, -9, -12] }}
+                        transition={{ duration: 4.8, repeat: Infinity, ease: 'easeInOut', delay: 0.3 }}
+                        className="pointer-events-none absolute left-[-2rem] top-[17rem] hidden sm:block h-28 w-36 sm:top-[24rem] z-20"
+                    >
+                        <OptionalSticker
+                            src={`${assetBase}/sticker-splash-rojo.webp`}
+                            alt=""
+                            className="w-full h-full object-contain"
+                        />
+                    </motion.div>
+                    <motion.div
+                        animate={{ y: [0, -7, 0], rotate: [12, 15, 12] }}
+                        transition={{ duration: 5.2, repeat: Infinity, ease: 'easeInOut', delay: 0.6 }}
+                        className="pointer-events-none absolute right-[4%] top-[9rem] hidden sm:block h-24 w-28 sm:top-[12rem] sm:h-32 sm:w-36 z-20"
+                    >
+                        <OptionalSticker
+                            src={`${assetBase}/sticker-splash-amarillo.webp`}
+                            alt=""
+                            className="w-full h-full object-contain"
+                        />
+                    </motion.div>
 
                     <EditableLayer id="whyTitle" className="relative mx-auto w-full max-w-[43rem] lg:mx-0">
                         <span className="absolute left-[9%] top-[3%] -z-10 h-[18%] w-[67%] rotate-[-3deg] rounded-sm bg-brand-yellow shadow-[0_7px_0_rgba(0,0,0,0.04)]" />
                         <span className="absolute left-[3%] top-[-5%] -z-10 h-[15%] w-[35%] rotate-[-8deg] rounded-[70%_42%_66%_46%] bg-[#75DFA2]/70" />
                         <h2 className="font-tan uppercase leading-[0.98] tracking-normal text-center lg:text-left">
-                            <span className="block lg:whitespace-nowrap text-3xl sm:text-5xl lg:text-[4.75rem] xl:text-[5.15rem] text-white [-webkit-text-stroke:2px_#203253] drop-shadow-[5px_5px_0_rgba(32,50,83,0.2)] text-center lg:text-left">
+                            <span 
+                                className="block lg:whitespace-nowrap text-3xl sm:text-5xl lg:text-[4.75rem] xl:text-[5.15rem] text-white [-webkit-text-stroke:2px_#203253] text-center lg:text-left"
+                                style={{ textShadow: '5px 5px 0px rgba(32,50,83,0.2)' }}
+                            >
                                 ¿Por qué
                             </span>
-                            <span className="ml-0 lg:ml-[18%] mt-3 block lg:whitespace-nowrap text-4xl sm:text-6xl lg:text-[5.05rem] xl:text-[5.45rem] text-[#8E0909] [-webkit-text-stroke:3px_#ffffff] drop-shadow-[5px_6px_0_rgba(0,0,0,0.18)] text-center lg:text-left">
+                            <span 
+                                className="ml-0 lg:ml-[18%] mt-3 block lg:whitespace-nowrap text-4xl sm:text-6xl lg:text-[5.05rem] xl:text-[5.45rem] text-[#8E0909] [-webkit-text-stroke:3px_#ffffff] text-center lg:text-left"
+                                style={{ textShadow: '5px 6px 0px rgba(0,0,0,0.18)' }}
+                            >
                                 elegir
                             </span>
-                            <span className="ml-0 lg:ml-[14%] mt-3 block lg:whitespace-nowrap text-4xl sm:text-6xl lg:text-[4.8rem] xl:text-[5.2rem] text-brand-yellow [-webkit-text-stroke:2px_#203253] drop-shadow-[5px_6px_0_rgba(32,50,83,0.22)] text-center lg:text-left">
+                            <span 
+                                className="ml-0 lg:ml-[14%] mt-3 block lg:whitespace-nowrap text-4xl sm:text-6xl lg:text-[4.8rem] xl:text-[5.2rem] text-brand-yellow [-webkit-text-stroke:2px_#203253] text-center lg:text-left"
+                                style={{ textShadow: '5px 6px 0px rgba(32,50,83,0.22)' }}
+                            >
                                 Briz?
                             </span>
                         </h2>
                     </EditableLayer>
 
                     <EditableLayer id="whyLeftText" className="relative z-10 mt-9 w-full max-w-[50rem] sm:mt-12 lg:mt-8 mx-auto lg:mx-0">
-                        <p className="font-cocon text-[1.1rem] leading-[1.48] text-[#101010] drop-shadow-[1px_1px_0_rgba(255,255,255,0.24)] sm:text-[1.55rem] lg:text-[1.42rem] xl:text-[1.52rem] text-center lg:text-left">
+                        <p 
+                            className="font-cocon text-[1.1rem] leading-[1.48] text-[#101010] sm:text-[1.55rem] lg:text-[1.42rem] xl:text-[1.52rem] text-center lg:text-left"
+                            style={{ textShadow: '1px 1px 0px rgba(255,255,255,0.24)' }}
+                        >
                             Porque somos una iniciativa que hace que una bicicleta pueda hacer mucho más que llevarte de un punto a otro.
-                            <span className="font-gochi text-[1.28rem] text-white drop-shadow-[2px_2px_0_rgba(0,0,0,0.16)] sm:text-[1.9rem]"> Puede sanar cuerpos, aliviar emociones, cuidar el planeta y activar economías locales.</span>
+                            <span 
+                                className="font-gochi text-[1.28rem] text-white sm:text-[1.9rem]"
+                                style={{ textShadow: '2px 2px 0px rgba(0,0,0,0.16)' }}
+                            >
+                                 Puede sanar cuerpos, aliviar emociones, cuidar el planeta y activar economías locales.
+                            </span>
                             {' '}Pero también pueda contar historias, conservar memorias, unir comunidades y revelar el alma de una ciudad.
                         </p>
                     </EditableLayer>
@@ -993,23 +1064,38 @@ function WhyChooseBrizSection() {
                     whileInView={{ opacity: 1, x: 0 }}
                     viewport={{ once: true, amount: 0.25 }}
                     transition={{ duration: 0.65, ease: 'easeOut' }}
-                    className="relative z-10 flex min-h-0 w-full flex-col items-center justify-start pt-16 pb-16 px-6 text-center -mt-12 lg:bg-transparent lg:rounded-none lg:border-t-0 lg:mt-0 lg:w-auto lg:px-0 lg:py-0 lg:min-h-0 lg:justify-start lg:pt-40"
+                    className="relative z-10 flex min-h-0 w-full flex-col items-center justify-start pt-16 pb-16 px-6 text-center mt-12 lg:bg-transparent lg:rounded-none lg:border-t-0 lg:mt-0 lg:w-auto lg:px-0 lg:py-0 lg:min-h-0 lg:justify-start lg:pt-40"
                 >
                     {/* Mobile organic dome background */}
                     <div className="pointer-events-none absolute inset-x-[-1.25rem] sm:inset-x-[-2rem] lg:hidden bottom-0 top-0 -z-10 rounded-t-[50vw] border-t-2 border-white/80 bg-[#A45D33]" />
-                    <OptionalSticker
-                        src={`${assetBase}/sticker-proposito-bici.webp`}
-                        alt=""
-                        className="pointer-events-none absolute left-[5%] top-[10%] hidden sm:block h-36 w-40 object-contain sm:h-44 sm:w-52 lg:left-[2%] lg:top-[14%]"
-                    />
-                    <OptionalSticker
-                        src={`${assetBase}/sticker-manos-corazon.webp`}
-                        alt=""
-                        className="pointer-events-none absolute left-1/2 top-[39%] hidden sm:block h-28 w-44 -translate-x-1/2 object-contain sm:h-36 sm:w-56 lg:top-[37%]"
-                    />
+                    <motion.div
+                        animate={{ y: [0, -6, 0], rotate: [-2, 2, -2] }}
+                        transition={{ duration: 4.5, repeat: Infinity, ease: 'easeInOut' }}
+                        className="pointer-events-none absolute left-[5%] top-[10%] hidden sm:block h-36 w-40 sm:h-44 sm:w-52 lg:left-[2%] lg:top-[14%] z-20"
+                    >
+                        <OptionalSticker
+                            src={`${assetBase}/sticker-proposito-bici.webp`}
+                            alt=""
+                            className="w-full h-full object-contain"
+                        />
+                    </motion.div>
+                    <motion.div
+                        animate={{ scale: [1, 1.05, 1], y: [0, -3, 0] }}
+                        transition={{ duration: 5, repeat: Infinity, ease: 'easeInOut', delay: 0.2 }}
+                        className="pointer-events-none absolute left-1/2 top-[39%] hidden sm:block h-28 w-44 -translate-x-1/2 sm:h-36 sm:w-56 lg:top-[37%] z-20"
+                    >
+                        <OptionalSticker
+                            src={`${assetBase}/sticker-manos-corazon.webp`}
+                            alt=""
+                            className="w-full h-full object-contain"
+                        />
+                    </motion.div>
 
                     <EditableLayer id="purposeTitle" className="mt-10 lg:mt-0 mx-auto lg:mx-0 text-center lg:text-left">
-                        <h3 className="rotate-[4deg] lg:rotate-[7deg] font-tan text-2xl sm:text-4xl lg:text-[4.35rem] xl:text-[4.9rem] uppercase leading-none text-transparent [-webkit-text-stroke:2px_#FFD200] drop-shadow-[3px_3px_0_rgba(0,0,0,0.12)] lg:translate-x-8 text-center lg:text-left">
+                        <h3 
+                            className="rotate-[4deg] lg:rotate-[7deg] font-tan text-2xl sm:text-4xl lg:text-[4.35rem] xl:text-[4.9rem] uppercase leading-none text-transparent [-webkit-text-stroke:2px_#FFD200] lg:translate-x-8 text-center lg:text-left"
+                            style={{ textShadow: '3px 3px 0px rgba(0,0,0,0.12)' }}
+                        >
                             Propósito
                         </h3>
                     </EditableLayer>
@@ -1017,7 +1103,10 @@ function WhyChooseBrizSection() {
                     <div className="hidden sm:block mt-24 h-24 w-44 sm:mt-28 sm:h-32 sm:w-56 lg:mt-28" aria-hidden="true" />
 
                     <EditableLayer id="purposeText" className="max-w-[37rem] mx-auto lg:mx-0">
-                        <p className="font-cocon text-[1.06rem] font-bold leading-[1.2] text-white drop-shadow-[3px_3px_0_#173C45] sm:text-[1.55rem] lg:text-[1.36rem] xl:text-[1.48rem] text-center lg:text-left">
+                        <p 
+                            className="font-cocon text-[1.06rem] font-bold leading-[1.2] text-white sm:text-[1.55rem] lg:text-[1.36rem] xl:text-[1.48rem] text-center lg:text-left"
+                            style={{ textShadow: '3px 3px 0px #173C45' }}
+                        >
                             <span className="text-brand-cyan">Nuestro propósito es hacer de la bicicleta una herramienta de bienestar integral,</span>
                             {' '}desde una visión holística que reconecta lo físico con lo emocional, lo ambiental con lo cultural, y lo cotidiano con lo extraordinario,
                             <span className="block pt-2 font-gochi text-[1.25rem] text-brand-cyan sm:text-[1.9rem]">a través de nuestras unidades de negocios.</span>
@@ -1045,6 +1134,42 @@ function BrandSection() {
             <WheelWatermark className="pointer-events-none absolute right-[-4rem] top-20 hidden h-[34rem] w-[34rem] text-white/13 lg:block" />
             <div className="pointer-events-none absolute left-[10%] top-20 h-16 w-48 rotate-[-6deg] rounded-[60%_44%_72%_48%] bg-white/15" aria-hidden="true" />
 
+            {/* Ambient floating particles */}
+            <div className="pointer-events-none absolute inset-0 -z-[1] overflow-hidden" aria-hidden="true">
+                {[
+                    { left: '12%', top: '28%', size: 10, color: '#24A9C5', duration: 6.5 },
+                    { left: '78%', top: '75%', size: 9, color: '#24A9C5', duration: 7.8 },
+                    { left: '26%', top: '68%', size: 8, color: '#FD7B2C', duration: 7.2 },
+                    { left: '88%', top: '22%', size: 11, color: '#FD7B2C', duration: 8.4 },
+                    { left: '42%', top: '15%', size: 7, color: '#FFFFFF', duration: 6.9 },
+                    { left: '68%', top: '52%', size: 10, color: '#FFFFFF', duration: 7.6 },
+                ].map((particle, idx) => (
+                    <motion.span
+                        key={idx}
+                        className="absolute rounded-full"
+                        style={{
+                            left: particle.left,
+                            top: particle.top,
+                            width: particle.size,
+                            height: particle.size,
+                            backgroundColor: particle.color,
+                            boxShadow: `0 0 ${particle.size * 2.8}px ${particle.color}`,
+                        }}
+                        animate={{
+                            y: [0, -15, 0],
+                            scale: [0.8, 1.25, 0.8],
+                            opacity: [0.25, 0.8, 0.25],
+                        }}
+                        transition={{
+                            duration: particle.duration,
+                            repeat: Infinity,
+                            ease: 'easeInOut',
+                            delay: idx * 0.45,
+                        }}
+                    />
+                ))}
+            </div>
+
             <div className="mx-auto grid max-w-[1500px] gap-8 px-5 pb-14 sm:px-8 lg:min-h-[740px] lg:grid-cols-2 lg:gap-0 lg:px-12 lg:pb-16">
                 <motion.div
                     initial={{ opacity: 0, x: -26 }}
@@ -1054,7 +1179,10 @@ function BrandSection() {
                     className="relative z-10 flex min-w-0 flex-col justify-center"
                 >
                     <EditableLayer id="brandTitle" className="w-full max-w-[44rem] mx-auto lg:mx-0 text-center lg:text-left">
-                        <h2 className="font-tan text-[clamp(2.2rem,8vw,5.5rem)] uppercase leading-none text-transparent [-webkit-text-stroke:2px_#174A35] drop-shadow-[3px_3px_0_rgba(255,255,255,0.35)] lg:text-[6rem] xl:text-[6.6rem] text-center lg:text-left">
+                        <h2 
+                            className="font-tan uppercase leading-none text-transparent [-webkit-text-stroke:2px_#174A35] text-3xl xs:text-4xl sm:text-5xl lg:text-[6rem] xl:text-[6.6rem] text-center lg:text-left"
+                            style={{ textShadow: '3px 3px 0px rgba(255,255,255,0.35)' }}
+                        >
                             La marca
                         </h2>
                     </EditableLayer>
@@ -1066,11 +1194,17 @@ function BrandSection() {
                     </EditableLayer>
 
                     <EditableLayer id="brandLogo" className="pointer-events-none absolute bottom-[3%] left-[28%] hidden w-[23rem] opacity-80 sm:block lg:w-[28rem]">
-                        <OptionalSticker
-                            src="/logo de briz.png"
-                            alt="Logo Briz"
-                            className="h-auto w-full object-contain brightness-0 invert opacity-90 drop-shadow-[0_18px_28px_rgba(0,0,0,0.08)]"
-                        />
+                        <motion.div
+                            animate={{ y: [0, -5, 0], scale: [1, 1.03, 1] }}
+                            transition={{ duration: 5.5, repeat: Infinity, ease: 'easeInOut' }}
+                            className="w-full h-full"
+                        >
+                            <OptionalSticker
+                                src="/logo de briz.png"
+                                alt="Logo Briz"
+                                className="h-auto w-full object-contain brightness-0 invert opacity-90 drop-shadow-[0_18px_28px_rgba(0,0,0,0.08)]"
+                            />
+                        </motion.div>
                     </EditableLayer>
                 </motion.div>
 
@@ -1079,26 +1213,38 @@ function BrandSection() {
                     whileInView={{ opacity: 1, x: 0 }}
                     viewport={{ once: true, amount: 0.25 }}
                     transition={{ duration: 0.65, ease: 'easeOut' }}
-                    className="relative z-10 flex min-h-0 w-full flex-col items-center justify-start pt-16 pb-16 px-6 text-center -mt-12 lg:bg-transparent lg:rounded-none lg:border-t-0 lg:mt-0 lg:w-auto lg:px-0 lg:py-0 lg:pt-10"
+                    className="relative z-10 flex min-h-0 w-full flex-col items-center justify-start pt-16 pb-16 px-6 text-center mt-12 lg:bg-transparent lg:rounded-none lg:border-t-0 lg:mt-0 lg:w-auto lg:px-0 lg:py-0 lg:pt-10"
                 >
                     {/* Mobile organic dome background */}
                     <div className="pointer-events-none absolute inset-x-[-1.25rem] sm:inset-x-[-2rem] lg:hidden bottom-0 top-0 -z-10 rounded-t-[50vw] border-t-2 border-white/80 bg-[#06465A]" />
                     <EditableLayer id="brandIllustration" className="relative mb-10 h-56 w-64 sm:h-64 sm:w-80 lg:h-72 lg:w-[25rem] mx-auto lg:mx-0">
-                        <OptionalSticker
-                            src="/menu-principal-web/sticker-marca.webp"
-                            alt="Sticker de marca Briz"
-                            className="block h-full w-full object-contain drop-shadow-[0_18px_35px_rgba(0,0,0,0.16)]"
-                        />
+                        <motion.div
+                            animate={{ y: [0, -6, 0], rotate: [-1, 2, -1] }}
+                            transition={{ duration: 5, repeat: Infinity, ease: 'easeInOut' }}
+                            className="w-full h-full"
+                        >
+                            <OptionalSticker
+                                src="/menu-principal-web/sticker-marca.webp"
+                                alt="Sticker de marca Briz"
+                                className="block h-full w-full object-contain drop-shadow-[0_18px_35px_rgba(0,0,0,0.16)]"
+                            />
+                        </motion.div>
                     </EditableLayer>
 
                     <EditableLayer id="brandRightText" className="max-w-[36rem] mx-auto lg:mx-0 text-center lg:text-left">
-                        <p className="font-gochi text-[1.16rem] font-bold leading-[1.16] text-white drop-shadow-[3px_3px_0_rgba(0,0,0,0.22)] sm:text-[1.75rem] lg:text-[1.7rem] xl:text-[1.88rem] text-center lg:text-left">
+                        <p 
+                            className="font-gochi text-[1.16rem] font-bold leading-[1.16] text-white sm:text-[1.75rem] lg:text-[1.7rem] xl:text-[1.88rem] text-center lg:text-left"
+                            style={{ textShadow: '3px 3px 0px rgba(0,0,0,0.22)' }}
+                        >
                             Implementaremos por etapas soluciones de publicidad creativa, mecánica integral y formación en ingeniería aplicada a la bicicleta. Briz potencia el uso de la bicicleta como herramienta de bienestar integral, contribuyendo a una ciudad más saludable y sostenible.
                         </p>
                     </EditableLayer>
 
                     <EditableLayer id="brandComingSoon" className="mt-12 lg:mt-16 text-center mx-auto lg:mx-0">
-                        <p className="font-tan text-xl sm:text-3xl lg:text-5xl uppercase leading-none text-transparent [-webkit-text-stroke:2px_#DDE44D] drop-shadow-[3px_3px_0_rgba(0,0,0,0.12)] text-center lg:text-left">
+                        <p 
+                            className="font-tan text-xl sm:text-3xl lg:text-5xl uppercase leading-none text-transparent [-webkit-text-stroke:2px_#DDE44D] text-center lg:text-left"
+                            style={{ textShadow: '3px 3px 0px rgba(0,0,0,0.12)' }}
+                        >
                             Próximamente...
                         </p>
                     </EditableLayer>
@@ -1207,16 +1353,52 @@ function CommunitySection() {
             {/* Organic ambient gradients */}
             <div className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(circle_at_20%_20%,rgba(255,210,0,0.18),transparent_25%),radial-gradient(circle_at_80%_80%,rgba(250,14,149,0.12),transparent_30%)]" />
             
+            {/* Ambient floating particles */}
+            <div className="pointer-events-none absolute inset-0 -z-[1] overflow-hidden" aria-hidden="true">
+                {[
+                    { left: '15%', top: '20%', size: 10, color: '#FFD200', duration: 6.8 },
+                    { left: '85%', top: '78%', size: 9, color: '#FFD200', duration: 7.4 },
+                    { left: '28%', top: '72%', size: 8, color: '#FA0E95', duration: 7.1 },
+                    { left: '75%', top: '15%', size: 11, color: '#FA0E95', duration: 8.0 },
+                    { left: '48%', top: '35%', size: 7, color: '#FFFFFF', duration: 6.5 },
+                    { left: '92%', top: '45%', size: 10, color: '#FFFFFF', duration: 7.7 },
+                ].map((particle, idx) => (
+                    <motion.span
+                        key={idx}
+                        className="absolute rounded-full"
+                        style={{
+                            left: particle.left,
+                            top: particle.top,
+                            width: particle.size,
+                            height: particle.size,
+                            backgroundColor: particle.color,
+                            boxShadow: `0 0 ${particle.size * 2.8}px ${particle.color}`,
+                        }}
+                        animate={{
+                            y: [0, -15, 0],
+                            scale: [0.8, 1.25, 0.8],
+                            opacity: [0.25, 0.8, 0.25],
+                        }}
+                        transition={{
+                            duration: particle.duration,
+                            repeat: Infinity,
+                            ease: 'easeInOut',
+                            delay: idx * 0.45,
+                        }}
+                    />
+                ))}
+            </div>
+
             <div className="mx-auto grid max-w-[1400px] items-center gap-12 lg:grid-cols-2 lg:gap-16">
                 {/* Left Column: Title, Description, Button */}
-                <div className="flex flex-col items-center text-center justify-center space-y-6 lg:space-y-8 max-w-[620px] mx-auto z-10">
+                <div className="flex flex-col items-center text-center justify-center space-y-6 lg:space-y-8 w-full max-w-[620px] mx-auto z-10 px-4 sm:px-0">
                     <motion.h2
                         initial={{ opacity: 0, y: 24, scale: 0.96 }}
                         whileInView={{ opacity: 1, y: 0, scale: 1 }}
                         viewport={{ once: true }}
                         transition={{ duration: 0.6, ease: 'easeOut' }}
-                        className="font-tan uppercase text-[clamp(2.5rem,7vw,5.5rem)] leading-[1.05] drop-shadow-[4px_4px_0_rgba(6,61,71,0.28)]"
-                        style={{ WebkitTextStroke: '2px #FFD200', color: '#063D47' }}
+                        className="font-tan uppercase text-3xl xs:text-4xl sm:text-5xl lg:text-[6.5rem] xl:text-[7.5rem] leading-[1.05]"
+                        style={{ WebkitTextStroke: '2px #FFD200', color: '#063D47', textShadow: '4px 4px 0px rgba(6,61,71,0.28)' }}
                     >
                         Comunidad
                     </motion.h2>
@@ -1252,10 +1434,10 @@ function CommunitySection() {
                 </div>
 
                 {/* Right Column: Polaroid Scrapbook Collage */}
-                <div className="relative mx-auto w-full max-w-[480px] lg:max-w-none px-4 sm:px-6 z-10 mt-8 lg:mt-0">
+                <div className="relative mx-auto w-full max-w-[480px] lg:max-w-none px-4 sm:px-6 z-10 mt-8 lg:mt-0 flex justify-center">
                     <motion.div
-                        initial={{ opacity: 0, x: 34, scale: 0.96, rotate: 4 }}
-                        whileInView={{ opacity: 1, x: 0, scale: 1, rotate: 2 }}
+                        initial={{ opacity: 0, y: 30, scale: 0.96, rotate: 4 }}
+                        whileInView={{ opacity: 1, y: 0, scale: 1, rotate: 2 }}
                         viewport={{ once: true, amount: 0.25 }}
                         transition={{ duration: 0.75, ease: 'easeOut' }}
                         className="relative mx-auto bg-white p-3 pb-10 sm:p-4 sm:pb-14 border-3 border-brand-black shadow-[10px_10px_0_rgba(0,0,0,0.18)] sm:shadow-[16px_16px_0_rgba(0,0,0,0.18)] rounded-sm rotate-[2deg] group w-[70vw] max-w-[280px] sm:w-full sm:max-w-[420px] overflow-visible"
@@ -1308,7 +1490,8 @@ function CommunitySection() {
                         <motion.p 
                             animate={{ y: [0, -3, 0] }}
                             transition={{ duration: 3.5, repeat: Infinity, ease: "easeInOut" }}
-                            className="font-gochi text-xl sm:text-2xl text-white drop-shadow-[2px_2px_0_rgba(6,61,71,0.7)]"
+                            className="font-gochi text-xl sm:text-2xl text-white font-bold"
+                            style={{ textShadow: '2px 2px 0px rgba(6,61,71,0.7)' }}
                         >
                             ¡Pedalear nos hace libres!
                         </motion.p>
@@ -1394,13 +1577,22 @@ function FinalInspirationalSection() {
                     >
                         {/* Big stacked text */}
                         <div className="flex flex-col text-center items-center justify-center space-y-2 select-none z-10 w-full">
-                            <h3 className="font-tan text-3xl sm:text-5xl lg:text-6xl font-black uppercase leading-[0.95] tracking-wide text-brand-orange drop-shadow-sm text-center w-full">
+                            <h3 
+                                className="font-tan text-3xl sm:text-5xl lg:text-6xl font-black uppercase leading-[0.95] tracking-wide text-brand-orange text-center w-full"
+                                style={{ textShadow: '1px 1px 2px rgba(0,0,0,0.15)' }}
+                            >
                                 Pedalea.
                             </h3>
-                            <h3 className="font-tan text-3xl sm:text-5xl lg:text-6xl font-black uppercase leading-[0.95] tracking-wide text-brand-pink drop-shadow-sm text-center w-full">
+                            <h3 
+                                className="font-tan text-3xl sm:text-5xl lg:text-6xl font-black uppercase leading-[0.95] tracking-wide text-brand-pink text-center w-full"
+                                style={{ textShadow: '1px 1px 2px rgba(0,0,0,0.15)' }}
+                            >
                                 Conecta.
                             </h3>
-                            <h3 className="font-tan text-3xl sm:text-5xl lg:text-6xl font-black uppercase leading-[0.95] tracking-wide text-brand-yellow drop-shadow-sm text-center w-full">
+                            <h3 
+                                className="font-tan text-3xl sm:text-5xl lg:text-6xl font-black uppercase leading-[0.95] tracking-wide text-brand-yellow text-center w-full"
+                                style={{ textShadow: '1px 1px 2px rgba(0,0,0,0.15)' }}
+                            >
                                 Inspira.
                             </h3>
                         </div>
@@ -1442,13 +1634,13 @@ function FinalInspirationalSection() {
                         <div className="flex flex-col items-center justify-center text-center">
                             <div className="flex items-center gap-1">
                                 <span 
-                                    className="font-tan uppercase text-lg sm:text-2xl text-brand-yellow-vibrant drop-shadow-[2px_2px_0_rgba(0,0,0,1)]"
-                                    style={{ WebkitTextStroke: '1px #000' }}
+                                    className="font-tan uppercase text-lg sm:text-2xl text-brand-yellow-vibrant"
+                                    style={{ WebkitTextStroke: '1px #000', textShadow: '2px 2px 0px rgba(0,0,0,1)' }}
                                 >
                                     ¡VIVE
                                 </span>
                                 <span className="font-gochi text-brand-black text-base sm:text-xl font-bold ml-1 mr-1">
-                                    la experiencia
+                                     la experiencia
                                 </span>
                                 <span className="font-scripter text-xl sm:text-3xl leading-none font-bold text-brand-pink">
                                     Briz!
@@ -1468,8 +1660,8 @@ function FinalInspirationalSection() {
 
                     {/* Main Polaroid Image Container */}
                     <motion.div
-                        initial={{ opacity: 0, x: 38, scale: 0.96, rotate: 3 }}
-                        whileInView={{ opacity: 1, x: 0, scale: 1, rotate: -2 }}
+                        initial={{ opacity: 0, y: 30, scale: 0.96, rotate: 3 }}
+                        whileInView={{ opacity: 1, y: 0, scale: 1, rotate: -2 }}
                         viewport={{ once: true, amount: 0.25 }}
                         transition={{ duration: 0.75, ease: 'easeOut' }}
                         className="relative bg-white p-3 pb-10 sm:p-4 sm:pb-14 border-3 border-brand-black shadow-[12px_12px_0_rgba(0,0,0,0.3)] sm:shadow-[16px_16px_0_rgba(0,0,0,0.3)] rounded-sm rotate-[-2deg] w-[70vw] max-w-[280px] sm:w-full sm:max-w-[420px] group overflow-visible"
