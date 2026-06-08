@@ -993,8 +993,10 @@ function WhyChooseBrizSection() {
                     whileInView={{ opacity: 1, x: 0 }}
                     viewport={{ once: true, amount: 0.25 }}
                     transition={{ duration: 0.65, ease: 'easeOut' }}
-                    className="relative z-10 flex min-h-0 w-full flex-col items-center justify-start pt-12 pb-16 px-6 text-center bg-[#A45D33] rounded-t-[3rem] border-t-2 border-white/80 -mt-10 lg:bg-transparent lg:rounded-none lg:border-t-0 lg:mt-0 lg:w-auto lg:px-0 lg:py-0 lg:min-h-0 lg:justify-start lg:pt-40"
+                    className="relative z-10 flex min-h-0 w-full flex-col items-center justify-start pt-16 pb-16 px-6 text-center -mt-12 lg:bg-transparent lg:rounded-none lg:border-t-0 lg:mt-0 lg:w-auto lg:px-0 lg:py-0 lg:min-h-0 lg:justify-start lg:pt-40"
                 >
+                    {/* Mobile organic dome background */}
+                    <div className="pointer-events-none absolute inset-x-[-1.25rem] sm:inset-x-[-2rem] lg:hidden bottom-0 top-0 -z-10 rounded-t-[50vw] border-t-2 border-white/80 bg-[#A45D33]" />
                     <OptionalSticker
                         src={`${assetBase}/sticker-proposito-bici.webp`}
                         alt=""
@@ -1077,8 +1079,10 @@ function BrandSection() {
                     whileInView={{ opacity: 1, x: 0 }}
                     viewport={{ once: true, amount: 0.25 }}
                     transition={{ duration: 0.65, ease: 'easeOut' }}
-                    className="relative z-10 flex min-h-0 w-full flex-col items-center justify-start py-12 px-6 text-center bg-[#06465A] rounded-t-[3rem] border-t-2 border-white/80 -mt-10 lg:bg-transparent lg:rounded-none lg:border-t-0 lg:mt-0 lg:w-auto lg:px-0 lg:py-0 lg:pt-10"
+                    className="relative z-10 flex min-h-0 w-full flex-col items-center justify-start pt-16 pb-16 px-6 text-center -mt-12 lg:bg-transparent lg:rounded-none lg:border-t-0 lg:mt-0 lg:w-auto lg:px-0 lg:py-0 lg:pt-10"
                 >
+                    {/* Mobile organic dome background */}
+                    <div className="pointer-events-none absolute inset-x-[-1.25rem] sm:inset-x-[-2rem] lg:hidden bottom-0 top-0 -z-10 rounded-t-[50vw] border-t-2 border-white/80 bg-[#06465A]" />
                     <EditableLayer id="brandIllustration" className="relative mb-10 h-56 w-64 sm:h-64 sm:w-80 lg:h-72 lg:w-[25rem] mx-auto lg:mx-0">
                         <OptionalSticker
                             src="/menu-principal-web/sticker-marca.webp"
@@ -1254,7 +1258,7 @@ function CommunitySection() {
                         whileInView={{ opacity: 1, x: 0, scale: 1, rotate: 2 }}
                         viewport={{ once: true, amount: 0.25 }}
                         transition={{ duration: 0.75, ease: 'easeOut' }}
-                        className="relative mx-auto bg-white p-3 pb-10 sm:p-4 sm:pb-14 border-3 border-brand-black shadow-[10px_10px_0_rgba(0,0,0,0.18)] sm:shadow-[16px_16px_0_rgba(0,0,0,0.18)] rounded-sm rotate-[2deg] group w-[76vw] sm:w-full sm:max-w-[420px] overflow-visible"
+                        className="relative mx-auto bg-white p-3 pb-10 sm:p-4 sm:pb-14 border-3 border-brand-black shadow-[10px_10px_0_rgba(0,0,0,0.18)] sm:shadow-[16px_16px_0_rgba(0,0,0,0.18)] rounded-sm rotate-[2deg] group w-[70vw] max-w-[280px] sm:w-full sm:max-w-[420px] overflow-visible"
                     >
                         {/* Writable tape tape-sticker effect */}
                         <div className="absolute -top-4 left-1/3 -translate-x-1/2 w-28 h-8 sm:w-36 sm:h-9 bg-[#FFFDF3]/88 border-x-2 border-dashed border-brand-black/20 backdrop-blur-sm shadow-sm rotate-[-6deg] z-20 flex items-center justify-center">
@@ -1468,7 +1472,7 @@ function FinalInspirationalSection() {
                         whileInView={{ opacity: 1, x: 0, scale: 1, rotate: -2 }}
                         viewport={{ once: true, amount: 0.25 }}
                         transition={{ duration: 0.75, ease: 'easeOut' }}
-                        className="relative bg-white p-3 pb-10 sm:p-4 sm:pb-14 border-3 border-brand-black shadow-[12px_12px_0_rgba(0,0,0,0.3)] sm:shadow-[16px_16px_0_rgba(0,0,0,0.3)] rounded-sm rotate-[-2deg] w-full max-w-[88vw] sm:max-w-[420px] group overflow-visible"
+                        className="relative bg-white p-3 pb-10 sm:p-4 sm:pb-14 border-3 border-brand-black shadow-[12px_12px_0_rgba(0,0,0,0.3)] sm:shadow-[16px_16px_0_rgba(0,0,0,0.3)] rounded-sm rotate-[-2deg] w-[70vw] max-w-[280px] sm:w-full sm:max-w-[420px] group overflow-visible"
                     >
                         {/* Polaroid Image Area */}
                         <div className="overflow-hidden bg-[#FFEEC7] relative aspect-[1.12/1]">
