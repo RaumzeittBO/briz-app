@@ -597,7 +597,7 @@ function HeroCollage({ variant }: { variant: 'mobile' | 'desktop' }) {
             id="heroCollage"
             className={
                 isMobile
-                    ? 'relative mx-auto mt-4 mb-4 block w-[108vw] max-w-[108vw] -ml-[4vw] sm:w-full sm:max-w-[28rem] sm:ml-0 px-2 lg:hidden'
+                    ? 'relative mx-auto mt-6 mb-6 block w-[90vw] max-w-[340px] px-2 lg:hidden'
                     : 'relative mx-auto hidden w-full max-w-none lg:ml-[-4.5rem] lg:mr-[-6rem] lg:mt-[-1rem] lg:block'
             }
         >
@@ -934,7 +934,6 @@ function WhyChooseBrizSection() {
     return (
         <section className="relative isolate overflow-hidden scroll-mt-28 bg-[#50C879] pt-24 sm:pt-28 lg:pt-[112px]">
             <div className="absolute inset-y-0 right-0 -z-10 hidden w-[54%] rounded-l-[48%] border-y-2 border-l-2 border-white/80 bg-[#A45D33] lg:block" />
-            <div className="pointer-events-none absolute inset-x-0 bottom-0 -z-10 h-[48%] rounded-t-[58%] border-t-2 border-white/80 bg-[#A45D33] lg:hidden" />
 
             <WheelWatermark className="pointer-events-none absolute -bottom-20 left-[-9rem] h-[30rem] w-[30rem] text-white/17 sm:left-[4%] lg:bottom-[-8rem] lg:left-[10%] lg:h-[34rem] lg:w-[34rem]" />
             <WheelWatermark className="pointer-events-none absolute right-[-5rem] top-24 hidden h-[34rem] w-[34rem] text-white/14 lg:block" />
@@ -994,7 +993,7 @@ function WhyChooseBrizSection() {
                     whileInView={{ opacity: 1, x: 0 }}
                     viewport={{ once: true, amount: 0.25 }}
                     transition={{ duration: 0.65, ease: 'easeOut' }}
-                    className="relative z-10 flex min-h-[34rem] min-w-0 flex-col items-center justify-start pt-24 text-center sm:pt-28 lg:min-h-0 lg:justify-start lg:pt-40"
+                    className="relative z-10 flex min-h-0 w-full flex-col items-center justify-start pt-12 pb-16 px-6 text-center bg-[#A45D33] rounded-t-[3rem] border-t-2 border-white/80 -mt-10 lg:bg-transparent lg:rounded-none lg:border-t-0 lg:mt-0 lg:w-auto lg:px-0 lg:py-0 lg:min-h-0 lg:justify-start lg:pt-40"
                 >
                     <OptionalSticker
                         src={`${assetBase}/sticker-proposito-bici.webp`}
@@ -1008,7 +1007,7 @@ function WhyChooseBrizSection() {
                     />
 
                     <EditableLayer id="purposeTitle" className="mt-10 lg:mt-0 mx-auto lg:mx-0 text-center lg:text-left">
-                        <h3 className="rotate-[7deg] font-tan text-3xl sm:text-5xl lg:text-[4.35rem] xl:text-[4.9rem] uppercase leading-none text-transparent [-webkit-text-stroke:2px_#FFD200] drop-shadow-[3px_3px_0_rgba(0,0,0,0.12)] lg:translate-x-8 text-center lg:text-left">
+                        <h3 className="rotate-[4deg] lg:rotate-[7deg] font-tan text-2xl sm:text-4xl lg:text-[4.35rem] xl:text-[4.9rem] uppercase leading-none text-transparent [-webkit-text-stroke:2px_#FFD200] drop-shadow-[3px_3px_0_rgba(0,0,0,0.12)] lg:translate-x-8 text-center lg:text-left">
                             Propósito
                         </h3>
                     </EditableLayer>
@@ -1039,7 +1038,6 @@ function BrandSection() {
             </div>
 
             <div className="absolute inset-y-0 right-0 -z-10 hidden w-[54%] rounded-l-[46%] border-y-2 border-l-2 border-white/80 bg-[#06465A] lg:block" />
-            <div className="pointer-events-none absolute inset-x-0 bottom-0 -z-10 h-[50%] rounded-t-[54%] border-t-2 border-white/80 bg-[#06465A] lg:hidden" />
 
             <WheelWatermark className="pointer-events-none absolute -bottom-16 left-[-8rem] h-[30rem] w-[30rem] text-white/22 sm:left-[6%] lg:bottom-[-6rem] lg:left-[11%] lg:h-[34rem] lg:w-[34rem]" />
             <WheelWatermark className="pointer-events-none absolute right-[-4rem] top-20 hidden h-[34rem] w-[34rem] text-white/13 lg:block" />
@@ -1059,7 +1057,7 @@ function BrandSection() {
                         </h2>
                     </EditableLayer>
 
-                    <EditableLayer id="brandLeftText" className="mt-10 max-w-[34rem] lg:mt-14 mx-auto lg:mx-0 text-center lg:text-left">
+                    <EditableLayer id="brandLeftText" className="mt-6 w-full max-w-[34rem] lg:mt-14 mx-auto lg:mx-0 text-center lg:text-left px-4 lg:px-0">
                         <p className="font-gochi text-[1.18rem] font-bold leading-[1.24] text-[#0B3D3C] sm:text-[1.75rem] lg:text-[1.62rem] xl:text-[1.78rem] text-center lg:text-left">
                             Briz es un ecosistema de movilidad y bienestar sostenible, donde la bicicleta es el eje central para transformar la salud, la comunidad y la ciudad. A través de un modelo de economía circular y regenerativa, Briz integra servicios innovadores que abarcan desde el alquiler y personalización de bicicletas, ciclotours temáticos y programas de salud, actualmente.
                         </p>
@@ -1079,7 +1077,7 @@ function BrandSection() {
                     whileInView={{ opacity: 1, x: 0 }}
                     viewport={{ once: true, amount: 0.25 }}
                     transition={{ duration: 0.65, ease: 'easeOut' }}
-                    className="relative z-10 flex min-h-0 py-8 lg:min-h-0 lg:pt-10 min-w-0 flex-col items-center justify-start text-center"
+                    className="relative z-10 flex min-h-0 w-full flex-col items-center justify-start py-12 px-6 text-center bg-[#06465A] rounded-t-[3rem] border-t-2 border-white/80 -mt-10 lg:bg-transparent lg:rounded-none lg:border-t-0 lg:mt-0 lg:w-auto lg:px-0 lg:py-0 lg:pt-10"
                 >
                     <EditableLayer id="brandIllustration" className="relative mb-10 h-56 w-64 sm:h-64 sm:w-80 lg:h-72 lg:w-[25rem] mx-auto lg:mx-0">
                         <OptionalSticker
@@ -1096,7 +1094,7 @@ function BrandSection() {
                     </EditableLayer>
 
                     <EditableLayer id="brandComingSoon" className="mt-12 lg:mt-16 text-center mx-auto lg:mx-0">
-                        <p className="font-tan text-2xl sm:text-3xl lg:text-5xl uppercase leading-none text-transparent [-webkit-text-stroke:2px_#DDE44D] drop-shadow-[3px_3px_0_rgba(0,0,0,0.12)] text-center lg:text-left">
+                        <p className="font-tan text-xl sm:text-3xl lg:text-5xl uppercase leading-none text-transparent [-webkit-text-stroke:2px_#DDE44D] drop-shadow-[3px_3px_0_rgba(0,0,0,0.12)] text-center lg:text-left">
                             Próximamente...
                         </p>
                     </EditableLayer>
@@ -1275,8 +1273,8 @@ function CommunitySection() {
                         </div>
 
                         {/* Caption in Gochi Hand */}
-                        <div className="absolute left-6 bottom-4">
-                            <p className="font-gochi text-xl text-brand-black/75 rotate-[-1deg] font-bold">
+                        <div className="absolute inset-x-0 bottom-4 text-center">
+                            <p className="font-gochi text-lg sm:text-xl text-brand-black/75 rotate-[-1deg] font-bold">
                                 #PedalearNosConecta 🌟
                             </p>
                         </div>
@@ -1302,11 +1300,11 @@ function CommunitySection() {
                     </motion.div>
 
                     {/* Gochi Hand emotional message under polaroid */}
-                    <div className="absolute right-6 -bottom-10 rotate-[5deg] z-20 hidden sm:block">
+                    <div className="mt-6 sm:mt-0 sm:absolute sm:right-6 sm:-bottom-10 rotate-[2deg] sm:rotate-[5deg] z-20 text-center sm:text-left">
                         <motion.p 
                             animate={{ y: [0, -3, 0] }}
                             transition={{ duration: 3.5, repeat: Infinity, ease: "easeInOut" }}
-                            className="font-gochi text-2xl text-white drop-shadow-[2px_2px_0_rgba(6,61,71,0.7)]"
+                            className="font-gochi text-xl sm:text-2xl text-white drop-shadow-[2px_2px_0_rgba(6,61,71,0.7)]"
                         >
                             ¡Pedalear nos hace libres!
                         </motion.p>
