@@ -17,6 +17,39 @@ interface CustomerAuthModalProps {
     onSuccess?: () => void;
 }
 
+const COUNTRIES_LIST = [
+    "Bolivia",
+    "Afganistán", "Albania", "Alemania", "Andorra", "Angola", "Antigua y Barbuda", 
+    "Arabia Saudita", "Argelia", "Argentina", "Armenia", "Australia", "Austria", 
+    "Azerbaiyán", "Bahamas", "Bangladés", "Barbados", "Bélgica", "Belice", 
+    "Benín", "Bielorrusia", "Birmania", "Bosnia y Herzegovina", "Botsuana", 
+    "Brasil", "Brunéi", "Bulgaria", "Burkina Faso", "Burundi", "Bután", 
+    "Cabo Verde", "Camboya", "Camerún", "Canadá", "Catar", "República Centroafricana", 
+    "Chad", "República Checa", "Chile", "China", "Chipre", "Colombia", "Comoras", 
+    "República del Congo", "República Democrática del Congo", "Corea del Norte", 
+    "Corea del Sur", "Costa de Marfil", "Costa Rica", "Croacia", "Cuba", 
+    "Dinamarca", "Dominica", "República Dominicana", "Ecuador", "Egipto", 
+    "El Salvador", "Emiratos Árabes Unidos", "Eritrea", "Eslovaquia", "Eslovenia", 
+    "España", "Estados Unidos", "Estonia", "Etiopía", "Filipinas", "Finlandia", 
+    "Fiyi", "Francia", "Gabón", "Gambia", "Georgia", "Ghana", "Granada", 
+    "Grecia", "Guatemala", "Guinea", "Guinea Ecuatorial", "Guyana", "Haití", 
+    "Honduras", "Hungría", "India", "Indonesia", "Irak", "Irán", "Irlanda", 
+    "Islandia", "Israel", "Italia", "Jamaica", "Japón", "Jordania", "Kazajistán", 
+    "Kenia", "Kirguistán", "Kuwait", "Laos", "Lesoto", "Letonia", "Líbano", 
+    "Liberia", "Libia", "Liechtenstein", "Lituania", "Luxemburgo", "Macedonia del Norte", 
+    "Madagascar", "Malasia", "Malaui", "Maldivas", "Malí", "Malta", "Marruecos", 
+    "Mauricio", "Mauritania", "México", "Moldavia", "Mónaco", "Mongolia", 
+    "Montenegro", "Mozambique", "Namibia", "Nepal", "Nicaragua", "Níger", 
+    "Nigeria", "Noruega", "Nueva Zelanda", "Omán", "Países Bajos", "Pakistán", 
+    "Panamá", "Papúa Nueva Guinea", "Paraguay", "Perú", "Polonia", "Portugal", 
+    "Reino Unido", "Ruanda", "Rumania", "Rusia", "Samoa", "San Cristóbal y Nieves", 
+    "San Marino", "Senegal", "Serbia", "Seychelles", "Sierra Leona", "Singapur", 
+    "Siria", "Somalia", "Sri Lanka", "Sudáfrica", "Sudán", "Suecia", "Suiza", 
+    "Surinam", "Tailandia", "Taiwán", "Tanzania", "Tayikistán", "Togo", "Tonga", 
+    "Trinidad y Tobago", "Túnez", "Turquía", "Ucrania", "Uganda", "Uruguay", 
+    "Uzbekistán", "Venezuela", "Vietnam", "Yemen", "Zambia", "Zimbabue"
+];
+
 export default function CustomerAuthModal({ isOpen, onClose, onSuccess }: CustomerAuthModalProps) {
     const { loginCustomer, registerCustomer } = useStore();
     
@@ -35,7 +68,7 @@ export default function CustomerAuthModal({ isOpen, onClose, onSuccess }: Custom
     const [name, setName] = useState('');
     const [phone, setPhone] = useState('');
     const [ci, setCi] = useState('');
-    const [nationality, setNationality] = useState('Boliviana');
+    const [nationality, setNationality] = useState('Bolivia');
     const [department, setDepartment] = useState('Cochabamba');
     const [referral, setReferral] = useState('Google');
     const [confirmPassword, setConfirmPassword] = useState('');
@@ -131,14 +164,12 @@ export default function CustomerAuthModal({ isOpen, onClose, onSuccess }: Custom
         }
     };
 
-    // Helper to convert base64 image if captured from cameras
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files && e.target.files.length > 0) {
             setDocFile(e.target.files[0]);
         }
     };
 
-    // Submitting handlers
     const handleLoginSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setError(null);
@@ -198,7 +229,7 @@ export default function CustomerAuthModal({ isOpen, onClose, onSuccess }: Custom
                 email,
                 password,
                 nacionalidad: nationality,
-                departamento: nationality.toLowerCase() === 'boliviana' ? department : '',
+                departamento: nationality.toLowerCase() === 'bolivia' ? department : '',
                 comoNosConociste: referral
             };
 
@@ -224,23 +255,23 @@ export default function CustomerAuthModal({ isOpen, onClose, onSuccess }: Custom
 
     return (
         <Dialog open={isOpen} onOpenChange={(v) => { if (!v) onClose(); }}>
-            <DialogContent className="max-w-xl w-[95vw] max-h-[92vh] overflow-y-auto bg-brand-charcoal border border-white/10 text-white rounded-3xl p-0 shadow-2xl">
+            <DialogContent className="max-w-xl sm:max-w-3xl lg:max-w-4xl w-[95vw] max-h-[92vh] overflow-y-auto bg-brand-beige border border-brand-yellow/30 text-brand-black rounded-3xl p-0 shadow-2xl">
                 
                 {/* Custom Close Button */}
                 <button 
                     onClick={onClose} 
-                    className="absolute right-4 top-4 z-50 p-2 text-white/40 hover:text-white bg-white/5 hover:bg-white/10 rounded-full transition-all"
+                    className="absolute right-4 top-4 z-50 p-2 text-brand-charcoal/40 hover:text-brand-charcoal bg-black/5 hover:bg-black/10 rounded-full transition-all cursor-pointer"
                 >
                     <X className="w-5 h-5" />
                 </button>
 
                 {/* Form header */}
-                <div className="p-8 pb-5 border-b border-white/5 flex flex-col items-center justify-center bg-black/10">
-                    <img src="/logo_bicicleta_principal.png" alt="Briz logo" className="h-14 w-auto object-contain brightness-0 invert mb-3" />
-                    <DialogTitle className="text-2xl font-tan uppercase tracking-wide text-brand-yellow">
+                <div className="p-8 pb-5 border-b border-brand-charcoal/5 flex flex-col items-center justify-center bg-brand-yellow/10">
+                    <img src="/logo_bicicleta_principal.png" alt="Briz logo" className="h-14 w-auto object-contain mb-3" />
+                    <DialogTitle className="text-2xl font-tan uppercase tracking-wide text-brand-charcoal">
                         {mode === 'login' ? 'INICIAR SESIÓN' : 'REGÍSTRATE EN BRIZ'}
                     </DialogTitle>
-                    <p className="text-[11px] font-maiandra text-white/50 uppercase tracking-widest mt-1">
+                    <p className="text-[11px] font-maiandra text-brand-charcoal/60 uppercase tracking-widest mt-1">
                         {mode === 'login' ? 'Ingresa para rentar tu bicicleta' : 'Sigue los pasos y regístrate en nuestro sistema'}
                     </p>
                 </div>
@@ -253,7 +284,7 @@ export default function CustomerAuthModal({ isOpen, onClose, onSuccess }: Custom
                                 initial={{ opacity: 0, y: -10 }}
                                 animate={{ opacity: 1, y: 0 }}
                                 exit={{ opacity: 0, y: -10 }}
-                                className="mb-5 p-4 bg-red-500/10 border border-red-500/20 text-red-400 rounded-2xl flex items-center gap-3 text-xs font-semibold"
+                                className="mb-5 p-4 bg-red-50 border border-red-200 text-red-600 rounded-2xl flex items-center gap-3 text-xs font-semibold"
                             >
                                 <AlertCircle className="w-5 h-5 shrink-0" />
                                 <span>{error}</span>
@@ -264,7 +295,7 @@ export default function CustomerAuthModal({ isOpen, onClose, onSuccess }: Custom
                                 initial={{ opacity: 0, y: -10 }}
                                 animate={{ opacity: 1, y: 0 }}
                                 exit={{ opacity: 0, y: -10 }}
-                                className="mb-5 p-4 bg-green-500/10 border border-green-500/20 text-green-400 rounded-2xl flex items-center gap-3 text-xs font-semibold"
+                                className="mb-5 p-4 bg-green-50 border border-green-200 text-green-700 rounded-2xl flex items-center gap-3 text-xs font-semibold"
                             >
                                 <CheckCircle2 className="w-5 h-5 shrink-0 animate-bounce" />
                                 <span>{successMessage}</span>
@@ -276,31 +307,31 @@ export default function CustomerAuthModal({ isOpen, onClose, onSuccess }: Custom
                     {mode === 'login' ? (
                         <form onSubmit={handleLoginSubmit} className="space-y-5">
                             <div className="space-y-2">
-                                <Label className="text-[10px] text-white/40 font-bold uppercase tracking-widest font-maiandra">Correo Electrónico</Label>
+                                <Label className="text-[10px] text-brand-charcoal/60 font-bold uppercase tracking-widest font-maiandra">Correo Electrónico</Label>
                                 <div className="relative">
-                                    <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30" />
+                                    <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-brand-charcoal/30" />
                                     <Input 
                                         type="email" 
                                         required 
                                         value={email}
                                         onChange={e => setEmail(e.target.value)}
                                         placeholder="ejemplo@briz.com" 
-                                        className="pl-12 bg-black/30 border-white/10 h-12 text-sm text-white font-bold rounded-xl focus:border-brand-yellow font-cocon"
+                                        className="pl-12 bg-white border border-brand-charcoal/15 h-12 text-sm text-brand-black font-bold rounded-xl focus-visible:ring-brand-yellow focus-visible:border-brand-yellow font-cocon shadow-sm"
                                     />
                                 </div>
                             </div>
 
                             <div className="space-y-2">
-                                <Label className="text-[10px] text-white/40 font-bold uppercase tracking-widest font-maiandra">Contraseña</Label>
+                                <Label className="text-[10px] text-brand-charcoal/60 font-bold uppercase tracking-widest font-maiandra">Contraseña</Label>
                                 <div className="relative">
-                                    <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30" />
+                                    <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-brand-charcoal/30" />
                                     <Input 
                                         type="password" 
                                         required 
                                         value={password}
                                         onChange={e => setPassword(e.target.value)}
                                         placeholder="••••••••" 
-                                        className="pl-12 bg-black/30 border-white/10 h-12 text-sm text-white font-bold rounded-xl focus:border-brand-yellow font-cocon"
+                                        className="pl-12 bg-white border border-brand-charcoal/15 h-12 text-sm text-brand-black font-bold rounded-xl focus-visible:ring-brand-yellow focus-visible:border-brand-yellow font-cocon shadow-sm"
                                     />
                                 </div>
                             </div>
@@ -310,25 +341,25 @@ export default function CustomerAuthModal({ isOpen, onClose, onSuccess }: Custom
                                     id="remember" 
                                     checked={remember} 
                                     onCheckedChange={(v) => setRemember(Boolean(v))}
-                                    className="border-white/20 data-[state=checked]:bg-brand-yellow data-[state=checked]:border-brand-yellow data-[state=checked]:text-brand-black"
+                                    className="border-brand-charcoal/20 data-[state=checked]:bg-brand-yellow data-[state=checked]:border-brand-yellow data-[state=checked]:text-brand-black"
                                 />
-                                <Label htmlFor="remember" className="text-xs text-white/60 font-medium cursor-pointer font-maiandra">Recordar usuario para futuras visitas</Label>
+                                <Label htmlFor="remember" className="text-xs text-brand-charcoal/70 font-medium cursor-pointer font-maiandra">Recordar usuario para futuras visitas</Label>
                             </div>
 
                             <Button 
                                 type="submit" 
                                 disabled={loading}
-                                className="w-full bg-brand-yellow text-brand-black hover:bg-brand-yellow/90 font-black rounded-xl h-12 uppercase text-xs tracking-widest transition-all mt-4 font-cocon shadow-lg shadow-brand-yellow/10"
+                                className="w-full bg-brand-yellow text-brand-black hover:bg-brand-yellow/90 font-black rounded-xl h-12 uppercase text-xs tracking-widest transition-all mt-4 font-cocon shadow-lg shadow-brand-yellow/10 cursor-pointer"
                             >
                                 {loading ? 'Iniciando sesión...' : 'INICIAR SESIÓN'}
                             </Button>
 
-                            <div className="text-center pt-3 border-t border-white/5 mt-4">
-                                <p className="text-xs text-white/40 font-medium font-maiandra">¿No tienes una cuenta aún?</p>
+                            <div className="text-center pt-3 border-t border-brand-charcoal/5 mt-4">
+                                <p className="text-xs text-brand-charcoal/40 font-medium font-maiandra">¿No tienes una cuenta aún?</p>
                                 <Button 
                                     type="button" 
                                     onClick={toggleMode} 
-                                    className="mt-2 bg-white/5 hover:bg-brand-yellow hover:text-brand-black text-white rounded-xl h-11 text-xs font-black uppercase tracking-widest px-6 w-full sm:w-auto font-cocon transition-all"
+                                    className="mt-2 bg-brand-charcoal/5 hover:bg-brand-yellow hover:text-brand-black text-brand-charcoal rounded-xl h-11 text-xs font-black uppercase tracking-widest px-6 w-full sm:w-auto font-cocon transition-all border border-transparent cursor-pointer"
                                 >
                                     USUARIO NUEVO / REGISTRARSE
                                 </Button>
@@ -338,16 +369,16 @@ export default function CustomerAuthModal({ isOpen, onClose, onSuccess }: Custom
                         <form onSubmit={handleRegisterSubmit} className="space-y-6">
                             
                             {/* CAMERA SELFIE STEP */}
-                            <div className="space-y-3 bg-black/20 p-5 rounded-2xl border border-white/5 flex flex-col items-center">
-                                <Label className="text-[10px] text-white/40 font-bold uppercase tracking-widest font-tangkiwood">1. Autofoto (Tu Rostro)</Label>
+                            <div className="space-y-3 bg-brand-yellow/5 p-5 rounded-2xl border border-brand-yellow/10 flex flex-col items-center">
+                                <Label className="text-[10px] text-brand-charcoal/60 font-bold uppercase tracking-widest font-tangkiwood">1. Autofoto (Tu Rostro)</Label>
                                 
-                                <div className="relative w-40 h-40 bg-black/40 border border-white/10 rounded-full overflow-hidden flex items-center justify-center shadow-inner">
+                                <div className="relative w-40 h-40 bg-white border border-brand-charcoal/10 rounded-full overflow-hidden flex items-center justify-center shadow-inner">
                                     {capturedSelfie ? (
                                         <img src={capturedSelfie} className="w-full h-full object-cover" alt="Selfie" />
                                     ) : cameraActive ? (
                                         <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover scale-x-[-1]" />
                                     ) : (
-                                        <Camera className="w-10 h-10 text-white/20" />
+                                        <Camera className="w-10 h-10 text-brand-charcoal/20" />
                                     )}
 
                                     {/* Canvas hidden for capture */}
@@ -356,40 +387,40 @@ export default function CustomerAuthModal({ isOpen, onClose, onSuccess }: Custom
 
                                 <div className="flex gap-2">
                                     {!cameraActive && !capturedSelfie && (
-                                        <Button type="button" onClick={startCamera} size="sm" className="bg-brand-yellow text-brand-black hover:bg-brand-yellow/85 font-black text-[10px] px-4 py-2 rounded-lg font-cocon">
+                                        <Button type="button" onClick={startCamera} size="sm" className="bg-brand-yellow text-brand-black hover:bg-brand-yellow/85 font-black text-[10px] px-4 py-2 rounded-lg font-cocon cursor-pointer">
                                             <Camera className="w-3.5 h-3.5 mr-1" /> Activar Cámara
                                         </Button>
                                     )}
                                     {cameraActive && (
-                                        <Button type="button" onClick={capturePhoto} size="sm" className="bg-green-600 hover:bg-green-700 text-white font-black text-[10px] px-4 py-2 rounded-lg font-cocon">
+                                        <Button type="button" onClick={capturePhoto} size="sm" className="bg-green-600 hover:bg-green-700 text-white font-black text-[10px] px-4 py-2 rounded-lg font-cocon cursor-pointer">
                                             ✓ Tomar Foto
                                         </Button>
                                     )}
                                     {(capturedSelfie || cameraActive) && (
-                                        <Button type="button" onClick={() => { stopCamera(); setCapturedSelfie(null); setSelfieBlob(null); }} size="sm" className="bg-red-600 hover:bg-red-700 text-white font-black text-[10px] px-4 py-2 rounded-lg font-cocon">
+                                        <Button type="button" onClick={() => { stopCamera(); setCapturedSelfie(null); setSelfieBlob(null); }} size="sm" className="bg-red-500 hover:bg-red-600 text-white font-black text-[10px] px-4 py-2 rounded-lg font-cocon cursor-pointer">
                                             Reiniciar
                                         </Button>
                                     )}
                                 </div>
-                                <span className="text-[9px] text-white/30 font-maiandra uppercase text-center mt-1">Toma una foto clara para validar tu identidad.</span>
+                                <span className="text-[9px] text-brand-charcoal/40 font-maiandra uppercase text-center mt-1">Toma una foto clara para validar tu identidad.</span>
                             </div>
 
                             {/* ID DOCUMENT STEP */}
-                            <div className="space-y-3 bg-black/20 p-5 rounded-2xl border border-white/5">
-                                <Label className="text-[10px] text-white/40 font-bold uppercase tracking-widest font-tangkiwood">2. Documento de Identificación</Label>
+                            <div className="space-y-3 bg-brand-yellow/5 p-5 rounded-2xl border border-brand-yellow/10">
+                                <Label className="text-[10px] text-brand-charcoal/60 font-bold uppercase tracking-widest font-tangkiwood">2. Documento de Identificación</Label>
                                 <div 
                                     onClick={() => docInputRef.current?.click()}
-                                    className="border-2 border-dashed border-white/10 hover:border-brand-yellow/50 bg-black/40 rounded-xl p-4 text-center cursor-pointer transition-all flex flex-col items-center justify-center group"
+                                    className="border-2 border-dashed border-brand-charcoal/10 hover:border-brand-yellow bg-white rounded-xl p-4 text-center cursor-pointer transition-all flex flex-col items-center justify-center group"
                                 >
-                                    <Upload className="w-8 h-8 text-white/20 group-hover:text-brand-yellow transition-colors mb-2" />
+                                    <Upload className="w-8 h-8 text-brand-charcoal/20 group-hover:text-brand-yellow transition-colors mb-2" />
                                     {docFile ? (
-                                        <div className="text-xs font-bold text-brand-yellow truncate max-w-full">
+                                        <div className="text-xs font-bold text-brand-charcoal truncate max-w-full">
                                             📄 {docFile.name} ({(docFile.size / 1024 / 1024).toFixed(2)} MB)
                                         </div>
                                     ) : (
                                         <>
-                                            <div className="text-xs font-bold text-white/60 font-maiandra">Sube una foto o documento PDF</div>
-                                            <div className="text-[9px] text-white/30 uppercase mt-1 font-maiandra">C.I. / Pasaporte / Licencia (Max. 5MB)</div>
+                                            <div className="text-xs font-bold text-brand-charcoal/60 font-maiandra">Sube una foto o documento PDF</div>
+                                            <div className="text-[9px] text-brand-charcoal/40 uppercase mt-1 font-maiandra">C.I. / Pasaporte / Licencia (Max. 5MB)</div>
                                         </>
                                     )}
                                     <input 
@@ -404,68 +435,78 @@ export default function CustomerAuthModal({ isOpen, onClose, onSuccess }: Custom
 
                             {/* ACCOUNT DATA FORM */}
                             <div className="space-y-4">
-                                <Label className="text-[10px] text-brand-yellow font-black uppercase tracking-widest font-tangkiwood">3. Datos Personales y de Cuenta</Label>
+                                <Label className="text-[10px] text-brand-charcoal font-black uppercase tracking-widest font-tangkiwood">3. Datos Personales y de Cuenta</Label>
                                 
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                     <div className="space-y-2">
-                                        <Label className="text-[10px] text-white/40 font-bold uppercase tracking-widest font-maiandra">Nombre Completo</Label>
+                                        <Label className="text-[10px] text-brand-charcoal/60 font-bold uppercase tracking-widest font-maiandra">Nombre Completo</Label>
                                         <div className="relative">
-                                            <User className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30" />
-                                            <Input required value={name} onChange={e=>setName(e.target.value)} placeholder="Juan Pérez" className="pl-12 bg-black/30 border-white/10 h-12 text-sm text-white font-bold rounded-xl focus:border-brand-yellow font-cocon" />
+                                            <User className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-brand-charcoal/30" />
+                                            <Input required value={name} onChange={e=>setName(e.target.value)} placeholder="Juan Pérez" className="pl-12 bg-white border border-brand-charcoal/15 h-12 text-sm text-brand-black font-bold rounded-xl focus-visible:ring-brand-yellow focus-visible:border-brand-yellow font-cocon shadow-sm" />
                                         </div>
                                     </div>
                                     <div className="space-y-2">
-                                        <Label className="text-[10px] text-white/40 font-bold uppercase tracking-widest font-maiandra">Número de WhatsApp</Label>
+                                        <Label className="text-[10px] text-brand-charcoal/60 font-bold uppercase tracking-widest font-maiandra">Número de WhatsApp</Label>
                                         <div className="relative flex items-center">
-                                            <div className="absolute left-4 flex items-center gap-1 text-white/40 font-black text-xs font-cocon pointer-events-none select-none">
+                                            <div className="absolute left-4 flex items-center gap-1 text-brand-charcoal/40 font-black text-xs font-cocon pointer-events-none select-none">
                                                 🇧🇴 +591
                                             </div>
-                                            <Input required type="tel" value={phone} onChange={e=>setPhone(e.target.value.replace(/\D/g, ''))} placeholder="77889900" className="pl-16 bg-black/30 border-white/10 h-12 text-sm text-white font-bold rounded-xl focus:border-brand-yellow font-cocon" />
+                                            <Input required type="tel" value={phone} onChange={e=>setPhone(e.target.value.replace(/\D/g, ''))} placeholder="77889900" className="pl-16 bg-white border border-brand-charcoal/15 h-12 text-sm text-brand-black font-bold rounded-xl focus-visible:ring-brand-yellow focus-visible:border-brand-yellow font-cocon shadow-sm" />
                                         </div>
                                     </div>
                                 </div>
 
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                     <div className="space-y-2">
-                                        <Label className="text-[10px] text-white/40 font-bold uppercase tracking-widest font-maiandra">CI / Pasaporte / Documento</Label>
+                                        <Label className="text-[10px] text-brand-charcoal/60 font-bold uppercase tracking-widest font-maiandra">CI / Pasaporte / Documento</Label>
                                         <div className="relative">
-                                            <ShieldCheck className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30" />
-                                            <Input required value={ci} onChange={e=>setCi(e.target.value)} placeholder="1234567 LP" className="pl-12 bg-black/30 border-white/10 h-12 text-sm text-white font-bold rounded-xl focus:border-brand-yellow font-cocon" />
+                                            <ShieldCheck className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-brand-charcoal/30" />
+                                            <Input required value={ci} onChange={e=>setCi(e.target.value)} placeholder="1234567 LP" className="pl-12 bg-white border border-brand-charcoal/15 h-12 text-sm text-brand-black font-bold rounded-xl focus-visible:ring-brand-yellow focus-visible:border-brand-yellow font-cocon shadow-sm" />
                                         </div>
                                     </div>
                                     <div className="space-y-2">
-                                        <Label className="text-[10px] text-white/40 font-bold uppercase tracking-widest font-maiandra">Correo Electrónico</Label>
+                                        <Label className="text-[10px] text-brand-charcoal/60 font-bold uppercase tracking-widest font-maiandra">Correo Electrónico</Label>
                                         <div className="relative">
-                                            <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30" />
-                                            <Input required type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="cliente@briz.com" className="pl-12 bg-black/30 border-white/10 h-12 text-sm text-white font-bold rounded-xl focus:border-brand-yellow font-cocon" />
+                                            <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-brand-charcoal/30" />
+                                            <Input required type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="cliente@briz.com" className="pl-12 bg-white border border-brand-charcoal/15 h-12 text-sm text-brand-black font-bold rounded-xl focus-visible:ring-brand-yellow focus-visible:border-brand-yellow font-cocon shadow-sm" />
                                         </div>
                                     </div>
                                 </div>
 
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                     <div className="space-y-2">
-                                        <Label className="text-[10px] text-white/40 font-bold uppercase tracking-widest font-maiandra">Nacionalidad</Label>
+                                        <Label className="text-[10px] text-brand-charcoal/60 font-bold uppercase tracking-widest font-maiandra">Nacionalidad</Label>
                                         <div className="relative">
-                                            <Globe className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30" />
-                                            <Input required value={nationality} onChange={e=>setNationality(e.target.value)} placeholder="Boliviana" className="pl-12 bg-black/30 border-white/10 h-12 text-sm text-white font-bold rounded-xl focus:border-brand-yellow font-cocon" />
+                                            <Globe className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-brand-charcoal/30 z-10" />
+                                            <select 
+                                                required 
+                                                value={nationality} 
+                                                onChange={e=>setNationality(e.target.value)} 
+                                                className="w-full pl-12 pr-10 bg-white border border-brand-charcoal/15 h-12 text-sm text-brand-black font-bold rounded-xl focus:border-brand-yellow focus:outline-none font-cocon appearance-none shadow-sm"
+                                            >
+                                                {COUNTRIES_LIST.map(country => (
+                                                    <option key={country} value={country}>{country}</option>
+                                                ))}
+                                            </select>
+                                            <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-brand-charcoal/40">▼</div>
                                         </div>
                                     </div>
                                     
-                                    {nationality.toLowerCase() === 'boliviana' && (
+                                    {nationality.toLowerCase() === 'bolivia' && (
                                         <div className="space-y-2">
-                                            <Label className="text-[10px] text-white/40 font-bold uppercase tracking-widest font-maiandra">Departamento</Label>
+                                            <Label className="text-[10px] text-brand-charcoal/60 font-bold uppercase tracking-widest font-maiandra">Departamento</Label>
                                             <div className="relative">
-                                                <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30 z-10" />
+                                                <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-brand-charcoal/30 z-10" />
                                                 <select 
                                                     value={department} 
                                                     onChange={e => setDepartment(e.target.value)} 
-                                                    className="w-full pl-12 pr-4 bg-black/30 border border-white/10 h-12 text-sm text-white font-bold rounded-xl focus:border-brand-yellow focus:outline-none font-cocon appearance-none"
+                                                    className="w-full pl-12 pr-10 bg-white border border-brand-charcoal/15 h-12 text-sm text-brand-black font-bold rounded-xl focus:border-brand-yellow focus:outline-none font-cocon appearance-none shadow-sm"
                                                 >
                                                     {['Cochabamba', 'La Paz', 'Santa Cruz', 'Oruro', 'Potosí', 'Tarija', 'Chuquisaca', 'Beni', 'Pando'].map(d => (
-                                                        <option key={d} value={d} className="bg-brand-charcoal text-white">{d}</option>
+                                                        <option key={d} value={d} className="bg-white text-brand-black">{d}</option>
                                                     ))}
                                                 </select>
-                                                <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-white/40">▼</div>
+                                                <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-brand-charcoal/40">▼</div>
                                             </div>
                                         </div>
                                     )}
@@ -473,35 +514,35 @@ export default function CustomerAuthModal({ isOpen, onClose, onSuccess }: Custom
 
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                     <div className="space-y-2">
-                                        <Label className="text-[10px] text-white/40 font-bold uppercase tracking-widest font-maiandra">Contraseña</Label>
+                                        <Label className="text-[10px] text-brand-charcoal/60 font-bold uppercase tracking-widest font-maiandra">Contraseña</Label>
                                         <div className="relative">
-                                            <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30" />
-                                            <Input required type="password" value={password} onChange={e=>setPassword(e.target.value)} placeholder="Min. 6 caracteres" className="pl-12 bg-black/30 border-white/10 h-12 text-sm text-white font-bold rounded-xl focus:border-brand-yellow font-cocon" />
+                                            <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-brand-charcoal/30" />
+                                            <Input required type="password" value={password} onChange={e=>setPassword(e.target.value)} placeholder="Min. 6 caracteres" className="pl-12 bg-white border border-brand-charcoal/15 h-12 text-sm text-brand-black font-bold rounded-xl focus-visible:ring-brand-yellow focus-visible:border-brand-yellow font-cocon shadow-sm" />
                                         </div>
                                     </div>
                                     <div className="space-y-2">
-                                        <Label className="text-[10px] text-white/40 font-bold uppercase tracking-widest font-maiandra">Confirmar Contraseña</Label>
+                                        <Label className="text-[10px] text-brand-charcoal/60 font-bold uppercase tracking-widest font-maiandra">Confirmar Contraseña</Label>
                                         <div className="relative">
-                                            <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30" />
-                                            <Input required type="password" value={confirmPassword} onChange={e=>setConfirmPassword(e.target.value)} placeholder="Repite tu contraseña" className="pl-12 bg-black/30 border-white/10 h-12 text-sm text-white font-bold rounded-xl focus:border-brand-yellow font-cocon" />
+                                            <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-brand-charcoal/30" />
+                                            <Input required type="password" value={confirmPassword} onChange={e=>setConfirmPassword(e.target.value)} placeholder="Repite tu contraseña" className="pl-12 bg-white border border-brand-charcoal/15 h-12 text-sm text-brand-black font-bold rounded-xl focus-visible:ring-brand-yellow focus-visible:border-brand-yellow font-cocon shadow-sm" />
                                         </div>
                                     </div>
                                 </div>
 
                                 <div className="space-y-2">
-                                    <Label className="text-[10px] text-white/40 font-bold uppercase tracking-widest font-maiandra">¿Cómo nos conociste?</Label>
+                                    <Label className="text-[10px] text-brand-charcoal/60 font-bold uppercase tracking-widest font-maiandra">¿Cómo nos conociste?</Label>
                                     <div className="relative">
-                                        <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30 z-10" />
+                                        <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-brand-charcoal/30 z-10" />
                                         <select 
                                             value={referral} 
                                             onChange={e => setReferral(e.target.value)} 
-                                            className="w-full pl-12 pr-4 bg-black/30 border border-white/10 h-12 text-sm text-white font-bold rounded-xl focus:border-brand-yellow focus:outline-none font-cocon appearance-none"
+                                            className="w-full pl-12 pr-10 bg-white border border-brand-charcoal/15 h-12 text-sm text-brand-black font-bold rounded-xl focus:border-brand-yellow focus:outline-none font-cocon appearance-none shadow-sm"
                                         >
                                             {['Google', 'Referencia en la web', 'TikTok', 'Instagram', 'Facebook', 'Por referencia de algún (a) conocido (a)', 'Otro'].map(r => (
-                                                <option key={r} value={r} className="bg-brand-charcoal text-white">{r}</option>
+                                                <option key={r} value={r} className="bg-white text-brand-black">{r}</option>
                                             ))}
                                         </select>
-                                        <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-white/40">▼</div>
+                                        <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-brand-charcoal/40">▼</div>
                                     </div>
                                 </div>
                             </div>
@@ -509,17 +550,17 @@ export default function CustomerAuthModal({ isOpen, onClose, onSuccess }: Custom
                             <Button 
                                 type="submit" 
                                 disabled={loading}
-                                className="w-full bg-brand-yellow text-brand-black hover:bg-brand-yellow/90 font-black rounded-xl h-12 uppercase text-xs tracking-widest transition-all mt-4 font-cocon shadow-lg shadow-brand-yellow/10"
+                                className="w-full bg-brand-yellow text-brand-black hover:bg-brand-yellow/90 font-black rounded-xl h-12 uppercase text-xs tracking-widest transition-all mt-4 font-cocon shadow-lg shadow-brand-yellow/10 cursor-pointer"
                             >
                                 {loading ? 'Creando cuenta y subiendo archivos...' : 'CREAR MI CUENTA'}
                             </Button>
 
-                            <div className="text-center pt-3 border-t border-white/5">
-                                <p className="text-xs text-white/40 font-medium font-maiandra">¿Ya estás registrado?</p>
+                            <div className="text-center pt-3 border-t border-brand-charcoal/5">
+                                <p className="text-xs text-brand-charcoal/40 font-medium font-maiandra">¿Ya estás registrado?</p>
                                 <Button 
                                     type="button" 
                                     onClick={toggleMode} 
-                                    className="mt-2 bg-white/5 hover:bg-brand-yellow hover:text-brand-black text-white rounded-xl h-11 text-xs font-black uppercase tracking-widest px-6 w-full sm:w-auto font-cocon transition-all"
+                                    className="mt-2 bg-brand-charcoal/5 hover:bg-brand-yellow hover:text-brand-black text-brand-charcoal rounded-xl h-11 text-xs font-black uppercase tracking-widest px-6 w-full sm:w-auto font-cocon transition-all border border-transparent cursor-pointer"
                                 >
                                     VOLVER A INICIAR SESIÓN
                                 </Button>

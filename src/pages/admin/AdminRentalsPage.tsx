@@ -760,6 +760,41 @@ export default function AdminRentalsPage() {
                   </div>
                 </div>
 
+                {/* Transportation Details (Delivery / Pickup Maps Link) */}
+                {(selected.deliveryService || selected.pickupService || selected.mapsLink) && (
+                  <div className="bg-brand-yellow/10 p-4 rounded-2xl border border-brand-yellow/20 space-y-2 text-xs">
+                    <p className="text-[9px] text-brand-yellow font-black uppercase tracking-wider font-maiandra">
+                      Servicio de Transporte a Domicilio
+                    </p>
+                    <div className="space-y-1 text-white/90 font-medium font-cocon">
+                      {selected.deliveryService && (
+                        <p className="flex items-center gap-1.5 font-bold">
+                          🚚 Requiere Servicio de Entrega (+Bs. 30)
+                        </p>
+                      )}
+                      {selected.pickupService && (
+                        <p className="flex items-center gap-1.5 font-bold">
+                          🔄 Requiere Servicio de Recojo (+Bs. 30)
+                        </p>
+                      )}
+                      {selected.mapsLink ? (
+                        <div className="pt-1.5">
+                          <a 
+                            href={selected.mapsLink} 
+                            target="_blank" 
+                            rel="noreferrer" 
+                            className="text-brand-yellow hover:underline font-black flex items-center gap-1.5 bg-brand-yellow/20 px-3.5 py-2 rounded-xl w-fit transition-transform active:scale-95"
+                          >
+                            📍 Ver Dirección en Google Maps <ExternalLink className="w-3.5 h-3.5" />
+                          </a>
+                        </div>
+                      ) : (
+                        <p className="text-white/30 italic text-[11px] mt-1">Sin enlace de ubicación registrado.</p>
+                      )}
+                    </div>
+                  </div>
+                )}
+
                 {/* Optional payment proof mock preparation */}
                 <div className="bg-black/40 p-4 rounded-2xl border border-white/5 space-y-1">
                   <p className="text-[9px] text-white/30 font-bold uppercase">Comprobante de Pago QR (Pre-aprobación)</p>

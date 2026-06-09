@@ -130,6 +130,10 @@ export interface Rental {
     paymentProofUrl?: string;
 
     createdDate?: string;
+
+    mapsLink?: string;
+    deliveryService?: boolean;
+    pickupService?: boolean;
 }
 
 export interface Sale {

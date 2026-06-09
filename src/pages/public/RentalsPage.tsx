@@ -1,15 +1,16 @@
 import { useState, useMemo, useRef } from 'react';
 import { motion } from 'framer-motion';
-import { Search, Plus, Minus, Bike, ChevronRight, ShoppingCart, Heart, Share2, ArrowLeft, Check } from 'lucide-react';
+import { Search, Bike, ChevronRight, ShoppingCart, ShoppingBag } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { useStore } from '@/context/StoreContext';
 import { useCart } from '@/context/CartContext';
 import CustomerAuthModal from '@/components/layout/CustomerAuthModal';
+import RentalCheckoutWizard from '@/components/rentals/RentalCheckoutWizard';
+import type { RentalCartItem } from '@/components/rentals/RentalCheckoutWizard';
 
 
 
@@ -46,7 +47,7 @@ function getBikeCategory(item: DisplayProduct): 'urban' | 'mountain' | 'road' | 
 }
 
 export default function RentalsPage() {
-  const { inventory, combos, calculatePrice, getComboAvailability } = useStore();
+  const { inventory, combos, getComboAvailability } = useStore();
   const { totalItems } = useCart();
 
   const [search, setSearch] = useState('');
@@ -72,13 +73,10 @@ export default function RentalsPage() {
     return p.stock ?? 0;
   };
 
-  // Detailed view local states
-  const [detailDuration, setDetailDuration] = useState('1 hora');
-  const [detailQty, setDetailQty] = useState(1);
-  const [detailWheelSize, setDetailWheelSize] = useState('');
+  // Rental Cart state and wizard checkout steps
+  const [rentalCart, setRentalCart] = useState<RentalCartItem[]>([]);
+  const [checkoutStep, setCheckoutStep] = useState<number>(1);
   const [authOpen, setAuthOpen] = useState(false);
-  const [rentSuccess, setRentSuccess] = useState(false);
-  const { currentCustomer } = useStore();
 
   // Build display list
   const products = useMemo((): DisplayProduct[] => {
@@ -178,10 +176,7 @@ export default function RentalsPage() {
 
   const openReservation = (p: DisplayProduct) => {
     setSelected(p);
-    setDetailDuration('1 hora');
-    setDetailQty(1);
-    setDetailWheelSize(p.hasWheelSizes && p.wheelSizes && p.wheelSizes.length > 0 ? p.wheelSizes[0].size : '');
-    setRentSuccess(false);
+    setCheckoutStep(1);
   };
 
   // Grouped products for sliders
@@ -319,185 +314,23 @@ export default function RentalsPage() {
   return (
     <div className="pt-20 bg-[#FFFDF3] min-h-screen">
       {selected ? (
-        <div className="max-w-xl mx-auto px-4 py-10">
-          <button 
-            onClick={() => { setSelected(null); setRentSuccess(false); }} 
-            className="flex items-center gap-2 text-brand-charcoal/60 hover:text-brand-charcoal text-xs font-black uppercase tracking-wider mb-6 font-maiandra"
-          >
-            <ArrowLeft className="w-4 h-4" /> Volver a Alquileres
-          </button>
-
-          {rentSuccess ? (
-            <motion.div 
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              className="bg-white border-2 border-brand-yellow rounded-[2.2rem] p-8 text-center space-y-6 shadow-xl"
-            >
-              <div className="w-20 h-20 bg-green-500/10 rounded-full flex items-center justify-center mx-auto border border-green-500/20">
-                <Check className="w-10 h-10 text-green-500" strokeWidth={3} />
-              </div>
-              <div className="space-y-2">
-                <h2 className="font-tan text-2xl uppercase text-brand-black">¡Alquiler Iniciado!</h2>
-                <p className="text-xs font-bold uppercase tracking-widest text-brand-yellow font-tangkiwood bg-brand-charcoal px-4 py-1.5 rounded-full inline-block">
-                  Reserva en proceso
-                </p>
-              </div>
-              
-              <div className="bg-brand-charcoal/5 p-5 rounded-2xl text-left text-xs space-y-3 font-maiandra border border-black/5">
-                <p className="text-brand-black/40 font-bold uppercase text-[9px] border-b border-black/5 pb-1">Resumen de Selección</p>
-                <p className="font-bold text-brand-black">🚴 Producto: <span className="font-black text-sm">{selected.name}</span></p>
-                <p className="font-bold text-brand-black">⏱️ Duración: <span className="font-black">{detailDuration}</span></p>
-                {selected.hasWheelSizes && detailWheelSize && (
-                  <p className="font-bold text-brand-black">⚙️ Aro: <span className="font-black">Aro {detailWheelSize}</span></p>
-                )}
-                <p className="font-bold text-brand-black">👥 Cliente: <span className="font-black">{currentCustomer?.name}</span></p>
-                <p className="font-bold text-brand-black">💰 Total Estimado: <span className="font-black text-base text-brand-charcoal">Bs. {calculatePrice(selected.type, selected.id, detailDuration, detailQty)}</span></p>
-              </div>
-
-              <div className="p-4 bg-brand-yellow/15 border border-brand-yellow/30 text-brand-black text-xs font-bold rounded-2xl text-center leading-relaxed">
-                Tus datos de registro se han asociado de forma segura. En el siguiente paso desarrollaremos la pantalla de especificaciones de tu alquiler.
-              </div>
-
-              <Button 
-                onClick={() => { setSelected(null); setRentSuccess(false); }} 
-                className="w-full bg-brand-black hover:bg-brand-black/90 text-brand-yellow font-black rounded-xl h-12 uppercase text-xs tracking-widest font-cocon"
-              >
-                Aceptar y Volver
-              </Button>
-            </motion.div>
-          ) : (
-            <div className="space-y-6">
-              {/* Product description */}
-              <p className="text-xs sm:text-sm font-medium text-brand-black leading-relaxed text-justify font-cocon bg-white/50 p-5 rounded-2xl border border-black/5">
-                {selected.description || 'La bicicleta urbana es ideal para cualquier ruta en la ciudad por caminos asfaltados. Pedalea con comfort, ergonomía y elegancia. Cuadro de acero alivianado. Aros disponibles: 26 y 27. El color mostrado es referencial. La bicicleta se entregará en el color disponible al momento de la entrega.'}
-              </p>
-
-              {/* Slideable Large Bike Image Card */}
-              <div className="relative aspect-[4/3] bg-white border border-gray-100 rounded-[2.2rem] overflow-hidden shadow-md">
-                <img src={selected.imageUrl || '/placeholder_bike.png'} alt={selected.name} className="w-full h-full object-cover" />
-                
-                {/* Overlay Action Buttons */}
-                <div className="absolute bottom-5 right-5 flex gap-2">
-                  <button 
-                    className="w-10 h-10 rounded-full bg-white/90 hover:bg-white text-brand-black shadow-lg flex items-center justify-center transition-transform active:scale-90 border border-gray-100 cursor-pointer"
-                    onClick={() => alert('¡Guardado en tus favoritos!')}
-                  >
-                    <Heart className="w-5 h-5 text-red-500 fill-red-500" />
-                  </button>
-                  <button 
-                    className="w-10 h-10 rounded-full bg-white/90 hover:bg-white text-brand-black shadow-lg flex items-center justify-center transition-transform active:scale-90 border border-gray-100 cursor-pointer"
-                    onClick={() => {
-                      navigator.clipboard.writeText(window.location.href);
-                      alert('¡Enlace de alquiler copiado al portapapeles!');
-                    }}
-                  >
-                    <Share2 className="w-5 h-5 text-gray-700" />
-                  </button>
-                </div>
-              </div>
-
-              {/* Title & Badge */}
-              <div className="flex justify-between items-center">
-                <h2 className="font-tangkiwood text-2xl sm:text-3xl text-brand-black leading-none">{selected.name}</h2>
-                <Badge className="bg-brand-yellow text-brand-black border-0 text-[10px] font-black uppercase rounded-lg px-2.5 py-1">
-                  {selected.type === 'combo' ? 'Combo' : selected.itemType === 'bike' ? 'Bicicleta' : 'Accesorio'}
-                </Badge>
-              </div>
-
-              {/* Wheel sizes selector */}
-              {selected.hasWheelSizes && selected.wheelSizes && selected.wheelSizes.length > 0 && (
-                <div className="space-y-2">
-                  <Label className="text-[10px] text-brand-black/50 font-bold uppercase tracking-widest font-maiandra">Selecciona Aro</Label>
-                  <div className="flex gap-2 flex-wrap">
-                    {selected.wheelSizes.map(ws => (
-                      <button 
-                        key={ws.size} 
-                        type="button" 
-                        disabled={ws.stock <= 0} 
-                        onClick={() => setDetailWheelSize(ws.size)}
-                        className={`px-4 py-2.5 text-xs font-black rounded-xl border transition-all cursor-pointer ${
-                          ws.stock <= 0 
-                            ? 'opacity-30 cursor-not-allowed border-gray-200 bg-gray-50' 
-                            : detailWheelSize === ws.size 
-                              ? 'bg-brand-yellow border-brand-charcoal text-brand-black shadow-sm' 
-                              : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300'
-                        }`}
-                      >
-                        Aro {ws.size} ({ws.stock} disp.)
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Quantity selector */}
-              <div className="space-y-2">
-                <Label className="text-[10px] text-brand-black/50 font-bold uppercase tracking-widest font-maiandra">Cantidad</Label>
-                <div className="flex items-center gap-3 bg-white border border-gray-200 rounded-xl p-1.5 w-32 shadow-sm">
-                  <button type="button" onClick={() => setDetailQty(Math.max(1, detailQty - 1))} className="w-8 h-8 rounded-lg bg-gray-50 flex items-center justify-center text-gray-500 hover:bg-gray-100 cursor-pointer"><Minus className="w-3.5 h-3.5" /></button>
-                  <span className="flex-1 text-center font-black text-sm text-brand-black font-cocon">{detailQty}</span>
-                  <button type="button" onClick={() => setDetailQty(detailQty + 1)} className="w-8 h-8 rounded-lg bg-gray-50 flex items-center justify-center text-gray-500 hover:bg-gray-100 cursor-pointer"><Plus className="w-3.5 h-3.5" /></button>
-                </div>
-              </div>
-
-              {/* Pricing Grid */}
-              <div className="space-y-3">
-                <Label className="text-[10px] text-brand-black/50 font-bold uppercase tracking-widest font-maiandra">Selecciona la Duración</Label>
-                <div className="grid grid-cols-2 gap-3">
-                  {[
-                    { l: '1 Hora', v: '1 hora' },
-                    { l: '2 Horas', v: '2 horas' },
-                    { l: '3 Horas', v: '3 horas' },
-                    { l: '4 Horas', v: '4 horas' },
-                    { l: '8 Horas', v: '8 horas' },
-                    { l: '24 Horas', v: '24 horas' },
-                    { l: '1 Semana', v: '1 semana' },
-                    { l: '1 Mes', v: '1 mes' }
-                  ].map(tier => {
-                    const computed = calculatePrice(selected.type, selected.id, tier.v, 1);
-                    const isSelected = detailDuration === tier.v;
-                    return (
-                      <button 
-                        key={tier.v} 
-                        type="button" 
-                        onClick={() => setDetailDuration(tier.v)}
-                        className={`p-4 border rounded-2xl text-left flex flex-col justify-center transition-all cursor-pointer ${
-                          isSelected 
-                            ? 'bg-brand-yellow border-brand-charcoal text-brand-black shadow-md scale-[1.01]' 
-                            : 'bg-white border-gray-100 text-brand-black hover:border-gray-200'
-                        }`}
-                      >
-                        <span className="font-tan text-lg leading-tight">Bs. {computed}</span>
-                        <span className={`text-[10px] font-bold mt-0.5 uppercase font-maiandra ${isSelected ? 'text-brand-charcoal/80 font-black' : 'text-gray-400'}`}>
-                          / {tier.l}
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Alquilar CTA */}
-              <Button 
-                onClick={() => {
-                  if (!currentCustomer) {
-                    setAuthOpen(true);
-                  } else {
-                    setRentSuccess(true);
-                  }
-                }}
-                className="w-full bg-brand-yellow hover:bg-brand-yellow-light text-brand-black font-black rounded-2xl h-14 uppercase text-sm tracking-widest transition-transform active:scale-[0.98] shadow-lg shadow-brand-yellow/10 font-cocon mt-6 cursor-pointer"
-              >
-                ALQUILAR
-              </Button>
-            </div>
-          )}
-
+        <div className="max-w-3xl mx-auto px-4 py-10">
+          <RentalCheckoutWizard 
+            selectedProduct={selected}
+            setSelectedProduct={setSelected}
+            cart={rentalCart}
+            setCart={setRentalCart}
+            step={checkoutStep}
+            setStep={setCheckoutStep}
+            onClose={() => setSelected(null)}
+            setAuthOpen={setAuthOpen}
+          />
+          
           {/* Auth Modal Trigger */}
           <CustomerAuthModal 
             isOpen={authOpen} 
             onClose={() => setAuthOpen(false)} 
-            onSuccess={() => setRentSuccess(true)}
+            onSuccess={() => setCheckoutStep(4)}
           />
         </div>
       ) : (
@@ -612,6 +445,27 @@ export default function RentalsPage() {
       </section>
 
         </>
+      )}
+
+      {/* Floating Rental Cart Indicator */}
+      {!selected && rentalCart.length > 0 && (
+        <motion.button 
+          initial={{ scale: 0, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          onClick={() => {
+            setSelected(rentalCart[0].product);
+            setCheckoutStep(2);
+          }}
+          className="fixed bottom-6 right-6 z-50 bg-brand-yellow hover:bg-brand-yellow-light text-brand-black w-16 h-16 rounded-full flex items-center justify-center shadow-2xl hover:scale-105 transition-all cursor-pointer group"
+          title="Ver Carrito de Alquiler"
+        >
+          <div className="relative">
+            <ShoppingBag className="w-7 h-7" strokeWidth={2.2} />
+            <Badge className="absolute -top-2.5 -right-2.5 bg-brand-black text-brand-yellow font-black text-[10px] min-w-5 h-5 flex items-center justify-center p-0 rounded-full border border-brand-yellow/20">
+              {rentalCart.reduce((sum, item) => sum + item.quantity, 0)}
+            </Badge>
+          </div>
+        </motion.button>
       )}
     </div>
   );
