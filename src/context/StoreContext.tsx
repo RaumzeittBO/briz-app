@@ -431,13 +431,36 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
         let autofotoUrl = '';
         let documentoUrl = '';
 
+        // Helper to prevent Firebase Storage uploads from hanging indefinitely (timeout in 6 seconds)
+        const uploadWithTimeout = async (ref: any, blobOrFile: Blob | File): Promise<any> => {
+            return Promise.race([
+                uploadBytes(ref, blobOrFile),
+                new Promise((_, reject) => 
+                    setTimeout(() => reject(new Error('Firebase Storage upload timeout')), 6000)
+                )
+            ]);
+        };
+
         if (selfieBlob) {
             try {
                 const pathRef = storageRef(storage, `customers/selfies/${id}_selfie.jpg`);
-                const result = await uploadBytes(pathRef, selfieBlob);
+                const result = await uploadWithTimeout(pathRef, selfieBlob);
                 autofotoUrl = await getDownloadURL(result.ref);
             } catch (err) {
-                console.error("Error uploading selfie:", err);
+                console.error("Error uploading selfie, using base64 fallback:", err);
+                try {
+                    const base64 = await new Promise<string>((resolve, reject) => {
+                        const reader = new FileReader();
+                        reader.onloadend = () => resolve(reader.result as string);
+                        reader.onerror = reject;
+                        reader.readAsDataURL(selfieBlob);
+                    });
+                    if (base64.length < 650000) {
+                        autofotoUrl = base64;
+                    }
+                } catch (fallbackErr) {
+                    console.error("Error creating base64 fallback for selfie:", fallbackErr);
+                }
             }
         }
 
@@ -445,10 +468,23 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
             try {
                 const fileExt = docFile.name.split('.').pop() || 'pdf';
                 const pathRef = storageRef(storage, `customers/documents/${id}_doc.${fileExt}`);
-                const result = await uploadBytes(pathRef, docFile);
+                const result = await uploadWithTimeout(pathRef, docFile);
                 documentoUrl = await getDownloadURL(result.ref);
             } catch (err) {
-                console.error("Error uploading document:", err);
+                console.error("Error uploading document, checking for base64 fallback:", err);
+                if (docFile.size < 500000) {
+                    try {
+                        const base64 = await new Promise<string>((resolve, reject) => {
+                            const reader = new FileReader();
+                            reader.onloadend = () => resolve(reader.result as string);
+                            reader.onerror = reject;
+                            reader.readAsDataURL(docFile);
+                        });
+                        documentoUrl = base64;
+                    } catch (fallbackErr) {
+                        console.error("Error creating base64 fallback for document:", fallbackErr);
+                    }
+                }
             }
         }
 
