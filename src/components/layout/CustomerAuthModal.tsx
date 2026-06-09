@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
     X, Camera, Upload, ShieldCheck, Mail, Lock, User, 
@@ -77,9 +77,22 @@ export default function CustomerAuthModal({ isOpen, onClose, onSuccess }: Custom
     const [cameraActive, setCameraActive] = useState(false);
     const [capturedSelfie, setCapturedSelfie] = useState<string | null>(null); // base64 URL for preview
     const [selfieBlob, setSelfieBlob] = useState<Blob | null>(null);
-    const videoRef = useRef<HTMLVideoElement | null>(null);
+    const [stream, setStream] = useState<MediaStream | null>(null);
+    
+    const videoElementRef = useRef<HTMLVideoElement | null>(null);
     const canvasRef = useRef<HTMLCanvasElement | null>(null);
-    const streamRef = useRef<MediaStream | null>(null);
+    const selfieInputRef = useRef<HTMLInputElement | null>(null);
+
+    // Callback ref to bind stream and play video when the element mounts
+    const videoRef = useCallback((node: HTMLVideoElement | null) => {
+        videoElementRef.current = node;
+        if (node && stream) {
+            node.srcObject = stream;
+            node.play().catch(err => {
+                console.error("Error playing webcam stream:", err);
+            });
+        }
+    }, [stream]);
 
     // ID Document upload states
     const [docFile, setDocFile] = useState<File | null>(null);
@@ -88,7 +101,11 @@ export default function CustomerAuthModal({ isOpen, onClose, onSuccess }: Custom
     // Reset fields on modal toggle or close
     useEffect(() => {
         if (!isOpen) {
-            stopCamera();
+            if (stream) {
+                stream.getTracks().forEach(track => track.stop());
+                setStream(null);
+            }
+            setCameraActive(false);
             setError(null);
             setSuccessMessage(null);
             setCapturedSelfie(null);
@@ -96,16 +113,16 @@ export default function CustomerAuthModal({ isOpen, onClose, onSuccess }: Custom
             setDocFile(null);
             setLoading(false);
         }
-    }, [isOpen]);
+    }, [isOpen, stream]);
 
     // Cleanup camera stream on unmount
     useEffect(() => {
         return () => {
-            if (streamRef.current) {
-                streamRef.current.getTracks().forEach(track => track.stop());
+            if (stream) {
+                stream.getTracks().forEach(track => track.stop());
             }
         };
-    }, []);
+    }, [stream]);
 
     // Camera WebAPI controllers
     const startCamera = async () => {
@@ -113,13 +130,10 @@ export default function CustomerAuthModal({ isOpen, onClose, onSuccess }: Custom
         setCapturedSelfie(null);
         setSelfieBlob(null);
         try {
-            const stream = await navigator.mediaDevices.getUserMedia({ 
-                video: { facingMode: 'user', width: 400, height: 400 } 
+            const mediaStream = await navigator.mediaDevices.getUserMedia({ 
+                video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 640 } } 
             });
-            streamRef.current = stream;
-            if (videoRef.current) {
-                videoRef.current.srcObject = stream;
-            }
+            setStream(mediaStream);
             setCameraActive(true);
         } catch (err) {
             console.error("Camera access blocked:", err);
@@ -127,29 +141,40 @@ export default function CustomerAuthModal({ isOpen, onClose, onSuccess }: Custom
         }
     };
 
-    const stopCamera = () => {
-        if (streamRef.current) {
-            streamRef.current.getTracks().forEach(track => track.stop());
-            streamRef.current = null;
+    const stopCamera = useCallback(() => {
+        if (stream) {
+            stream.getTracks().forEach(track => track.stop());
+            setStream(null);
         }
         setCameraActive(false);
-    };
+    }, [stream]);
 
     const capturePhoto = () => {
-        if (videoRef.current && canvasRef.current) {
-            const video = videoRef.current;
+        if (videoElementRef.current && canvasRef.current) {
+            const video = videoElementRef.current;
             const canvas = canvasRef.current;
             
             // Draw a square frame to match preview
-            const size = Math.min(video.videoWidth, video.videoHeight);
+            const videoWidth = video.videoWidth || video.clientWidth || 640;
+            const videoHeight = video.videoHeight || video.clientHeight || 480;
+            const size = Math.min(videoWidth, videoHeight);
+            
             canvas.width = size;
             canvas.height = size;
             const ctx = canvas.getContext('2d');
             
             if (ctx) {
-                const sx = (video.videoWidth - size) / 2;
-                const sy = (video.videoHeight - size) / 2;
+                const sx = (videoWidth - size) / 2;
+                const sy = (videoHeight - size) / 2;
+                
+                // Mirror horizontally to match front video preview
+                ctx.translate(size, 0);
+                ctx.scale(-1, 1);
+                
                 ctx.drawImage(video, sx, sy, size, size, 0, 0, size, size);
+                
+                // Reset transform
+                ctx.setTransform(1, 0, 0, 1, 0, 0);
                 
                 const dataUrl = canvas.toDataURL('image/jpeg', 0.95);
                 setCapturedSelfie(dataUrl);
@@ -161,6 +186,21 @@ export default function CustomerAuthModal({ isOpen, onClose, onSuccess }: Custom
                 
                 stopCamera();
             }
+        }
+    };
+
+    const handleSelfieFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (e.target.files && e.target.files.length > 0) {
+            const file = e.target.files[0];
+            setSelfieBlob(file);
+            
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                if (event.target?.result) {
+                    setCapturedSelfie(event.target.result as string);
+                }
+            };
+            reader.readAsDataURL(file);
         }
     };
 
@@ -210,7 +250,7 @@ export default function CustomerAuthModal({ isOpen, onClose, onSuccess }: Custom
         }
 
         if (!selfieBlob) {
-            setError("Por favor tómate una foto de rostro (Autofoto) para completar tu registro.");
+            setError("Por favor tómate una foto o sube una foto de tu rostro para completar tu registro.");
             return;
         }
 
@@ -370,15 +410,31 @@ export default function CustomerAuthModal({ isOpen, onClose, onSuccess }: Custom
                             
                             {/* CAMERA SELFIE STEP */}
                             <div className="space-y-3 bg-brand-yellow/5 p-5 rounded-2xl border border-brand-yellow/10 flex flex-col items-center">
-                                <Label className="text-[10px] text-brand-charcoal/60 font-bold uppercase tracking-widest font-tangkiwood">1. Autofoto (Tu Rostro)</Label>
+                                <Label className="text-[10px] text-brand-charcoal/60 font-bold uppercase tracking-widest font-tangkiwood">1. Autofoto o Sube tu Foto</Label>
                                 
-                                <div className="relative w-40 h-40 bg-white border border-brand-charcoal/10 rounded-full overflow-hidden flex items-center justify-center shadow-inner">
+                                <div className="relative w-48 h-48 bg-white border border-brand-charcoal/10 rounded-full overflow-hidden flex items-center justify-center shadow-inner">
                                     {capturedSelfie ? (
                                         <img src={capturedSelfie} className="w-full h-full object-cover" alt="Selfie" />
-                                    ) : cameraActive ? (
-                                        <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover scale-x-[-1]" />
                                     ) : (
-                                        <Camera className="w-10 h-10 text-brand-charcoal/20" />
+                                        <>
+                                            {cameraActive && (
+                                                <video 
+                                                    ref={videoRef}
+                                                    autoPlay 
+                                                    playsInline 
+                                                    muted 
+                                                    className="w-full h-full object-cover scale-x-[-1]" 
+                                                />
+                                            )}
+                                            {!cameraActive && (
+                                                <div className="flex flex-col items-center justify-center p-4 text-center">
+                                                    <Camera className="w-8 h-8 text-brand-charcoal/30 mb-1" />
+                                                    <span className="text-[10px] font-bold text-brand-charcoal/50 uppercase tracking-wider font-maiandra">
+                                                        Autofoto o Sube tu Foto
+                                                    </span>
+                                                </div>
+                                            )}
+                                        </>
                                     )}
 
                                     {/* Canvas hidden for capture */}
@@ -387,13 +443,30 @@ export default function CustomerAuthModal({ isOpen, onClose, onSuccess }: Custom
 
                                 <div className="flex gap-2">
                                     {!cameraActive && !capturedSelfie && (
-                                        <Button type="button" onClick={startCamera} size="sm" className="bg-brand-yellow text-brand-black hover:bg-brand-yellow/85 font-black text-[10px] px-4 py-2 rounded-lg font-cocon cursor-pointer">
-                                            <Camera className="w-3.5 h-3.5 mr-1" /> Activar Cámara
-                                        </Button>
+                                        <div className="flex flex-col sm:flex-row gap-2">
+                                            <Button type="button" onClick={startCamera} size="sm" className="bg-brand-yellow text-brand-black hover:bg-brand-yellow/85 font-black text-[10px] px-4 py-2 rounded-lg font-cocon cursor-pointer">
+                                                <Camera className="w-3.5 h-3.5 mr-1" /> Autofoto (Cámara)
+                                            </Button>
+                                            <Button 
+                                                type="button" 
+                                                onClick={() => selfieInputRef.current?.click()} 
+                                                size="sm" 
+                                                className="bg-brand-charcoal hover:bg-brand-yellow hover:text-brand-black text-brand-yellow font-black text-[10px] px-4 py-2 rounded-lg font-cocon cursor-pointer border border-transparent"
+                                            >
+                                                <Upload className="w-3.5 h-3.5 mr-1" /> Sube tu Foto
+                                            </Button>
+                                            <input 
+                                                type="file"
+                                                ref={selfieInputRef}
+                                                onChange={handleSelfieFileChange}
+                                                accept="image/*"
+                                                className="hidden"
+                                            />
+                                        </div>
                                     )}
                                     {cameraActive && (
                                         <Button type="button" onClick={capturePhoto} size="sm" className="bg-green-600 hover:bg-green-700 text-white font-black text-[10px] px-4 py-2 rounded-lg font-cocon cursor-pointer">
-                                            ✓ Tomar Foto
+                                            ✓ Tomar Autofoto
                                         </Button>
                                     )}
                                     {(capturedSelfie || cameraActive) && (
@@ -402,7 +475,7 @@ export default function CustomerAuthModal({ isOpen, onClose, onSuccess }: Custom
                                         </Button>
                                     )}
                                 </div>
-                                <span className="text-[9px] text-brand-charcoal/40 font-maiandra uppercase text-center mt-1">Toma una foto clara para validar tu identidad.</span>
+                                <span className="text-[9px] text-brand-charcoal/40 font-maiandra uppercase text-center mt-1">Saca una foto frontal de tu rostro o sube un archivo de imagen.</span>
                             </div>
 
                             {/* ID DOCUMENT STEP */}
