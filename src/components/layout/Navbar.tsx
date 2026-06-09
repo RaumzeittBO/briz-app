@@ -10,6 +10,8 @@ import {
     Sparkles,
     Users,
     X,
+    User,
+    LogOut,
     type LucideIcon,
 } from 'lucide-react';
 
@@ -28,11 +30,17 @@ const navLinks: NavLinkItem[] = [
     { label: 'Nosotros', href: '/about', icon: Users },
 ];
 
+import { useStore } from '@/context/StoreContext';
+import CustomerAuthModal from './CustomerAuthModal';
+
 export default function Navbar() {
     const [scrolled, setScrolled] = useState(false);
     const [mobileOpen, setMobileOpen] = useState(false);
     const location = useLocation();
     const navigate = useNavigate();
+    
+    const { currentCustomer, logoutCustomer } = useStore();
+    const [authModalOpen, setAuthModalOpen] = useState(false);
 
     useEffect(() => {
         const handleScroll = () => setScrolled(window.scrollY > 20);
@@ -122,6 +130,47 @@ export default function Navbar() {
                             })}
                         </div>
 
+                        {/* Desktop User Auth Button */}
+                        <div className="hidden lg:flex items-center gap-2">
+                            {currentCustomer ? (
+                                <div className="relative group">
+                                    <button 
+                                        className="h-10 px-4 flex items-center gap-2 rounded-full bg-white/20 text-white font-cocon text-xs font-bold uppercase transition hover:scale-105 hover:bg-white/28"
+                                    >
+                                        {currentCustomer.autofotoUrl ? (
+                                            <img src={currentCustomer.autofotoUrl} className="w-5 h-5 rounded-full object-cover border border-white/50" />
+                                        ) : (
+                                            <User className="w-4 h-4" />
+                                        )}
+                                        <span className="max-w-[100px] truncate">{currentCustomer.name.split(' ')[0]}</span>
+                                    </button>
+                                    
+                                    {/* Dropdown on hover */}
+                                    <div className="absolute right-0 top-full pt-2 opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto transition-all duration-200 z-50">
+                                        <div className="bg-brand-charcoal border border-white/10 rounded-2xl p-2 w-48 shadow-xl">
+                                            <div className="px-3 py-2 border-b border-white/5 text-left">
+                                                <p className="text-[10px] text-white/40 font-bold uppercase tracking-wider font-maiandra">Cliente</p>
+                                                <p className="text-xs font-bold text-white truncate font-cocon">{currentCustomer.name}</p>
+                                            </div>
+                                            <button 
+                                                onClick={logoutCustomer} 
+                                                className="w-full flex items-center gap-2 text-left px-3 py-2 text-xs font-bold text-red-400 hover:bg-red-500/10 rounded-xl mt-1 transition-colors font-cocon"
+                                            >
+                                                <LogOut className="w-3.5 h-3.5" /> Cerrar Sesión
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            ) : (
+                                <button 
+                                    onClick={() => setAuthModalOpen(true)}
+                                    className="h-10 px-5 flex items-center gap-2 rounded-full bg-white text-brand-black hover:bg-brand-yellow-light font-cocon text-xs font-bold uppercase transition hover:scale-105 shadow-sm"
+                                >
+                                    <User className="w-4 h-4" /> Iniciar Sesión
+                                </button>
+                            )}
+                        </div>
+
                         <button
                             className="ml-2 hidden h-12 w-12 shrink-0 items-center justify-center rounded-full bg-white/20 text-white transition hover:scale-105 hover:bg-white/28 lg:inline-flex"
                             aria-label="Abrir menu"
@@ -175,10 +224,52 @@ export default function Navbar() {
                                     </Link>
                                 );
                             })}
+                            
+                            {/* Mobile User Auth Link */}
+                            <div className="border-t border-brand-black/10 pt-2 mt-2">
+                                {currentCustomer ? (
+                                    <div className="space-y-1">
+                                        <div className="flex items-center gap-3 rounded-2xl px-4 py-3 bg-white/12 text-brand-black font-cocon text-sm font-bold">
+                                            {currentCustomer.autofotoUrl ? (
+                                                <img src={currentCustomer.autofotoUrl} className="w-6 h-6 rounded-full object-cover border border-white/50" />
+                                            ) : (
+                                                <User className="w-4 h-4" />
+                                            )}
+                                            <span className="truncate">{currentCustomer.name}</span>
+                                        </div>
+                                        <button 
+                                            onClick={() => {
+                                                logoutCustomer();
+                                                setMobileOpen(false);
+                                            }}
+                                            className="w-full flex items-center gap-3 rounded-2xl px-4 py-3 bg-red-500/10 text-red-700 font-cocon text-sm font-bold hover:bg-red-500/20 transition-all text-left"
+                                        >
+                                            <LogOut className="h-5 w-5 shrink-0 text-red-700" strokeWidth={2.2} />
+                                            <span>Cerrar Sesión</span>
+                                        </button>
+                                    </div>
+                                ) : (
+                                    <button 
+                                        onClick={() => {
+                                            setAuthModalOpen(true);
+                                            setMobileOpen(false);
+                                        }}
+                                        className="w-full flex items-center gap-3 rounded-2xl px-4 py-3 bg-white text-brand-black font-cocon text-sm font-bold hover:bg-white/90 transition-all text-left"
+                                    >
+                                        <User className="h-5 w-5 shrink-0" strokeWidth={2.2} />
+                                        <span>Iniciar Sesión</span>
+                                    </button>
+                                )}
+                            </div>
                         </div>
                     </motion.div>
                 )}
             </AnimatePresence>
+
+            <CustomerAuthModal 
+                isOpen={authModalOpen} 
+                onClose={() => setAuthModalOpen(false)} 
+            />
         </motion.header>
     );
 }

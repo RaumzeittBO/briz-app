@@ -15,13 +15,13 @@ import { Checkbox } from '@/components/ui/checkbox';
 const WHEEL_OPTIONS = ['12','16','20','24','26','27','28','29'];
 
 function defaultBike(): InventoryItem {
-  return { id: `inv_${Date.now()}_${Math.random().toString(36).slice(2,7)}`, itemType:'bike', name:'', description:'', imageUrl:'', active:true, availableForRental:true, availableForSale:false, hasWheelSizes:true, wheelSizes:[{size:'26',stock:0}], pricePerHour:0, priceFrom5thHour:0, pricePerDay:0, pricePerWeek:0, pricePerMonth:0 };
+  return { id: `inv_${Date.now()}_${Math.random().toString(36).slice(2,7)}`, itemType:'bike', name:'', description:'', imageUrl:'', active:true, availableForRental:true, availableForSale:false, hasWheelSizes:true, wheelSizes:[{size:'26',stock:0}], pricePerHour:0, priceFrom5thHour:0, pricePerDay:0, pricePerWeek:0, pricePerMonth:0, price1Hour:0, price2Hours:0, price3Hours:0, price4Hours:0, price8Hours:0, price24Hours:0, price1Week:0, price1Month:0 };
 }
 function defaultAccessory(): InventoryItem {
-  return { id: `inv_${Date.now()}_${Math.random().toString(36).slice(2,7)}`, itemType:'accessory', name:'', description:'', imageUrl:'', active:true, availableForRental:true, availableForSale:false, hasWheelSizes:false, stock:0, pricePerHour:0, priceFrom5thHour:0, pricePerDay:0, pricePerWeek:0, pricePerMonth:0 };
+  return { id: `inv_${Date.now()}_${Math.random().toString(36).slice(2,7)}`, itemType:'accessory', name:'', description:'', imageUrl:'', active:true, availableForRental:true, availableForSale:false, hasWheelSizes:false, stock:0, pricePerHour:0, priceFrom5thHour:0, pricePerDay:0, pricePerWeek:0, pricePerMonth:0, price1Hour:0, price2Hours:0, price3Hours:0, price4Hours:0, price8Hours:0, price24Hours:0, price1Week:0, price1Month:0 };
 }
 function defaultCombo(): ComboProduct {
-  return { id: `combo_${Date.now()}_${Math.random().toString(36).slice(2,7)}`, name:'', description:'', imageUrl:'', active:true, availableForRental:true, availableForSale:false, components:[], pricePerHour:0, priceFrom5thHour:0, pricePerDay:0, pricePerWeek:0, pricePerMonth:0 };
+  return { id: `combo_${Date.now()}_${Math.random().toString(36).slice(2,7)}`, name:'', description:'', imageUrl:'', active:true, availableForRental:true, availableForSale:false, components:[], pricePerHour:0, priceFrom5thHour:0, pricePerDay:0, pricePerWeek:0, pricePerMonth:0, price1Hour:0, price2Hours:0, price3Hours:0, price4Hours:0, price8Hours:0, price24Hours:0, price1Week:0, price1Month:0 };
 }
 
 export default function InventoryPage() {
@@ -102,19 +102,48 @@ export default function InventoryPage() {
     setEditItem({...editItem, components:c});
   };
 
-  const PriceFields = ({ editItem, setEditItem }: any) => (
-    <div className="space-y-3">
-      <h4 className="text-xs font-black text-brand-yellow uppercase tracking-widest">Precios de Alquiler (Bs.)</h4>
-      <div className="grid grid-cols-2 gap-3">
-        {[{l:'Por hora',k:'pricePerHour'},{l:'Desde 5ta hora',k:'priceFrom5thHour'},{l:'Por día',k:'pricePerDay'},{l:'Por semana',k:'pricePerWeek'},{l:'Por mes',k:'pricePerMonth'}].map(p=>(
-          <div key={p.k} className="space-y-1">
-            <Label className="text-[10px] text-white/40 font-bold uppercase">{p.l}</Label>
-            <Input type="number" min={0} value={(editItem as any)[p.k]||0} onChange={e=>setEditItem({...editItem,[p.k]:Number(e.target.value)})} className="bg-black/40 border-white/10 h-10 font-bold text-brand-yellow rounded-xl" />
-          </div>
-        ))}
+  const PriceFields = ({ editItem, setEditItem }: any) => {
+    const handlePriceChange = (key: string, value: number) => {
+      const updates: any = { [key]: value };
+      if (key === 'price1Hour') updates.pricePerHour = value;
+      else if (key === 'price24Hours') updates.pricePerDay = value;
+      else if (key === 'price1Week') updates.pricePerWeek = value;
+      else if (key === 'price1Month') updates.pricePerMonth = value;
+      setEditItem({ ...editItem, ...updates });
+    };
+
+    const fields = [
+      { l: '1 Hora', k: 'price1Hour' },
+      { l: '2 Horas', k: 'price2Hours' },
+      { l: '3 Horas', k: 'price3Hours' },
+      { l: '4 Horas', k: 'price4Hours' },
+      { l: '8 Horas', k: 'price8Hours' },
+      { l: '24 Horas (1 Día)', k: 'price24Hours' },
+      { l: '1 Semana', k: 'price1Week' },
+      { l: '1 Mes', k: 'price1Month' },
+      { l: 'Hora adicional (5ta+)', k: 'priceFrom5thHour' }
+    ];
+
+    return (
+      <div className="space-y-3">
+        <h4 className="text-xs font-black text-brand-yellow uppercase tracking-widest">Precios de Alquiler (Bs.)</h4>
+        <div className="grid grid-cols-2 gap-3">
+          {fields.map(p => (
+            <div key={p.k} className="space-y-1">
+              <Label className="text-[10px] text-white/40 font-bold uppercase">{p.l}</Label>
+              <Input 
+                type="number" 
+                min={0} 
+                value={(editItem as any)[p.k] || 0} 
+                onChange={e => handlePriceChange(p.k, Number(e.target.value))} 
+                className="bg-black/40 border-white/10 h-10 font-bold text-brand-yellow rounded-xl" 
+              />
+            </div>
+          ))}
+        </div>
       </div>
-    </div>
-  );
+    );
+  };
 
   const ItemRow = ({item, type, openEdit, setDeleteConfirm}:{item:InventoryItem; type:'bike'|'accessory'; openEdit:any; setDeleteConfirm:any}) => (
     <div className="flex items-center gap-4 p-4 bg-white/[0.02] rounded-2xl border border-white/5 hover:border-white/10 transition-all">

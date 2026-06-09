@@ -91,18 +91,46 @@ export default function CustomersPage() {
                     return (
                         <Card key={c.id} className="bg-[#1A1A1A] border-white/5 rounded-[1.5rem] hover:border-white/10 transition-all duration-300 shadow-xl flex flex-col group overflow-hidden">
                             <CardContent className="p-0 flex-1 flex flex-col">
-                                <div className="p-6 flex flex-col items-center text-center relative border-b border-white/5 bg-white/[0.01]">
-                                    <div className="w-20 h-20 rounded-2xl bg-brand-yellow/10 flex items-center justify-center mb-4 border border-brand-yellow/20 group-hover:scale-110 transition-transform">
-                                        <span className="text-brand-yellow text-2xl font-black">{c.name.substring(0, 2).toUpperCase()}</span>
+                                <div className="p-6 flex flex-col items-center text-center relative border-b border-white/5 bg-white/[0.01] flex-1">
+                                    <div className="w-24 h-24 rounded-full overflow-hidden mb-4 border-2 border-brand-yellow/30 group-hover:scale-105 transition-transform flex items-center justify-center bg-brand-yellow/10">
+                                        {c.autofotoUrl ? (
+                                            <img src={c.autofotoUrl} className="w-full h-full object-cover" alt={c.name} />
+                                        ) : (
+                                            <span className="text-brand-yellow text-2xl font-black">{c.name.substring(0, 2).toUpperCase()}</span>
+                                        )}
                                     </div>
                                     <h3 className="text-white font-black text-xl mb-1 truncate w-full">{c.name}</h3>
-                                    <div className="space-y-1">
-                                        <p className="text-white/40 text-[10px] font-bold uppercase tracking-widest flex items-center justify-center gap-1.5">
-                                            <span className="w-1.5 h-1.5 rounded-full bg-brand-yellow/40" /> {c.phone}
+                                    
+                                    <div className="space-y-1.5 w-full text-xs font-medium text-white/60">
+                                        <p className="text-white/40 text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-1.5">
+                                            <span className="w-1.5 h-1.5 rounded-full bg-brand-yellow/60" /> {c.phone}
                                         </p>
-                                        <p className="text-white/40 text-[10px] font-bold uppercase tracking-widest flex items-center justify-center gap-1.5">
-                                            <span className="w-1.5 h-1.5 rounded-full bg-white/10" /> CI: {c.ci}
+                                        <p className="text-white/40 text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-1.5">
+                                            <span className="w-1.5 h-1.5 rounded-full bg-white/20" /> CI: {c.ci}
                                         </p>
+                                        {c.email && (
+                                            <p className="truncate text-white/50 text-[11px] font-mono">{c.email}</p>
+                                        )}
+                                        {c.nacionalidad && (
+                                            <p className="text-[10px] text-white/40 uppercase font-bold">
+                                                🌍 {c.nacionalidad} {c.departamento ? `(${c.departamento})` : ''}
+                                            </p>
+                                        )}
+                                        {c.comoNosConociste && (
+                                            <p className="text-[10px] text-brand-yellow/60 font-semibold uppercase">
+                                                📢 {c.comoNosConociste}
+                                            </p>
+                                        )}
+                                        {c.documentoUrl && (
+                                            <a 
+                                                href={c.documentoUrl} 
+                                                target="_blank" 
+                                                rel="noreferrer" 
+                                                className="inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-wider text-brand-yellow bg-brand-yellow/10 hover:bg-brand-yellow/20 px-3 py-1 rounded-full mt-2 transition-all cursor-pointer"
+                                            >
+                                                📄 Ver Documento
+                                            </a>
+                                        )}
                                     </div>
 
                                     <div className="absolute top-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -175,6 +203,14 @@ export default function CustomersPage() {
                                 <Label className="text-white/40 font-bold uppercase tracking-widest text-[10px]">CI / Carnet</Label>
                                 <Input required value={current.ci || ''} onChange={e => setCurrent({ ...current, ci: e.target.value })} className="h-12 bg-black/40 border-white/10 rounded-xl focus:ring-brand-yellow/50 text-white" placeholder="1234567" />
                             </div>
+                        </div>
+                        <div className="space-y-2">
+                            <Label className="text-white/40 font-bold uppercase tracking-widest text-[10px]">Correo Electrónico</Label>
+                            <Input type="email" value={current.email || ''} onChange={e => setCurrent({ ...current, email: e.target.value })} className="h-12 bg-black/40 border-white/10 rounded-xl focus:ring-brand-yellow/50 text-white" placeholder="juan@gmail.com" />
+                        </div>
+                        <div className="space-y-2">
+                            <Label className="text-white/40 font-bold uppercase tracking-widest text-[10px]">Contraseña</Label>
+                            <Input type="text" value={current.password || ''} onChange={e => setCurrent({ ...current, password: e.target.value })} className="h-12 bg-black/40 border-white/10 rounded-xl focus:ring-brand-yellow/50 text-white" placeholder="Contraseña de cliente" />
                         </div>
                         <DialogFooter className="pt-6 border-t border-white/5 flex gap-3">
                             <Button type="button" variant="ghost" onClick={() => setIsModalOpen(false)} className="h-12 px-6 rounded-xl hover:bg-white/5 font-bold">Cancelar</Button>

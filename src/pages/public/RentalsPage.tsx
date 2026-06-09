@@ -1,19 +1,17 @@
 import { useState, useMemo, useRef } from 'react';
 import { motion } from 'framer-motion';
-import { Search, Plus, Minus, Info, Bike, ChevronRight, ShoppingCart } from 'lucide-react';
+import { Search, Plus, Minus, Bike, ChevronRight, ShoppingCart, Heart, Share2, ArrowLeft, Check } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Checkbox } from '@/components/ui/checkbox';
-import { Textarea } from '@/components/ui/textarea';
+import { Input } from '@/components/ui/input';
 import { useStore } from '@/context/StoreContext';
 import { useCart } from '@/context/CartContext';
+import CustomerAuthModal from '@/components/layout/CustomerAuthModal';
 
-import { generateRentalWhatsAppLink } from '@/lib/whatsapp';
+
 
 type DisplayProduct = {
   id: string; name: string; description: string; imageUrl: string;
@@ -27,7 +25,7 @@ type DisplayProduct = {
   pricePerHour: number; priceFrom5thHour: number; pricePerDay: number; pricePerWeek: number; pricePerMonth: number;
 };
 
-const DURATIONS = ['1 hora', '2 horas', '3 horas', '4 horas', '1 día', '1 semana', '1 mes'];
+
 
 // Helper to determine bike category based on name/description
 function getBikeCategory(item: DisplayProduct): 'urban' | 'mountain' | 'road' | 'accessory' {
@@ -48,15 +46,12 @@ function getBikeCategory(item: DisplayProduct): 'urban' | 'mountain' | 'road' | 
 }
 
 export default function RentalsPage() {
-  const { inventory, combos, addRental, addOrUpdateCustomer, calculatePrice, getComboAvailability } = useStore();
+  const { inventory, combos, calculatePrice, getComboAvailability } = useStore();
   const { totalItems } = useCart();
 
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState('Bicicletas');
   const [selected, setSelected] = useState<DisplayProduct | null>(null);
-  const [showForm, setShowForm] = useState(false);
-  const [loading, setLoading] = useState(false);
-
   // Scroll Container Refs
   const urbanScrollRef = useRef<HTMLDivElement>(null);
   const mountainScrollRef = useRef<HTMLDivElement>(null);
@@ -69,20 +64,21 @@ export default function RentalsPage() {
     }
   };
 
-  // Form states
-  const [name, setName] = useState('');
-  const [lastName, setLastName] = useState('');
-  const [phone, setPhone] = useState('');
-  const [ci, setCi] = useState('');
-  const [date, setDate] = useState('');
-  const [pickupTime, setPickupTime] = useState('');
-  const [duration, setDuration] = useState('1 hora');
-  const [qty, setQty] = useState(1);
-  const [wheelSize, setWheelSize] = useState('');
-  const [paymentMethod, setPaymentMethod] = useState('Efectivo');
-  const [notes, setNotes] = useState('');
-  const [accepted, setAccepted] = useState(false);
-  const [customHours, setCustomHours] = useState('');
+  const getAvailableStock = (p: DisplayProduct): number => {
+    if (p.type === 'combo') return p.comboAvailability ?? 0;
+    if (p.hasWheelSizes && p.wheelSizes) {
+      return p.wheelSizes.reduce((s, ws) => s + ws.stock, 0);
+    }
+    return p.stock ?? 0;
+  };
+
+  // Detailed view local states
+  const [detailDuration, setDetailDuration] = useState('1 hora');
+  const [detailQty, setDetailQty] = useState(1);
+  const [detailWheelSize, setDetailWheelSize] = useState('');
+  const [authOpen, setAuthOpen] = useState(false);
+  const [rentSuccess, setRentSuccess] = useState(false);
+  const { currentCustomer } = useStore();
 
   // Build display list
   const products = useMemo((): DisplayProduct[] => {
@@ -178,122 +174,14 @@ export default function RentalsPage() {
     });
   }, [products, category, search]);
 
-  const total = useMemo(() => {
-    if (!selected) return 0;
-    return calculatePrice(selected.type, selected.id, duration, qty);
-  }, [selected, duration, qty, calculatePrice]);
 
-  const getAvailableStock = (p: DisplayProduct): number => {
-    if (p.type === 'combo') return p.comboAvailability ?? 0;
-    if (p.hasWheelSizes && p.wheelSizes) {
-      if (wheelSize) return p.wheelSizes.find(ws => ws.size === wheelSize)?.stock ?? 0;
-      return p.wheelSizes.reduce((s, ws) => s + ws.stock, 0);
-    }
-    return p.stock ?? 0;
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!selected || !accepted || loading) return;
-
-    // Validate wheel size
-    if (selected.hasWheelSizes && !wheelSize) {
-      alert('Por favor selecciona un tamaño de aro.');
-      return;
-    }
-
-    // Validate stock
-    const avail = getAvailableStock(selected);
-    if (avail < qty) {
-      alert(`Solo hay ${avail} unidades disponibles.`);
-      return;
-    }
-
-    setLoading(true);
-
-    try {
-      const customerFullName = `${name} ${lastName}`.trim();
-
-      // Build component selections for combos
-      let componentSelections;
-      if (selected.type === 'combo') {
-        const combo = combos.find(c => c.id === selected.id);
-        if (combo) {
-          componentSelections = combo.components.map(comp => {
-            const item = inventory.find(i => i.id === comp.inventoryItemId);
-            return {
-              inventoryItemId: comp.inventoryItemId,
-              wheelSize: item?.hasWheelSizes ? wheelSize : undefined,
-            };
-          });
-        }
-      }
-
-      const rental = {
-        customerName: customerFullName,
-        customerPhone: phone,
-        customerCI: ci,
-        productType: selected.type as 'single' | 'combo',
-        productId: selected.id,
-        productName: selected.name,
-        productNameSnapshot: selected.name,
-        selectedWheelSize: selected.hasWheelSizes ? wheelSize : undefined,
-        componentSelections,
-        quantity: qty,
-        duration,
-        date,
-        pickupTime,
-        total,
-        paymentMethod,
-        notes,
-      };
-
-      // Generate rental object with reservation code (instant, no DB call)
-      const savedRental = await addRental(rental);
-
-      // Open WhatsApp immediately — no blocking
-      const link = generateRentalWhatsAppLink({
-        reservationCode: savedRental.reservationCode,
-        customerName: customerFullName,
-        customerPhone: phone,
-        customerCI: ci,
-        productName: selected.name,
-        quantity: qty,
-        duration,
-        date,
-        pickupTime,
-        selectedWheelSize: selected.hasWheelSizes ? wheelSize : undefined,
-        total,
-        paymentMethod,
-        notes,
-      });
-      
-      window.open(link, '_blank');
-
-      // Fire customer save in background (don't block or throw)
-      addOrUpdateCustomer({ name: customerFullName, phone, ci }, false).catch(err => {
-        console.warn('Background customer save failed (non-critical):', err);
-      });
-
-      // Reset & Close
-      setShowForm(false);
-      setName(''); setLastName(''); setPhone(''); setCi(''); setDate(''); setPickupTime('');
-      setDuration('1 hora'); setQty(1); setWheelSize(''); setNotes(''); setAccepted(false); setPaymentMethod('Efectivo'); setCustomHours('');
-      
-      alert('¡Reserva enviada con éxito! Se ha abierto WhatsApp para tu confirmación.');
-    } catch (err) {
-      console.error(err);
-      alert('No se pudo registrar la reserva, intenta nuevamente.');
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const openReservation = (p: DisplayProduct) => {
     setSelected(p);
-    setShowForm(true);
-    setQty(1);
-    setWheelSize('');
+    setDetailDuration('1 hora');
+    setDetailQty(1);
+    setDetailWheelSize(p.hasWheelSizes && p.wheelSizes && p.wheelSizes.length > 0 ? p.wheelSizes[0].size : '');
+    setRentSuccess(false);
   };
 
   // Grouped products for sliders
@@ -430,6 +318,190 @@ export default function RentalsPage() {
 
   return (
     <div className="pt-20 bg-[#FFFDF3] min-h-screen">
+      {selected ? (
+        <div className="max-w-xl mx-auto px-4 py-10">
+          <button 
+            onClick={() => { setSelected(null); setRentSuccess(false); }} 
+            className="flex items-center gap-2 text-brand-charcoal/60 hover:text-brand-charcoal text-xs font-black uppercase tracking-wider mb-6 font-maiandra"
+          >
+            <ArrowLeft className="w-4 h-4" /> Volver a Alquileres
+          </button>
+
+          {rentSuccess ? (
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="bg-white border-2 border-brand-yellow rounded-[2.2rem] p-8 text-center space-y-6 shadow-xl"
+            >
+              <div className="w-20 h-20 bg-green-500/10 rounded-full flex items-center justify-center mx-auto border border-green-500/20">
+                <Check className="w-10 h-10 text-green-500" strokeWidth={3} />
+              </div>
+              <div className="space-y-2">
+                <h2 className="font-tan text-2xl uppercase text-brand-black">¡Alquiler Iniciado!</h2>
+                <p className="text-xs font-bold uppercase tracking-widest text-brand-yellow font-tangkiwood bg-brand-charcoal px-4 py-1.5 rounded-full inline-block">
+                  Reserva en proceso
+                </p>
+              </div>
+              
+              <div className="bg-brand-charcoal/5 p-5 rounded-2xl text-left text-xs space-y-3 font-maiandra border border-black/5">
+                <p className="text-brand-black/40 font-bold uppercase text-[9px] border-b border-black/5 pb-1">Resumen de Selección</p>
+                <p className="font-bold text-brand-black">🚴 Producto: <span className="font-black text-sm">{selected.name}</span></p>
+                <p className="font-bold text-brand-black">⏱️ Duración: <span className="font-black">{detailDuration}</span></p>
+                {selected.hasWheelSizes && detailWheelSize && (
+                  <p className="font-bold text-brand-black">⚙️ Aro: <span className="font-black">Aro {detailWheelSize}</span></p>
+                )}
+                <p className="font-bold text-brand-black">👥 Cliente: <span className="font-black">{currentCustomer?.name}</span></p>
+                <p className="font-bold text-brand-black">💰 Total Estimado: <span className="font-black text-base text-brand-charcoal">Bs. {calculatePrice(selected.type, selected.id, detailDuration, detailQty)}</span></p>
+              </div>
+
+              <div className="p-4 bg-brand-yellow/15 border border-brand-yellow/30 text-brand-black text-xs font-bold rounded-2xl text-center leading-relaxed">
+                Tus datos de registro se han asociado de forma segura. En el siguiente paso desarrollaremos la pantalla de especificaciones de tu alquiler.
+              </div>
+
+              <Button 
+                onClick={() => { setSelected(null); setRentSuccess(false); }} 
+                className="w-full bg-brand-black hover:bg-brand-black/90 text-brand-yellow font-black rounded-xl h-12 uppercase text-xs tracking-widest font-cocon"
+              >
+                Aceptar y Volver
+              </Button>
+            </motion.div>
+          ) : (
+            <div className="space-y-6">
+              {/* Product description */}
+              <p className="text-xs sm:text-sm font-medium text-brand-black leading-relaxed text-justify font-cocon bg-white/50 p-5 rounded-2xl border border-black/5">
+                {selected.description || 'La bicicleta urbana es ideal para cualquier ruta en la ciudad por caminos asfaltados. Pedalea con comfort, ergonomía y elegancia. Cuadro de acero alivianado. Aros disponibles: 26 y 27. El color mostrado es referencial. La bicicleta se entregará en el color disponible al momento de la entrega.'}
+              </p>
+
+              {/* Slideable Large Bike Image Card */}
+              <div className="relative aspect-[4/3] bg-white border border-gray-100 rounded-[2.2rem] overflow-hidden shadow-md">
+                <img src={selected.imageUrl || '/placeholder_bike.png'} alt={selected.name} className="w-full h-full object-cover" />
+                
+                {/* Overlay Action Buttons */}
+                <div className="absolute bottom-5 right-5 flex gap-2">
+                  <button 
+                    className="w-10 h-10 rounded-full bg-white/90 hover:bg-white text-brand-black shadow-lg flex items-center justify-center transition-transform active:scale-90 border border-gray-100 cursor-pointer"
+                    onClick={() => alert('¡Guardado en tus favoritos!')}
+                  >
+                    <Heart className="w-5 h-5 text-red-500 fill-red-500" />
+                  </button>
+                  <button 
+                    className="w-10 h-10 rounded-full bg-white/90 hover:bg-white text-brand-black shadow-lg flex items-center justify-center transition-transform active:scale-90 border border-gray-100 cursor-pointer"
+                    onClick={() => {
+                      navigator.clipboard.writeText(window.location.href);
+                      alert('¡Enlace de alquiler copiado al portapapeles!');
+                    }}
+                  >
+                    <Share2 className="w-5 h-5 text-gray-700" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Title & Badge */}
+              <div className="flex justify-between items-center">
+                <h2 className="font-tangkiwood text-2xl sm:text-3xl text-brand-black leading-none">{selected.name}</h2>
+                <Badge className="bg-brand-yellow text-brand-black border-0 text-[10px] font-black uppercase rounded-lg px-2.5 py-1">
+                  {selected.type === 'combo' ? 'Combo' : selected.itemType === 'bike' ? 'Bicicleta' : 'Accesorio'}
+                </Badge>
+              </div>
+
+              {/* Wheel sizes selector */}
+              {selected.hasWheelSizes && selected.wheelSizes && selected.wheelSizes.length > 0 && (
+                <div className="space-y-2">
+                  <Label className="text-[10px] text-brand-black/50 font-bold uppercase tracking-widest font-maiandra">Selecciona Aro</Label>
+                  <div className="flex gap-2 flex-wrap">
+                    {selected.wheelSizes.map(ws => (
+                      <button 
+                        key={ws.size} 
+                        type="button" 
+                        disabled={ws.stock <= 0} 
+                        onClick={() => setDetailWheelSize(ws.size)}
+                        className={`px-4 py-2.5 text-xs font-black rounded-xl border transition-all cursor-pointer ${
+                          ws.stock <= 0 
+                            ? 'opacity-30 cursor-not-allowed border-gray-200 bg-gray-50' 
+                            : detailWheelSize === ws.size 
+                              ? 'bg-brand-yellow border-brand-charcoal text-brand-black shadow-sm' 
+                              : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300'
+                        }`}
+                      >
+                        Aro {ws.size} ({ws.stock} disp.)
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Quantity selector */}
+              <div className="space-y-2">
+                <Label className="text-[10px] text-brand-black/50 font-bold uppercase tracking-widest font-maiandra">Cantidad</Label>
+                <div className="flex items-center gap-3 bg-white border border-gray-200 rounded-xl p-1.5 w-32 shadow-sm">
+                  <button type="button" onClick={() => setDetailQty(Math.max(1, detailQty - 1))} className="w-8 h-8 rounded-lg bg-gray-50 flex items-center justify-center text-gray-500 hover:bg-gray-100 cursor-pointer"><Minus className="w-3.5 h-3.5" /></button>
+                  <span className="flex-1 text-center font-black text-sm text-brand-black font-cocon">{detailQty}</span>
+                  <button type="button" onClick={() => setDetailQty(detailQty + 1)} className="w-8 h-8 rounded-lg bg-gray-50 flex items-center justify-center text-gray-500 hover:bg-gray-100 cursor-pointer"><Plus className="w-3.5 h-3.5" /></button>
+                </div>
+              </div>
+
+              {/* Pricing Grid */}
+              <div className="space-y-3">
+                <Label className="text-[10px] text-brand-black/50 font-bold uppercase tracking-widest font-maiandra">Selecciona la Duración</Label>
+                <div className="grid grid-cols-2 gap-3">
+                  {[
+                    { l: '1 Hora', v: '1 hora' },
+                    { l: '2 Horas', v: '2 horas' },
+                    { l: '3 Horas', v: '3 horas' },
+                    { l: '4 Horas', v: '4 horas' },
+                    { l: '8 Horas', v: '8 horas' },
+                    { l: '24 Horas', v: '24 horas' },
+                    { l: '1 Semana', v: '1 semana' },
+                    { l: '1 Mes', v: '1 mes' }
+                  ].map(tier => {
+                    const computed = calculatePrice(selected.type, selected.id, tier.v, 1);
+                    const isSelected = detailDuration === tier.v;
+                    return (
+                      <button 
+                        key={tier.v} 
+                        type="button" 
+                        onClick={() => setDetailDuration(tier.v)}
+                        className={`p-4 border rounded-2xl text-left flex flex-col justify-center transition-all cursor-pointer ${
+                          isSelected 
+                            ? 'bg-brand-yellow border-brand-charcoal text-brand-black shadow-md scale-[1.01]' 
+                            : 'bg-white border-gray-100 text-brand-black hover:border-gray-200'
+                        }`}
+                      >
+                        <span className="font-tan text-lg leading-tight">Bs. {computed}</span>
+                        <span className={`text-[10px] font-bold mt-0.5 uppercase font-maiandra ${isSelected ? 'text-brand-charcoal/80 font-black' : 'text-gray-400'}`}>
+                          / {tier.l}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Alquilar CTA */}
+              <Button 
+                onClick={() => {
+                  if (!currentCustomer) {
+                    setAuthOpen(true);
+                  } else {
+                    setRentSuccess(true);
+                  }
+                }}
+                className="w-full bg-brand-yellow hover:bg-brand-yellow-light text-brand-black font-black rounded-2xl h-14 uppercase text-sm tracking-widest transition-transform active:scale-[0.98] shadow-lg shadow-brand-yellow/10 font-cocon mt-6 cursor-pointer"
+              >
+                ALQUILAR
+              </Button>
+            </div>
+          )}
+
+          {/* Auth Modal Trigger */}
+          <CustomerAuthModal 
+            isOpen={authOpen} 
+            onClose={() => setAuthOpen(false)} 
+            onSuccess={() => setRentSuccess(true)}
+          />
+        </div>
+      ) : (
+        <>
       {/* Hero */}
       <section className="bg-brand-charcoal pt-28 pb-20 relative overflow-hidden">
         <div className="absolute inset-0">
@@ -539,147 +611,8 @@ export default function RentalsPage() {
         </div>
       </section>
 
-      <Dialog open={showForm} onOpenChange={setShowForm}>
-        <DialogContent className="reservation-modal max-w-2xl w-[95vw] max-h-[90vh] overflow-y-auto bg-brand-charcoal border-white/10 p-0 rounded-2xl text-white">
-          <DialogHeader className="p-5 border-b border-white/5">
-            <DialogTitle className="text-lg sm:text-xl font-tan uppercase">RESERVAR — {selected?.name}</DialogTitle>
-          </DialogHeader>
-
-          <form onSubmit={handleSubmit} className="p-5 sm:p-6 space-y-5">
-            {/* Personal info */}
-            <div className="space-y-3">
-              <h4 className="text-[10px] font-black text-brand-yellow uppercase tracking-widest font-tangkiwood">1. Datos personales</h4>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                <div><Label className="text-[10px] text-white/40 font-bold uppercase font-maiandra">Nombre</Label>
-                  <Input value={name} onChange={e=>setName(e.target.value)} required className="bg-black/40 border-white/5 h-10 text-white font-bold rounded-xl mt-1 font-cocon"/></div>
-                <div><Label className="text-[10px] text-white/40 font-bold uppercase font-maiandra">Apellido</Label>
-                  <Input value={lastName} onChange={e=>setLastName(e.target.value)} required className="bg-black/40 border-white/5 h-10 text-white font-bold rounded-xl mt-1 font-cocon"/></div>
-              </div>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                <div><Label className="text-[10px] text-white/40 font-bold uppercase font-maiandra">WhatsApp</Label>
-                  <Input value={phone} onChange={e=>setPhone(e.target.value)} required placeholder="+591..." className="bg-black/40 border-white/5 h-10 text-white font-bold rounded-xl mt-1 font-cocon"/></div>
-                <div><Label className="text-[10px] text-white/40 font-bold uppercase font-maiandra">CI</Label>
-                  <Input value={ci} onChange={e=>setCi(e.target.value)} required className="bg-black/40 border-white/5 h-10 text-white font-bold rounded-xl mt-1 font-cocon"/></div>
-              </div>
-            </div>
-
-            {/* Schedule */}
-            <div className="space-y-3">
-              <h4 className="text-[10px] font-black text-brand-yellow uppercase tracking-widest font-tangkiwood">2. Fecha y hora</h4>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                <div><Label className="text-[10px] text-white/40 font-bold uppercase font-maiandra">Fecha</Label>
-                  <Input type="date" value={date} onChange={e=>setDate(e.target.value)} required className="bg-black/40 border-white/5 h-10 text-white font-bold rounded-xl mt-1 font-cocon"/></div>
-                <div><Label className="text-[10px] text-white/40 font-bold uppercase font-maiandra">Hora</Label>
-                  <Input type="time" value={pickupTime} onChange={e=>setPickupTime(e.target.value)} required className="bg-black/40 border-white/5 h-10 text-white font-bold rounded-xl mt-1 font-cocon"/></div>
-              </div>
-            </div>
-
-            {/* Duration + Qty */}
-            <div className="space-y-3">
-              <h4 className="text-[10px] font-black text-brand-yellow uppercase tracking-widest font-tangkiwood">3. Duración y cantidad</h4>
-              <div className="grid grid-cols-4 sm:grid-cols-7 gap-2">
-                {DURATIONS.map(d => (
-                  <button key={d} type="button" onClick={() => { setDuration(d); setCustomHours(''); }}
-                    className={`h-9 rounded-xl text-[10px] font-black uppercase border transition-all font-maiandra ${duration===d && !customHours?'bg-brand-yellow text-brand-black border-brand-yellow':'bg-black/20 border-white/5 text-white/50 hover:border-white/20'}`}>{d}</button>
-                ))}
-              </div>
-              
-              {/* Custom hours input */}
-              <div className="flex items-center gap-3">
-                <div className="flex-1">
-                  <Label className="text-[10px] text-white/40 font-bold uppercase font-maiandra">Horas personalizadas (5+)</Label>
-                  <Input 
-                    type="number" 
-                    min="5" 
-                    max="24"
-                    placeholder="Ej: 5, 6, 8..."
-                    value={customHours}
-                    onChange={e => {
-                      const val = e.target.value;
-                      setCustomHours(val);
-                      if (val && parseInt(val, 10) >= 1) {
-                        setDuration(`${val} horas`);
-                      }
-                    }}
-                    className="bg-black/40 border-white/5 h-10 text-white font-bold rounded-xl mt-1 w-full font-cocon"
-                  />
-                </div>
-                {customHours && parseInt(customHours, 10) >= 5 && selected && (
-                  <div className="flex-1 bg-black/30 border border-white/5 rounded-xl p-3 mt-5">
-                    <p className="text-[9px] text-white/30 font-bold uppercase font-maiandra">Desglose</p>
-                    <p className="text-[10px] text-white/60 font-bold font-cocon">
-                      4 hrs × Bs.{selected.pricePerHour} = Bs.{selected.pricePerHour * 4}
-                    </p>
-                    <p className="text-[10px] text-brand-yellow font-bold font-cocon">
-                      +{parseInt(customHours, 10) - 4} hrs × Bs.{selected.priceFrom5thHour} = Bs.{(parseInt(customHours, 10) - 4) * selected.priceFrom5thHour}
-                    </p>
-                  </div>
-                )}
-              </div>
-
-              <div className="flex items-center gap-3 bg-black/40 border border-white/5 rounded-xl p-2">
-                <button type="button" onClick={()=>setQty(Math.max(1,qty-1))} className="w-9 h-9 rounded-xl bg-white/5 flex items-center justify-center text-white/50"><Minus className="w-4 h-4"/></button>
-                <span className="flex-1 text-center font-black text-lg font-cocon">{qty}</span>
-                <button type="button" onClick={()=>setQty(qty+1)} className="w-9 h-9 rounded-xl bg-white/5 flex items-center justify-center text-white/50"><Plus className="w-4 h-4"/></button>
-              </div>
-            </div>
-
-            {/* Wheel size */}
-            {selected?.hasWheelSizes && selected.wheelSizes && (
-              <div className="space-y-3">
-                <h4 className="text-[10px] font-black text-brand-yellow uppercase tracking-widest flex items-center gap-1 font-tangkiwood"><Info className="w-3 h-3"/> Selecciona aro</h4>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                  {selected.wheelSizes.map(ws => (
-                    <button key={ws.size} type="button" disabled={ws.stock<=0} onClick={()=>setWheelSize(ws.size)}
-                      className={`p-3 rounded-xl border transition-all text-center flex flex-col items-center justify-center min-w-[80px] font-maiandra ${ws.stock<=0?'opacity-30 cursor-not-allowed border-white/5':wheelSize===ws.size?'bg-brand-yellow/10 border-brand-yellow text-brand-yellow':'bg-black/20 border-white/5 text-white/60 hover:border-white/20'}`}>
-                      <span className="text-sm font-black whitespace-nowrap">Aro {ws.size}</span>
-                      <span className="block text-[9px] font-bold opacity-50 uppercase whitespace-nowrap">{ws.stock} disp.</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Payment */}
-            <div className="space-y-3">
-              <h4 className="text-[10px] font-black text-brand-yellow uppercase tracking-widest font-tangkiwood">4. Método de pago</h4>
-              <div className="flex gap-2">
-                {['Efectivo', 'QR'].map(m => (
-                  <button key={m} type="button" onClick={()=>setPaymentMethod(m)}
-                    className={`flex-1 h-10 rounded-xl text-xs font-black uppercase border transition-all font-maiandra ${paymentMethod===m?'bg-brand-yellow text-brand-black border-brand-yellow':'bg-black/20 border-white/5 text-white/50'}`}>{m}</button>
-                ))}
-              </div>
-            </div>
-
-            {/* Notes */}
-            <div>
-              <Label className="text-[10px] text-white/40 font-bold uppercase font-maiandra">Observaciones (opcional)</Label>
-              <Textarea value={notes} onChange={e=>setNotes(e.target.value)} className="bg-black/40 border-white/5 h-16 rounded-xl resize-none text-sm mt-1 font-cocon"/>
-            </div>
-
-            {/* Total + Submit */}
-            <div className="bg-brand-yellow text-brand-black p-5 rounded-xl space-y-3">
-              <div className="flex justify-between items-center">
-                <div>
-                  <p className="text-[10px] font-black uppercase tracking-widest font-maiandra">Total Estimado</p>
-                  <p className="text-3xl font-black font-tan">Bs. {total}</p>
-                </div>
-                <p className="text-[9px] font-bold uppercase opacity-60 font-maiandra">Pago en local</p>
-              </div>
-
-              <div className="flex items-start gap-2 bg-brand-charcoal/10 p-3 rounded-xl">
-                <Checkbox id="terms" checked={accepted} onCheckedChange={v=>setAccepted(Boolean(v))} required className="mt-0.5 border-brand-charcoal"/>
-                <Label htmlFor="terms" className="text-[10px] font-bold uppercase text-brand-charcoal/80 leading-relaxed font-maiandra">Acepto los términos y condiciones de alquiler</Label>
-              </div>
-
-              <Button type="submit" disabled={!accepted || (selected?.hasWheelSizes && !wheelSize) || loading}
-                className="w-full bg-brand-black text-brand-yellow hover:bg-brand-black/90 font-black rounded-xl h-12 uppercase text-xs tracking-widest disabled:opacity-30 font-cocon">
-                {loading ? 'Registrando...' : 'Confirmar Reserva vía WhatsApp'}
-              </Button>
-            </div>
-          </form>
-        </DialogContent>
-      </Dialog>
+        </>
+      )}
     </div>
   );
 }

@@ -10,7 +10,8 @@ import {
     orderBy,
     writeBatch
 } from 'firebase/firestore';
-import { db } from '../lib/firebase';
+import { db, storage } from '../lib/firebase';
+import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 
 // ===========================
 // TYPES
@@ -46,6 +47,16 @@ export interface InventoryItem {
     pricePerWeek: number;
     pricePerMonth: number;
     salePrice?: number;
+
+    // Pricing tiers
+    price1Hour?: number;
+    price2Hours?: number;
+    price3Hours?: number;
+    price4Hours?: number;
+    price8Hours?: number;
+    price24Hours?: number;
+    price1Week?: number;
+    price1Month?: number;
 }
 
 export interface ComboComponent {
@@ -71,6 +82,16 @@ export interface ComboProduct {
     pricePerWeek: number;
     pricePerMonth: number;
     salePrice?: number;
+
+    // Pricing tiers
+    price1Hour?: number;
+    price2Hours?: number;
+    price3Hours?: number;
+    price4Hours?: number;
+    price8Hours?: number;
+    price24Hours?: number;
+    price1Week?: number;
+    price1Month?: number;
 }
 
 export interface ComponentSelection {
@@ -134,6 +155,15 @@ export interface Customer {
     firstVisit: string;
     lastVisit: string;
     notes: string;
+
+    // New customer fields
+    email?: string;
+    password?: string;
+    nacionalidad?: string;
+    departamento?: string;
+    comoNosConociste?: string;
+    autofotoUrl?: string;
+    documentoUrl?: string;
 }
 
 export interface ServiceOrder {
@@ -197,6 +227,17 @@ interface StoreContextType {
     calculatePrice: (productType: 'single' | 'combo', productId: string, duration: string, quantity: number) => number;
 
     resetAllData: () => Promise<void>;
+
+    // Customer Authentication state & methods
+    currentCustomer: Customer | null;
+    loginCustomer: (email: string, password: string, remember: boolean) => Promise<Customer | null>;
+    registerCustomer: (
+        customerData: Omit<Customer, 'id' | 'rentalsCount' | 'purchasesCount' | 'firstVisit' | 'lastVisit' | 'notes'>,
+        selfieBlob: Blob | null,
+        docFile: File | null,
+        remember: boolean
+    ) => Promise<Customer>;
+    logoutCustomer: () => void;
 }
 
 export const StoreContext = createContext<StoreContextType | null>(null);
@@ -215,6 +256,21 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
     const [customers, setCustomers] = useState<Customer[]>([]);
     const [serviceOrders, setServiceOrders] = useState<ServiceOrder[]>([]);
     const [isLoaded, setIsLoaded] = useState(false);
+
+    // Customer Session state
+    const [currentCustomer, setCurrentCustomer] = useState<Customer | null>(null);
+
+    // Load saved session
+    useEffect(() => {
+        const saved = localStorage.getItem('briz_logged_customer');
+        if (saved) {
+            try {
+                setCurrentCustomer(JSON.parse(saved));
+            } catch (e) {
+                console.error('Failed to parse saved customer session:', e);
+            }
+        }
+    }, []);
 
     // ---- Real-time Sync ----
     useEffect(() => {
@@ -295,21 +351,130 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
         if (!pricing) return 0;
         let base = 0;
         const d = duration.toLowerCase().trim();
-        if (d === '1 hora') base = pricing.pricePerHour;
-        else if (d === '2 horas') base = pricing.pricePerHour * 2;
-        else if (d === '3 horas') base = pricing.pricePerHour * 3;
-        else if (d === '4 horas' || d === 'medio día') base = pricing.pricePerHour * 4;
-        else if (d === '1 día' || d === 'día completo') base = pricing.pricePerDay;
-        else if (d === '1 semana') base = pricing.pricePerWeek;
-        else if (d === '1 mes') base = pricing.pricePerMonth;
-        else {
+
+        // 8-tier pricing fields with default fallback values
+        const p1h = (pricing as any).price1Hour || 0;
+        const p2h = (pricing as any).price2Hours || 0;
+        const p3h = (pricing as any).price3Hours || 0;
+        const p4h = (pricing as any).price4Hours || 0;
+        const p8h = (pricing as any).price8Hours || 0;
+        const p24h = (pricing as any).price24Hours || 0;
+        const p1w = (pricing as any).price1Week || 0;
+        const p1m = (pricing as any).price1Month || 0;
+
+        if (d === '1 hora') {
+            base = p1h > 0 ? p1h : pricing.pricePerHour;
+        } else if (d === '2 horas') {
+            base = p2h > 0 ? p2h : (pricing.pricePerHour * 2);
+        } else if (d === '3 horas') {
+            base = p3h > 0 ? p3h : (pricing.pricePerHour * 3);
+        } else if (d === '4 horas' || d === 'medio día') {
+            base = p4h > 0 ? p4h : (pricing.pricePerHour * 4);
+        } else if (d === '8 horas') {
+            base = p8h > 0 ? p8h : ((p4h > 0 ? p4h : pricing.pricePerHour * 4) + 4 * (pricing.priceFrom5thHour || 0));
+        } else if (d === '24 horas' || d === '1 día' || d === 'día completo') {
+            base = p24h > 0 ? p24h : pricing.pricePerDay;
+        } else if (d === '1 semana') {
+            base = p1w > 0 ? p1w : pricing.pricePerWeek;
+        } else if (d === '1 mes') {
+            base = p1m > 0 ? p1m : pricing.pricePerMonth;
+        } else {
             const match = d.match(/(\d+)\s*hora/);
             if (match) {
                 const hrs = parseInt(match[1], 10);
-                base = hrs <= 4 ? pricing.pricePerHour * hrs : (pricing.pricePerHour * 4 + (hrs - 4) * pricing.priceFrom5thHour);
+                if (hrs === 1) base = p1h > 0 ? p1h : pricing.pricePerHour;
+                else if (hrs === 2) base = p2h > 0 ? p2h : pricing.pricePerHour * 2;
+                else if (hrs === 3) base = p3h > 0 ? p3h : pricing.pricePerHour * 3;
+                else if (hrs === 4) base = p4h > 0 ? p4h : pricing.pricePerHour * 4;
+                else if (hrs === 8) base = p8h > 0 ? p8h : ((p4h > 0 ? p4h : pricing.pricePerHour * 4) + 4 * (pricing.priceFrom5thHour || 0));
+                else {
+                    base = hrs <= 4 
+                        ? (pricing.pricePerHour * hrs) 
+                        : ((p4h > 0 ? p4h : pricing.pricePerHour * 4) + (hrs - 4) * (pricing.priceFrom5thHour || 0));
+                }
             }
         }
         return base * quantity;
+    };
+
+    // CUSTOMER AUTH ACTIONS
+    const loginCustomer = async (email: string, password: string, remember: boolean): Promise<Customer | null> => {
+        const cust = customers.find(c => c.email?.toLowerCase().trim() === email.toLowerCase().trim() && c.password === password);
+        if (cust) {
+            setCurrentCustomer(cust);
+            if (remember) {
+                localStorage.setItem('briz_logged_customer', JSON.stringify(cust));
+            } else {
+                localStorage.removeItem('briz_logged_customer');
+            }
+            return cust;
+        }
+        return null;
+    };
+
+    const registerCustomer = async (
+        customerData: Omit<Customer, 'id' | 'rentalsCount' | 'purchasesCount' | 'firstVisit' | 'lastVisit' | 'notes'>,
+        selfieBlob: Blob | null,
+        docFile: File | null,
+        remember: boolean
+    ): Promise<Customer> => {
+        const emailExists = customers.some(c => c.email?.toLowerCase().trim() === customerData.email?.toLowerCase().trim());
+        if (emailExists) {
+            throw new Error('El correo electrónico ya está registrado.');
+        }
+
+        const id = generateId('cust');
+        let autofotoUrl = '';
+        let documentoUrl = '';
+
+        if (selfieBlob) {
+            try {
+                const pathRef = storageRef(storage, `customers/selfies/${id}_selfie.jpg`);
+                const result = await uploadBytes(pathRef, selfieBlob);
+                autofotoUrl = await getDownloadURL(result.ref);
+            } catch (err) {
+                console.error("Error uploading selfie:", err);
+            }
+        }
+
+        if (docFile) {
+            try {
+                const fileExt = docFile.name.split('.').pop() || 'pdf';
+                const pathRef = storageRef(storage, `customers/documents/${id}_doc.${fileExt}`);
+                const result = await uploadBytes(pathRef, docFile);
+                documentoUrl = await getDownloadURL(result.ref);
+            } catch (err) {
+                console.error("Error uploading document:", err);
+            }
+        }
+
+        const newCustomer: Customer = {
+            id,
+            ...customerData,
+            rentalsCount: 0,
+            purchasesCount: 0,
+            firstVisit: new Date().toISOString(),
+            lastVisit: new Date().toISOString(),
+            notes: '',
+            autofotoUrl,
+            documentoUrl
+        };
+
+        await setDoc(doc(db, 'customers', id), newCustomer);
+
+        setCurrentCustomer(newCustomer);
+        if (remember) {
+            localStorage.setItem('briz_logged_customer', JSON.stringify(newCustomer));
+        } else {
+            localStorage.removeItem('briz_logged_customer');
+        }
+
+        return newCustomer;
+    };
+
+    const logoutCustomer = () => {
+        setCurrentCustomer(null);
+        localStorage.removeItem('briz_logged_customer');
     };
 
     // CRUD ACTIONS
@@ -571,7 +736,8 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
         addSale, updateSaleStatus, deleteSale,
         addOrUpdateCustomer, updateCustomer, deleteCustomer,
         addServiceOrder, updateServiceOrder, deleteServiceOrder,
-        getItemStock, getComboAvailability, calculatePrice, resetAllData
+        getItemStock, getComboAvailability, calculatePrice, resetAllData,
+        currentCustomer, loginCustomer, registerCustomer, logoutCustomer
     };
 
     return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;

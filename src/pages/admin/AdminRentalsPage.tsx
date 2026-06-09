@@ -101,12 +101,18 @@ export default function AdminRentalsPage() {
     deleteRental, 
     updateRentalPaymentStatus, 
     markRentalExpired, 
-    inventory 
+    inventory,
+    customers
   } = useStore();
 
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<string>('all');
   const [selected, setSelected] = useState<Rental | null>(null);
+  const [showClientProfile, setShowClientProfile] = useState(false);
+
+  useEffect(() => {
+    setShowClientProfile(false);
+  }, [selected]);
   
   // Real-time Sound Notification state
   const [soundEnabled, setSoundEnabled] = useState(true);
@@ -634,6 +640,76 @@ export default function AdminRentalsPage() {
                       <CreditCard className="w-3.5 h-3.5 text-white/30" /> CI: {selected.customerCI}
                     </p>
                   </div>
+
+                  {/* Expandable client profile search */}
+                  {(() => {
+                    const matchingCustomer = customers.find(
+                      c => c.phone === selected.customerPhone || 
+                           c.ci === selected.customerCI || 
+                           c.phone === `+591${selected.customerPhone}` ||
+                           `+591${c.phone}` === selected.customerPhone ||
+                           c.ci.replace(/\D/g, '') === selected.customerCI.replace(/\D/g, '')
+                    );
+
+                    if (!matchingCustomer) {
+                      return (
+                        <p className="text-[9px] text-white/20 italic mt-2 border-t border-white/5 pt-2">
+                          Cliente no registrado en el sistema.
+                        </p>
+                      );
+                    }
+
+                    return (
+                      <div className="border-t border-white/5 pt-2 mt-2 space-y-2">
+                        <button
+                          type="button"
+                          onClick={() => setShowClientProfile(!showClientProfile)}
+                          className="w-full flex items-center justify-between text-[10px] font-black uppercase tracking-wider text-brand-yellow bg-brand-yellow/10 hover:bg-brand-yellow/20 px-3 py-1.5 rounded-lg transition-colors cursor-pointer"
+                        >
+                          <span>{showClientProfile ? '▲ Ocultar Ficha Cliente' : '▼ Ver Ficha de Registro del Cliente'}</span>
+                          <Badge className="bg-brand-yellow text-brand-black text-[8px] font-black border-0">REGISTRADO</Badge>
+                        </button>
+
+                        {showClientProfile && (
+                          <div className="bg-black/30 p-3 rounded-xl space-y-3 mt-2 border border-white/5 animate-in slide-in-from-top duration-200">
+                            {/* Profile Pic preview */}
+                            {matchingCustomer.autofotoUrl && (
+                              <div className="flex flex-col items-center">
+                                <p className="text-[8px] text-white/30 font-bold uppercase mb-1">Foto de Rostro</p>
+                                <div className="w-20 h-20 rounded-full overflow-hidden border border-brand-yellow/30 bg-black/40">
+                                  <img src={matchingCustomer.autofotoUrl} className="w-full h-full object-cover" alt="selfie" />
+                                </div>
+                              </div>
+                            )}
+                            
+                            <div className="grid grid-cols-1 gap-1 text-[11px] font-medium text-white/60">
+                              {matchingCustomer.email && (
+                                <p>📧 <span className="font-bold text-white">Email:</span> {matchingCustomer.email}</p>
+                              )}
+                              {matchingCustomer.nacionalidad && (
+                                <p>🌍 <span className="font-bold text-white">Nac:</span> {matchingCustomer.nacionalidad} {matchingCustomer.departamento ? `(${matchingCustomer.departamento})` : ''}</p>
+                              )}
+                              {matchingCustomer.comoNosConociste && (
+                                <p>📢 <span className="font-bold text-white">Referencia:</span> {matchingCustomer.comoNosConociste}</p>
+                              )}
+                              {matchingCustomer.documentoUrl && (
+                                <div className="pt-2 border-t border-white/5 mt-1">
+                                  <a 
+                                    href={matchingCustomer.documentoUrl} 
+                                    target="_blank" 
+                                    rel="noreferrer" 
+                                    className="inline-flex items-center gap-1 text-[9px] font-black uppercase tracking-widest text-brand-yellow bg-brand-yellow/10 hover:bg-brand-yellow/20 px-3 py-1 rounded-lg transition-all"
+                                  >
+                                    📄 Descargar ID / CI
+                                  </a>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
                 </div>
 
                 {/* Rental Product Snapshot Card */}
