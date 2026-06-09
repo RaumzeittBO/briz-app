@@ -26,6 +26,7 @@ export interface InventoryItem {
     id: string;
     itemType: 'bike' | 'accessory';
     name: string;
+    category?: string;
     description: string;
     imageUrl: string;
     active: boolean;
@@ -68,6 +69,7 @@ export interface ComboComponent {
 export interface ComboProduct {
     id: string;
     name: string;
+    category?: string;
     description: string;
     imageUrl: string;
     active: boolean;
@@ -92,6 +94,14 @@ export interface ComboProduct {
     price24Hours?: number;
     price1Week?: number;
     price1Month?: number;
+}
+
+export interface RentalSettings {
+    bankName: string;
+    accountNumber: string;
+    accountOwner: string;
+    ownerCI: string;
+    qrCodeUrl: string;
 }
 
 export interface ComponentSelection {
@@ -191,6 +201,8 @@ interface StoreContextType {
     customers: Customer[];
     serviceOrders: ServiceOrder[];
     isLoaded: boolean;
+    rentalSettings: RentalSettings;
+    updateRentalSettings: (updates: Partial<RentalSettings>, qrFile: File | null) => Promise<void>;
 
     // Inventory CRUD
     addInventoryItem: (item: InventoryItem) => Promise<void>;
@@ -252,6 +264,190 @@ export const useStore = () => {
     return context;
 };
 
+// ===========================
+// DEFAULT SEED DATA
+// ===========================
+
+const DEFAULT_INVENTORY: InventoryItem[] = [
+    {
+        id: 'b1',
+        itemType: 'bike',
+        name: 'Briz Urban Pro',
+        category: 'Urbana',
+        description: 'Bicicleta urbana ligera, perfecta para las calles de Cochabamba. Ideal para commuting diario.',
+        imageUrl: 'https://images.unsplash.com/photo-1485965120184-e220f721d03e?auto=format&fit=crop&w=600&q=80',
+        active: true,
+        availableForRental: true,
+        availableForSale: true,
+        hasWheelSizes: true,
+        wheelSizes: [
+            { size: '26', stock: 5 },
+            { size: '27.5', stock: 3 },
+            { size: '29', stock: 2 }
+        ],
+        pricePerHour: 15,
+        priceFrom5thHour: 10,
+        pricePerDay: 60,
+        pricePerWeek: 300,
+        pricePerMonth: 900,
+        price1Hour: 15,
+        price2Hours: 30,
+        price3Hours: 45,
+        price4Hours: 60,
+        price8Hours: 100,
+        price24Hours: 60,
+        price1Week: 300,
+        price1Month: 900,
+        salePrice: 2800
+    },
+    {
+        id: 'b2',
+        itemType: 'bike',
+        name: 'Briz Mountain X1',
+        category: 'Montaña',
+        description: 'MTB de alto rendimiento con suspensión delantera. Conquista los senderos de Tunari.',
+        imageUrl: 'https://images.unsplash.com/photo-1576435465679-64a037f487fb?auto=format&fit=crop&w=600&q=80',
+        active: true,
+        availableForRental: true,
+        availableForSale: true,
+        hasWheelSizes: true,
+        wheelSizes: [
+            { size: '26', stock: 2 },
+            { size: '27.5', stock: 5 },
+            { size: '29', stock: 5 }
+        ],
+        pricePerHour: 25,
+        priceFrom5thHour: 15,
+        pricePerDay: 100,
+        pricePerWeek: 500,
+        pricePerMonth: 1500,
+        price1Hour: 25,
+        price2Hours: 50,
+        price3Hours: 75,
+        price4Hours: 100,
+        price8Hours: 160,
+        price24Hours: 100,
+        price1Week: 500,
+        price1Month: 1500,
+        salePrice: 4500
+    },
+    {
+        id: 'b3',
+        itemType: 'bike',
+        name: 'Briz Road Elite',
+        category: 'Ruta',
+        description: 'Bicicleta de ruta aerodinámica para los ciclistas que buscan velocidad y rendimiento.',
+        imageUrl: 'https://images.unsplash.com/photo-1532298229144-0ec0c57515c7?auto=format&fit=crop&w=600&q=80',
+        active: true,
+        availableForRental: true,
+        availableForSale: true,
+        hasWheelSizes: true,
+        wheelSizes: [
+            { size: '27.5', stock: 2 },
+            { size: '29', stock: 3 }
+        ],
+        pricePerHour: 30,
+        priceFrom5thHour: 20,
+        pricePerDay: 120,
+        pricePerWeek: 600,
+        pricePerMonth: 1800,
+        price1Hour: 30,
+        price2Hours: 60,
+        price3Hours: 90,
+        price4Hours: 120,
+        price8Hours: 200,
+        price24Hours: 120,
+        price1Week: 600,
+        price1Month: 1800,
+        salePrice: 5200
+    },
+    {
+        id: 'p1',
+        itemType: 'accessory',
+        name: 'Casco Urbano Briz',
+        category: 'Accesorios',
+        description: 'Casco ligero con ventilación superior. Diseño moderno y seguro.',
+        imageUrl: 'https://images.unsplash.com/photo-1557053910-d9eedeed1d7d?auto=format&fit=crop&w=600&q=80',
+        active: true,
+        availableForRental: true,
+        availableForSale: true,
+        hasWheelSizes: false,
+        stock: 20,
+        pricePerHour: 5,
+        priceFrom5thHour: 5,
+        pricePerDay: 10,
+        pricePerWeek: 40,
+        pricePerMonth: 120,
+        price1Hour: 5,
+        price2Hours: 10,
+        price3Hours: 10,
+        price4Hours: 10,
+        price8Hours: 10,
+        price24Hours: 10,
+        price1Week: 40,
+        price1Month: 120,
+        salePrice: 180
+    },
+    {
+        id: 'p2',
+        itemType: 'accessory',
+        name: 'Candado U-Lock Premium',
+        category: 'Accesorios',
+        description: 'Candado de alta seguridad tipo U. Protege tu bicicleta en la ciudad.',
+        imageUrl: 'https://images.unsplash.com/photo-1549492423-40028e32c8c6?auto=format&fit=crop&w=600&q=80',
+        active: true,
+        availableForRental: true,
+        availableForSale: true,
+        hasWheelSizes: false,
+        stock: 30,
+        pricePerHour: 5,
+        priceFrom5thHour: 5,
+        pricePerDay: 10,
+        pricePerWeek: 40,
+        pricePerMonth: 120,
+        price1Hour: 5,
+        price2Hours: 10,
+        price3Hours: 10,
+        price4Hours: 10,
+        price8Hours: 10,
+        price24Hours: 10,
+        price1Week: 40,
+        price1Month: 120,
+        salePrice: 120
+    }
+];
+
+const DEFAULT_COMBOS: ComboProduct[] = [
+    {
+        id: 'combo_1',
+        name: 'Combo Urbano Briz',
+        category: 'Bicicletas',
+        description: 'Briz Urban Pro + Casco Urbano + Candado U-Lock con precio preferencial.',
+        imageUrl: 'https://images.unsplash.com/photo-1485965120184-e220f721d03e?auto=format&fit=crop&w=600&q=80',
+        active: true,
+        availableForRental: true,
+        availableForSale: false,
+        components: [
+            { inventoryItemId: 'b1', quantity: 1, requiresWheelSize: true },
+            { inventoryItemId: 'p1', quantity: 1, requiresWheelSize: false },
+            { inventoryItemId: 'p2', quantity: 1, requiresWheelSize: false }
+        ],
+        pricePerHour: 20,
+        priceFrom5thHour: 12,
+        pricePerDay: 75,
+        pricePerWeek: 350,
+        pricePerMonth: 1100,
+        price1Hour: 20,
+        price2Hours: 40,
+        price3Hours: 60,
+        price4Hours: 75,
+        price8Hours: 120,
+        price24Hours: 75,
+        price1Week: 350,
+        price1Month: 1100
+    }
+];
+
 export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
     const [inventory, setInventory] = useState<InventoryItem[]>([]);
     const [combos, setCombos] = useState<ComboProduct[]>([]);
@@ -261,8 +457,41 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
     const [serviceOrders, setServiceOrders] = useState<ServiceOrder[]>([]);
     const [isLoaded, setIsLoaded] = useState(false);
 
+    const [rentalSettings, setRentalSettings] = useState<RentalSettings>({
+        bankName: 'Banco Nacional de Bolivia (BNB)',
+        accountNumber: '3501818797',
+        accountOwner: 'Litzy Jhoselyn Gutierrez Jarillo',
+        ownerCI: '9399367 CB',
+        qrCodeUrl: '/images/qr_pago.png'
+    });
+
     // Customer Session state
     const [currentCustomer, setCurrentCustomer] = useState<Customer | null>(null);
+
+    // Seeding methods
+    const seedDefaultInventory = async () => {
+        try {
+            const batch = writeBatch(db);
+            DEFAULT_INVENTORY.forEach(item => {
+                batch.set(doc(db, 'inventory', item.id), item);
+            });
+            await batch.commit();
+        } catch (e) {
+            console.error('Failed to seed default inventory:', e);
+        }
+    };
+
+    const seedDefaultCombos = async () => {
+        try {
+            const batch = writeBatch(db);
+            DEFAULT_COMBOS.forEach(combo => {
+                batch.set(doc(db, 'combos', combo.id), combo);
+            });
+            await batch.commit();
+        } catch (e) {
+            console.error('Failed to seed default combos:', e);
+        }
+    };
 
     // Load saved session
     useEffect(() => {
@@ -280,9 +509,15 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
     useEffect(() => {
         const unsubInv = onSnapshot(query(collection(db, 'inventory')), (snap) => {
             setInventory(snap.docs.map(doc => ({ ...doc.data() } as InventoryItem)));
+            if (snap.empty) {
+                seedDefaultInventory();
+            }
         });
         const unsubCombos = onSnapshot(query(collection(db, 'combos')), (snap) => {
             setCombos(snap.docs.map(doc => ({ ...doc.data() } as ComboProduct)));
+            if (snap.empty) {
+                seedDefaultCombos();
+            }
         });
         const unsubRentals = onSnapshot(query(collection(db, 'rentals'), orderBy('createdDate', 'desc')), (snap) => {
             setRentals(snap.docs.map(doc => ({ ...doc.data() } as Rental)));
@@ -296,10 +531,15 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
         const unsubSO = onSnapshot(query(collection(db, 'serviceOrders'), orderBy('date', 'desc')), (snap) => {
             setServiceOrders(snap.docs.map(doc => ({ ...doc.data() } as ServiceOrder)));
         });
+        const unsubSettings = onSnapshot(doc(db, 'settings', 'rental_settings'), (snap) => {
+            if (snap.exists()) {
+                setRentalSettings(snap.data() as RentalSettings);
+            }
+        });
 
         setIsLoaded(true);
         return () => {
-            unsubInv(); unsubCombos(); unsubRentals(); unsubSales(); unsubCustomers(); unsubSO();
+            unsubInv(); unsubCombos(); unsubRentals(); unsubSales(); unsubCustomers(); unsubSO(); unsubSettings();
         };
     }, []);
 
@@ -602,6 +842,7 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
         const invCopy = [...inventory];
 
         const updateStock = (itemId: string, qty: number, wsSize?: string) => {
+            if (itemId.startsWith('srv_') || itemId.startsWith('acc_')) return true;
             const itemIdx = invCopy.findIndex(i => i.id === itemId);
             if (itemIdx < 0) return false;
             const item = { ...invCopy[itemIdx] };
@@ -653,6 +894,7 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
         if (rental.status === 'confirmed' || rental.status === 'Confirmado') {
             const batch = writeBatch(db);
             const restoreStock = (itemId: string, qty: number, wsSize?: string) => {
+                if (itemId.startsWith('srv_') || itemId.startsWith('acc_')) return;
                 const item = inventory.find(i => i.id === itemId);
                 if (!item) return;
                 const updated = { ...item };
@@ -756,10 +998,24 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
         await deleteDoc(doc(db, 'serviceOrders', id));
     };
 
+    const updateRentalSettings = async (updates: Partial<RentalSettings>, qrFile: File | null) => {
+        let qrCodeUrl = updates.qrCodeUrl || rentalSettings.qrCodeUrl;
+        if (qrFile) {
+            const fileExt = qrFile.name.split('.').pop() || 'png';
+            const pathRef = storageRef(storage, `settings/qr_pago.${fileExt}`);
+            const result = await uploadBytes(pathRef, qrFile);
+            qrCodeUrl = await getDownloadURL(result.ref);
+        }
+        const newSettings = {
+            ...rentalSettings,
+            ...updates,
+            qrCodeUrl
+        };
+        await setDoc(doc(db, 'settings', 'rental_settings'), newSettings);
+    };
+
     const resetAllData = async () => {
         const batch = writeBatch(db);
-        inventory.forEach(i => batch.delete(doc(db, 'inventory', i.id)));
-        combos.forEach(c => batch.delete(doc(db, 'combos', c.id)));
         rentals.forEach(r => batch.delete(doc(db, 'rentals', r.id)));
         sales.forEach(s => batch.delete(doc(db, 'sales', s.id)));
         customers.forEach(c => batch.delete(doc(db, 'customers', c.id)));
@@ -769,6 +1025,7 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
 
     const value: StoreContextType = {
         inventory, combos, rentals, sales, customers, serviceOrders, isLoaded,
+        rentalSettings, updateRentalSettings,
         addInventoryItem, updateInventoryItem, deleteInventoryItem,
         addCombo, updateCombo, deleteCombo,
         addRental, confirmRental, cancelRental, deleteRental,

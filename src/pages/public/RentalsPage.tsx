@@ -18,6 +18,7 @@ type DisplayProduct = {
   id: string; name: string; description: string; imageUrl: string;
   type: 'single' | 'combo';
   itemType?: 'bike' | 'accessory';
+  category?: string;
   hasWheelSizes: boolean;
   wheelSizes?: { size: string; stock: number }[];
   stock?: number;
@@ -28,24 +29,6 @@ type DisplayProduct = {
 
 
 
-// Helper to determine bike category based on name/description
-function getBikeCategory(item: DisplayProduct): 'urban' | 'mountain' | 'road' | 'accessory' {
-  if (item.type === 'single' && item.itemType === 'accessory') {
-    return 'accessory';
-  }
-  const name = item.name.toLowerCase();
-  const desc = item.description.toLowerCase();
-
-  if (name.includes('ruta') || name.includes('pista') || name.includes('road') || name.includes('carrera') || desc.includes('ruta') || desc.includes('pista')) {
-    return 'road';
-  }
-  if (name.includes('montaña') || name.includes('montañera') || name.includes('mtb') || name.includes('mountain') || name.includes('aro 26') || name.includes('aro 24') || name.includes('aro 29') || desc.includes('montaña') || desc.includes('montañera') || desc.includes('mtb')) {
-    return 'mountain';
-  }
-  // Default is urban
-  return 'urban';
-}
-
 export default function RentalsPage() {
   const { inventory, combos, getComboAvailability } = useStore();
   const { totalItems } = useCart();
@@ -53,13 +36,12 @@ export default function RentalsPage() {
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState('Bicicletas');
   const [selected, setSelected] = useState<DisplayProduct | null>(null);
-  // Scroll Container Refs
-  const urbanScrollRef = useRef<HTMLDivElement>(null);
-  const mountainScrollRef = useRef<HTMLDivElement>(null);
-  const roadScrollRef = useRef<HTMLDivElement>(null);
-  const accessoryScrollRef = useRef<HTMLDivElement>(null);
+  
+  // Dynamic Scroll Container Refs
+  const scrollRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
-  const scrollRight = (ref: HTMLDivElement | null) => {
+  const scrollRight = (catKey: string) => {
+    const ref = scrollRefs.current[catKey];
     if (ref) {
       ref.scrollBy({ left: 320, behavior: 'smooth' });
     }
@@ -92,6 +74,7 @@ export default function RentalsPage() {
       items.push({
         id: i.id, name: i.name, description: i.description, imageUrl: i.imageUrl,
         type: 'single', itemType: i.itemType,
+        category: i.category,
         hasWheelSizes: i.hasWheelSizes,
         wheelSizes: i.wheelSizes,
         stock: i.hasWheelSizes ? undefined : (i.stock ?? 0),
@@ -148,6 +131,7 @@ export default function RentalsPage() {
       items.push({
         id: c.id, name: c.name, description: c.description, imageUrl: c.imageUrl,
         type: 'combo', hasWheelSizes: hasWS, wheelSizes: ws,
+        category: c.category || 'Bicicletas',
         comboAvailability: avail, components: comps,
         pricePerHour: c.pricePerHour, priceFrom5thHour: c.priceFrom5thHour,
         pricePerDay: c.pricePerDay, pricePerWeek: c.pricePerWeek, pricePerMonth: c.pricePerMonth,
@@ -179,38 +163,50 @@ export default function RentalsPage() {
     setCheckoutStep(1);
   };
 
-  // Grouped products for sliders
-  const urbanProducts = useMemo(() => {
-    return filtered.filter(p => getBikeCategory(p) === 'urban');
+  // Group products dynamically by their category field
+  const productsByCategory = useMemo(() => {
+    const groups: Record<string, DisplayProduct[]> = {};
+    filtered.forEach(p => {
+      const cat = p.category || (p.itemType === 'accessory' ? 'Accesorios' : 'Otros');
+      if (!groups[cat]) {
+        groups[cat] = [];
+      }
+      groups[cat].push(p);
+    });
+    return groups;
   }, [filtered]);
 
-  const mountainProducts = useMemo(() => {
-    return filtered.filter(p => getBikeCategory(p) === 'mountain');
-  }, [filtered]);
-
-  const roadProducts = useMemo(() => {
-    return filtered.filter(p => getBikeCategory(p) === 'road');
-  }, [filtered]);
-
-  const accessoryProducts = useMemo(() => {
-    return filtered.filter(p => getBikeCategory(p) === 'accessory');
-  }, [filtered]);
+  const categoriesToRender = useMemo(() => {
+    return Object.keys(productsByCategory).sort((a, b) => {
+      if (a === 'Accesorios') return 1;
+      if (b === 'Accesorios') return -1;
+      return a.localeCompare(b);
+    });
+  }, [productsByCategory]);
 
   // Render method for horizontal slider
   const renderCategorySlider = (
     title: string, 
     productsList: DisplayProduct[], 
-    scrollRef: React.RefObject<HTMLDivElement | null>
+    catKey: string
   ) => {
     if (productsList.length === 0) return null;
+
+    const minPrice = Math.min(...productsList.map(p => p.pricePerHour));
+    const displayMinPrice = minPrice !== Infinity ? minPrice : 0;
 
     return (
       <div className="relative py-10 border-b border-gray-100 last:border-b-0">
         {/* Category Header */}
         <div className="flex justify-between items-end mb-6">
-          <h2 className="font-tan text-2xl sm:text-4xl uppercase tracking-wider text-brand-yellow [-webkit-text-stroke:1.5px_#000] drop-shadow-[2px_2px_0_rgba(0,0,0,1)]">
-            {title}
-          </h2>
+          <div className="space-y-1">
+            <h2 className="font-tan text-2xl sm:text-4xl uppercase tracking-wider text-brand-yellow [-webkit-text-stroke:1.5px_#000] drop-shadow-[2px_2px_0_rgba(0,0,0,1)]">
+              {title}
+            </h2>
+            <p className="text-[10px] sm:text-xs font-black uppercase text-gray-400 tracking-widest font-maiandra">
+              Desde Bs. {displayMinPrice} / Hora
+            </p>
+          </div>
           <button className="font-maiandra text-xs sm:text-sm text-gray-500 hover:text-brand-yellow hover:underline transition-all tracking-wide underline">
             Ver todo
           </button>
@@ -219,7 +215,7 @@ export default function RentalsPage() {
         {/* Horizontal Slider Area */}
         <div className="relative group/slider">
           <div 
-            ref={scrollRef}
+            ref={(el) => { scrollRefs.current[catKey] = el; }}
             className="flex overflow-x-auto gap-6 pb-6 pt-2 scrollbar-none snap-x snap-mandatory scroll-smooth px-1"
           >
             {productsList.map((p) => {
@@ -267,7 +263,7 @@ export default function RentalsPage() {
                         <h3 className="font-tangkiwood text-lg sm:text-xl text-brand-black leading-tight truncate">
                           {p.name}
                         </h3>
-                        <p className="text-xs font-cocon text-gray-400 mt-1 line-clamp-2 leading-relaxed">
+                        <p className="text-xs font-sans text-gray-400 mt-1 line-clamp-2 leading-relaxed">
                           {p.description || 'Disponible para alquiler'}
                         </p>
                       </div>
@@ -300,7 +296,7 @@ export default function RentalsPage() {
 
           {/* Navigation right arrow - floating, premium style */}
           <button 
-            onClick={() => scrollRight(scrollRef.current)}
+            onClick={() => scrollRight(catKey)}
             className="absolute right-2 top-1/2 -translate-y-1/2 z-10 bg-white/90 hover:bg-white text-brand-black shadow-lg rounded-full w-11 h-11 flex items-center justify-center border border-gray-200 transition-transform active:scale-95 opacity-0 group-hover/slider:opacity-100 pointer-events-none group-hover/slider:pointer-events-auto duration-300"
             aria-label="Deslizar a la derecha"
           >
@@ -369,7 +365,7 @@ export default function RentalsPage() {
                   placeholder="Buscar en Briz..." 
                   value={search} 
                   onChange={e => setSearch(e.target.value)}
-                  className="border-0 bg-transparent h-10 shadow-none focus-visible:ring-0 focus-visible:ring-offset-0 placeholder:text-gray-400 font-cocon font-medium text-base text-brand-black w-full"
+                  className="border-0 bg-transparent h-10 shadow-none focus-visible:ring-0 focus-visible:ring-offset-0 placeholder:text-gray-400 font-sans font-medium text-base text-brand-black w-full"
                 />
                 <button className="bg-brand-yellow hover:bg-brand-yellow-light text-brand-black p-2.5 rounded-full flex items-center justify-center transition-colors">
                   <Search className="w-4 h-4" strokeWidth={2.5} />
@@ -385,7 +381,7 @@ export default function RentalsPage() {
                     key={c} 
                     variant={category === c ? 'default' : 'outline'} 
                     size="sm"
-                    className={`rounded-full px-6 h-10 font-cocon font-bold text-sm tracking-wide transition-all ${
+                    className={`rounded-full px-6 h-10 font-sans font-bold text-sm tracking-wide transition-all ${
                       category === c 
                         ? 'bg-brand-yellow text-brand-black border-brand-yellow shadow-md scale-105' 
                         : 'bg-white text-gray-500 border-gray-200 hover:border-brand-yellow hover:text-brand-black'
@@ -419,27 +415,15 @@ export default function RentalsPage() {
       <section className="py-10 min-h-[50vh] bg-background">
         <div className="max-w-7xl mx-auto px-4">
           {filtered.length === 0 ? (
-            <div className="text-center py-20 text-gray-400 font-medium font-cocon">
+            <div className="text-center py-20 text-gray-400 font-medium font-sans">
               No hay productos disponibles para alquiler.
             </div>
           ) : (
-            <div className="space-y-6">
-              {/* Category Sliders for Bikes (Urban, Mountain, Road) */}
-              {(category === 'Bicicletas' || category === 'Todas') && (
-                <>
-                  {renderCategorySlider('Bicicletas Urbanas', urbanProducts, urbanScrollRef)}
-                  {renderCategorySlider('Bicicletas Montañeras', mountainProducts, mountainScrollRef)}
-                  {renderCategorySlider('Bicicletas de Ruta / Pista', roadProducts, roadScrollRef)}
-                </>
-              )}
-
-              {/* Slider for Accessories */}
-              {(category === 'Accesorios' || category === 'Todas') && (
-                <>
-                  {renderCategorySlider('Accesorios', accessoryProducts, accessoryScrollRef)}
-                </>
-              )}
-            </div>
+              categoriesToRender.map(catName => (
+                <div key={catName}>
+                  {renderCategorySlider(catName, productsByCategory[catName], catName)}
+                </div>
+              ))
           )}
         </div>
       </section>

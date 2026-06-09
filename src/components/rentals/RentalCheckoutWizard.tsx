@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+﻿import { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
     ArrowLeft, Minus, Plus, X, Calendar, Clock, Heart, 
@@ -41,7 +41,7 @@ export default function RentalCheckoutWizard({
     onClose,
     setAuthOpen
 }: RentalCheckoutWizardProps) {
-    const { currentCustomer, addRental, calculatePrice } = useStore();
+    const { currentCustomer, addRental, calculatePrice, rentalSettings } = useStore();
     const [loading, setLoading] = useState(false);
 
     // Step 1 local states
@@ -140,6 +140,8 @@ export default function RentalCheckoutWizard({
         });
         
         alert(`¡${selectedProduct.name} añadido al carrito!`);
+        setSelectedProduct(null);
+        onClose();
     };
 
     const handleContinueStep1 = () => {
@@ -498,7 +500,7 @@ export default function RentalCheckoutWizard({
                         {/* Title & Badge */}
                         <div className="flex justify-between items-center">
                             <h2 className="font-tangkiwood text-2xl sm:text-3xl text-brand-black leading-none">{selectedProduct.name}</h2>
-                            <span className="bg-brand-yellow text-brand-black border-0 text-[10px] font-black uppercase rounded-lg px-2.5 py-1 font-cocon">
+                            <span className="bg-brand-yellow text-brand-black border-0 text-[10px] font-black uppercase rounded-lg px-2.5 py-1 font-sans">
                                 {selectedProduct.type === 'combo' ? 'Combo' : selectedProduct.itemType === 'bike' ? 'Bicicleta' : 'Accesorio'}
                             </span>
                         </div>
@@ -523,7 +525,7 @@ export default function RentalCheckoutWizard({
                         </div>
 
                         {/* Description */}
-                        <p className="text-xs sm:text-sm font-medium text-brand-black leading-relaxed text-justify font-cocon bg-white/50 p-5 rounded-2xl border border-black/5">
+                        <p className="text-xs sm:text-sm font-medium text-brand-black leading-relaxed text-justify font-sans bg-white/50 p-5 rounded-2xl border border-black/5">
                             {selectedProduct.description || 'Alquila tu bicicleta ideal para pasear o entrenar por la ciudad con total comodidad y estilo.'}
                         </p>
 
@@ -558,7 +560,7 @@ export default function RentalCheckoutWizard({
                             <Label className="text-[10px] text-brand-black/50 font-bold uppercase tracking-widest font-maiandra">Cantidad</Label>
                             <div className="flex items-center gap-3 bg-white border border-gray-200 rounded-xl p-1.5 w-32 shadow-sm">
                                 <button type="button" onClick={() => setDetailQty(Math.max(1, detailQty - 1))} className="w-8 h-8 rounded-lg bg-gray-50 flex items-center justify-center text-gray-500 hover:bg-gray-100 cursor-pointer"><Minus className="w-3.5 h-3.5" /></button>
-                                <span className="flex-1 text-center font-black text-sm text-brand-black font-cocon">{detailQty}</span>
+                                <span className="flex-1 text-center font-black text-sm text-brand-black font-sans">{detailQty}</span>
                                 <button type="button" onClick={() => setDetailQty(detailQty + 1)} className="w-8 h-8 rounded-lg bg-gray-50 flex items-center justify-center text-gray-500 hover:bg-gray-100 cursor-pointer"><Plus className="w-3.5 h-3.5" /></button>
                             </div>
                         </div>
@@ -567,13 +569,13 @@ export default function RentalCheckoutWizard({
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-4">
                             <Button 
                                 onClick={handleAddToCart}
-                                className="w-full bg-white border-2 border-brand-yellow hover:bg-brand-yellow/10 text-brand-black font-black rounded-2xl h-14 uppercase text-xs tracking-widest font-cocon cursor-pointer"
+                                className="w-full bg-white border-2 border-brand-yellow hover:bg-brand-yellow/10 text-brand-black font-black rounded-2xl h-14 uppercase text-xs tracking-widest font-sans cursor-pointer"
                             >
                                 <ShoppingBag className="w-4 h-4 mr-2" /> Añadir al Carrito
                             </Button>
                             <Button 
                                 onClick={handleContinueStep1}
-                                className="w-full bg-brand-yellow hover:bg-brand-yellow-light text-brand-black font-black rounded-2xl h-14 uppercase text-xs tracking-widest font-cocon cursor-pointer shadow-md shadow-brand-yellow/10"
+                                className="w-full bg-brand-yellow hover:bg-brand-yellow-light text-brand-black font-black rounded-2xl h-14 uppercase text-xs tracking-widest font-sans cursor-pointer shadow-md shadow-brand-yellow/10"
                             >
                                 Continuar
                             </Button>
@@ -625,17 +627,17 @@ export default function RentalCheckoutWizard({
                                                 
                                                 {/* Text Info */}
                                                 <div className="flex-1 min-w-0">
-                                                    <h3 className="font-bold text-brand-black text-sm truncate uppercase font-cocon">{item.product.name}</h3>
+                                                    <h3 className="font-bold text-brand-black text-sm truncate uppercase font-sans">{item.product.name}</h3>
                                                     <p className="text-[10px] text-brand-black/40 font-bold uppercase font-maiandra mt-0.5">
                                                         {item.selectedWheelSize ? `Aro ${item.selectedWheelSize} • ` : ''}Tarifa Diaria (24h)
                                                     </p>
-                                                    <p className="font-black text-brand-yellow-vibrant text-xs mt-1 font-cocon">Bs. {subTotal.toFixed(2)}</p>
+                                                    <p className="font-black text-brand-yellow-vibrant text-xs mt-1 font-sans">Bs. {subTotal.toFixed(2)}</p>
                                                 </div>
 
                                                 {/* Qty +/- Controls */}
                                                 <div className="flex items-center gap-2 bg-gray-50 border border-gray-150 rounded-lg p-1 shrink-0 scale-95">
                                                     <button type="button" onClick={() => handleUpdateQty(item.id, -1)} className="w-6 h-6 rounded-md bg-white flex items-center justify-center text-gray-500 hover:bg-gray-100 cursor-pointer"><Minus className="w-2.5 h-2.5" /></button>
-                                                    <span className="w-6 text-center font-bold text-xs text-brand-black font-cocon">{item.quantity}</span>
+                                                    <span className="w-6 text-center font-bold text-xs text-brand-black font-sans">{item.quantity}</span>
                                                     <button type="button" onClick={() => handleUpdateQty(item.id, 1)} className="w-6 h-6 rounded-md bg-white flex items-center justify-center text-gray-500 hover:bg-gray-100 cursor-pointer"><Plus className="w-2.5 h-2.5" /></button>
                                                 </div>
 
@@ -656,13 +658,13 @@ export default function RentalCheckoutWizard({
                                 <div className="space-y-3 pt-4">
                                     <Button 
                                         onClick={() => { setSelectedProduct(null); }}
-                                        className="w-full bg-white border border-gray-200 hover:bg-gray-50 text-brand-charcoal font-black rounded-2xl h-12 uppercase text-xs tracking-widest font-cocon cursor-pointer"
+                                        className="w-full bg-white border border-gray-200 hover:bg-gray-50 text-brand-charcoal font-black rounded-2xl h-12 uppercase text-xs tracking-widest font-sans cursor-pointer"
                                     >
                                         + Añadir más bicicletas
                                     </Button>
                                     <Button 
                                         onClick={() => setStep(3)}
-                                        className="w-full bg-brand-yellow hover:bg-brand-yellow-light text-brand-black font-black rounded-2xl h-14 uppercase text-xs tracking-widest font-cocon cursor-pointer shadow-md shadow-brand-yellow/10"
+                                        className="w-full bg-brand-yellow hover:bg-brand-yellow-light text-brand-black font-black rounded-2xl h-14 uppercase text-xs tracking-widest font-sans cursor-pointer shadow-md shadow-brand-yellow/10"
                                     >
                                         Continuar con la Reserva
                                     </Button>
@@ -702,7 +704,7 @@ export default function RentalCheckoutWizard({
                                     <select 
                                         value={pickupTime} 
                                         onChange={e => setPickupTime(e.target.value)} 
-                                        className="w-full px-4 bg-gray-50 border border-gray-200 h-12 text-sm text-brand-black font-bold rounded-xl focus:border-brand-yellow focus:outline-none font-cocon"
+                                        className="w-full px-4 bg-gray-50 border border-gray-200 h-12 text-sm text-brand-black font-bold rounded-xl focus:border-brand-yellow focus:outline-none font-sans"
                                     >
                                         {['08:00', '09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00', '18:00', '19:00'].map(t => (
                                             <option key={t} value={t}>{t}</option>
@@ -715,7 +717,7 @@ export default function RentalCheckoutWizard({
                                     <select 
                                         value={returnTime} 
                                         onChange={e => setReturnTime(e.target.value)} 
-                                        className="w-full px-4 bg-gray-50 border border-gray-200 h-12 text-sm text-brand-black font-bold rounded-xl focus:border-brand-yellow focus:outline-none font-cocon"
+                                        className="w-full px-4 bg-gray-50 border border-gray-200 h-12 text-sm text-brand-black font-bold rounded-xl focus:border-brand-yellow focus:outline-none font-sans"
                                     >
                                         {['09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00', '18:00', '19:00', '20:00'].map(t => (
                                             <option key={t} value={t}>{t}</option>
@@ -776,12 +778,12 @@ export default function RentalCheckoutWizard({
                                         <div className="flex items-center gap-2 text-xs">
                                             <span className="text-lg">{acc.icon}</span>
                                             <div>
-                                                <p className="font-bold text-brand-black font-cocon">{acc.label}</p>
+                                                <p className="font-bold text-brand-black font-sans">{acc.label}</p>
                                                 {acc.note && <p className="text-[9px] text-brand-black/40 font-bold uppercase font-maiandra">{acc.note}</p>}
                                             </div>
                                         </div>
                                         <div className="flex items-center gap-3 shrink-0">
-                                            <span className="text-xs font-bold text-brand-yellow-vibrant font-cocon">+{acc.price}</span>
+                                            <span className="text-xs font-bold text-brand-yellow-vibrant font-sans">+{acc.price}</span>
                                             <select 
                                                 value={(accessories as any)[acc.key]} 
                                                 onChange={e => {
@@ -817,7 +819,7 @@ export default function RentalCheckoutWizard({
                                         onCheckedChange={(v) => setDeliveryChecked(Boolean(v))}
                                         className="border-brand-charcoal/20 data-[state=checked]:bg-brand-yellow data-[state=checked]:border-brand-yellow data-[state=checked]:text-brand-black"
                                     />
-                                    <Label htmlFor="delivery" className="text-xs text-brand-charcoal/80 font-bold cursor-pointer font-cocon leading-none">
+                                    <Label htmlFor="delivery" className="text-xs text-brand-charcoal/80 font-bold cursor-pointer font-sans leading-none">
                                         🚚 Servicio de entrega (+30 Bs)
                                     </Label>
                                 </div>
@@ -829,7 +831,7 @@ export default function RentalCheckoutWizard({
                                         onCheckedChange={(v) => setPickupChecked(Boolean(v))}
                                         className="border-brand-charcoal/20 data-[state=checked]:bg-brand-yellow data-[state=checked]:border-brand-yellow data-[state=checked]:text-brand-black"
                                     />
-                                    <Label htmlFor="pickup" className="text-xs text-brand-charcoal/80 font-bold cursor-pointer font-cocon leading-none">
+                                    <Label htmlFor="pickup" className="text-xs text-brand-charcoal/80 font-bold cursor-pointer font-sans leading-none">
                                         🔄 Servicio de recojo (+30 Bs)
                                     </Label>
                                 </div>
@@ -859,13 +861,13 @@ export default function RentalCheckoutWizard({
                         {/* TOTAL BS */}
                         <div className="bg-brand-charcoal text-brand-yellow p-5 rounded-[2.2rem] text-center shadow-lg flex justify-between items-center px-8">
                             <span className="text-[10px] font-black uppercase tracking-widest font-maiandra">Monto Total Estimado:</span>
-                            <span className="text-2xl font-black font-cocon">Bs. {rawTotal.toFixed(2)}</span>
+                            <span className="text-2xl font-black font-sans">Bs. {rawTotal.toFixed(2)}</span>
                         </div>
 
                         {/* Step 3 Alquilar CTA */}
                         <Button 
                             onClick={handleAlquilarAhora}
-                            className="w-full bg-brand-yellow hover:bg-brand-yellow-light text-brand-black font-black rounded-2xl h-14 uppercase text-xs tracking-widest font-cocon cursor-pointer shadow-md shadow-brand-yellow/10"
+                            className="w-full bg-brand-yellow hover:bg-brand-yellow-light text-brand-black font-black rounded-2xl h-14 uppercase text-xs tracking-widest font-sans cursor-pointer shadow-md shadow-brand-yellow/10"
                         >
                             Alquilar ahora
                         </Button>
@@ -886,13 +888,13 @@ export default function RentalCheckoutWizard({
                         {/* Collapsible Order Summary */}
                         <div className="bg-white border border-gray-150 p-5 rounded-3xl space-y-3 shadow-sm">
                             <div className="flex justify-between items-center border-b border-gray-100 pb-2">
-                                <span className="text-xs font-bold text-brand-black font-cocon uppercase">Resumen de reserva</span>
-                                <span className="text-xs font-black text-brand-charcoal font-cocon">
+                                <span className="text-xs font-bold text-brand-black font-sans uppercase">Resumen de reserva</span>
+                                <span className="text-xs font-black text-brand-charcoal font-sans">
                                     Bs. {finalTotal.toFixed(2)}
                                 </span>
                             </div>
                             
-                            <div className="space-y-2 text-xs text-brand-charcoal/80 font-medium font-cocon">
+                            <div className="space-y-2 text-xs text-brand-charcoal/80 font-medium font-sans">
                                 {cart.map(item => {
                                     const price = calculatePrice(item.product.type || 'single', item.product.id, duration, 1);
                                     return (
@@ -960,7 +962,7 @@ export default function RentalCheckoutWizard({
                                             {paymentMethod === 'qr' && <div className="w-1.5 h-1.5 rounded-full bg-brand-black" />}
                                         </div>
                                         <CreditCard className="w-4 h-4 text-brand-charcoal/60" />
-                                        <span className="font-bold text-xs uppercase font-cocon text-brand-black">Pago con QR</span>
+                                        <span className="font-bold text-xs uppercase font-sans text-brand-black">Pago con QR</span>
                                     </div>
                                     {paymentMethod === 'qr' && (
                                         <motion.div 
@@ -972,8 +974,8 @@ export default function RentalCheckoutWizard({
                                                 Escanea el siguiente código QR BNB para completar tu pago:
                                             </p>
                                             <img 
-                                                src="/images/qr_pago.png" 
-                                                alt="BNB QR Pago" 
+                                                src={rentalSettings.qrCodeUrl} 
+                                                alt="QR Pago" 
                                                 className="w-48 h-auto object-contain rounded-xl border border-gray-100 shadow-sm" 
                                             />
                                             <p className="text-[9px] text-brand-black/40 text-center uppercase font-maiandra leading-relaxed">
@@ -997,19 +999,19 @@ export default function RentalCheckoutWizard({
                                             {paymentMethod === 'transfer' && <div className="w-1.5 h-1.5 rounded-full bg-brand-black" />}
                                         </div>
                                         <CreditCard className="w-4 h-4 text-brand-charcoal/60" />
-                                        <span className="font-bold text-xs uppercase font-cocon text-brand-black">Depósito / Transferencia Bancaria</span>
+                                        <span className="font-bold text-xs uppercase font-sans text-brand-black">Depósito / Transferencia Bancaria</span>
                                     </div>
                                     {paymentMethod === 'transfer' && (
                                         <motion.div 
                                             initial={{ opacity: 0, height: 0 }} 
                                             animate={{ opacity: 1, height: 'auto' }} 
-                                            className="pt-3 border-t border-gray-100 mt-3 text-xs text-brand-charcoal/80 space-y-2 font-cocon"
+                                            className="pt-3 border-t border-gray-100 mt-3 text-xs text-brand-charcoal/80 space-y-2 font-sans"
                                         >
                                             <div className="bg-gray-50 p-3.5 rounded-xl space-y-1.5 border border-gray-100 text-[11px] leading-relaxed">
-                                                <p className="font-black text-brand-black uppercase">Banco Nacional de Bolivia (BNB)</p>
-                                                <p>Caja de Ahorro Bs: <span className="font-black">3501818797</span></p>
-                                                <p>Titular: <span className="font-black">Litzy Jhoselyn Gutierrez Jarillo</span></p>
-                                                <p>CI: <span className="font-black">9399367 CB</span></p>
+                                                <p className="font-black text-brand-black uppercase">{rentalSettings.bankName}</p>
+                                                <p>Caja de Ahorro Bs: <span className="font-black">{rentalSettings.accountNumber}</span></p>
+                                                <p>Titular: <span className="font-black">{rentalSettings.accountOwner}</span></p>
+                                                <p>CI: <span className="font-black">{rentalSettings.ownerCI}</span></p>
                                             </div>
                                             <p className="text-[9px] text-brand-black/40 uppercase font-maiandra leading-relaxed">
                                                 *Reservamos tu pedido por 24 horas hasta validar la transferencia.*
@@ -1032,7 +1034,7 @@ export default function RentalCheckoutWizard({
                                             {paymentMethod === 'cash' && <div className="w-1.5 h-1.5 rounded-full bg-brand-black" />}
                                         </div>
                                         <CreditCard className="w-4 h-4 text-brand-charcoal/60" />
-                                        <span className="font-bold text-xs uppercase font-cocon text-brand-black">Pago en Efectivo</span>
+                                        <span className="font-bold text-xs uppercase font-sans text-brand-black">Pago en Efectivo</span>
                                     </div>
                                     {paymentMethod === 'cash' && (
                                         <motion.div 
@@ -1051,7 +1053,7 @@ export default function RentalCheckoutWizard({
                         <Button 
                             onClick={handleFinalizeOrder}
                             disabled={loading}
-                            className="w-full bg-brand-yellow hover:bg-brand-yellow-light text-brand-black font-black rounded-2xl h-14 uppercase text-xs tracking-widest font-cocon cursor-pointer shadow-md shadow-brand-yellow/10"
+                            className="w-full bg-brand-yellow hover:bg-brand-yellow-light text-brand-black font-black rounded-2xl h-14 uppercase text-xs tracking-widest font-sans cursor-pointer shadow-md shadow-brand-yellow/10"
                         >
                             {loading ? 'Procesando Reserva...' : 'FINALIZAR EL PEDIDO'}
                         </Button>
@@ -1079,13 +1081,13 @@ export default function RentalCheckoutWizard({
                                         ? 'Tu pedido está en estado reservado hasta realizar el pago' 
                                         : 'Tu pedido está confirmado'}
                                 </h2>
-                                <p className="text-xs font-semibold text-brand-charcoal/70 leading-relaxed font-cocon">
+                                <p className="text-xs font-semibold text-brand-charcoal/70 leading-relaxed font-sans">
                                     Recibirás un correo electrónico cuando tu pedido esté listo para ser entregado.
                                 </p>
                             </div>
 
                             {/* Order details Card */}
-                            <div className="bg-white/80 border border-brand-yellow/15 p-5 rounded-2xl space-y-4 text-xs font-cocon">
+                            <div className="bg-white/80 border border-brand-yellow/15 p-5 rounded-2xl space-y-4 text-xs font-sans">
                                 <p className="font-black text-brand-black text-sm border-b border-gray-100 pb-1.5">Detalles del pedido</p>
                                 
                                 <div className="space-y-3.5">
@@ -1132,7 +1134,7 @@ export default function RentalCheckoutWizard({
                                     setStep(1);
                                     onClose();
                                 }}
-                                className="w-full bg-brand-yellow hover:bg-brand-yellow-light text-brand-black font-black rounded-2xl h-14 uppercase text-xs tracking-widest font-cocon cursor-pointer shadow-md shadow-brand-yellow/10"
+                                className="w-full bg-brand-yellow hover:bg-brand-yellow-light text-brand-black font-black rounded-2xl h-14 uppercase text-xs tracking-widest font-sans cursor-pointer shadow-md shadow-brand-yellow/10"
                             >
                                 SEGUIR COMPRANDO
                             </Button>

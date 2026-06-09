@@ -208,10 +208,6 @@ export default function CustomersPage() {
                             <Label className="text-white/40 font-bold uppercase tracking-widest text-[10px]">Correo Electrónico</Label>
                             <Input type="email" value={current.email || ''} onChange={e => setCurrent({ ...current, email: e.target.value })} className="h-12 bg-black/40 border-white/10 rounded-xl focus:ring-brand-yellow/50 text-white" placeholder="juan@gmail.com" />
                         </div>
-                        <div className="space-y-2">
-                            <Label className="text-white/40 font-bold uppercase tracking-widest text-[10px]">Contraseña</Label>
-                            <Input type="text" value={current.password || ''} onChange={e => setCurrent({ ...current, password: e.target.value })} className="h-12 bg-black/40 border-white/10 rounded-xl focus:ring-brand-yellow/50 text-white" placeholder="Contraseña de cliente" />
-                        </div>
                         <DialogFooter className="pt-6 border-t border-white/5 flex gap-3">
                             <Button type="button" variant="ghost" onClick={() => setIsModalOpen(false)} className="h-12 px-6 rounded-xl hover:bg-white/5 font-bold">Cancelar</Button>
                             <Button type="submit" className="h-12 px-8 bg-brand-yellow text-brand-black hover:bg-white font-black rounded-full shadow-lg transition-all flex-1">

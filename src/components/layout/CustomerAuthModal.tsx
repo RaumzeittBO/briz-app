@@ -17,6 +17,57 @@ interface CustomerAuthModalProps {
     onSuccess?: () => void;
 }
 
+const COUNTRY_PREFIXES = [
+    { code: '+591', flag: '🇧🇴', country: 'Bolivia' },
+    { code: '+54', flag: '🇦🇷', country: 'Argentina' },
+    { code: '+33', flag: '🇫🇷', country: 'Francia' },
+    { code: '+55', flag: '🇧🇷', country: 'Brasil' },
+    { code: '+51', flag: '🇵🇪', country: 'Perú' },
+    { code: '+56', flag: '🇨🇱', country: 'Chile' },
+    { code: '+1', flag: '🇺🇸', country: 'Estados Unidos' },
+    { code: '+34', flag: '🇪🇸', country: 'España' },
+    { code: '+49', flag: '🇩🇪', country: 'Alemania' },
+    { code: '+57', flag: '🇨🇴', country: 'Colombia' },
+    { code: '+44', flag: '🇬🇧', country: 'Reino Unido' },
+    { code: '+39', flag: '🇮🇹', country: 'Italia' },
+    { code: '+52', flag: '🇲🇽', country: 'México' },
+    { code: '+595', flag: '🇵🇾', country: 'Paraguay' },
+    { code: '+598', flag: '🇺🇾', country: 'Uruguay' },
+    { code: '+593', flag: '🇪🇨', country: 'Ecuador' },
+    { code: '+1', flag: '🇨🇦', country: 'Canadá' },
+    { code: '+41', flag: '🇨🇭', country: 'Suiza' },
+    { code: '+31', flag: '🇳🇱', country: 'Países Bajos' },
+    { code: '+81', flag: '🇯🇵', country: 'Japón' },
+    { code: '+86', flag: '🇨🇳', country: 'China' },
+    { code: '+61', flag: '🇦🇺', country: 'Australia' },
+    { code: '+58', flag: '🇻🇪', country: 'Venezuela' }
+];
+
+const POPULAR_COUNTRIES = [
+    "Bolivia",
+    "Argentina",
+    "Francia",
+    "Brasil",
+    "Perú",
+    "Chile",
+    "Estados Unidos",
+    "España",
+    "Alemania",
+    "Colombia",
+    "Reino Unido",
+    "Italia",
+    "Paraguay",
+    "Uruguay",
+    "Ecuador",
+    "Canadá",
+    "Suiza",
+    "Países Bajos",
+    "Japón",
+    "China",
+    "Australia",
+    "Venezuela"
+];
+
 const COUNTRIES_LIST = [
     "Bolivia",
     "Afganistán", "Albania", "Alemania", "Andorra", "Angola", "Antigua y Barbuda", 
@@ -51,10 +102,10 @@ const COUNTRIES_LIST = [
 ];
 
 export default function CustomerAuthModal({ isOpen, onClose, onSuccess }: CustomerAuthModalProps) {
-    const { loginCustomer, registerCustomer } = useStore();
+    const { loginCustomer, registerCustomer, customers, updateCustomer } = useStore();
     
-    // Auth Mode: 'login' | 'register'
-    const [mode, setMode] = useState<'login' | 'register'>('login');
+    // Auth Mode: 'login' | 'register' | 'forgot' | 'reset'
+    const [mode, setMode] = useState<'login' | 'register' | 'forgot' | 'reset'>('login');
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [successMessage, setSuccessMessage] = useState<string | null>(null);
@@ -67,11 +118,20 @@ export default function CustomerAuthModal({ isOpen, onClose, onSuccess }: Custom
     // Register-specific fields
     const [name, setName] = useState('');
     const [phone, setPhone] = useState('');
+    const [countryPrefix, setCountryPrefix] = useState('+591');
     const [ci, setCi] = useState('');
     const [nationality, setNationality] = useState('Bolivia');
     const [department, setDepartment] = useState('Cochabamba');
     const [referral, setReferral] = useState('Google');
     const [confirmPassword, setConfirmPassword] = useState('');
+
+    // Recovery states
+    const [recoveryEmail, setRecoveryEmail] = useState('');
+    const [recoveryPhone, setRecoveryPhone] = useState('');
+    const [recoveryPrefix, setRecoveryPrefix] = useState('+591');
+    const [newPassword, setNewPassword] = useState('');
+    const [confirmNewPassword, setConfirmNewPassword] = useState('');
+    const [matchedCustomerId, setMatchedCustomerId] = useState<string | null>(null);
 
     // Selfie Capture states
     const [cameraActive, setCameraActive] = useState(false);
@@ -82,6 +142,7 @@ export default function CustomerAuthModal({ isOpen, onClose, onSuccess }: Custom
     const videoElementRef = useRef<HTMLVideoElement | null>(null);
     const canvasRef = useRef<HTMLCanvasElement | null>(null);
     const selfieInputRef = useRef<HTMLInputElement | null>(null);
+    const docInputRef = useRef<HTMLInputElement | null>(null);
 
     // Callback ref to bind stream and play video when the element mounts
     const videoRef = useCallback((node: HTMLVideoElement | null) => {
@@ -96,7 +157,6 @@ export default function CustomerAuthModal({ isOpen, onClose, onSuccess }: Custom
 
     // ID Document upload states
     const [docFile, setDocFile] = useState<File | null>(null);
-    const docInputRef = useRef<HTMLInputElement | null>(null);
 
     // Reset fields on modal toggle or close
     useEffect(() => {
@@ -112,6 +172,12 @@ export default function CustomerAuthModal({ isOpen, onClose, onSuccess }: Custom
             setSelfieBlob(null);
             setDocFile(null);
             setLoading(false);
+            setMode('login');
+            setRecoveryEmail('');
+            setRecoveryPhone('');
+            setNewPassword('');
+            setConfirmNewPassword('');
+            setMatchedCustomerId(null);
         }
     }, [isOpen, stream]);
 
@@ -154,7 +220,6 @@ export default function CustomerAuthModal({ isOpen, onClose, onSuccess }: Custom
             const video = videoElementRef.current;
             const canvas = canvasRef.current;
             
-            // Draw a square frame to match preview
             const videoWidth = video.videoWidth || video.clientWidth || 640;
             const videoHeight = video.videoHeight || video.clientHeight || 480;
             const size = Math.min(videoWidth, videoHeight);
@@ -167,19 +232,16 @@ export default function CustomerAuthModal({ isOpen, onClose, onSuccess }: Custom
                 const sx = (videoWidth - size) / 2;
                 const sy = (videoHeight - size) / 2;
                 
-                // Mirror horizontally to match front video preview
                 ctx.translate(size, 0);
                 ctx.scale(-1, 1);
                 
                 ctx.drawImage(video, sx, sy, size, size, 0, 0, size, size);
                 
-                // Reset transform
                 ctx.setTransform(1, 0, 0, 1, 0, 0);
                 
                 const dataUrl = canvas.toDataURL('image/jpeg', 0.95);
                 setCapturedSelfie(dataUrl);
                 
-                // Convert to Blob for Firebase upload
                 canvas.toBlob((blob) => {
                     if (blob) setSelfieBlob(blob);
                 }, 'image/jpeg', 0.95);
@@ -238,7 +300,6 @@ export default function CustomerAuthModal({ isOpen, onClose, onSuccess }: Custom
         e.preventDefault();
         setError(null);
         
-        // Validations
         if (password !== confirmPassword) {
             setError("Las contraseñas no coinciden.");
             return;
@@ -264,7 +325,7 @@ export default function CustomerAuthModal({ isOpen, onClose, onSuccess }: Custom
         try {
             const customerData = {
                 name,
-                phone: phone.startsWith('+591') ? phone : `+591${phone}`,
+                phone: `${countryPrefix} ${phone}`,
                 ci,
                 email,
                 password,
@@ -285,6 +346,62 @@ export default function CustomerAuthModal({ isOpen, onClose, onSuccess }: Custom
             setError(err.message || "No se pudo registrar tu usuario. Verifica si el correo ya está registrado.");
         } finally {
             setLoading(false);
+        }
+    };
+
+    const handleVerifyRecovery = (e: React.FormEvent) => {
+        e.preventDefault();
+        setError(null);
+        setSuccessMessage(null);
+        
+        const cleanSearchPhone = recoveryPhone.replace(/\D/g, '').slice(-8);
+        const match = customers.find(c => 
+            c.email?.toLowerCase().trim() === recoveryEmail.toLowerCase().trim() && 
+            c.phone?.replace(/\D/g, '').slice(-8) === cleanSearchPhone
+        );
+
+        if (match) {
+            setMatchedCustomerId(match.id);
+            setMode('reset');
+        } else {
+            setError("No se encontró ningún cliente con ese correo y número de WhatsApp registrados.");
+        }
+    };
+
+    const handleResetPasswordSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setError(null);
+        
+        if (newPassword.length < 6) {
+            setError("La nueva contraseña debe tener al menos 6 caracteres.");
+            return;
+        }
+        if (newPassword !== confirmNewPassword) {
+            setError("Las contraseñas no coinciden.");
+            return;
+        }
+        
+        if (matchedCustomerId) {
+            setLoading(true);
+            try {
+                await updateCustomer(matchedCustomerId, { password: newPassword });
+                setSuccessMessage("¡Contraseña restablecida con éxito! Ya puedes iniciar sesión.");
+                setEmail(recoveryEmail);
+                setTimeout(() => {
+                    setMode('login');
+                    setRecoveryEmail('');
+                    setRecoveryPhone('');
+                    setNewPassword('');
+                    setConfirmNewPassword('');
+                    setMatchedCustomerId(null);
+                    setSuccessMessage(null);
+                }, 2000);
+            } catch (err) {
+                console.error(err);
+                setError("Error al actualizar la contraseña.");
+            } finally {
+                setLoading(false);
+            }
         }
     };
 
@@ -309,10 +426,24 @@ export default function CustomerAuthModal({ isOpen, onClose, onSuccess }: Custom
                 <div className="p-8 pb-5 border-b border-brand-charcoal/5 flex flex-col items-center justify-center bg-brand-yellow/10">
                     <img src="/logo_bicicleta_principal.png" alt="Briz logo" className="h-14 w-auto object-contain mb-3" />
                     <DialogTitle className="text-2xl font-tan uppercase tracking-wide text-brand-charcoal">
-                        {mode === 'login' ? 'INICIAR SESIÓN' : 'REGÍSTRATE EN BRIZ'}
+                        {mode === 'login' 
+                            ? 'INICIAR SESIÓN' 
+                            : mode === 'register' 
+                            ? 'REGÍSTRATE EN BRIZ' 
+                            : mode === 'forgot'
+                            ? 'RECUPERAR CONTRASEÑA'
+                            : 'RESTABLECER CONTRASEÑA'
+                        }
                     </DialogTitle>
                     <p className="text-[11px] font-maiandra text-brand-charcoal/60 uppercase tracking-widest mt-1">
-                        {mode === 'login' ? 'Ingresa para rentar tu bicicleta' : 'Sigue los pasos y regístrate en nuestro sistema'}
+                        {mode === 'login' 
+                            ? 'Ingresa para rentar tu bicicleta' 
+                            : mode === 'register'
+                            ? 'Sigue los pasos y regístrate en nuestro sistema'
+                            : mode === 'forgot'
+                            ? 'Ingresa tus datos para validar tu perfil'
+                            : 'Establece tu nueva contraseña de acceso'
+                        }
                     </p>
                 </div>
 
@@ -356,7 +487,7 @@ export default function CustomerAuthModal({ isOpen, onClose, onSuccess }: Custom
                                         value={email}
                                         onChange={e => setEmail(e.target.value)}
                                         placeholder="ejemplo@briz.com" 
-                                        className="pl-12 bg-white border border-brand-charcoal/15 h-12 text-sm text-brand-black font-bold rounded-xl focus-visible:ring-brand-yellow focus-visible:border-brand-yellow font-cocon shadow-sm"
+                                        className="pl-12 bg-white border border-brand-charcoal/15 h-12 text-sm text-brand-black font-bold rounded-xl focus-visible:ring-brand-yellow focus-visible:border-brand-yellow font-sans shadow-sm"
                                     />
                                 </div>
                             </div>
@@ -371,25 +502,34 @@ export default function CustomerAuthModal({ isOpen, onClose, onSuccess }: Custom
                                         value={password}
                                         onChange={e => setPassword(e.target.value)}
                                         placeholder="••••••••" 
-                                        className="pl-12 bg-white border border-brand-charcoal/15 h-12 text-sm text-brand-black font-bold rounded-xl focus-visible:ring-brand-yellow focus-visible:border-brand-yellow font-cocon shadow-sm"
+                                        className="pl-12 bg-white border border-brand-charcoal/15 h-12 text-sm text-brand-black font-bold rounded-xl focus-visible:ring-brand-yellow focus-visible:border-brand-yellow font-sans shadow-sm"
                                     />
                                 </div>
                             </div>
 
-                            <div className="flex items-center space-x-2">
-                                <Checkbox 
-                                    id="remember" 
-                                    checked={remember} 
-                                    onCheckedChange={(v) => setRemember(Boolean(v))}
-                                    className="border-brand-charcoal/20 data-[state=checked]:bg-brand-yellow data-[state=checked]:border-brand-yellow data-[state=checked]:text-brand-black"
-                                />
-                                <Label htmlFor="remember" className="text-xs text-brand-charcoal/70 font-medium cursor-pointer font-maiandra">Recordar usuario para futuras visitas</Label>
+                            <div className="flex items-center justify-between text-xs font-medium font-maiandra text-brand-charcoal/70">
+                                <div className="flex items-center space-x-2">
+                                    <Checkbox 
+                                        id="remember" 
+                                        checked={remember} 
+                                        onCheckedChange={(v) => setRemember(Boolean(v))}
+                                        className="border-brand-charcoal/20 data-[state=checked]:bg-brand-yellow data-[state=checked]:border-brand-yellow data-[state=checked]:text-brand-black"
+                                    />
+                                    <Label htmlFor="remember" className="cursor-pointer">Recordar usuario</Label>
+                                </div>
+                                <button 
+                                    type="button" 
+                                    onClick={() => { setMode('forgot'); setError(null); setSuccessMessage(null); }}
+                                    className="text-brand-yellow hover:underline font-bold"
+                                >
+                                    ¿Olvidaste tu contraseña?
+                                </button>
                             </div>
 
                             <Button 
                                 type="submit" 
                                 disabled={loading}
-                                className="w-full bg-brand-yellow text-brand-black hover:bg-brand-yellow/90 font-black rounded-xl h-12 uppercase text-xs tracking-widest transition-all mt-4 font-cocon shadow-lg shadow-brand-yellow/10 cursor-pointer"
+                                className="w-full bg-brand-yellow text-brand-black hover:bg-brand-yellow/90 font-black rounded-xl h-12 uppercase text-xs tracking-widest transition-all mt-4 font-sans shadow-lg shadow-brand-yellow/10 cursor-pointer"
                             >
                                 {loading ? 'Iniciando sesión...' : 'INICIAR SESIÓN'}
                             </Button>
@@ -399,13 +539,13 @@ export default function CustomerAuthModal({ isOpen, onClose, onSuccess }: Custom
                                 <Button 
                                     type="button" 
                                     onClick={toggleMode} 
-                                    className="mt-2 bg-brand-charcoal/5 hover:bg-brand-yellow hover:text-brand-black text-brand-charcoal rounded-xl h-11 text-xs font-black uppercase tracking-widest px-6 w-full sm:w-auto font-cocon transition-all border border-transparent cursor-pointer"
+                                    className="mt-2 bg-brand-charcoal/5 hover:bg-brand-yellow hover:text-brand-black text-brand-charcoal rounded-xl h-11 text-xs font-black uppercase tracking-widest px-6 w-full sm:w-auto font-sans transition-all border border-transparent cursor-pointer"
                                 >
                                     USUARIO NUEVO / REGISTRARSE
                                 </Button>
                             </div>
                         </form>
-                    ) : (
+                    ) : mode === 'register' ? (
                         <form onSubmit={handleRegisterSubmit} className="space-y-6">
                             
                             {/* CAMERA SELFIE STEP */}
@@ -444,14 +584,14 @@ export default function CustomerAuthModal({ isOpen, onClose, onSuccess }: Custom
                                 <div className="flex gap-2">
                                     {!cameraActive && !capturedSelfie && (
                                         <div className="flex flex-col sm:flex-row gap-2">
-                                            <Button type="button" onClick={startCamera} size="sm" className="bg-brand-yellow text-brand-black hover:bg-brand-yellow/85 font-black text-[10px] px-4 py-2 rounded-lg font-cocon cursor-pointer">
+                                            <Button type="button" onClick={startCamera} size="sm" className="bg-brand-yellow text-brand-black hover:bg-brand-yellow/85 font-black text-[10px] px-4 py-2 rounded-lg font-sans cursor-pointer">
                                                 <Camera className="w-3.5 h-3.5 mr-1" /> Autofoto (Cámara)
                                             </Button>
                                             <Button 
                                                 type="button" 
                                                 onClick={() => selfieInputRef.current?.click()} 
                                                 size="sm" 
-                                                className="bg-brand-charcoal hover:bg-brand-yellow hover:text-brand-black text-brand-yellow font-black text-[10px] px-4 py-2 rounded-lg font-cocon cursor-pointer border border-transparent"
+                                                className="bg-brand-charcoal hover:bg-brand-yellow hover:text-brand-black text-brand-yellow font-black text-[10px] px-4 py-2 rounded-lg font-sans cursor-pointer border border-transparent"
                                             >
                                                 <Upload className="w-3.5 h-3.5 mr-1" /> Sube tu Foto
                                             </Button>
@@ -465,12 +605,12 @@ export default function CustomerAuthModal({ isOpen, onClose, onSuccess }: Custom
                                         </div>
                                     )}
                                     {cameraActive && (
-                                        <Button type="button" onClick={capturePhoto} size="sm" className="bg-green-600 hover:bg-green-700 text-white font-black text-[10px] px-4 py-2 rounded-lg font-cocon cursor-pointer">
+                                        <Button type="button" onClick={capturePhoto} size="sm" className="bg-green-600 hover:bg-green-700 text-white font-black text-[10px] px-4 py-2 rounded-lg font-sans cursor-pointer">
                                             ✓ Tomar Autofoto
                                         </Button>
                                     )}
                                     {(capturedSelfie || cameraActive) && (
-                                        <Button type="button" onClick={() => { stopCamera(); setCapturedSelfie(null); setSelfieBlob(null); }} size="sm" className="bg-red-500 hover:bg-red-600 text-white font-black text-[10px] px-4 py-2 rounded-lg font-cocon cursor-pointer">
+                                        <Button type="button" onClick={() => { stopCamera(); setCapturedSelfie(null); setSelfieBlob(null); }} size="sm" className="bg-red-500 hover:bg-red-600 text-white font-black text-[10px] px-4 py-2 rounded-lg font-sans cursor-pointer">
                                             Reiniciar
                                         </Button>
                                     )}
@@ -515,16 +655,24 @@ export default function CustomerAuthModal({ isOpen, onClose, onSuccess }: Custom
                                         <Label className="text-[10px] text-brand-charcoal/60 font-bold uppercase tracking-widest font-maiandra">Nombre Completo</Label>
                                         <div className="relative">
                                             <User className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-brand-charcoal/30" />
-                                            <Input required value={name} onChange={e=>setName(e.target.value)} placeholder="Juan Pérez" className="pl-12 bg-white border border-brand-charcoal/15 h-12 text-sm text-brand-black font-bold rounded-xl focus-visible:ring-brand-yellow focus-visible:border-brand-yellow font-cocon shadow-sm" />
+                                            <Input required value={name} onChange={e=>setName(e.target.value)} placeholder="Juan Pérez" className="pl-12 bg-white border border-brand-charcoal/15 h-12 text-sm text-brand-black font-bold rounded-xl focus-visible:ring-brand-yellow focus-visible:border-brand-yellow font-sans shadow-sm" />
                                         </div>
                                     </div>
                                     <div className="space-y-2">
                                         <Label className="text-[10px] text-brand-charcoal/60 font-bold uppercase tracking-widest font-maiandra">Número de WhatsApp</Label>
                                         <div className="relative flex items-center">
-                                            <div className="absolute left-4 flex items-center gap-1 text-brand-charcoal/40 font-black text-xs font-cocon pointer-events-none select-none">
-                                                🇧🇴 +591
-                                            </div>
-                                            <Input required type="tel" value={phone} onChange={e=>setPhone(e.target.value.replace(/\D/g, ''))} placeholder="77889900" className="pl-16 bg-white border border-brand-charcoal/15 h-12 text-sm text-brand-black font-bold rounded-xl focus-visible:ring-brand-yellow focus-visible:border-brand-yellow font-cocon shadow-sm" />
+                                            <select 
+                                                value={countryPrefix} 
+                                                onChange={e => setCountryPrefix(e.target.value)} 
+                                                className="absolute left-2 bg-transparent text-brand-charcoal/70 font-black text-xs font-sans border-0 focus:outline-none cursor-pointer z-10 pr-1 h-full"
+                                            >
+                                                {COUNTRY_PREFIXES.map(p => (
+                                                    <option key={p.code} value={p.code} className="bg-white text-brand-black">
+                                                        {p.flag} {p.code}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                            <Input required type="tel" value={phone} onChange={e=>setPhone(e.target.value.replace(/\D/g, ''))} placeholder="77889900" className="pl-24 bg-white border border-brand-charcoal/15 h-12 text-sm text-brand-black font-bold rounded-xl focus-visible:ring-brand-yellow focus-visible:border-brand-yellow font-sans shadow-sm" />
                                         </div>
                                     </div>
                                 </div>
@@ -534,14 +682,14 @@ export default function CustomerAuthModal({ isOpen, onClose, onSuccess }: Custom
                                         <Label className="text-[10px] text-brand-charcoal/60 font-bold uppercase tracking-widest font-maiandra">CI / Pasaporte / Documento</Label>
                                         <div className="relative">
                                             <ShieldCheck className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-brand-charcoal/30" />
-                                            <Input required value={ci} onChange={e=>setCi(e.target.value)} placeholder="1234567 LP" className="pl-12 bg-white border border-brand-charcoal/15 h-12 text-sm text-brand-black font-bold rounded-xl focus-visible:ring-brand-yellow focus-visible:border-brand-yellow font-cocon shadow-sm" />
+                                            <Input required value={ci} onChange={e=>setCi(e.target.value)} placeholder="1234567 LP" className="pl-12 bg-white border border-brand-charcoal/15 h-12 text-sm text-brand-black font-bold rounded-xl focus-visible:ring-brand-yellow focus-visible:border-brand-yellow font-sans shadow-sm" />
                                         </div>
                                     </div>
                                     <div className="space-y-2">
                                         <Label className="text-[10px] text-brand-charcoal/60 font-bold uppercase tracking-widest font-maiandra">Correo Electrónico</Label>
                                         <div className="relative">
                                             <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-brand-charcoal/30" />
-                                            <Input required type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="cliente@briz.com" className="pl-12 bg-white border border-brand-charcoal/15 h-12 text-sm text-brand-black font-bold rounded-xl focus-visible:ring-brand-yellow focus-visible:border-brand-yellow font-cocon shadow-sm" />
+                                            <Input required type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="cliente@briz.com" className="pl-12 bg-white border border-brand-charcoal/15 h-12 text-sm text-brand-black font-bold rounded-xl focus-visible:ring-brand-yellow focus-visible:border-brand-yellow font-sans shadow-sm" />
                                         </div>
                                     </div>
                                 </div>
@@ -555,8 +703,12 @@ export default function CustomerAuthModal({ isOpen, onClose, onSuccess }: Custom
                                                 required 
                                                 value={nationality} 
                                                 onChange={e=>setNationality(e.target.value)} 
-                                                className="w-full pl-12 pr-10 bg-white border border-brand-charcoal/15 h-12 text-sm text-brand-black font-bold rounded-xl focus:border-brand-yellow focus:outline-none font-cocon appearance-none shadow-sm"
+                                                className="w-full pl-12 pr-10 bg-white border border-brand-charcoal/15 h-12 text-sm text-brand-black font-bold rounded-xl focus:border-brand-yellow focus:outline-none font-sans appearance-none shadow-sm"
                                             >
+                                                {POPULAR_COUNTRIES.map(country => (
+                                                    <option key={`pop-${country}`} value={country}>{country}</option>
+                                                ))}
+                                                <option disabled>──────────────</option>
                                                 {COUNTRIES_LIST.map(country => (
                                                     <option key={country} value={country}>{country}</option>
                                                 ))}
@@ -573,7 +725,7 @@ export default function CustomerAuthModal({ isOpen, onClose, onSuccess }: Custom
                                                 <select 
                                                     value={department} 
                                                     onChange={e => setDepartment(e.target.value)} 
-                                                    className="w-full pl-12 pr-10 bg-white border border-brand-charcoal/15 h-12 text-sm text-brand-black font-bold rounded-xl focus:border-brand-yellow focus:outline-none font-cocon appearance-none shadow-sm"
+                                                    className="w-full pl-12 pr-10 bg-white border border-brand-charcoal/15 h-12 text-sm text-brand-black font-bold rounded-xl focus:border-brand-yellow focus:outline-none font-sans appearance-none shadow-sm"
                                                 >
                                                     {['Cochabamba', 'La Paz', 'Santa Cruz', 'Oruro', 'Potosí', 'Tarija', 'Chuquisaca', 'Beni', 'Pando'].map(d => (
                                                         <option key={d} value={d} className="bg-white text-brand-black">{d}</option>
@@ -590,14 +742,14 @@ export default function CustomerAuthModal({ isOpen, onClose, onSuccess }: Custom
                                         <Label className="text-[10px] text-brand-charcoal/60 font-bold uppercase tracking-widest font-maiandra">Contraseña</Label>
                                         <div className="relative">
                                             <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-brand-charcoal/30" />
-                                            <Input required type="password" value={password} onChange={e=>setPassword(e.target.value)} placeholder="Min. 6 caracteres" className="pl-12 bg-white border border-brand-charcoal/15 h-12 text-sm text-brand-black font-bold rounded-xl focus-visible:ring-brand-yellow focus-visible:border-brand-yellow font-cocon shadow-sm" />
+                                            <Input required type="password" value={password} onChange={e=>setPassword(e.target.value)} placeholder="Min. 6 caracteres" className="pl-12 bg-white border border-brand-charcoal/15 h-12 text-sm text-brand-black font-bold rounded-xl focus-visible:ring-brand-yellow focus-visible:border-brand-yellow font-sans shadow-sm" />
                                         </div>
                                     </div>
                                     <div className="space-y-2">
                                         <Label className="text-[10px] text-brand-charcoal/60 font-bold uppercase tracking-widest font-maiandra">Confirmar Contraseña</Label>
                                         <div className="relative">
                                             <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-brand-charcoal/30" />
-                                            <Input required type="password" value={confirmPassword} onChange={e=>setConfirmPassword(e.target.value)} placeholder="Repite tu contraseña" className="pl-12 bg-white border border-brand-charcoal/15 h-12 text-sm text-brand-black font-bold rounded-xl focus-visible:ring-brand-yellow focus-visible:border-brand-yellow font-cocon shadow-sm" />
+                                            <Input required type="password" value={confirmPassword} onChange={e=>setConfirmPassword(e.target.value)} placeholder="Repite tu contraseña" className="pl-12 bg-white border border-brand-charcoal/15 h-12 text-sm text-brand-black font-bold rounded-xl focus-visible:ring-brand-yellow focus-visible:border-brand-yellow font-sans shadow-sm" />
                                         </div>
                                     </div>
                                 </div>
@@ -609,7 +761,7 @@ export default function CustomerAuthModal({ isOpen, onClose, onSuccess }: Custom
                                         <select 
                                             value={referral} 
                                             onChange={e => setReferral(e.target.value)} 
-                                            className="w-full pl-12 pr-10 bg-white border border-brand-charcoal/15 h-12 text-sm text-brand-black font-bold rounded-xl focus:border-brand-yellow focus:outline-none font-cocon appearance-none shadow-sm"
+                                            className="w-full pl-12 pr-10 bg-white border border-brand-charcoal/15 h-12 text-sm text-brand-black font-bold rounded-xl focus:border-brand-yellow focus:outline-none font-sans appearance-none shadow-sm"
                                         >
                                             {['Google', 'Referencia en la web', 'TikTok', 'Instagram', 'Facebook', 'Por referencia de algún (a) conocido (a)', 'Otro'].map(r => (
                                                 <option key={r} value={r} className="bg-white text-brand-black">{r}</option>
@@ -623,7 +775,7 @@ export default function CustomerAuthModal({ isOpen, onClose, onSuccess }: Custom
                             <Button 
                                 type="submit" 
                                 disabled={loading}
-                                className="w-full bg-brand-yellow text-brand-black hover:bg-brand-yellow/90 font-black rounded-xl h-12 uppercase text-xs tracking-widest transition-all mt-4 font-cocon shadow-lg shadow-brand-yellow/10 cursor-pointer"
+                                className="w-full bg-brand-yellow text-brand-black hover:bg-brand-yellow/90 font-black rounded-xl h-12 uppercase text-xs tracking-widest transition-all mt-4 font-sans shadow-lg shadow-brand-yellow/10 cursor-pointer"
                             >
                                 {loading ? 'Creando cuenta y subiendo archivos...' : 'CREAR MI CUENTA'}
                             </Button>
@@ -633,11 +785,111 @@ export default function CustomerAuthModal({ isOpen, onClose, onSuccess }: Custom
                                 <Button 
                                     type="button" 
                                     onClick={toggleMode} 
-                                    className="mt-2 bg-brand-charcoal/5 hover:bg-brand-yellow hover:text-brand-black text-brand-charcoal rounded-xl h-11 text-xs font-black uppercase tracking-widest px-6 w-full sm:w-auto font-cocon transition-all border border-transparent cursor-pointer"
+                                    className="mt-2 bg-brand-charcoal/5 hover:bg-brand-yellow hover:text-brand-black text-brand-charcoal rounded-xl h-11 text-xs font-black uppercase tracking-widest px-6 w-full sm:w-auto font-sans transition-all border border-transparent cursor-pointer"
                                 >
                                     VOLVER A INICIAR SESIÓN
                                 </Button>
                             </div>
+                        </form>
+                    ) : mode === 'forgot' ? (
+                        <form onSubmit={handleVerifyRecovery} className="space-y-5">
+                            <p className="text-xs text-brand-charcoal/70 font-maiandra leading-relaxed">
+                                Ingresa el correo electrónico y el número de WhatsApp vinculados a tu cuenta para verificar tu perfil.
+                            </p>
+                            <div className="space-y-2">
+                                <Label className="text-[10px] text-brand-charcoal/60 font-bold uppercase tracking-widest font-maiandra">Correo Electrónico</Label>
+                                <div className="relative">
+                                    <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-brand-charcoal/30" />
+                                    <Input 
+                                        type="email" 
+                                        required 
+                                        value={recoveryEmail}
+                                        onChange={e => setRecoveryEmail(e.target.value)}
+                                        placeholder="ejemplo@briz.com" 
+                                        className="pl-12 bg-white border border-brand-charcoal/15 h-12 text-sm text-brand-black font-bold rounded-xl focus-visible:ring-brand-yellow focus-visible:border-brand-yellow font-sans shadow-sm"
+                                    />
+                                </div>
+                            </div>
+                            <div className="space-y-2">
+                                <Label className="text-[10px] text-brand-charcoal/60 font-bold uppercase tracking-widest font-maiandra">Número de WhatsApp</Label>
+                                <div className="relative flex items-center">
+                                    <select 
+                                        value={recoveryPrefix} 
+                                        onChange={e => setRecoveryPrefix(e.target.value)} 
+                                        className="absolute left-2 bg-transparent text-brand-charcoal/70 font-black text-xs font-sans border-0 focus:outline-none cursor-pointer z-10 pr-1 h-full"
+                                    >
+                                        {COUNTRY_PREFIXES.map(p => (
+                                            <option key={p.code} value={p.code} className="bg-white text-brand-black">
+                                                {p.flag} {p.code}
+                                            </option>
+                                        ))}
+                                    </select>
+                                    <Input 
+                                        required 
+                                        type="tel" 
+                                        value={recoveryPhone} 
+                                        onChange={e => setRecoveryPhone(e.target.value.replace(/\D/g, ''))} 
+                                        placeholder="77889900" 
+                                        className="pl-24 bg-white border border-brand-charcoal/15 h-12 text-sm text-brand-black font-bold rounded-xl focus-visible:ring-brand-yellow focus-visible:border-brand-yellow font-sans shadow-sm" 
+                                    />
+                                </div>
+                            </div>
+                            <Button 
+                                type="submit" 
+                                className="w-full bg-brand-yellow text-brand-black hover:bg-brand-yellow/90 font-black rounded-xl h-12 uppercase text-xs tracking-widest transition-all mt-4 font-sans shadow-lg cursor-pointer"
+                            >
+                                VERIFICAR DATOS
+                            </Button>
+                            <div className="text-center pt-3 border-t border-brand-charcoal/5 mt-4">
+                                <Button 
+                                    type="button" 
+                                    onClick={() => setMode('login')} 
+                                    className="bg-brand-charcoal/5 hover:bg-brand-yellow hover:text-brand-black text-brand-charcoal rounded-xl h-11 text-xs font-black uppercase tracking-widest px-6 w-full sm:w-auto font-sans transition-all border border-transparent cursor-pointer"
+                                >
+                                    VOLVER AL LOGIN
+                                </Button>
+                            </div>
+                        </form>
+                    ) : (
+                        <form onSubmit={handleResetPasswordSubmit} className="space-y-5">
+                            <p className="text-xs text-brand-charcoal/70 font-maiandra leading-relaxed">
+                                Datos verificados con éxito. Ingresa tu nueva contraseña a continuación.
+                            </p>
+                            <div className="space-y-2">
+                                <Label className="text-[10px] text-brand-charcoal/60 font-bold uppercase tracking-widest font-maiandra">Nueva Contraseña</Label>
+                                <div className="relative">
+                                    <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-brand-charcoal/30" />
+                                    <Input 
+                                        type="password" 
+                                        required 
+                                        value={newPassword}
+                                        onChange={e => setNewPassword(e.target.value)}
+                                        placeholder="Min. 6 caracteres" 
+                                        className="pl-12 bg-white border border-brand-charcoal/15 h-12 text-sm text-brand-black font-bold rounded-xl focus-visible:ring-brand-yellow focus-visible:border-brand-yellow font-sans shadow-sm"
+                                    />
+                                </div>
+                            </div>
+                            <div className="space-y-2">
+                                <Label className="text-[10px] text-brand-charcoal/60 font-bold uppercase tracking-widest font-maiandra">Confirmar Nueva Contraseña</Label>
+                                <div className="relative">
+                                    <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-brand-charcoal/30" />
+                                    <Input 
+                                        type="password" 
+                                        required 
+                                        value={confirmNewPassword}
+                                        onChange={e => setConfirmNewPassword(e.target.value)}
+                                        placeholder="Repite tu contraseña" 
+                                        className="pl-12 bg-white border border-brand-charcoal/15 h-12 text-sm text-brand-black font-bold rounded-xl focus-visible:ring-brand-yellow focus-visible:border-brand-yellow font-sans shadow-sm"
+                                    />
+                                </div>
+                            </div>
+                            <Button 
+                                type="submit" 
+                                disabled={loading}
+                                className="w-full bg-brand-yellow text-brand-black hover:bg-brand-yellow/90 font-black rounded-xl h-12 uppercase text-xs tracking-widest transition-all mt-4 font-sans shadow-lg cursor-pointer"
+                            >
+                                {loading ? 'Restableciendo...' : 'CAMBIAR CONTRASEÑA'}
+                            </Button>
                         </form>
                     )}
                 </div>
