@@ -74,7 +74,7 @@ export default function Navbar() {
     const { currentCustomer, logoutCustomer } = useStore();
     const [authModalOpen, setAuthModalOpen] = useState(false);
 
-    const [customizerOpen, setCustomizerOpen] = useState(false);
+
 
     useEffect(() => {
         const handleScroll = () => setScrolled(window.scrollY > 20);
