@@ -416,7 +416,7 @@ export default function Navbar() {
                                 onClick={(e) => { if (dragMode) e.preventDefault(); }}
                             >
                                 <motion.div
-                                    drag={dragMode}
+                                    drag={import.meta.env.DEV && dragMode}
                                     dragMomentum={false}
                                     style={{ 
                                         x: isMobile ? mobileBikeTranslateX : bikeTranslateX, 
@@ -440,7 +440,7 @@ export default function Navbar() {
                                 </motion.div>
 
                                 <motion.div
-                                    drag={dragMode}
+                                    drag={import.meta.env.DEV && dragMode}
                                     dragMomentum={false}
                                     style={{ 
                                         x: isMobile ? mobileBrizTranslateX : brizTranslateX, 
@@ -465,7 +465,7 @@ export default function Navbar() {
                             </Link>
 
                             <motion.div
-                                drag={dragMode && !isMobile}
+                                drag={import.meta.env.DEV && dragMode && !isMobile}
                                 dragMomentum={false}
                                 style={{ x: track1TranslateX, y: track1TranslateY }}
                                 onDragEnd={(_, info) => {
@@ -482,7 +482,7 @@ export default function Navbar() {
                             </motion.div>
 
                             <motion.div 
-                                drag={dragMode && !isMobile}
+                                drag={import.meta.env.DEV && dragMode && !isMobile}
                                 dragMomentum={false}
                                 style={{ x: textTranslateX, y: textTranslateY }}
                                 onDragEnd={(_, info) => {
@@ -504,7 +504,7 @@ export default function Navbar() {
                         {/* Desktop Navigation */}
                         <div className="hidden items-center lg:flex h-full dyn-desktop-nav">
                             <motion.div
-                                drag={dragMode && !isMobile}
+                                drag={import.meta.env.DEV && dragMode && !isMobile}
                                 dragMomentum={false}
                                 style={{ x: track2TranslateX, y: track2TranslateY }}
                                 onDragEnd={(_, info) => {
@@ -521,7 +521,7 @@ export default function Navbar() {
                             </motion.div>
 
                             <motion.div 
-                                drag={dragMode && !isMobile}
+                                drag={import.meta.env.DEV && dragMode && !isMobile}
                                 dragMomentum={false}
                                 style={{ x: g1TranslateX, y: g1TranslateY }}
                                 onDragEnd={(_, info) => {
@@ -566,7 +566,7 @@ export default function Navbar() {
                             </motion.div>
 
                             <motion.div
-                                drag={dragMode && !isMobile}
+                                drag={import.meta.env.DEV && dragMode && !isMobile}
                                 dragMomentum={false}
                                 style={{ x: track3TranslateX, y: track3TranslateY }}
                                 onDragEnd={(_, info) => {
@@ -583,7 +583,7 @@ export default function Navbar() {
                             </motion.div>
 
                             <motion.div 
-                                drag={dragMode && !isMobile}
+                                drag={import.meta.env.DEV && dragMode && !isMobile}
                                 dragMomentum={false}
                                 style={{ x: g2TranslateX, y: g2TranslateY }}
                                 onDragEnd={(_, info) => {
@@ -678,7 +678,7 @@ export default function Navbar() {
                         </button>
 
                         <motion.div
-                            drag={dragMode && isMobile}
+                            drag={import.meta.env.DEV && dragMode && isMobile}
                             dragMomentum={false}
                             style={{ 
                                 x: isMobile ? mobileMenuTranslateX : 0, 
@@ -788,19 +788,21 @@ export default function Navbar() {
             />
 
             {/* Floating Customizer Trigger */}
-            <button 
-                onClick={() => setCustomizerOpen(!customizerOpen)}
-                className="fixed bottom-6 right-6 z-[100] p-3.5 rounded-full bg-brand-charcoal text-white hover:bg-brand-black hover:scale-110 shadow-2xl transition duration-300 border border-white/20"
-                title="Abrir Editor de Navbar"
-            >
-                <svg className="w-6 h-6 animate-spin-slow" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                </svg>
-            </button>
+            {import.meta.env.DEV && (
+                <button 
+                    onClick={() => setCustomizerOpen(!customizerOpen)}
+                    className="fixed bottom-6 right-6 z-[100] p-3.5 rounded-full bg-brand-charcoal text-white hover:bg-brand-black hover:scale-110 shadow-2xl transition duration-300 border border-white/20"
+                    title="Abrir Editor de Navbar"
+                >
+                    <svg className="w-6 h-6 animate-spin-slow" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                    </svg>
+                </button>
+            )}
 
             {/* Customizer Drawer */}
-            {customizerOpen && (
+            {import.meta.env.DEV && customizerOpen && (
                 <div className="fixed bottom-24 right-6 z-[100] w-[350px] max-h-[70vh] overflow-y-auto rounded-3xl bg-brand-charcoal/95 backdrop-blur-md border border-white/10 p-6 text-white shadow-2xl font-cocon">
                     <div className="flex items-center justify-between border-b border-white/10 pb-3 mb-4">
                         <h3 className="font-bold text-lg text-brand-yellow">Ajustes Visuales Navbar</h3>
