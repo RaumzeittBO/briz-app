@@ -20,7 +20,7 @@ import {
 } from 'lucide-react';
 
 const assetBase = '/menu-principal-web';
-const designStorageKey = 'briz-home-design-editor-v3';
+const designStorageKey = 'briz-home-design-editor-v4';
 const designEditorEnabled = import.meta.env.DEV;
 
 type DesignViewport = 'desktop' | 'mobile';
@@ -88,8 +88,8 @@ const defaultDesignConfig: DesignConfig = {
         brandComingSoon: { x: 197, y: 257, scale: 0.59 },
     },
     mobile: {
-        heroLettering: { x: 0, y: 0, scale: 0.73 },
-        heroCollage: { x: 0, y: 0, scale: 1.30 },
+        heroLettering: { x: 0, y: 0, scale: 1.0 },
+        heroCollage: { x: 0, y: 0, scale: 1.50 },
         heroButtons: { x: 0, y: 0, scale: 1 },
         servicesTitle: { x: 0, y: 0, scale: 1 },
         servicesImage: { x: 0, y: 0, scale: 1 },
@@ -597,7 +597,7 @@ function HeroCollage({ variant }: { variant: 'mobile' | 'desktop' }) {
             id="heroCollage"
             className={
                 isMobile
-                    ? 'relative mx-auto mt-6 mb-6 block w-[98vw] max-w-[550px] px-2 lg:hidden'
+                    ? 'relative mx-auto mt-6 mb-6 block w-[98vw] max-w-[650px] px-2 lg:hidden'
                     : 'relative mx-auto hidden w-full max-w-none lg:ml-[-4.5rem] lg:mr-[-6rem] lg:mt-[-1rem] lg:block'
             }
         >
@@ -686,12 +686,7 @@ function HeroSection() {
                         transition={{ duration: 0.7, ease: 'easeOut' }}
                         className="relative z-10 mx-auto flex w-full max-w-[560px] flex-col items-center text-center lg:mx-0 lg:max-w-[680px] lg:items-start lg:text-left"
                     >
-                        <div className="inline-flex items-center gap-2 rounded-full bg-white/68 px-4 py-2 font-maiandra text-xs uppercase tracking-[0.04em] text-[#9A7B00] shadow-[0_10px_30px_rgba(143,104,0,0.08)] ring-1 ring-brand-yellow/25">
-                            <Bike className="h-4 w-4 text-brand-yellow" strokeWidth={2.3} />
-                            Centro de la bicicleta
-                        </div>
-
-                        <EditableLayer id="heroLettering" className="relative mt-4 w-[min(100%,25.5rem)] sm:mt-5 lg:ml-[-1.5rem] lg:w-[32.25rem]">
+                        <EditableLayer id="heroLettering" className="relative mt-4 w-full max-w-[34rem] sm:mt-5 lg:ml-[-1.5rem] lg:w-[38rem]">
                             <motion.div
                                 initial={{ opacity: 0, y: 18, rotate: -1.2, scale: 0.92 }}
                                 animate={{

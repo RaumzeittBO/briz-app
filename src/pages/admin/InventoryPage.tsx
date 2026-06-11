@@ -125,22 +125,42 @@ export default function InventoryPage() {
     ];
 
     return (
-      <div className="space-y-3">
-        <h4 className="text-xs font-black text-brand-yellow uppercase tracking-widest">Precios de Alquiler (Bs.)</h4>
-        <div className="grid grid-cols-2 gap-3">
-          {fields.map(p => (
-            <div key={p.k} className="space-y-1">
-              <Label className="text-[10px] text-white/40 font-bold uppercase">{p.l}</Label>
+      <div className="space-y-4">
+        {editItem.availableForRental && (
+          <div className="space-y-3">
+            <h4 className="text-xs font-black text-brand-yellow uppercase tracking-widest">Precios de Alquiler (Bs.)</h4>
+            <div className="grid grid-cols-2 gap-3">
+              {fields.map(p => (
+                <div key={p.k} className="space-y-1">
+                  <Label className="text-[10px] text-white/40 font-bold uppercase">{p.l}</Label>
+                  <Input 
+                    type="number" 
+                    min={0} 
+                    value={(editItem as any)[p.k] || 0} 
+                    onChange={e => handlePriceChange(p.k, Number(e.target.value))} 
+                    className="bg-black/40 border-white/10 h-10 font-bold text-brand-yellow rounded-xl" 
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {editItem.availableForSale && (
+          <div className="space-y-2 pt-2 border-t border-white/5">
+            <h4 className="text-xs font-black text-blue-400 uppercase tracking-widest">Precio de Venta (Bs.)</h4>
+            <div className="space-y-1">
+              <Label className="text-[10px] text-white/40 font-bold uppercase">Precio final de venta</Label>
               <Input 
                 type="number" 
                 min={0} 
-                value={(editItem as any)[p.k] || 0} 
-                onChange={e => handlePriceChange(p.k, Number(e.target.value))} 
-                className="bg-black/40 border-white/10 h-10 font-bold text-brand-yellow rounded-xl" 
+                value={editItem.salePrice || 0} 
+                onChange={e => setEditItem({ ...editItem, salePrice: Number(e.target.value) })} 
+                className="bg-black/40 border-white/10 h-10 font-bold text-blue-400 rounded-xl" 
               />
             </div>
-          ))}
-        </div>
+          </div>
+        )}
       </div>
     );
   };

@@ -146,7 +146,7 @@ export default function ShopPage() {
                                                 Carrito
                                                 {totalItems > 0 && <Badge className="absolute -top-1 -right-1 bg-brand-yellow text-brand-black font-black text-xs min-w-5 h-5 flex items-center justify-center p-0 rounded-full shadow-md animate-in zoom-in">{totalItems}</Badge>}
                                             </Button>
-                                            <Button className="w-full sm:w-auto h-12 px-8 rounded-full bg-brand-charcoal text-white hover:bg-brand-yellow hover:text-brand-black transition-all font-black text-base shadow-lg hover:shadow-xl hover:-translate-y-0.5">
+                                            <Button className="w-full sm:w-auto h-12 px-8 rounded-full bg-brand-yellow text-brand-black hover:bg-brand-yellow-light transition-all font-black text-base shadow-lg hover:shadow-xl hover:-translate-y-0.5 border-0">
                                                 Buscar
                                             </Button>
                                         </div>
@@ -214,7 +214,7 @@ export default function ShopPage() {
                                                         <p className="font-black text-3xl text-brand-charcoal">{item.price}</p>
                                                     </div>
                                                     <div className="grid grid-cols-2 gap-3">
-                                                        <Button className="h-14 bg-brand-charcoal text-white hover:bg-brand-yellow hover:text-brand-black shadow-xl hover:shadow-brand-yellow/20 hover:-translate-y-1 transition-all rounded-full border-0 font-black text-sm"
+                                                        <Button className="h-14 bg-brand-yellow text-brand-black hover:bg-brand-yellow-light shadow-xl hover:shadow-brand-yellow/20 hover:-translate-y-1 transition-all rounded-full border-0 font-black text-sm"
                                                             onClick={() => addToCart({ id: item.id, name: item.name, price: item.price, itemType: item.itemType, image: item.image })}>
                                                             <ShoppingCart className="w-4 h-4 mr-2" strokeWidth={1.5} /> Añadir
                                                         </Button>
@@ -238,12 +238,12 @@ export default function ShopPage() {
             {/* Cart Modal */}
             <Dialog open={showCart} onOpenChange={(val) => { setShowCart(val); if (!val) setCheckoutStep('cart'); }}>
                 <DialogContent className="max-w-2xl rounded-[2.5rem] border-0 shadow-2xl overflow-hidden p-0">
-                    <div className="bg-brand-charcoal p-8">
+                    <div className="bg-brand-yellow p-8">
                         <DialogHeader>
-                            <DialogTitle className="text-3xl font-black text-white">
+                            <DialogTitle className="text-3xl font-black text-brand-black">
                                 {checkoutStep === 'cart' ? 'Tu Carrito' : 'Detalles de Compra'}
                             </DialogTitle>
-                            <p className="text-white/60 font-medium">
+                            <p className="text-brand-black/70 font-medium">
                                 {checkoutStep === 'cart' ? 'Revisa tus productos antes de finalizar.' : 'Completa tus datos para procesar el pedido.'}
                             </p>
                         </DialogHeader>
@@ -299,7 +299,7 @@ export default function ShopPage() {
                                             <span className="font-bold text-brand-charcoal/60 uppercase tracking-widest text-xs">Total a Pagar</span>
                                             <span className="font-black text-4xl text-brand-charcoal">Bs. {totalPrice}</span>
                                         </div>
-                                        <Button className="w-full h-16 bg-brand-charcoal text-white hover:bg-brand-yellow hover:text-brand-black transition-all font-black text-lg rounded-full shadow-xl hover:shadow-brand-yellow/20 hover:-translate-y-1"
+                                        <Button className="w-full h-16 bg-brand-yellow text-brand-black hover:bg-brand-yellow-light transition-all font-black text-lg rounded-full shadow-xl hover:shadow-brand-yellow/20 hover:-translate-y-1 border-0"
                                             onClick={() => setCheckoutStep('checkout')}>
                                             Proceder al Pago
                                         </Button>

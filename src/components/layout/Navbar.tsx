@@ -279,13 +279,13 @@ export default function Navbar() {
                                 src="/logo_bicicleta_principal.png"
                                 alt="Bicicleta BRIZ"
                                 className="w-auto shrink-0 object-contain brightness-0 invert"
-                                style={{ height: 60 }}
+                                style={{ height: 75 }}
                             />
                             <img
                                 src="/logo_briz_principal.png"
                                 alt="BRIZ"
                                 className="w-auto shrink-0 object-contain brightness-0 invert"
-                                style={{ height: 36, marginLeft: -4 }}
+                                style={{ height: 44, marginLeft: -4 }}
                             />
                         </Link>
 
@@ -293,8 +293,8 @@ export default function Navbar() {
                         <TireTrackSeparator className="mx-1.5" style={{ height: 50, width: 14 }} />
 
                         {/* Centro de la Bicicleta text - mobile */}
-                        <span className="font-maiandra font-black uppercase leading-tight tracking-wider text-white drop-shadow-sm text-center" style={{ fontSize: 11, lineHeight: '1.2' }}>
-                            Centro de<br />la Bicicleta
+                        <span className="font-maiandra font-black uppercase leading-none tracking-wider text-white drop-shadow-sm shrink-0 whitespace-nowrap" style={{ fontSize: 'min(11px, 2.8vw)' }}>
+                            Centro de la Bicicleta
                         </span>
 
                         {/* Spacer */}
