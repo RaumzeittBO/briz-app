@@ -20,7 +20,7 @@ import {
 } from 'lucide-react';
 
 const assetBase = '/menu-principal-web';
-const designStorageKey = 'briz-home-design-editor-v2';
+const designStorageKey = 'briz-home-design-editor-v3';
 const designEditorEnabled = import.meta.env.DEV;
 
 type DesignViewport = 'desktop' | 'mobile';
@@ -71,7 +71,7 @@ const defaultTransform: EditableTransform = { x: 0, y: 0, scale: 1 };
 
 const defaultDesignConfig: DesignConfig = {
     desktop: {
-        heroLettering: { x: 0, y: 0, scale: 0.75 },
+        heroLettering: { x: 0, y: 0, scale: 0.98 },
         heroCollage: { x: 0, y: 0, scale: 0.92 },
         heroButtons: { x: 0, y: 0, scale: 0.98 },
         servicesTitle: { x: 0, y: 0, scale: 1 },
@@ -88,8 +88,8 @@ const defaultDesignConfig: DesignConfig = {
         brandComingSoon: { x: 197, y: 257, scale: 0.59 },
     },
     mobile: {
-        heroLettering: { x: 0, y: 0, scale: 0.56 },
-        heroCollage: { x: 0, y: 0, scale: 1.15 },
+        heroLettering: { x: 0, y: 0, scale: 0.73 },
+        heroCollage: { x: 0, y: 0, scale: 1.30 },
         heroButtons: { x: 0, y: 0, scale: 1 },
         servicesTitle: { x: 0, y: 0, scale: 1 },
         servicesImage: { x: 0, y: 0, scale: 1 },
@@ -597,7 +597,7 @@ function HeroCollage({ variant }: { variant: 'mobile' | 'desktop' }) {
             id="heroCollage"
             className={
                 isMobile
-                    ? 'relative mx-auto mt-6 mb-6 block w-[98vw] max-w-[500px] px-2 lg:hidden'
+                    ? 'relative mx-auto mt-6 mb-6 block w-[98vw] max-w-[550px] px-2 lg:hidden'
                     : 'relative mx-auto hidden w-full max-w-none lg:ml-[-4.5rem] lg:mr-[-6rem] lg:mt-[-1rem] lg:block'
             }
         >
@@ -628,8 +628,8 @@ function HeroCollage({ variant }: { variant: 'mobile' | 'desktop' }) {
                 className={isMobile ? 'relative mx-auto w-full' : 'relative ml-auto w-[min(74vw,1040px)] xl:w-[min(72vw,1120px)]'}
             >
                 <SmartImage
-                    src={`${assetBase}/hero-collage-principal.webp?v=2`}
-                    fallbackSrcs={[`/menu-principal-celular/hero-collage-principal.webp?v=2`]}
+                    src={`${assetBase}/hero-collage-principal.webp?v=3`}
+                    fallbackSrcs={[`/menu-principal-celular/hero-collage-principal.webp?v=3`]}
                     alt="Collage principal de bicicletas y experiencias Briz"
                     placeholderLabel="hero-collage-principal.webp"
                     loading="eager"
@@ -708,8 +708,8 @@ function HeroSection() {
                                 }}
                             >
                                 <SmartImage
-                                    src={`${assetBase}/lettering-una-bicicleta.webp?v=2`}
-                                    fallbackSrcs={[`/menu-principal-celular/lettering-una-bicicleta.webp?v=2`]}
+                                    src={`${assetBase}/lettering-una-bicicleta.webp?v=3`}
+                                    fallbackSrcs={[`/menu-principal-celular/lettering-una-bicicleta.webp?v=3`]}
                                     alt="Una bicicleta. Un ciclo de expresiones infinitas."
                                     placeholderLabel="lettering-una-bicicleta.webp"
                                     loading="eager"
