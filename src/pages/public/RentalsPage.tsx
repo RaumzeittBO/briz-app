@@ -308,7 +308,7 @@ export default function RentalsPage() {
   };
 
   return (
-    <div className="pt-20 bg-[#FFFDF3] min-h-screen">
+    <div className="pt-[80px] lg:pt-[120px] bg-[#FFFDF3] min-h-screen">
       {selected ? (
         <div className="max-w-3xl mx-auto px-4 py-10">
           <RentalCheckoutWizard 
@@ -331,30 +331,8 @@ export default function RentalsPage() {
         </div>
       ) : (
         <>
-      {/* Hero */}
-      <section className="bg-brand-charcoal pt-28 pb-20 relative overflow-hidden">
-        <div className="absolute inset-0">
-          {/* Desktop Image */}
-          <img src="/hero-alquiler-computadora.jpg" alt="" className="hidden sm:block w-full h-full object-cover" />
-          {/* Mobile Image */}
-          <img src="/hero-alquiler-celular.jpg" alt="" className="block sm:hidden w-full h-full object-cover" />
-          {/* Overlay */}
-          <div className="absolute inset-0 bg-gradient-to-b from-brand-black/60 via-brand-black/40 to-brand-black/70" />
-        </div>
-        <div className="relative max-w-7xl mx-auto px-4 text-center z-10">
-          <motion.div initial={{opacity:0,y:30}} animate={{opacity:1,y:0}} transition={{duration:0.6}}>
-            <h1 className="text-3xl sm:text-5xl font-tan text-white tracking-tight leading-tight uppercase">
-              TU AVENTURA EN <span className="text-brand-yellow">MOVIMIENTO</span>
-            </h1>
-            <p className="text-white/60 text-lg sm:text-xl font-maiandra max-w-2xl mx-auto mt-4">
-              Explora nuestros productos de alquiler. Calidad, estilo y libertad.
-            </p>
-          </motion.div>
-        </div>
-      </section>
-
       {/* Filters & Search Row */}
-      <div className="sticky top-16 z-40 bg-background/90 backdrop-blur-md border-b border-gray-100/50 py-5">
+      <div className="sticky top-[80px] lg:top-[120px] z-40 bg-background/90 backdrop-blur-md border-b border-gray-100/50 py-5">
         <div className="max-w-7xl mx-auto px-4 sm:px-6">
           <div className="flex flex-col md:flex-row items-center gap-4">
             {/* Search Input Card */}

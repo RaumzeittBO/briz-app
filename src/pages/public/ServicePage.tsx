@@ -17,35 +17,7 @@ const fadeUp = {
 
 export default function ServicePage() {
     return (
-        <div className="pt-20">
-            {/* Hero */}
-            <section className="bg-brand-charcoal py-24 sm:py-32 relative overflow-hidden flex items-center min-h-[60vh]">
-                <div className="absolute inset-0 pointer-events-none">
-                    <img src="/hero-servicio-computadora.jpg" alt="" className="hidden sm:block w-full h-full object-cover" />
-                    <img src="/hero-servicio-celular.jpg" alt="" className="block sm:hidden w-full h-full object-cover" />
-                    <div className="absolute inset-0 bg-brand-black/40 mix-blend-multiply" />
-                    <div className="absolute inset-0 bg-gradient-to-b from-brand-black/60 via-brand-black/20 to-brand-charcoal" />
-                </div>
-                <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center w-full">
-                    <motion.div initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.8, ease: "easeOut" }} className="space-y-6">
-                        <motion.div 
-                            initial={{ opacity: 0, scale: 0.8 }}
-                            animate={{ opacity: 1, scale: 1 }}
-                            transition={{ delay: 0.3 }}
-                            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-white/5 border border-white/10 backdrop-blur-sm shadow-lg ring-1 ring-white/10 mx-auto"
-                        >
-                            <Wrench className="w-4 h-4 text-brand-yellow" strokeWidth={1.5} />
-                            <span className="text-xs font-black text-white tracking-widest uppercase">Servicio Técnico Especializado</span>
-                        </motion.div>
-                        <h1 className="text-4xl sm:text-5xl lg:text-7xl font-tan text-white tracking-tight drop-shadow-sm leading-tight uppercase">
-                            Taller <span className="text-brand-yellow drop-shadow-md">experto.</span>
-                        </h1>
-                        <p className="text-xl sm:text-3xl text-white/70 max-w-2xl mx-auto font-cocon font-bold leading-relaxed">
-                            Servicio técnico profesional para tu bicicleta. Reparaciones, mantenimiento y ajustes precisos con repuestos originales.
-                        </p>
-                    </motion.div>
-                </div>
-            </section>
+        <div className="pt-[80px] lg:pt-[120px]">
 
             {/* Services Grid */}
             <section className="py-24 sm:py-32 bg-gray-50/50">

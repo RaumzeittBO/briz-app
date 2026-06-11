@@ -15,34 +15,7 @@ const difficultyColor: Record<string, string> = {
 
 export default function RoutesPage() {
     return (
-        <div className="pt-20 bg-background min-h-screen flex flex-col">
-            <section className="bg-brand-charcoal py-24 sm:py-32 relative overflow-hidden flex items-center min-h-[60vh]">
-                <div className="absolute inset-0 pointer-events-none">
-                    <img src="/hero-rutas-computadora.jpg" alt="" className="hidden sm:block w-full h-full object-cover" />
-                    <img src="/hero-rutas-celular.jpg" alt="" className="block sm:hidden w-full h-full object-cover" />
-                    <div className="absolute inset-0 bg-brand-black/40 mix-blend-multiply" />
-                    <div className="absolute inset-0 bg-gradient-to-b from-brand-black/60 via-brand-black/20 to-brand-charcoal" />
-                </div>
-                <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center w-full">
-                    <motion.div initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.8, ease: "easeOut" }} className="space-y-6">
-                        <motion.div 
-                            initial={{ opacity: 0, scale: 0.8 }}
-                            animate={{ opacity: 1, scale: 1 }}
-                            transition={{ delay: 0.3 }}
-                            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-white/5 border border-white/10 backdrop-blur-sm shadow-lg ring-1 ring-white/10 mx-auto"
-                        >
-                            <Route className="w-4 h-4 text-brand-yellow" strokeWidth={1.5} />
-                            <span className="text-xs font-black text-white tracking-widest uppercase">Explora Cochabamba</span>
-                        </motion.div>
-                        <h1 className="text-5xl sm:text-7xl lg:text-8xl font-tan text-white tracking-tight drop-shadow-sm leading-tight break-words">
-                            Descubre la <br className="sm:hidden" /><span className="text-brand-yellow drop-shadow-md">ciudad.</span>
-                        </h1>
-                        <p className="text-xl sm:text-3xl text-white/70 max-w-2xl mx-auto font-cocon font-bold leading-relaxed">
-                            Las mejores rutas para explorar Cochabamba sobre dos ruedas. Desde paseos urbanos hasta aventuras en la naturaleza.
-                        </p>
-                    </motion.div>
-                </div>
-            </section>
+        <div className="pt-[80px] lg:pt-[120px] bg-background min-h-screen flex flex-col">
 
             <section className="py-24 sm:py-32 bg-gray-50/50 flex-1">
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">

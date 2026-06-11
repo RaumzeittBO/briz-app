@@ -120,31 +120,11 @@ export default function ShopPage() {
 
 
     return (
-        <div className="pt-20 bg-background min-h-screen flex flex-col">
-            {/* Hero */}
-            <section className="bg-brand-charcoal py-24 sm:py-32 relative overflow-hidden flex items-center min-h-[50vh]">
-                <div className="absolute inset-0 pointer-events-none">
-                    <img src="/hero-tienda-computadora.jpg" alt="" className="hidden sm:block w-full h-full object-cover" />
-                    <img src="/hero-tienda-celular.jpg" alt="" className="block sm:hidden w-full h-full object-cover" />
-                    <div className="absolute inset-0 bg-brand-black/40 mix-blend-multiply" />
-                    <div className="absolute inset-0 bg-gradient-to-b from-brand-black/60 via-brand-black/20 to-brand-charcoal" />
-                </div>
-                <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center w-full">
-                    <motion.div initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6, ease: "easeOut" }} className="space-y-6">
-                        <h1 className="text-4xl sm:text-5xl lg:text-7xl font-tan text-white tracking-tight drop-shadow-sm leading-tight uppercase">
-                            Tu equipo <span className="text-brand-yellow">perfecto.</span>
-                        </h1>
-                        <p className="text-xl sm:text-3xl text-white/70 max-w-2xl mx-auto font-cocon font-bold">
-                            Bicicletas, equipo de seguridad y repuestos de alta calidad. Lo que necesitas para las calles.
-                        </p>
-                    </motion.div>
-                </div>
-            </section>
-
-            <div className="sticky top-16 sm:top-[72px] z-40 bg-background/95 backdrop-blur-md border-b border-gray-100">
-                <section className="pt-12 pb-8">
+        <div className="pt-[80px] lg:pt-[120px] bg-background min-h-screen flex flex-col">
+            <div className="sticky top-[80px] lg:top-[120px] z-40 bg-background/95 backdrop-blur-md border-b border-gray-100">
+                <section className="pt-6 pb-6">
                     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                        <motion.div {...fadeUp} className="max-w-4xl mx-auto -mt-20 sm:-mt-24 relative z-30 mb-8">
+                        <motion.div {...fadeUp} className="max-w-4xl mx-auto relative z-30 mb-6">
                             <Card className="rounded-[2.5rem] shadow-2xl border-0 overflow-hidden bg-white">
                                 <CardContent className="p-4 sm:p-2">
                                     <div className="flex flex-col sm:flex-row items-center gap-2">

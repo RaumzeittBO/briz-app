@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { MapPin, Phone, Mail, Clock, MessageCircle, Facebook, Instagram, Send } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -6,31 +7,88 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
-import { faqs } from '@/data/mockData';
 
 const fadeUp = { initial: { opacity: 0, y: 30 }, whileInView: { opacity: 1, y: 0 }, viewport: { once: true }, transition: { duration: 0.6 } };
 
+const customFaqs = [
+    {
+        question: "¿Cómo puedo alquilar una bicicleta?",
+        answer: (
+            <div className="space-y-3 font-sans">
+                <p className="text-gray-500 font-bold text-base sm:text-lg leading-relaxed opacity-90">
+                    Sigue estos sencillos pasos:
+                </p>
+                <ol className="list-decimal pl-5 space-y-2 text-gray-500 font-bold text-sm sm:text-base leading-relaxed opacity-80">
+                    <li>Elige el modelo de tu preferencia. (Revisa nuestra sección de alquiler para ver modelos y tarifas).</li>
+                    <li>Regístrate en nuestro sistema de usuarios y si ya estás registrad@ completa solamente el registro de tu alquiler.</li>
+                    <li>Elige el método de pago.</li>
+                    <li>Recoge tu bici de nuestras instalaciones habilitadas o si solicitaste servicio de transporte, aguarda tu pedido.</li>
+                </ol>
+            </div>
+        )
+    },
+    {
+        question: "¿Por qué debo comprar una bici urbana de procedencia japonesa a medio uso?",
+        answer: (
+            <div className="space-y-4 font-sans">
+                <ul className="list-disc pl-5 space-y-2 text-gray-500 font-bold text-sm sm:text-base leading-relaxed opacity-80">
+                    <li>Ingeniería hecha para durar.</li>
+                    <li>Pedaleo suave y eficiente.</li>
+                    <li>Repuestos accesibles.</li>
+                    <li>Menor mantenimiento.</li>
+                    <li>Más ahorro a largo plazo.</li>
+                </ul>
+                <div className="pt-2">
+                    <Link to="/shop">
+                        <Button size="sm" className="bg-brand-yellow text-brand-black hover:bg-brand-yellow-light rounded-full font-black text-xs px-6 h-11 shadow-md border-0 transition-transform active:scale-95">
+                            REVISA NUESTRO CATÁLOGO
+                        </Button>
+                    </Link>
+                </div>
+            </div>
+        )
+    },
+    {
+        question: "Quiero comprar una bicicleta personalizada. ¿Cómo puedo hacerlo?",
+        answer: (
+            <div className="space-y-4 font-sans">
+                <ul className="list-disc pl-5 space-y-2 text-gray-500 font-bold text-sm sm:text-base leading-relaxed opacity-80">
+                    <li>Elige el tipo de cuadro.</li>
+                    <li>Elige tu paleta de colores favorita.</li>
+                    <li>Elige tus accesorios complementarios favoritos (canasta, luces, alforja y otros).</li>
+                    <li>Paga el 70% del presupuesto total y el otro 30% al momento de la entrega de tu bici.</li>
+                    <li>Tiempo de entrega: de 4 a 10 días hábiles. Dependerá de la orden de solicitudes.</li>
+                </ul>
+                <div className="pt-2">
+                    <Button size="sm" className="bg-gray-200 text-gray-400 cursor-not-allowed rounded-full font-black text-xs px-6 h-11 border-0" disabled>
+                        PERSONALIZA TU BICI (Funcionalidad futura)
+                    </Button>
+                </div>
+            </div>
+        )
+    },
+    {
+        question: "Quiero vender mi bici a medio uso. ¿Cuál es el procedimiento?",
+        answer: (
+            <div className="space-y-4 font-sans">
+                <p className="text-gray-500 font-bold text-base sm:text-lg leading-relaxed opacity-80">
+                    Envíanos una foto, un vídeo y el precio de tu bici a nuestra línea de atención al cliente:
+                </p>
+                <div className="pt-1">
+                    <a href="https://wa.me/59177860277" target="_blank" rel="noopener noreferrer">
+                        <Button size="sm" className="bg-green-500 hover:bg-green-600 text-white rounded-full font-black text-sm px-6 h-12 shadow-md flex items-center gap-2 border-0 transition-all hover:scale-105 active:scale-95">
+                            <MessageCircle className="w-5 h-5 text-white" /> +591 77860277
+                        </Button>
+                    </a>
+                </div>
+            </div>
+        )
+    }
+];
+
 export default function ContactPage() {
     return (
-        <div className="pt-20">
-            <section className="bg-brand-charcoal py-24 sm:py-32 relative overflow-hidden flex items-center min-h-[50vh]">
-                <div className="absolute inset-0 pointer-events-none">
-                    <img src="/hero-contacto-computadora.jpg" alt="" className="hidden sm:block w-full h-full object-cover" />
-                    <img src="/hero-contacto-celular.jpg" alt="" className="block sm:hidden w-full h-full object-cover" />
-                    <div className="absolute inset-0 bg-brand-black/40 mix-blend-multiply" />
-                    <div className="absolute inset-0 bg-gradient-to-b from-brand-black/60 via-brand-black/20 to-brand-charcoal" />
-                </div>
-                <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center w-full">
-                    <motion.div initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6, ease: "easeOut" }} className="space-y-6">
-                        <h1 className="text-5xl sm:text-8xl font-tan text-white tracking-tight drop-shadow-sm leading-none break-words">
-                            Hablemos de <br className="sm:hidden" /><span className="text-brand-yellow">rutas.</span>
-                        </h1>
-                        <p className="text-xl sm:text-3xl text-white/70 max-w-2xl mx-auto font-cocon font-bold">
-                            Estamos aquí para ayudarte a planear tu próxima aventura en dos ruedas. Contáctanos.
-                        </p>
-                    </motion.div>
-                </div>
-            </section>
+        <div className="pt-[80px] lg:pt-[120px]">
 
             <section className="py-24 sm:py-32 bg-gray-50/50">
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -163,7 +221,7 @@ export default function ContactPage() {
                         <p className="text-gray-500 font-cocon font-bold text-lg max-w-2xl mx-auto pt-4">Resolvemos tus dudas más comunes de forma rápida.</p>
                     </motion.div>
                     <Accordion type="single" collapsible className="space-y-5">
-                        {faqs.slice(0, 4).map((faq, i) => (
+                        {customFaqs.map((faq, i) => (
                             <motion.div 
                                 key={i}
                                 initial={{ opacity: 0, y: 10 }}
@@ -174,7 +232,7 @@ export default function ContactPage() {
                                     <AccordionTrigger className="hover:text-brand-yellow hover:no-underline text-left text-lg sm:text-xl font-black py-7 !no-underline group">
                                         {faq.question}
                                     </AccordionTrigger>
-                                    <AccordionContent className="text-gray-500 font-bold text-base sm:text-lg pb-7 leading-relaxed opacity-80">{faq.answer}</AccordionContent>
+                                    <AccordionContent className="pb-7 leading-relaxed opacity-80">{faq.answer}</AccordionContent>
                                 </AccordionItem>
                             </motion.div>
                         ))}
