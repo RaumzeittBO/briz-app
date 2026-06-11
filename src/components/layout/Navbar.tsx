@@ -73,6 +73,36 @@ export default function Navbar() {
     const { currentCustomer, logoutCustomer } = useStore();
     const [authModalOpen, setAuthModalOpen] = useState(false);
 
+    const [customizerOpen, setCustomizerOpen] = useState(false);
+    const [styles, setStyles] = useState(() => {
+        const saved = localStorage.getItem('briz-navbar-styles');
+        if (saved) {
+            try { return JSON.parse(saved); } catch (e) {}
+        }
+        return {
+            mobileNavbarHeight: 88,
+            desktopNavbarHeight: 120,
+            mobileBikeHeight: 66,
+            desktopBikeHeight: 108,
+            mobileBrizHeight: 42,
+            desktopBrizHeight: 68,
+            mobileLogoGap: 8,
+            desktopLogoGap: 16,
+            logoBrizMarginLeft: 0,
+            separatorMargin: 24,
+            separatorHeight: 64,
+            separatorWidth: 16,
+            textFontSize: 16,
+            textYShift: 0,
+            desktopNavGap: 24,
+            buttonGroupGap: 24,
+        };
+    });
+
+    useEffect(() => {
+        localStorage.setItem('briz-navbar-styles', JSON.stringify(styles));
+    }, [styles]);
+
     useEffect(() => {
         const handleScroll = () => setScrolled(window.scrollY > 20);
         handleScroll();
@@ -118,37 +148,129 @@ export default function Navbar() {
             transition={{ duration: 0.45, ease: 'easeOut' }}
             className={`fixed left-0 right-0 top-0 z-50 transition-shadow duration-300 ${scrolled ? 'shadow-[0_10px_24px_rgba(102,76,0,0.13)]' : ''}`}
         >
+            <style>{`
+                @keyframes spin-slow {
+                    from { transform: rotate(0deg); }
+                    to { transform: rotate(360deg); }
+                }
+                .animate-spin-slow {
+                    animation: spin-slow 10s linear infinite;
+                }
+                
+                :root {
+                    --nav-h-mobile: ${styles.mobileNavbarHeight}px;
+                    --nav-h-desktop: ${styles.desktopNavbarHeight}px;
+                    
+                    --bike-h-mobile: ${styles.mobileBikeHeight}px;
+                    --bike-h-desktop: ${styles.desktopBikeHeight}px;
+                    
+                    --briz-h-mobile: ${styles.mobileBrizHeight}px;
+                    --briz-h-desktop: ${styles.desktopBrizHeight}px;
+                    
+                    --logo-gap-mobile: ${styles.mobileLogoGap}px;
+                    --logo-gap-desktop: ${styles.desktopLogoGap}px;
+                    --briz-ml: ${styles.logoBrizMarginLeft}px;
+                    
+                    --sep-mx: ${styles.separatorMargin}px;
+                    --sep-h: ${styles.separatorHeight}px;
+                    --sep-w: ${styles.separatorWidth}px;
+                    
+                    --text-fs: ${styles.textFontSize}px;
+                    --text-y: ${styles.textYShift}px;
+                    
+                    --nav-gap: ${styles.desktopNavGap}px;
+                    --btn-gap: ${styles.buttonGroupGap}px;
+                }
+                
+                .dyn-navbar {
+                    height: var(--nav-h-mobile) !important;
+                }
+                @media (min-width: 1024px) {
+                    .dyn-navbar {
+                        height: var(--nav-h-desktop) !important;
+                    }
+                }
+                
+                .dyn-bike-logo {
+                    height: var(--bike-h-mobile) !important;
+                }
+                @media (min-width: 1024px) {
+                    .dyn-bike-logo {
+                        height: var(--bike-h-desktop) !important;
+                    }
+                }
+                
+                .dyn-briz-logo {
+                    height: var(--briz-h-mobile) !important;
+                    margin-left: var(--briz-ml) !important;
+                }
+                @media (min-width: 1024px) {
+                    .dyn-briz-logo {
+                        height: var(--briz-h-desktop) !important;
+                    }
+                }
+                
+                .dyn-logo-link {
+                    gap: var(--logo-gap-mobile) !important;
+                }
+                @media (min-width: 1024px) {
+                    .dyn-logo-link {
+                        gap: var(--logo-gap-desktop) !important;
+                    }
+                }
+                
+                .dyn-separator {
+                    margin-left: var(--sep-mx) !important;
+                    margin-right: var(--sep-mx) !important;
+                    height: var(--sep-h) !important;
+                    width: var(--sep-w) !important;
+                }
+                
+                .dyn-text-centro {
+                    font-size: var(--text-fs) !important;
+                    transform: translateY(var(--text-y)) !important;
+                }
+                
+                .dyn-desktop-nav {
+                    gap: var(--nav-gap) !important;
+                }
+                
+                .dyn-btn-group {
+                    gap: var(--btn-gap) !important;
+                }
+            `}</style>
+
             <div className="relative bg-brand-yellow">
                 <nav className="mx-auto max-w-[1480px] px-3 sm:px-7">
-                    <div className="flex h-[88px] items-center justify-between gap-3 lg:h-[120px]">
+                    <div className="flex items-center justify-between gap-3 dyn-navbar">
                         <div className="flex items-center gap-1 sm:gap-2">
-                            <Link to="/" className="group flex items-center shrink-0 gap-2 sm:gap-3 lg:gap-4 pl-1" aria-label="BRIZ Centro de la Bicicleta">
+                            <Link to="/" className="group flex items-center shrink-0 pl-1 dyn-logo-link" aria-label="BRIZ Centro de la Bicicleta">
                                 <img
                                     src="/logo_bicicleta_principal.png"
                                     alt="Bicicleta BRIZ"
-                                    className="h-[66px] w-auto shrink-0 object-contain brightness-0 invert transition-transform duration-200 group-hover:scale-[1.02] sm:h-[84px] lg:h-[108px]"
+                                    className="w-auto shrink-0 object-contain brightness-0 invert transition-transform duration-200 group-hover:scale-[1.02] dyn-bike-logo"
                                 />
                                 <img
                                     src="/logo_briz_principal.png"
                                     alt="BRIZ"
-                                    className="h-[42px] w-auto shrink-0 object-contain brightness-0 invert sm:h-[52px] lg:h-[68px]"
+                                    className="w-auto shrink-0 object-contain brightness-0 invert dyn-briz-logo"
                                 />
                             </Link>
 
-                            <TireTrackSeparator className="mx-3 lg:mx-6" />
+                            <TireTrackSeparator />
 
                             <div className="hidden md:flex items-center h-full">
-                                <span className="font-maiandra text-xs font-black uppercase leading-none tracking-widest text-white drop-shadow-sm sm:text-sm lg:text-base xl:text-lg shrink-0">
+                                <span className="font-maiandra font-black uppercase leading-none tracking-widest text-white drop-shadow-sm shrink-0 dyn-text-centro">
                                     Centro de la Bicicleta
                                 </span>
                             </div>
                         </div>
 
                         {/* Desktop Navigation */}
-                        <div className="hidden items-center gap-3 xl:gap-6 lg:flex h-full">
-                            <TireTrackSeparator className="mx-3 lg:mx-6" />
+                        <div className="hidden items-center lg:flex h-full dyn-desktop-nav">
+                            <TireTrackSeparator />
 
-                            <div className="flex items-center gap-1.5 lg:gap-3 xl:gap-6">
+                            <div className="flex items-center dyn-btn-group">
                                 {group1Links.map((link) => {
                                     const Icon = link.icon;
                                     const active = isActive(link.href);
@@ -174,9 +296,9 @@ export default function Navbar() {
                                 })}
                             </div>
 
-                            <TireTrackSeparator className="mx-3 lg:mx-6" />
+                            <TireTrackSeparator />
 
-                            <div className="flex items-center gap-1.5 lg:gap-3 xl:gap-6">
+                            <div className="flex items-center dyn-btn-group">
                                 {group2Links.map((link) => {
                                     const Icon = link.icon;
                                     const active = isActive(link.href);
@@ -343,6 +465,190 @@ export default function Navbar() {
                 isOpen={authModalOpen} 
                 onClose={() => setAuthModalOpen(false)} 
             />
+
+            {/* Floating Customizer Trigger */}
+            <button 
+                onClick={() => setCustomizerOpen(!customizerOpen)}
+                className="fixed bottom-6 right-6 z-[100] p-3.5 rounded-full bg-brand-charcoal text-white hover:bg-brand-black hover:scale-110 shadow-2xl transition duration-300 border border-white/20"
+                title="Abrir Editor de Navbar"
+            >
+                <svg className="w-6 h-6 animate-spin-slow" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+            </button>
+
+            {/* Customizer Drawer */}
+            {customizerOpen && (
+                <div className="fixed bottom-24 right-6 z-[100] w-[350px] max-h-[70vh] overflow-y-auto rounded-3xl bg-brand-charcoal/95 backdrop-blur-md border border-white/10 p-6 text-white shadow-2xl font-cocon">
+                    <div className="flex items-center justify-between border-b border-white/10 pb-3 mb-4">
+                        <h3 className="font-bold text-lg text-brand-yellow">Ajustes Visuales Navbar</h3>
+                        <button onClick={() => setCustomizerOpen(false)} className="text-white/60 hover:text-white font-black text-sm">✕</button>
+                    </div>
+                    
+                    <div className="space-y-4 text-xs">
+                        {/* Height Group */}
+                        <div>
+                            <h4 className="font-bold text-brand-yellow/80 uppercase tracking-widest mb-2">Altura Navbar</h4>
+                            <div className="space-y-2">
+                                <label className="flex justify-between items-center">
+                                    <span>Celular: {styles.mobileNavbarHeight}px</span>
+                                    <input type="range" min="60" max="140" value={styles.mobileNavbarHeight} onChange={(e) => setStyles({...styles, mobileNavbarHeight: Number(e.target.value)})} className="w-1/2" />
+                                </label>
+                                <label className="flex justify-between items-center">
+                                    <span>PC: {styles.desktopNavbarHeight}px</span>
+                                    <input type="range" min="80" max="180" value={styles.desktopNavbarHeight} onChange={(e) => setStyles({...styles, desktopNavbarHeight: Number(e.target.value)})} className="w-1/2" />
+                                </label>
+                            </div>
+                        </div>
+
+                        <hr className="border-white/5" />
+
+                        {/* Logo sizes */}
+                        <div>
+                            <h4 className="font-bold text-brand-yellow/80 uppercase tracking-widest mb-2">Tamaño de Logo Bicicleta</h4>
+                            <div className="space-y-2">
+                                <label className="flex justify-between items-center">
+                                    <span>Celular: {styles.mobileBikeHeight}px</span>
+                                    <input type="range" min="40" max="120" value={styles.mobileBikeHeight} onChange={(e) => setStyles({...styles, mobileBikeHeight: Number(e.target.value)})} className="w-1/2" />
+                                </label>
+                                <label className="flex justify-between items-center">
+                                    <span>PC: {styles.desktopBikeHeight}px</span>
+                                    <input type="range" min="60" max="160" value={styles.desktopBikeHeight} onChange={(e) => setStyles({...styles, desktopBikeHeight: Number(e.target.value)})} className="w-1/2" />
+                                </label>
+                            </div>
+                        </div>
+
+                        <hr className="border-white/5" />
+
+                        {/* Logo sizes */}
+                        <div>
+                            <h4 className="font-bold text-brand-yellow/80 uppercase tracking-widest mb-2">Tamaño de Logo Briz</h4>
+                            <div className="space-y-2">
+                                <label className="flex justify-between items-center">
+                                    <span>Celular: {styles.mobileBrizHeight}px</span>
+                                    <input type="range" min="20" max="90" value={styles.mobileBrizHeight} onChange={(e) => setStyles({...styles, mobileBrizHeight: Number(e.target.value)})} className="w-1/2" />
+                                </label>
+                                <label className="flex justify-between items-center">
+                                    <span>PC: {styles.desktopBrizHeight}px</span>
+                                    <input type="range" min="30" max="120" value={styles.desktopBrizHeight} onChange={(e) => setStyles({...styles, desktopBrizHeight: Number(e.target.value)})} className="w-1/2" />
+                                </label>
+                            </div>
+                        </div>
+
+                        <hr className="border-white/5" />
+
+                        {/* Logo spacing */}
+                        <div>
+                            <h4 className="font-bold text-brand-yellow/80 uppercase tracking-widest mb-2">Distancia entre Logos</h4>
+                            <div className="space-y-2">
+                                <label className="flex justify-between items-center">
+                                    <span>Separación Celular: {styles.mobileLogoGap}px</span>
+                                    <input type="range" min="0" max="32" value={styles.mobileLogoGap} onChange={(e) => setStyles({...styles, mobileLogoGap: Number(e.target.value)})} className="w-1/2" />
+                                </label>
+                                <label className="flex justify-between items-center">
+                                    <span>Separación PC: {styles.desktopLogoGap}px</span>
+                                    <input type="range" min="0" max="48" value={styles.desktopLogoGap} onChange={(e) => setStyles({...styles, desktopLogoGap: Number(e.target.value)})} className="w-1/2" />
+                                </label>
+                                <label className="flex justify-between items-center">
+                                    <span>Solapamiento (Briz): {styles.logoBrizMarginLeft}px</span>
+                                    <input type="range" min="-30" max="15" value={styles.logoBrizMarginLeft} onChange={(e) => setStyles({...styles, logoBrizMarginLeft: Number(e.target.value)})} className="w-1/2" />
+                                </label>
+                            </div>
+                        </div>
+
+                        <hr className="border-white/5" />
+
+                        {/* Separators */}
+                        <div>
+                            <h4 className="font-bold text-brand-yellow/80 uppercase tracking-widest mb-2">Separadores (Huellas)</h4>
+                            <div className="space-y-2">
+                                <label className="flex justify-between items-center">
+                                    <span>Margen lateral: {styles.separatorMargin}px</span>
+                                    <input type="range" min="0" max="50" value={styles.separatorMargin} onChange={(e) => setStyles({...styles, separatorMargin: Number(e.target.value)})} className="w-1/2" />
+                                </label>
+                                <label className="flex justify-between items-center">
+                                    <span>Alto de huella: {styles.separatorHeight}px</span>
+                                    <input type="range" min="20" max="90" value={styles.separatorHeight} onChange={(e) => setStyles({...styles, separatorHeight: Number(e.target.value), separatorWidth: Math.round(Number(e.target.value) / 4)})} className="w-1/2" />
+                                </label>
+                            </div>
+                        </div>
+
+                        <hr className="border-white/5" />
+
+                        {/* Text Centro */}
+                        <div>
+                            <h4 className="font-bold text-brand-yellow/80 uppercase tracking-widest mb-2">Texto "Centro de la Bicicleta"</h4>
+                            <div className="space-y-2">
+                                <label className="flex justify-between items-center">
+                                    <span>Tamaño de letra: {styles.textFontSize}px</span>
+                                    <input type="range" min="10" max="28" value={styles.textFontSize} onChange={(e) => setStyles({...styles, textFontSize: Number(e.target.value)})} className="w-1/2" />
+                                </label>
+                                <label className="flex justify-between items-center">
+                                    <span>Desplazamiento Y: {styles.textYShift}px</span>
+                                    <input type="range" min="-20" max="20" value={styles.textYShift} onChange={(e) => setStyles({...styles, textYShift: Number(e.target.value)})} className="w-1/2" />
+                                </label>
+                            </div>
+                        </div>
+
+                        <hr className="border-white/5" />
+
+                        {/* Spacing buttons */}
+                        <div>
+                            <h4 className="font-bold text-brand-yellow/80 uppercase tracking-widest mb-2">Espaciado Botones PC</h4>
+                            <div className="space-y-2">
+                                <label className="flex justify-between items-center">
+                                    <span>Espacio Nav: {styles.desktopNavGap}px</span>
+                                    <input type="range" min="10" max="64" value={styles.desktopNavGap} onChange={(e) => setStyles({...styles, desktopNavGap: Number(e.target.value)})} className="w-1/2" />
+                                </label>
+                                <label className="flex justify-between items-center">
+                                    <span>Espacio Grupo: {styles.buttonGroupGap}px</span>
+                                    <input type="range" min="8" max="64" value={styles.buttonGroupGap} onChange={(e) => setStyles({...styles, buttonGroupGap: Number(e.target.value)})} className="w-1/2" />
+                                </label>
+                            </div>
+                        </div>
+
+                        <hr className="border-white/5" />
+
+                        <div className="flex gap-2 pt-2">
+                            <button 
+                                onClick={() => {
+                                    setStyles({
+                                        mobileNavbarHeight: 88,
+                                        desktopNavbarHeight: 120,
+                                        mobileBikeHeight: 66,
+                                        desktopBikeHeight: 108,
+                                        mobileBrizHeight: 42,
+                                        desktopBrizHeight: 68,
+                                        mobileLogoGap: 8,
+                                        desktopLogoGap: 16,
+                                        logoBrizMarginLeft: 0,
+                                        separatorMargin: 24,
+                                        separatorHeight: 64,
+                                        separatorWidth: 16,
+                                        textFontSize: 16,
+                                        textYShift: 0,
+                                        desktopNavGap: 24,
+                                        buttonGroupGap: 24,
+                                    });
+                                }}
+                                className="w-1/2 py-2.5 bg-white/10 hover:bg-white/15 rounded-xl transition font-bold text-center"
+                            >
+                                Reiniciar
+                            </button>
+                            <button 
+                                onClick={() => {
+                                    navigator.clipboard.writeText(JSON.stringify(styles, null, 4));
+                                    alert('¡Estilos copiados! Pégalos en el chat.');
+                                }}
+                                className="w-1/2 py-2.5 bg-brand-yellow text-brand-black hover:bg-brand-yellow/90 rounded-xl transition font-bold text-center"
+                            >
+                                Copiar Estilos
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </motion.header>
     );
 }
