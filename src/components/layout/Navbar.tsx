@@ -39,30 +39,25 @@ const allNavLinks = [...group1Links, ...group2Links];
 
 const TireTrackSeparator = ({ className = '' }: { className?: string }) => (
     <svg 
-        className={`hidden h-10 w-4 shrink-0 text-white/80 md:block lg:h-12 lg:w-5 ${className}`} 
-        viewBox="0 0 20 64" 
+        className={`hidden h-12 w-3 shrink-0 text-white/80 md:block lg:h-16 lg:w-4 ${className}`} 
+        viewBox="0 0 16 64" 
         fill="currentColor" 
         aria-hidden="true"
     >
-        <path d="M 3 2 L 8 4 L 8 7 L 3 5 Z" />
-        <path d="M 12 8 L 17 10 L 17 13 L 12 11 Z" />
-        <rect x="9" y="5" width="2" height="2" rx="0.5" />
+        <path d="M 2 4 L 7 7 L 6 9 L 1 6 Z" />
+        <path d="M 10 9 L 15 12 L 14 14 L 9 11 Z" />
 
-        <path d="M 3 14 L 8 16 L 8 19 L 3 17 Z" />
-        <path d="M 12 20 L 17 22 L 17 25 L 12 23 Z" />
-        <rect x="9" y="17" width="2" height="2" rx="0.5" />
+        <path d="M 2 16 L 7 19 L 6 21 L 1 18 Z" />
+        <path d="M 10 21 L 15 24 L 14 26 L 9 23 Z" />
 
-        <path d="M 3 26 L 8 28 L 8 31 L 3 29 Z" />
-        <path d="M 12 32 L 17 34 L 17 37 L 12 35 Z" />
-        <rect x="9" y="29" width="2" height="2" rx="0.5" />
+        <path d="M 2 28 L 7 31 L 6 33 L 1 30 Z" />
+        <path d="M 10 33 L 15 36 L 14 38 L 9 35 Z" />
 
-        <path d="M 3 38 L 8 40 L 8 43 L 3 41 Z" />
-        <path d="M 12 44 L 17 46 L 17 49 L 12 47 Z" />
-        <rect x="9" y="41" width="2" height="2" rx="0.5" />
+        <path d="M 2 40 L 7 43 L 6 45 L 1 42 Z" />
+        <path d="M 10 45 L 15 48 L 14 50 L 9 47 Z" />
 
-        <path d="M 3 50 L 8 52 L 8 55 L 3 53 Z" />
-        <path d="M 12 56 L 17 58 L 17 61 L 12 59 Z" />
-        <rect x="9" y="53" width="2" height="2" rx="0.5" />
+        <path d="M 2 52 L 7 55 L 6 57 L 1 54 Z" />
+        <path d="M 10 57 L 15 60 L 14 62 L 9 59 Z" />
     </svg>
 );
 
@@ -125,22 +120,22 @@ export default function Navbar() {
         >
             <div className="relative bg-brand-yellow">
                 <nav className="mx-auto max-w-[1480px] px-3 sm:px-7">
-                    <div className="flex h-[74px] items-center justify-between gap-2 lg:h-[96px]">
-                        <div className="flex items-center gap-2 lg:gap-3">
-                            <Link to="/" className="group flex min-w-0 items-center gap-1.5 sm:gap-2 lg:gap-2.5" aria-label="BRIZ Centro de la Bicicleta">
+                    <div className="flex h-[88px] items-center justify-between gap-3 lg:h-[120px]">
+                        <div className="flex items-center gap-1 sm:gap-2">
+                            <Link to="/" className="group flex items-center shrink-0 gap-2 sm:gap-3 lg:gap-4 pl-1" aria-label="BRIZ Centro de la Bicicleta">
                                 <img
                                     src="/logo_bicicleta_principal.png"
                                     alt="Bicicleta BRIZ"
-                                    className="h-[52px] w-auto shrink-0 object-contain brightness-0 invert transition-transform duration-200 group-hover:scale-[1.02] sm:h-[65px] lg:h-[80px]"
+                                    className="h-[66px] w-auto shrink-0 object-contain brightness-0 invert transition-transform duration-200 group-hover:scale-[1.02] sm:h-[84px] lg:h-[108px]"
                                 />
                                 <img
                                     src="/logo_briz_principal.png"
                                     alt="BRIZ"
-                                    className="h-[36px] w-auto shrink-0 object-contain brightness-0 invert sm:h-[44px] lg:h-[54px]"
+                                    className="h-[42px] w-auto shrink-0 object-contain brightness-0 invert sm:h-[52px] lg:h-[68px]"
                                 />
                             </Link>
 
-                            <TireTrackSeparator />
+                            <TireTrackSeparator className="mx-3 lg:mx-6" />
 
                             <div className="hidden md:flex items-center h-full">
                                 <span className="font-maiandra text-xs font-black uppercase leading-none tracking-widest text-white drop-shadow-sm sm:text-sm lg:text-base xl:text-lg shrink-0">
@@ -151,7 +146,7 @@ export default function Navbar() {
 
                         {/* Desktop Navigation */}
                         <div className="hidden items-center gap-3 xl:gap-6 lg:flex h-full">
-                            <TireTrackSeparator />
+                            <TireTrackSeparator className="mx-3 lg:mx-6" />
 
                             <div className="flex items-center gap-1.5 lg:gap-3 xl:gap-6">
                                 {group1Links.map((link) => {
@@ -179,7 +174,7 @@ export default function Navbar() {
                                 })}
                             </div>
 
-                            <TireTrackSeparator />
+                            <TireTrackSeparator className="mx-3 lg:mx-6" />
 
                             <div className="flex items-center gap-1.5 lg:gap-3 xl:gap-6">
                                 {group2Links.map((link) => {
