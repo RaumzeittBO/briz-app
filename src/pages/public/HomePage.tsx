@@ -71,7 +71,7 @@ const defaultTransform: EditableTransform = { x: 0, y: 0, scale: 1 };
 
 const defaultDesignConfig: DesignConfig = {
     desktop: {
-        heroLettering: { x: 0, y: 0, scale: 1.33 },
+        heroLettering: { x: 0, y: 0, scale: 1.0 },
         heroCollage: { x: 0, y: 0, scale: 0.92 },
         heroButtons: { x: 0, y: 0, scale: 0.98 },
         servicesTitle: { x: 0, y: 0, scale: 1 },
@@ -88,7 +88,7 @@ const defaultDesignConfig: DesignConfig = {
         brandComingSoon: { x: 197, y: 257, scale: 0.59 },
     },
     mobile: {
-        heroLettering: { x: 0, y: 0, scale: 1 },
+        heroLettering: { x: 0, y: 0, scale: 0.75 },
         heroCollage: { x: 0, y: 0, scale: 1 },
         heroButtons: { x: 0, y: 0, scale: 1 },
         servicesTitle: { x: 0, y: 0, scale: 1 },
@@ -597,7 +597,7 @@ function HeroCollage({ variant }: { variant: 'mobile' | 'desktop' }) {
             id="heroCollage"
             className={
                 isMobile
-                    ? 'relative mx-auto mt-6 mb-6 block w-[90vw] max-w-[340px] px-2 lg:hidden'
+                    ? 'relative mx-auto mt-6 mb-6 block w-[95vw] max-w-[440px] px-2 lg:hidden'
                     : 'relative mx-auto hidden w-full max-w-none lg:ml-[-4.5rem] lg:mr-[-6rem] lg:mt-[-1rem] lg:block'
             }
         >
@@ -691,7 +691,7 @@ function HeroSection() {
                             Centro de la bicicleta
                         </div>
 
-                        <EditableLayer id="heroLettering" className="relative mt-4 w-[min(100%,34rem)] sm:mt-5 lg:ml-[-1.5rem] lg:w-[43rem]">
+                        <EditableLayer id="heroLettering" className="relative mt-4 w-[min(100%,25.5rem)] sm:mt-5 lg:ml-[-1.5rem] lg:w-[32.25rem]">
                             <motion.div
                                 initial={{ opacity: 0, y: 18, rotate: -1.2, scale: 0.92 }}
                                 animate={{
