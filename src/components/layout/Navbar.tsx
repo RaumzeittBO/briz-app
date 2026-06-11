@@ -125,9 +125,9 @@ export default function Navbar() {
         >
             <div className="relative bg-brand-yellow">
                 <nav className="mx-auto max-w-[1480px] px-3 sm:px-7">
-                    <div className="flex h-[74px] items-center justify-between gap-1 sm:gap-2 lg:h-[96px]">
-                        <div className="flex items-center gap-1 sm:gap-2">
-                            <Link to="/" className="group flex min-w-0 items-center gap-0" aria-label="BRIZ Centro de la Bicicleta">
+                    <div className="flex h-[74px] items-center justify-between gap-2 lg:h-[96px]">
+                        <div className="flex items-center gap-2 lg:gap-3">
+                            <Link to="/" className="group flex min-w-0 items-center gap-1.5 sm:gap-2 lg:gap-2.5" aria-label="BRIZ Centro de la Bicicleta">
                                 <img
                                     src="/logo_bicicleta_principal.png"
                                     alt="Bicicleta BRIZ"
@@ -136,22 +136,24 @@ export default function Navbar() {
                                 <img
                                     src="/logo_briz_principal.png"
                                     alt="BRIZ"
-                                    className="-ml-3 h-[36px] w-auto shrink-0 object-contain brightness-0 invert sm:h-[44px] sm:-ml-4 lg:h-[54px] lg:-ml-5"
+                                    className="h-[36px] w-auto shrink-0 object-contain brightness-0 invert sm:h-[44px] lg:h-[54px]"
                                 />
                             </Link>
 
                             <TireTrackSeparator />
 
-                            <span className="hidden font-maiandra text-[10px] font-bold uppercase leading-tight tracking-wider text-white drop-shadow-sm md:block sm:text-xs lg:text-sm shrink-0">
-                                Centro de la Bicicleta
-                            </span>
+                            <div className="hidden md:flex items-center h-full">
+                                <span className="font-maiandra text-xs font-black uppercase leading-none tracking-widest text-white drop-shadow-sm sm:text-sm lg:text-base xl:text-lg shrink-0">
+                                    Centro de la Bicicleta
+                                </span>
+                            </div>
                         </div>
 
                         {/* Desktop Navigation */}
-                        <div className="hidden items-center gap-1 xl:gap-2 lg:flex h-full">
+                        <div className="hidden items-center gap-3 xl:gap-6 lg:flex h-full">
                             <TireTrackSeparator />
 
-                            <div className="flex items-center gap-0.5 xl:gap-2">
+                            <div className="flex items-center gap-1.5 lg:gap-3 xl:gap-6">
                                 {group1Links.map((link) => {
                                     const Icon = link.icon;
                                     const active = isActive(link.href);
@@ -160,12 +162,12 @@ export default function Navbar() {
                                             key={link.label}
                                             to={link.href}
                                             onClick={(event) => handleNavClick(event, link.href)}
-                                            className={`relative flex flex-col items-center justify-center gap-1 rounded-xl px-2.5 py-1.5 text-center transition-all duration-300 hover:bg-white/20 hover:scale-[1.03] ${
+                                            className={`relative flex flex-col items-center justify-center gap-1.5 rounded-xl px-3 py-1.5 text-center transition-all duration-300 hover:bg-white/20 hover:scale-[1.03] ${
                                                 active ? 'text-white' : 'text-brand-black'
                                             }`}
                                         >
-                                            <Icon className="h-6 w-6 shrink-0 transition-transform duration-200" strokeWidth={2.0} />
-                                            <span className="font-cocon text-[11px] font-bold tracking-wide leading-none">{link.label}</span>
+                                            <Icon className="h-6 w-6 lg:h-7 lg:w-7 shrink-0 transition-transform duration-200" strokeWidth={2.0} />
+                                            <span className="font-cocon text-xs lg:text-sm font-bold tracking-wide leading-none">{link.label}</span>
                                             {active && (
                                                 <motion.span
                                                     layoutId="activeNavUnderline"
@@ -179,7 +181,7 @@ export default function Navbar() {
 
                             <TireTrackSeparator />
 
-                            <div className="flex items-center gap-0.5 xl:gap-2">
+                            <div className="flex items-center gap-1.5 lg:gap-3 xl:gap-6">
                                 {group2Links.map((link) => {
                                     const Icon = link.icon;
                                     const active = isActive(link.href);
@@ -188,12 +190,12 @@ export default function Navbar() {
                                             key={link.label}
                                             to={link.href}
                                             onClick={(event) => handleNavClick(event, link.href)}
-                                            className={`relative flex flex-col items-center justify-center gap-1 rounded-xl px-2.5 py-1.5 text-center transition-all duration-300 hover:bg-white/20 hover:scale-[1.03] ${
+                                            className={`relative flex flex-col items-center justify-center gap-1.5 rounded-xl px-3 py-1.5 text-center transition-all duration-300 hover:bg-white/20 hover:scale-[1.03] ${
                                                 active ? 'text-white' : 'text-brand-black'
                                             }`}
                                         >
-                                            <Icon className="h-6 w-6 shrink-0 transition-transform duration-200" strokeWidth={2.0} />
-                                            <span className="font-cocon text-[11px] font-bold tracking-wide leading-none">{link.label}</span>
+                                            <Icon className="h-6 w-6 lg:h-7 lg:w-7 shrink-0 transition-transform duration-200" strokeWidth={2.0} />
+                                            <span className="font-cocon text-xs lg:text-sm font-bold tracking-wide leading-none">{link.label}</span>
                                             {active && (
                                                 <motion.span
                                                     layoutId="activeNavUnderline"
