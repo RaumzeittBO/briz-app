@@ -39,7 +39,7 @@ const allNavLinks = [...group1Links, ...group2Links];
 
 const TireTrackSeparator = ({ className = '' }: { className?: string }) => (
     <svg 
-        className={`hidden h-12 w-3 shrink-0 text-white/80 md:block lg:h-16 lg:w-4 ${className}`} 
+        className={`hidden shrink-0 text-white/80 md:block dyn-separator ${className}`} 
         viewBox="0 0 16 64" 
         fill="currentColor" 
         aria-hidden="true"
@@ -64,6 +64,57 @@ const TireTrackSeparator = ({ className = '' }: { className?: string }) => (
 import { useStore } from '@/context/StoreContext';
 import CustomerAuthModal from './CustomerAuthModal';
 
+export interface NavbarStyles {
+    mobileNavbarHeight: number;
+    desktopNavbarHeight: number;
+    mobileBikeHeight: number;
+    desktopBikeHeight: number;
+    mobileBrizHeight: number;
+    desktopBrizHeight: number;
+    mobileLogoGap: number;
+    desktopLogoGap: number;
+    logoBrizMarginLeft: number;
+    separatorMargin: number;
+    separatorHeight: number;
+    separatorWidth: number;
+    textFontSize: number;
+    desktopNavGap: number;
+    buttonGroupGap: number;
+
+    logoTranslateX?: number;
+    logoTranslateY?: number;
+    bikeTranslateX?: number;
+    bikeTranslateY?: number;
+    brizTranslateX?: number;
+    brizTranslateY?: number;
+    track1TranslateX?: number;
+    track1TranslateY?: number;
+    textTranslateX?: number;
+    textTranslateY?: number;
+    track2TranslateX?: number;
+    track2TranslateY?: number;
+    g1TranslateX?: number;
+    g1TranslateY?: number;
+    track3TranslateX?: number;
+    track3TranslateY?: number;
+    g2TranslateX?: number;
+    g2TranslateY?: number;
+
+    mobileBikeTranslateX?: number;
+    mobileBikeTranslateY?: number;
+    mobileBrizTranslateX?: number;
+    mobileBrizTranslateY?: number;
+    mobileMenuTranslateX?: number;
+    mobileMenuTranslateY?: number;
+
+    navPaddingX: number;
+    navMaxWidth: number;
+    btnPaddingX: number;
+    btnPaddingY: number;
+    btnFontSize: number;
+    btnIconSize: number;
+}
+
 export default function Navbar() {
     const [scrolled, setScrolled] = useState(false);
     const [mobileOpen, setMobileOpen] = useState(false);
@@ -74,7 +125,19 @@ export default function Navbar() {
     const [authModalOpen, setAuthModalOpen] = useState(false);
 
     const [customizerOpen, setCustomizerOpen] = useState(false);
-    const [styles, setStyles] = useState(() => {
+    const [dragMode, setDragMode] = useState(false);
+    const [isMobile, setIsMobile] = useState(false);
+
+    useEffect(() => {
+        const handleResize = () => {
+            setIsMobile(window.innerWidth < 1024);
+        };
+        handleResize();
+        window.addEventListener('resize', handleResize);
+        return () => window.removeEventListener('resize', handleResize);
+    }, []);
+
+    const [styles, setStyles] = useState<NavbarStyles>(() => {
         const saved = localStorage.getItem('briz-navbar-styles');
         if (saved) {
             try { return JSON.parse(saved); } catch (e) {}
@@ -93,9 +156,44 @@ export default function Navbar() {
             separatorHeight: 64,
             separatorWidth: 16,
             textFontSize: 16,
-            textYShift: 0,
             desktopNavGap: 24,
             buttonGroupGap: 24,
+
+            // 2D translation offsets
+            logoTranslateX: 0,
+            logoTranslateY: 0,
+            bikeTranslateX: 0,
+            bikeTranslateY: 0,
+            brizTranslateX: 0,
+            brizTranslateY: 0,
+            track1TranslateX: 0,
+            track1TranslateY: 0,
+            textTranslateX: 0,
+            textTranslateY: 0,
+            track2TranslateX: 0,
+            track2TranslateY: 0,
+            g1TranslateX: 0,
+            g1TranslateY: 0,
+            track3TranslateX: 0,
+            track3TranslateY: 0,
+            g2TranslateX: 0,
+            g2TranslateY: 0,
+
+            // Mobile-specific offsets
+            mobileBikeTranslateX: 0,
+            mobileBikeTranslateY: 0,
+            mobileBrizTranslateX: 0,
+            mobileBrizTranslateY: 0,
+            mobileMenuTranslateX: 0,
+            mobileMenuTranslateY: 0,
+
+            // Layout configurations
+            navPaddingX: 28,
+            navMaxWidth: 1480,
+            btnPaddingX: 12,
+            btnPaddingY: 6,
+            btnFontSize: 14,
+            btnIconSize: 28,
         };
     });
 
@@ -141,6 +239,32 @@ export default function Navbar() {
         return location.pathname === href;
     };
 
+    // 2D translation offsets with safe defaults
+    const bikeTranslateX = styles.bikeTranslateX ?? 0;
+    const bikeTranslateY = styles.bikeTranslateY ?? 0;
+    const brizTranslateX = styles.brizTranslateX ?? 0;
+    const brizTranslateY = styles.brizTranslateY ?? 0;
+    const track1TranslateX = styles.track1TranslateX ?? 0;
+    const track1TranslateY = styles.track1TranslateY ?? 0;
+    const textTranslateX = styles.textTranslateX ?? 0;
+    const textTranslateY = styles.textTranslateY ?? 0;
+    const track2TranslateX = styles.track2TranslateX ?? 0;
+    const track2TranslateY = styles.track2TranslateY ?? 0;
+    const g1TranslateX = styles.g1TranslateX ?? 0;
+    const g1TranslateY = styles.g1TranslateY ?? 0;
+    const track3TranslateX = styles.track3TranslateX ?? 0;
+    const track3TranslateY = styles.track3TranslateY ?? 0;
+    const g2TranslateX = styles.g2TranslateX ?? 0;
+    const g2TranslateY = styles.g2TranslateY ?? 0;
+
+    // Mobile offsets
+    const mobileBikeTranslateX = styles.mobileBikeTranslateX ?? 0;
+    const mobileBikeTranslateY = styles.mobileBikeTranslateY ?? 0;
+    const mobileBrizTranslateX = styles.mobileBrizTranslateX ?? 0;
+    const mobileBrizTranslateY = styles.mobileBrizTranslateY ?? 0;
+    const mobileMenuTranslateX = styles.mobileMenuTranslateX ?? 0;
+    const mobileMenuTranslateY = styles.mobileMenuTranslateY ?? 0;
+
     return (
         <motion.header
             initial={{ y: -100 }}
@@ -176,10 +300,18 @@ export default function Navbar() {
                     --sep-w: ${styles.separatorWidth}px;
                     
                     --text-fs: ${styles.textFontSize}px;
-                    --text-y: ${styles.textYShift}px;
                     
                     --nav-gap: ${styles.desktopNavGap}px;
                     --btn-gap: ${styles.buttonGroupGap}px;
+
+                    /* Spacings and sizes */
+                    --nav-padding-x: ${styles.navPaddingX}px;
+                    --nav-max-w: ${styles.navMaxWidth}px;
+                    
+                    --btn-px: ${styles.btnPaddingX}px;
+                    --btn-py: ${styles.btnPaddingY}px;
+                    --btn-fs: ${styles.btnFontSize}px;
+                    --icon-sz: ${styles.btnIconSize}px;
                 }
                 
                 .dyn-navbar {
@@ -228,7 +360,6 @@ export default function Navbar() {
                 
                 .dyn-text-centro {
                     font-size: var(--text-fs) !important;
-                    transform: translateY(var(--text-y)) !important;
                 }
                 
                 .dyn-desktop-nav {
@@ -238,39 +369,171 @@ export default function Navbar() {
                 .dyn-btn-group {
                     gap: var(--btn-gap) !important;
                 }
+                
+                .dyn-nav-container {
+                    max-width: var(--nav-max-w) !important;
+                    padding-left: var(--nav-padding-x) !important;
+                    padding-right: var(--nav-padding-x) !important;
+                }
+                
+                .dyn-btn {
+                    padding-left: var(--btn-px) !important;
+                    padding-right: var(--btn-px) !important;
+                    padding-top: var(--btn-py) !important;
+                    padding-bottom: var(--btn-py) !important;
+                }
+                
+                .dyn-btn-text {
+                    font-size: var(--btn-fs) !important;
+                }
+                
+                .dyn-btn-icon {
+                    width: var(--icon-sz) !important;
+                    height: var(--icon-sz) !important;
+                }
             `}</style>
 
+            {dragMode && (
+                <div className="bg-red-600 text-white font-cocon text-xs font-bold text-center py-2.5 px-4 flex items-center justify-center gap-2 z-[60] shadow-md border-b border-red-700 select-none">
+                    <span>🔧 Modo Arrastre Libre Activo: Arrastra los logos, textos, huellas o botones para colocarlos donde quieras. Haz clic en "Copiar Estilos" en el panel flotante para guardar los cambios.</span>
+                    <button 
+                        onClick={() => setDragMode(false)}
+                        className="bg-white/20 hover:bg-white/30 text-white px-3 py-1 rounded-lg text-[10px] uppercase font-black transition active:scale-95"
+                    >
+                        Salir de Edición
+                    </button>
+                </div>
+            )}
+
             <div className="relative bg-brand-yellow">
-                <nav className="mx-auto max-w-[1480px] px-3 sm:px-7">
+                <nav className="mx-auto dyn-nav-container">
                     <div className="flex items-center justify-between gap-3 dyn-navbar">
                         <div className="flex items-center gap-1 sm:gap-2">
-                            <Link to="/" className="group flex items-center shrink-0 pl-1 dyn-logo-link" aria-label="BRIZ Centro de la Bicicleta">
-                                <img
-                                    src="/logo_bicicleta_principal.png"
-                                    alt="Bicicleta BRIZ"
-                                    className="w-auto shrink-0 object-contain brightness-0 invert transition-transform duration-200 group-hover:scale-[1.02] dyn-bike-logo"
-                                />
-                                <img
-                                    src="/logo_briz_principal.png"
-                                    alt="BRIZ"
-                                    className="w-auto shrink-0 object-contain brightness-0 invert dyn-briz-logo"
-                                />
+                            <Link 
+                                to="/" 
+                                className="group flex items-center shrink-0 pl-1 dyn-logo-link" 
+                                aria-label="BRIZ Centro de la Bicicleta"
+                                onClick={(e) => { if (dragMode) e.preventDefault(); }}
+                            >
+                                <motion.div
+                                    drag={dragMode}
+                                    dragMomentum={false}
+                                    style={{ 
+                                        x: isMobile ? mobileBikeTranslateX : bikeTranslateX, 
+                                        y: isMobile ? mobileBikeTranslateY : bikeTranslateY 
+                                    }}
+                                    onDragEnd={(_, info) => {
+                                        if (!dragMode) return;
+                                        setStyles(prev => ({
+                                            ...prev,
+                                            [isMobile ? 'mobileBikeTranslateX' : 'bikeTranslateX']: (isMobile ? (prev.mobileBikeTranslateX ?? 0) : (prev.bikeTranslateX ?? 0)) + info.offset.x,
+                                            [isMobile ? 'mobileBikeTranslateY' : 'bikeTranslateY']: (isMobile ? (prev.mobileBikeTranslateY ?? 0) : (prev.bikeTranslateY ?? 0)) + info.offset.y
+                                        }));
+                                    }}
+                                    className={dragMode ? "border border-dashed border-brand-charcoal/60 bg-brand-charcoal/5 cursor-grab active:cursor-grabbing p-1 rounded-xl select-none" : "shrink-0"}
+                                >
+                                    <img
+                                        src="/logo_bicicleta_principal.png"
+                                        alt="Bicicleta BRIZ"
+                                        className="w-auto shrink-0 object-contain brightness-0 invert transition-transform duration-200 group-hover:scale-[1.02] dyn-bike-logo"
+                                    />
+                                </motion.div>
+
+                                <motion.div
+                                    drag={dragMode}
+                                    dragMomentum={false}
+                                    style={{ 
+                                        x: isMobile ? mobileBrizTranslateX : brizTranslateX, 
+                                        y: isMobile ? mobileBrizTranslateY : brizTranslateY 
+                                    }}
+                                    onDragEnd={(_, info) => {
+                                        if (!dragMode) return;
+                                        setStyles(prev => ({
+                                            ...prev,
+                                            [isMobile ? 'mobileBrizTranslateX' : 'brizTranslateX']: (isMobile ? (prev.mobileBrizTranslateX ?? 0) : (prev.brizTranslateX ?? 0)) + info.offset.x,
+                                            [isMobile ? 'mobileBrizTranslateY' : 'brizTranslateY']: (isMobile ? (prev.mobileBrizTranslateY ?? 0) : (prev.brizTranslateY ?? 0)) + info.offset.y
+                                        }));
+                                    }}
+                                    className={dragMode ? "border border-dashed border-brand-charcoal/60 bg-brand-charcoal/5 cursor-grab active:cursor-grabbing p-1 rounded-xl select-none" : "shrink-0"}
+                                >
+                                    <img
+                                        src="/logo_briz_principal.png"
+                                        alt="BRIZ"
+                                        className="w-auto shrink-0 object-contain brightness-0 invert dyn-briz-logo"
+                                    />
+                                </motion.div>
                             </Link>
 
-                            <TireTrackSeparator />
+                            <motion.div
+                                drag={dragMode && !isMobile}
+                                dragMomentum={false}
+                                style={{ x: track1TranslateX, y: track1TranslateY }}
+                                onDragEnd={(_, info) => {
+                                    if (!dragMode || isMobile) return;
+                                    setStyles(prev => ({
+                                        ...prev,
+                                        track1TranslateX: (prev.track1TranslateX ?? 0) + info.offset.x,
+                                        track1TranslateY: (prev.track1TranslateY ?? 0) + info.offset.y
+                                    }));
+                                }}
+                                className={dragMode && !isMobile ? "border border-dashed border-brand-charcoal/60 bg-brand-charcoal/5 cursor-grab active:cursor-grabbing p-1 rounded-xl select-none" : ""}
+                            >
+                                <TireTrackSeparator className="dyn-track-1" />
+                            </motion.div>
 
-                            <div className="hidden md:flex items-center h-full">
+                            <motion.div 
+                                drag={dragMode && !isMobile}
+                                dragMomentum={false}
+                                style={{ x: textTranslateX, y: textTranslateY }}
+                                onDragEnd={(_, info) => {
+                                    if (!dragMode || isMobile) return;
+                                    setStyles(prev => ({
+                                        ...prev,
+                                        textTranslateX: (prev.textTranslateX ?? 0) + info.offset.x,
+                                        textTranslateY: (prev.textTranslateY ?? 0) + info.offset.y
+                                    }));
+                                }}
+                                className={dragMode && !isMobile ? "border border-dashed border-brand-charcoal/60 bg-brand-charcoal/5 cursor-grab active:cursor-grabbing p-2 rounded-xl select-none" : "hidden md:flex items-center h-full dyn-text-wrapper"}
+                            >
                                 <span className="font-maiandra font-black uppercase leading-none tracking-widest text-white drop-shadow-sm shrink-0 dyn-text-centro">
                                     Centro de la Bicicleta
                                 </span>
-                            </div>
+                            </motion.div>
                         </div>
 
                         {/* Desktop Navigation */}
                         <div className="hidden items-center lg:flex h-full dyn-desktop-nav">
-                            <TireTrackSeparator />
+                            <motion.div
+                                drag={dragMode && !isMobile}
+                                dragMomentum={false}
+                                style={{ x: track2TranslateX, y: track2TranslateY }}
+                                onDragEnd={(_, info) => {
+                                    if (!dragMode || isMobile) return;
+                                    setStyles(prev => ({
+                                        ...prev,
+                                        track2TranslateX: (prev.track2TranslateX ?? 0) + info.offset.x,
+                                        track2TranslateY: (prev.track2TranslateY ?? 0) + info.offset.y
+                                    }));
+                                }}
+                                className={dragMode && !isMobile ? "border border-dashed border-brand-charcoal/60 bg-brand-charcoal/5 cursor-grab active:cursor-grabbing p-1 rounded-xl select-none" : ""}
+                            >
+                                <TireTrackSeparator className="dyn-track-2" />
+                            </motion.div>
 
-                            <div className="flex items-center dyn-btn-group">
+                            <motion.div 
+                                drag={dragMode && !isMobile}
+                                dragMomentum={false}
+                                style={{ x: g1TranslateX, y: g1TranslateY }}
+                                onDragEnd={(_, info) => {
+                                    if (!dragMode || isMobile) return;
+                                    setStyles(prev => ({
+                                        ...prev,
+                                        g1TranslateX: (prev.g1TranslateX ?? 0) + info.offset.x,
+                                        g1TranslateY: (prev.g1TranslateY ?? 0) + info.offset.y
+                                    }));
+                                }}
+                                className={dragMode && !isMobile ? "border border-dashed border-brand-charcoal/60 bg-brand-charcoal/5 cursor-grab active:cursor-grabbing p-2 rounded-xl select-none" : "flex items-center dyn-btn-group"}
+                            >
                                 {group1Links.map((link) => {
                                     const Icon = link.icon;
                                     const active = isActive(link.href);
@@ -278,13 +541,19 @@ export default function Navbar() {
                                         <Link
                                             key={link.label}
                                             to={link.href}
-                                            onClick={(event) => handleNavClick(event, link.href)}
-                                            className={`relative flex flex-col items-center justify-center gap-1.5 rounded-xl px-3 py-1.5 text-center transition-all duration-300 hover:bg-white/20 hover:scale-[1.03] ${
+                                            onClick={(event) => {
+                                                if (dragMode) {
+                                                    event.preventDefault();
+                                                    return;
+                                                }
+                                                handleNavClick(event, link.href);
+                                            }}
+                                            className={`relative flex flex-col items-center justify-center gap-1.5 rounded-xl text-center transition-all duration-300 hover:bg-white/20 hover:scale-[1.03] dyn-btn ${
                                                 active ? 'text-white' : 'text-brand-black'
                                             }`}
                                         >
-                                            <Icon className="h-6 w-6 lg:h-7 lg:w-7 shrink-0 transition-transform duration-200" strokeWidth={2.0} />
-                                            <span className="font-cocon text-xs lg:text-sm font-bold tracking-wide leading-none">{link.label}</span>
+                                            <Icon className="shrink-0 transition-transform duration-200 dyn-btn-icon" strokeWidth={2.0} />
+                                            <span className="font-cocon font-bold tracking-wide leading-none dyn-btn-text">{link.label}</span>
                                             {active && (
                                                 <motion.span
                                                     layoutId="activeNavUnderline"
@@ -294,11 +563,39 @@ export default function Navbar() {
                                         </Link>
                                     );
                                 })}
-                            </div>
+                            </motion.div>
 
-                            <TireTrackSeparator />
+                            <motion.div
+                                drag={dragMode && !isMobile}
+                                dragMomentum={false}
+                                style={{ x: track3TranslateX, y: track3TranslateY }}
+                                onDragEnd={(_, info) => {
+                                    if (!dragMode || isMobile) return;
+                                    setStyles(prev => ({
+                                        ...prev,
+                                        track3TranslateX: (prev.track3TranslateX ?? 0) + info.offset.x,
+                                        track3TranslateY: (prev.track3TranslateY ?? 0) + info.offset.y
+                                    }));
+                                }}
+                                className={dragMode && !isMobile ? "border border-dashed border-brand-charcoal/60 bg-brand-charcoal/5 cursor-grab active:cursor-grabbing p-1 rounded-xl select-none" : ""}
+                            >
+                                <TireTrackSeparator className="dyn-track-3" />
+                            </motion.div>
 
-                            <div className="flex items-center dyn-btn-group">
+                            <motion.div 
+                                drag={dragMode && !isMobile}
+                                dragMomentum={false}
+                                style={{ x: g2TranslateX, y: g2TranslateY }}
+                                onDragEnd={(_, info) => {
+                                    if (!dragMode || isMobile) return;
+                                    setStyles(prev => ({
+                                        ...prev,
+                                        g2TranslateX: (prev.g2TranslateX ?? 0) + info.offset.x,
+                                        g2TranslateY: (prev.g2TranslateY ?? 0) + info.offset.y
+                                    }));
+                                }}
+                                className={dragMode && !isMobile ? "border border-dashed border-brand-charcoal/60 bg-brand-charcoal/5 cursor-grab active:cursor-grabbing p-2 rounded-xl select-none" : "flex items-center dyn-btn-group"}
+                            >
                                 {group2Links.map((link) => {
                                     const Icon = link.icon;
                                     const active = isActive(link.href);
@@ -306,13 +603,19 @@ export default function Navbar() {
                                         <Link
                                             key={link.label}
                                             to={link.href}
-                                            onClick={(event) => handleNavClick(event, link.href)}
-                                            className={`relative flex flex-col items-center justify-center gap-1.5 rounded-xl px-3 py-1.5 text-center transition-all duration-300 hover:bg-white/20 hover:scale-[1.03] ${
+                                            onClick={(event) => {
+                                                if (dragMode) {
+                                                    event.preventDefault();
+                                                    return;
+                                                }
+                                                handleNavClick(event, link.href);
+                                            }}
+                                            className={`relative flex flex-col items-center justify-center gap-1.5 rounded-xl text-center transition-all duration-300 hover:bg-white/20 hover:scale-[1.03] dyn-btn ${
                                                 active ? 'text-white' : 'text-brand-black'
                                             }`}
                                         >
-                                            <Icon className="h-6 w-6 lg:h-7 lg:w-7 shrink-0 transition-transform duration-200" strokeWidth={2.0} />
-                                            <span className="font-cocon text-xs lg:text-sm font-bold tracking-wide leading-none">{link.label}</span>
+                                            <Icon className="shrink-0 transition-transform duration-200 dyn-btn-icon" strokeWidth={2.0} />
+                                            <span className="font-cocon font-bold tracking-wide leading-none dyn-btn-text">{link.label}</span>
                                             {active && (
                                                 <motion.span
                                                     layoutId="activeNavUnderline"
@@ -322,7 +625,7 @@ export default function Navbar() {
                                         </Link>
                                     );
                                 })}
-                            </div>
+                            </motion.div>
                         </div>
 
                         {/* Desktop User Auth Button */}
@@ -374,15 +677,33 @@ export default function Navbar() {
                             <Menu className="h-8 w-8" strokeWidth={2.5} />
                         </button>
 
-                        <button
-                            onClick={() => setMobileOpen((open) => !open)}
-                            className="ml-auto inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-white/18 text-white transition-transform active:scale-95 lg:hidden"
-                            aria-label={mobileOpen ? 'Cerrar menu' : 'Abrir menu'}
-                            aria-expanded={mobileOpen}
-                            type="button"
+                        <motion.div
+                            drag={dragMode && isMobile}
+                            dragMomentum={false}
+                            style={{ 
+                                x: isMobile ? mobileMenuTranslateX : 0, 
+                                y: isMobile ? mobileMenuTranslateY : 0 
+                            }}
+                            onDragEnd={(_, info) => {
+                                if (!dragMode || !isMobile) return;
+                                setStyles(prev => ({
+                                    ...prev,
+                                    mobileMenuTranslateX: (prev.mobileMenuTranslateX ?? 0) + info.offset.x,
+                                    mobileMenuTranslateY: (prev.mobileMenuTranslateY ?? 0) + info.offset.y
+                                }));
+                            }}
+                            className={dragMode && isMobile ? "border border-dashed border-brand-charcoal/60 bg-brand-charcoal/5 cursor-grab active:cursor-grabbing p-1 rounded-xl select-none" : "ml-auto lg:hidden"}
                         >
-                            {mobileOpen ? <X className="h-7 w-7" strokeWidth={2.5} /> : <Menu className="h-7 w-7" strokeWidth={2.5} />}
-                        </button>
+                            <button
+                                onClick={() => !dragMode && setMobileOpen((open) => !open)}
+                                className="inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-white/18 text-white transition-transform active:scale-95"
+                                aria-label={mobileOpen ? 'Cerrar menu' : 'Abrir menu'}
+                                aria-expanded={mobileOpen}
+                                type="button"
+                            >
+                                {mobileOpen ? <X className="h-7 w-7" strokeWidth={2.5} /> : <Menu className="h-7 w-7" strokeWidth={2.5} />}
+                            </button>
+                        </motion.div>
                     </div>
                 </nav>
 
@@ -487,116 +808,281 @@ export default function Navbar() {
                     </div>
                     
                     <div className="space-y-4 text-xs">
-                        {/* Height Group */}
-                        <div>
-                            <h4 className="font-bold text-brand-yellow/80 uppercase tracking-widest mb-2">Altura Navbar</h4>
-                            <div className="space-y-2">
+                        {/* Drag & Drop Toggle */}
+                        <div className="border border-white/10 bg-brand-yellow/10 rounded-2xl p-4 mb-2">
+                            <h4 className="font-bold text-brand-yellow uppercase tracking-wider mb-2 flex items-center gap-1.5 text-xs">
+                                <span>🎮 Arrastre Libre</span>
+                                <span className="text-[10px] bg-brand-yellow text-brand-black px-2 py-0.5 rounded-full font-black animate-pulse">NUEVO</span>
+                            </h4>
+                            <p className="text-white/60 mb-3 text-[10px] leading-relaxed">
+                                Activa esta opción para mover CUALQUIER elemento (logos, textos, huellas, botones) arrastrándolo directamente con el ratón. Los links se desactivarán para permitir el arrastre.
+                            </p>
+                            <button
+                                onClick={() => setDragMode(!dragMode)}
+                                className={`w-full py-3 rounded-xl font-bold transition flex items-center justify-center gap-2 text-xs ${
+                                    dragMode 
+                                        ? 'bg-red-500 text-white hover:bg-red-600' 
+                                        : 'bg-brand-yellow text-brand-black hover:bg-brand-yellow/90'
+                                }`}
+                            >
+                                {dragMode ? '🛑 Desactivar Arrastre Libre' : '🖱️ Activar Arrastre Libre (Drag)'}
+                            </button>
+                        </div>
+
+                        {/* Section: Dimensiones */}
+                        <div className="border border-white/5 bg-white/5 rounded-2xl p-3">
+                            <h4 className="font-bold text-brand-yellow uppercase tracking-wider mb-2">📐 Dimensiones y Escala</h4>
+                            <div className="space-y-3">
                                 <label className="flex justify-between items-center">
-                                    <span>Celular: {styles.mobileNavbarHeight}px</span>
+                                    <span>Navbar Alto (Cel): {styles.mobileNavbarHeight}px</span>
                                     <input type="range" min="60" max="140" value={styles.mobileNavbarHeight} onChange={(e) => setStyles({...styles, mobileNavbarHeight: Number(e.target.value)})} className="w-1/2" />
                                 </label>
                                 <label className="flex justify-between items-center">
-                                    <span>PC: {styles.desktopNavbarHeight}px</span>
+                                    <span>Navbar Alto (PC): {styles.desktopNavbarHeight}px</span>
                                     <input type="range" min="80" max="180" value={styles.desktopNavbarHeight} onChange={(e) => setStyles({...styles, desktopNavbarHeight: Number(e.target.value)})} className="w-1/2" />
                                 </label>
-                            </div>
-                        </div>
-
-                        <hr className="border-white/5" />
-
-                        {/* Logo sizes */}
-                        <div>
-                            <h4 className="font-bold text-brand-yellow/80 uppercase tracking-widest mb-2">Tamaño de Logo Bicicleta</h4>
-                            <div className="space-y-2">
                                 <label className="flex justify-between items-center">
-                                    <span>Celular: {styles.mobileBikeHeight}px</span>
+                                    <span>Bici Alto (Cel): {styles.mobileBikeHeight}px</span>
                                     <input type="range" min="40" max="120" value={styles.mobileBikeHeight} onChange={(e) => setStyles({...styles, mobileBikeHeight: Number(e.target.value)})} className="w-1/2" />
                                 </label>
                                 <label className="flex justify-between items-center">
-                                    <span>PC: {styles.desktopBikeHeight}px</span>
+                                    <span>Bici Alto (PC): {styles.desktopBikeHeight}px</span>
                                     <input type="range" min="60" max="160" value={styles.desktopBikeHeight} onChange={(e) => setStyles({...styles, desktopBikeHeight: Number(e.target.value)})} className="w-1/2" />
                                 </label>
-                            </div>
-                        </div>
-
-                        <hr className="border-white/5" />
-
-                        {/* Logo sizes */}
-                        <div>
-                            <h4 className="font-bold text-brand-yellow/80 uppercase tracking-widest mb-2">Tamaño de Logo Briz</h4>
-                            <div className="space-y-2">
                                 <label className="flex justify-between items-center">
-                                    <span>Celular: {styles.mobileBrizHeight}px</span>
+                                    <span>Briz Alto (Cel): {styles.mobileBrizHeight}px</span>
                                     <input type="range" min="20" max="90" value={styles.mobileBrizHeight} onChange={(e) => setStyles({...styles, mobileBrizHeight: Number(e.target.value)})} className="w-1/2" />
                                 </label>
                                 <label className="flex justify-between items-center">
-                                    <span>PC: {styles.desktopBrizHeight}px</span>
+                                    <span>Briz Alto (PC): {styles.desktopBrizHeight}px</span>
                                     <input type="range" min="30" max="120" value={styles.desktopBrizHeight} onChange={(e) => setStyles({...styles, desktopBrizHeight: Number(e.target.value)})} className="w-1/2" />
                                 </label>
                             </div>
                         </div>
 
-                        <hr className="border-white/5" />
-
-                        {/* Logo spacing */}
-                        <div>
-                            <h4 className="font-bold text-brand-yellow/80 uppercase tracking-widest mb-2">Distancia entre Logos</h4>
-                            <div className="space-y-2">
+                        {/* Section: Espaciados */}
+                        <div className="border border-white/5 bg-white/5 rounded-2xl p-3">
+                            <h4 className="font-bold text-brand-yellow uppercase tracking-wider mb-2">↔️ Espaciados y Gaps</h4>
+                            <div className="space-y-3">
                                 <label className="flex justify-between items-center">
-                                    <span>Separación Celular: {styles.mobileLogoGap}px</span>
+                                    <span>Bici-Briz Gap (Cel): {styles.mobileLogoGap}px</span>
                                     <input type="range" min="0" max="32" value={styles.mobileLogoGap} onChange={(e) => setStyles({...styles, mobileLogoGap: Number(e.target.value)})} className="w-1/2" />
                                 </label>
                                 <label className="flex justify-between items-center">
-                                    <span>Separación PC: {styles.desktopLogoGap}px</span>
+                                    <span>Bici-Briz Gap (PC): {styles.desktopLogoGap}px</span>
                                     <input type="range" min="0" max="48" value={styles.desktopLogoGap} onChange={(e) => setStyles({...styles, desktopLogoGap: Number(e.target.value)})} className="w-1/2" />
                                 </label>
                                 <label className="flex justify-between items-center">
-                                    <span>Solapamiento (Briz): {styles.logoBrizMarginLeft}px</span>
+                                    <span>Solapamiento Briz: {styles.logoBrizMarginLeft}px</span>
                                     <input type="range" min="-30" max="15" value={styles.logoBrizMarginLeft} onChange={(e) => setStyles({...styles, logoBrizMarginLeft: Number(e.target.value)})} className="w-1/2" />
                                 </label>
-                            </div>
-                        </div>
-
-                        <hr className="border-white/5" />
-
-                        {/* Separators */}
-                        <div>
-                            <h4 className="font-bold text-brand-yellow/80 uppercase tracking-widest mb-2">Separadores (Huellas)</h4>
-                            <div className="space-y-2">
                                 <label className="flex justify-between items-center">
-                                    <span>Margen lateral: {styles.separatorMargin}px</span>
+                                    <span>Margen Huellas: {styles.separatorMargin}px</span>
                                     <input type="range" min="0" max="50" value={styles.separatorMargin} onChange={(e) => setStyles({...styles, separatorMargin: Number(e.target.value)})} className="w-1/2" />
                                 </label>
                                 <label className="flex justify-between items-center">
-                                    <span>Alto de huella: {styles.separatorHeight}px</span>
+                                    <span>Alto Huella: {styles.separatorHeight}px</span>
                                     <input type="range" min="20" max="90" value={styles.separatorHeight} onChange={(e) => setStyles({...styles, separatorHeight: Number(e.target.value), separatorWidth: Math.round(Number(e.target.value) / 4)})} className="w-1/2" />
                                 </label>
                             </div>
                         </div>
 
-                        <hr className="border-white/5" />
-
-                        {/* Text Centro */}
-                        <div>
-                            <h4 className="font-bold text-brand-yellow/80 uppercase tracking-widest mb-2">Texto "Centro de la Bicicleta"</h4>
-                            <div className="space-y-2">
+                        {/* Section: Textos y Botones */}
+                        <div className="border border-white/5 bg-white/5 rounded-2xl p-3">
+                            <h4 className="font-bold text-brand-yellow uppercase tracking-wider mb-2">🔤 Textos y Botones</h4>
+                            <div className="space-y-3">
                                 <label className="flex justify-between items-center">
-                                    <span>Tamaño de letra: {styles.textFontSize}px</span>
+                                    <span>Texto Centro Font: {styles.textFontSize}px</span>
                                     <input type="range" min="10" max="28" value={styles.textFontSize} onChange={(e) => setStyles({...styles, textFontSize: Number(e.target.value)})} className="w-1/2" />
                                 </label>
                                 <label className="flex justify-between items-center">
-                                    <span>Desplazamiento Y: {styles.textYShift}px</span>
-                                    <input type="range" min="-20" max="20" value={styles.textYShift} onChange={(e) => setStyles({...styles, textYShift: Number(e.target.value)})} className="w-1/2" />
+                                    <span>Botón Padding X: {styles.btnPaddingX}px</span>
+                                    <input type="range" min="4" max="24" value={styles.btnPaddingX} onChange={(e) => setStyles({...styles, btnPaddingX: Number(e.target.value)})} className="w-1/2" />
+                                </label>
+                                <label className="flex justify-between items-center">
+                                    <span>Botón Padding Y: {styles.btnPaddingY}px</span>
+                                    <input type="range" min="2" max="16" value={styles.btnPaddingY} onChange={(e) => setStyles({...styles, btnPaddingY: Number(e.target.value)})} className="w-1/2" />
+                                </label>
+                                <label className="flex justify-between items-center">
+                                    <span>Botón Font Size: {styles.btnFontSize}px</span>
+                                    <input type="range" min="9" max="20" value={styles.btnFontSize} onChange={(e) => setStyles({...styles, btnFontSize: Number(e.target.value)})} className="w-1/2" />
+                                </label>
+                                <label className="flex justify-between items-center">
+                                    <span>Botón Icon Size: {styles.btnIconSize}px</span>
+                                    <input type="range" min="16" max="48" value={styles.btnIconSize} onChange={(e) => setStyles({...styles, btnIconSize: Number(e.target.value)})} className="w-1/2" />
                                 </label>
                             </div>
                         </div>
 
-                        <hr className="border-white/5" />
+                        {/* Section: 2D Translations */}
+                        <div className="border border-white/5 bg-white/5 rounded-2xl p-3">
+                            <h4 className="font-bold text-brand-yellow uppercase tracking-wider mb-3">🎮 Posición 2D (Mover Manual)</h4>
+                            <div className="space-y-4">
+                                <div className="border-b border-white/10 pb-2 mb-2">
+                                    <span className="font-black text-brand-yellow uppercase tracking-wider block mb-1.5">🖥️ Layout PC (Desktop)</span>
+                                    
+                                    {/* Bike Logo PC */}
+                                    <div className="mb-2">
+                                        <span className="font-bold text-white/80 block mb-0.5">Bicicleta Logo (PC):</span>
+                                        <label className="flex justify-between items-center">
+                                            <span>X: {bikeTranslateX}px</span>
+                                            <input type="range" min="-150" max="150" value={bikeTranslateX} onChange={(e) => setStyles({...styles, bikeTranslateX: Number(e.target.value)})} className="w-1/2" />
+                                        </label>
+                                        <label className="flex justify-between items-center">
+                                            <span>Y: {bikeTranslateY}px</span>
+                                            <input type="range" min="-80" max="80" value={bikeTranslateY} onChange={(e) => setStyles({...styles, bikeTranslateY: Number(e.target.value)})} className="w-1/2" />
+                                        </label>
+                                    </div>
 
-                        {/* Spacing buttons */}
-                        <div>
-                            <h4 className="font-bold text-brand-yellow/80 uppercase tracking-widest mb-2">Espaciado Botones PC</h4>
-                            <div className="space-y-2">
+                                    {/* Briz Logo PC */}
+                                    <div className="mb-2">
+                                        <span className="font-bold text-white/80 block mb-0.5">Briz Logo (PC):</span>
+                                        <label className="flex justify-between items-center">
+                                            <span>X: {brizTranslateX}px</span>
+                                            <input type="range" min="-150" max="150" value={brizTranslateX} onChange={(e) => setStyles({...styles, brizTranslateX: Number(e.target.value)})} className="w-1/2" />
+                                        </label>
+                                        <label className="flex justify-between items-center">
+                                            <span>Y: {brizTranslateY}px</span>
+                                            <input type="range" min="-80" max="80" value={brizTranslateY} onChange={(e) => setStyles({...styles, brizTranslateY: Number(e.target.value)})} className="w-1/2" />
+                                        </label>
+                                    </div>
+
+                                    {/* Track 1 translation */}
+                                    <div className="mb-2">
+                                        <span className="font-bold text-white/80 block mb-0.5">Huella 1 (Separador):</span>
+                                        <label className="flex justify-between items-center">
+                                            <span>X: {track1TranslateX}px</span>
+                                            <input type="range" min="-100" max="100" value={track1TranslateX} onChange={(e) => setStyles({...styles, track1TranslateX: Number(e.target.value)})} className="w-1/2" />
+                                        </label>
+                                        <label className="flex justify-between items-center">
+                                            <span>Y: {track1TranslateY}px</span>
+                                            <input type="range" min="-50" max="50" value={track1TranslateY} onChange={(e) => setStyles({...styles, track1TranslateY: Number(e.target.value)})} className="w-1/2" />
+                                        </label>
+                                    </div>
+
+                                    {/* Text Centro translation */}
+                                    <div className="mb-2">
+                                        <span className="font-bold text-white/80 block mb-0.5">Texto Centro:</span>
+                                        <label className="flex justify-between items-center">
+                                            <span>X: {textTranslateX}px</span>
+                                            <input type="range" min="-150" max="150" value={textTranslateX} onChange={(e) => setStyles({...styles, textTranslateX: Number(e.target.value)})} className="w-1/2" />
+                                        </label>
+                                        <label className="flex justify-between items-center">
+                                            <span>Y: {textTranslateY}px</span>
+                                            <input type="range" min="-50" max="50" value={textTranslateY} onChange={(e) => setStyles({...styles, textTranslateY: Number(e.target.value)})} className="w-1/2" />
+                                        </label>
+                                    </div>
+
+                                    {/* Track 2 translation */}
+                                    <div className="mb-2">
+                                        <span className="font-bold text-white/80 block mb-0.5">Huella 2 (Separador):</span>
+                                        <label className="flex justify-between items-center">
+                                            <span>X: {track2TranslateX}px</span>
+                                            <input type="range" min="-100" max="100" value={track2TranslateX} onChange={(e) => setStyles({...styles, track2TranslateX: Number(e.target.value)})} className="w-1/2" />
+                                        </label>
+                                        <label className="flex justify-between items-center">
+                                            <span>Y: {track2TranslateY}px</span>
+                                            <input type="range" min="-50" max="50" value={track2TranslateY} onChange={(e) => setStyles({...styles, track2TranslateY: Number(e.target.value)})} className="w-1/2" />
+                                        </label>
+                                    </div>
+
+                                    {/* Group 1 translation */}
+                                    <div className="mb-2">
+                                        <span className="font-bold text-white/80 block mb-0.5">Grupo Botones 1:</span>
+                                        <label className="flex justify-between items-center">
+                                            <span>X: {g1TranslateX}px</span>
+                                            <input type="range" min="-200" max="200" value={g1TranslateX} onChange={(e) => setStyles({...styles, g1TranslateX: Number(e.target.value)})} className="w-1/2" />
+                                        </label>
+                                        <label className="flex justify-between items-center">
+                                            <span>Y: {g1TranslateY}px</span>
+                                            <input type="range" min="-80" max="80" value={g1TranslateY} onChange={(e) => setStyles({...styles, g1TranslateY: Number(e.target.value)})} className="w-1/2" />
+                                        </label>
+                                    </div>
+
+                                    {/* Track 3 translation */}
+                                    <div className="mb-2">
+                                        <span className="font-bold text-white/80 block mb-0.5">Huella 3 (Separador):</span>
+                                        <label className="flex justify-between items-center">
+                                            <span>X: {track3TranslateX}px</span>
+                                            <input type="range" min="-100" max="100" value={track3TranslateX} onChange={(e) => setStyles({...styles, track3TranslateX: Number(e.target.value)})} className="w-1/2" />
+                                        </label>
+                                        <label className="flex justify-between items-center">
+                                            <span>Y: {track3TranslateY}px</span>
+                                            <input type="range" min="-50" max="50" value={track3TranslateY} onChange={(e) => setStyles({...styles, track3TranslateY: Number(e.target.value)})} className="w-1/2" />
+                                        </label>
+                                    </div>
+
+                                    {/* Group 2 translation */}
+                                    <div className="mb-2">
+                                        <span className="font-bold text-white/80 block mb-0.5">Grupo Botones 2:</span>
+                                        <label className="flex justify-between items-center">
+                                            <span>X: {g2TranslateX}px</span>
+                                            <input type="range" min="-200" max="200" value={g2TranslateX} onChange={(e) => setStyles({...styles, g2TranslateX: Number(e.target.value)})} className="w-1/2" />
+                                        </label>
+                                        <label className="flex justify-between items-center">
+                                            <span>Y: {g2TranslateY}px</span>
+                                            <input type="range" min="-80" max="80" value={g2TranslateY} onChange={(e) => setStyles({...styles, g2TranslateY: Number(e.target.value)})} className="w-1/2" />
+                                        </label>
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <span className="font-black text-brand-yellow uppercase tracking-wider block mb-1.5">📱 Layout Móvil (Celular)</span>
+                                    
+                                    {/* Bike Logo Mobile */}
+                                    <div className="mb-2">
+                                        <span className="font-bold text-white/80 block mb-0.5">Bicicleta Logo (Cel):</span>
+                                        <label className="flex justify-between items-center">
+                                            <span>X: {mobileBikeTranslateX}px</span>
+                                            <input type="range" min="-100" max="100" value={mobileBikeTranslateX} onChange={(e) => setStyles({...styles, mobileBikeTranslateX: Number(e.target.value)})} className="w-1/2" />
+                                        </label>
+                                        <label className="flex justify-between items-center">
+                                            <span>Y: {mobileBikeTranslateY}px</span>
+                                            <input type="range" min="-50" max="50" value={mobileBikeTranslateY} onChange={(e) => setStyles({...styles, mobileBikeTranslateY: Number(e.target.value)})} className="w-1/2" />
+                                        </label>
+                                    </div>
+
+                                    {/* Briz Logo Mobile */}
+                                    <div className="mb-2">
+                                        <span className="font-bold text-white/80 block mb-0.5">Briz Logo (Cel):</span>
+                                        <label className="flex justify-between items-center">
+                                            <span>X: {mobileBrizTranslateX}px</span>
+                                            <input type="range" min="-100" max="100" value={mobileBrizTranslateX} onChange={(e) => setStyles({...styles, mobileBrizTranslateX: Number(e.target.value)})} className="w-1/2" />
+                                        </label>
+                                        <label className="flex justify-between items-center">
+                                            <span>Y: {mobileBrizTranslateY}px</span>
+                                            <input type="range" min="-50" max="50" value={mobileBrizTranslateY} onChange={(e) => setStyles({...styles, mobileBrizTranslateY: Number(e.target.value)})} className="w-1/2" />
+                                        </label>
+                                    </div>
+
+                                    {/* Menu Mobile */}
+                                    <div className="mb-2">
+                                        <span className="font-bold text-white/80 block mb-0.5">Botón Menú Hamburguesa (Cel):</span>
+                                        <label className="flex justify-between items-center">
+                                            <span>X: {mobileMenuTranslateX}px</span>
+                                            <input type="range" min="-100" max="100" value={mobileMenuTranslateX} onChange={(e) => setStyles({...styles, mobileMenuTranslateX: Number(e.target.value)})} className="w-1/2" />
+                                        </label>
+                                        <label className="flex justify-between items-center">
+                                            <span>Y: {mobileMenuTranslateY}px</span>
+                                            <input type="range" min="-50" max="50" value={mobileMenuTranslateY} onChange={(e) => setStyles({...styles, mobileMenuTranslateY: Number(e.target.value)})} className="w-1/2" />
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Section: Layout PC Spacings */}
+                        <div className="border border-white/5 bg-white/5 rounded-2xl p-3">
+                            <h4 className="font-bold text-brand-yellow uppercase tracking-wider mb-2">🖥️ Contenedores y Layout PC</h4>
+                            <div className="space-y-3">
+                                <label className="flex justify-between items-center">
+                                    <span>Margen Nav X: {styles.navPaddingX}px</span>
+                                    <input type="range" min="4" max="80" value={styles.navPaddingX} onChange={(e) => setStyles({...styles, navPaddingX: Number(e.target.value)})} className="w-1/2" />
+                                </label>
+                                <label className="flex justify-between items-center">
+                                    <span>Ancho Máximo Nav: {styles.navMaxWidth}px</span>
+                                    <input type="range" min="1000" max="1800" step="20" value={styles.navMaxWidth} onChange={(e) => setStyles({...styles, navMaxWidth: Number(e.target.value)})} className="w-1/2" />
+                                </label>
                                 <label className="flex justify-between items-center">
                                     <span>Espacio Nav: {styles.desktopNavGap}px</span>
                                     <input type="range" min="10" max="64" value={styles.desktopNavGap} onChange={(e) => setStyles({...styles, desktopNavGap: Number(e.target.value)})} className="w-1/2" />
@@ -627,12 +1113,45 @@ export default function Navbar() {
                                         separatorHeight: 64,
                                         separatorWidth: 16,
                                         textFontSize: 16,
-                                        textYShift: 0,
                                         desktopNavGap: 24,
                                         buttonGroupGap: 24,
+
+                                        logoTranslateX: 0,
+                                        logoTranslateY: 0,
+                                        bikeTranslateX: 0,
+                                        bikeTranslateY: 0,
+                                        brizTranslateX: 0,
+                                        brizTranslateY: 0,
+                                        track1TranslateX: 0,
+                                        track1TranslateY: 0,
+                                        textTranslateX: 0,
+                                        textTranslateY: 0,
+                                        track2TranslateX: 0,
+                                        track2TranslateY: 0,
+                                        g1TranslateX: 0,
+                                        g1TranslateY: 0,
+                                        track3TranslateX: 0,
+                                        track3TranslateY: 0,
+                                        g2TranslateX: 0,
+                                        g2TranslateY: 0,
+
+                                        mobileBikeTranslateX: 0,
+                                        mobileBikeTranslateY: 0,
+                                        mobileBrizTranslateX: 0,
+                                        mobileBrizTranslateY: 0,
+                                        mobileMenuTranslateX: 0,
+                                        mobileMenuTranslateY: 0,
+
+                                        navPaddingX: 28,
+                                        navMaxWidth: 1480,
+                                        btnPaddingX: 12,
+                                        btnPaddingY: 6,
+                                        btnFontSize: 14,
+                                        btnIconSize: 28,
                                     });
+                                    setDragMode(false);
                                 }}
-                                className="w-1/2 py-2.5 bg-white/10 hover:bg-white/15 rounded-xl transition font-bold text-center"
+                                className="w-1/2 py-2.5 bg-white/10 hover:bg-white/15 rounded-xl transition font-bold text-center text-xs"
                             >
                                 Reiniciar
                             </button>
@@ -641,7 +1160,7 @@ export default function Navbar() {
                                     navigator.clipboard.writeText(JSON.stringify(styles, null, 4));
                                     alert('¡Estilos copiados! Pégalos en el chat.');
                                 }}
-                                className="w-1/2 py-2.5 bg-brand-yellow text-brand-black hover:bg-brand-yellow/90 rounded-xl transition font-bold text-center"
+                                className="w-1/2 py-2.5 bg-brand-yellow text-brand-black hover:bg-brand-yellow/90 rounded-xl transition font-bold text-center text-xs"
                             >
                                 Copiar Estilos
                             </button>
