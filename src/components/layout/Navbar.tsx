@@ -3,12 +3,13 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
     Bike,
-    Compass,
-    Home,
-    Map,
+    Store,
+    Route,
+    Wrench,
+    HandHeart,
+    Info,
+    HelpCircle,
     Menu,
-    Sparkles,
-    Users,
     X,
     User,
     LogOut,
@@ -21,14 +22,49 @@ type NavLinkItem = {
     icon: LucideIcon;
 };
 
-const navLinks: NavLinkItem[] = [
-    { label: 'Inicio', href: '/', icon: Home },
+const group1Links: NavLinkItem[] = [
     { label: 'Alquiler', href: '/rentals', icon: Bike },
-    { label: 'Rutas', href: '/routes', icon: Map },
-    { label: 'Ciclotours', href: '/routes', icon: Compass },
-    { label: 'Experiencias', href: '/#experiencias', icon: Sparkles },
-    { label: 'Nosotros', href: '/about', icon: Users },
+    { label: 'Tienda', href: '/shop', icon: Store },
+    { label: 'Ciclotours', href: '/routes', icon: Route },
+    { label: 'Mecánica', href: '/service', icon: Wrench },
+    { label: 'Comunidad', href: '/community', icon: HandHeart },
 ];
+
+const group2Links: NavLinkItem[] = [
+    { label: 'Conócenos', href: '/about', icon: Info },
+    { label: 'Preguntas frecuentes', href: '/contact', icon: HelpCircle },
+];
+
+const allNavLinks = [...group1Links, ...group2Links];
+
+const TireTrackSeparator = ({ className = '' }: { className?: string }) => (
+    <svg 
+        className={`hidden h-10 w-4 shrink-0 text-white/80 md:block lg:h-12 lg:w-5 ${className}`} 
+        viewBox="0 0 20 64" 
+        fill="currentColor" 
+        aria-hidden="true"
+    >
+        <path d="M 3 2 L 8 4 L 8 7 L 3 5 Z" />
+        <path d="M 12 8 L 17 10 L 17 13 L 12 11 Z" />
+        <rect x="9" y="5" width="2" height="2" rx="0.5" />
+
+        <path d="M 3 14 L 8 16 L 8 19 L 3 17 Z" />
+        <path d="M 12 20 L 17 22 L 17 25 L 12 23 Z" />
+        <rect x="9" y="17" width="2" height="2" rx="0.5" />
+
+        <path d="M 3 26 L 8 28 L 8 31 L 3 29 Z" />
+        <path d="M 12 32 L 17 34 L 17 37 L 12 35 Z" />
+        <rect x="9" y="29" width="2" height="2" rx="0.5" />
+
+        <path d="M 3 38 L 8 40 L 8 43 L 3 41 Z" />
+        <path d="M 12 44 L 17 46 L 17 49 L 12 47 Z" />
+        <rect x="9" y="41" width="2" height="2" rx="0.5" />
+
+        <path d="M 3 50 L 8 52 L 8 55 L 3 53 Z" />
+        <path d="M 12 56 L 17 58 L 17 61 L 12 59 Z" />
+        <rect x="9" y="53" width="2" height="2" rx="0.5" />
+    </svg>
+);
 
 import { useStore } from '@/context/StoreContext';
 import CustomerAuthModal from './CustomerAuthModal';
@@ -77,7 +113,6 @@ export default function Navbar() {
     };
 
     const isActive = (href: string) => {
-        if (href === '/#experiencias') return location.hash === '#experiencias';
         return location.pathname === href;
     };
 
@@ -90,44 +125,85 @@ export default function Navbar() {
         >
             <div className="relative bg-brand-yellow">
                 <nav className="mx-auto max-w-[1480px] px-3 sm:px-7">
-                    <div className="flex h-[74px] items-center justify-between gap-2 lg:h-[88px]">
-                        <Link to="/" className="group flex min-w-0 items-center gap-1 sm:gap-2 lg:gap-3" aria-label="BRIZ Centro de la Bicicleta">
-                            <img
-                                src="/logo_bicicleta_principal.png"
-                                alt="Bicicleta BRIZ"
-                                className="h-[50px] w-[70px] shrink-0 object-contain brightness-0 invert transition-transform duration-200 group-hover:scale-[1.03] sm:h-[60px] sm:w-[90px] lg:h-[72px] lg:w-[110px]"
-                            />
-                            <img
-                                src="/logo_briz_principal.png"
-                                alt="BRIZ"
-                                className="-ml-1 h-[34px] w-auto max-w-[68px] shrink-0 object-contain brightness-0 invert sm:h-10 sm:max-w-[78px] lg:-ml-2 lg:h-[48px] lg:max-w-[96px]"
-                            />
-                            <span className="mx-1 hidden h-10 w-[2px] shrink-0 bg-white/80 sm:block sm:mx-2 sm:h-11 lg:mx-3 lg:h-14" aria-hidden="true" />
-                            <span className="hidden font-maiandra text-[10px] font-bold uppercase leading-tight tracking-wider text-white drop-shadow-sm sm:block sm:text-xs lg:text-sm">
+                    <div className="flex h-[74px] items-center justify-between gap-1 sm:gap-2 lg:h-[96px]">
+                        <div className="flex items-center gap-1 sm:gap-2">
+                            <Link to="/" className="group flex min-w-0 items-center gap-0" aria-label="BRIZ Centro de la Bicicleta">
+                                <img
+                                    src="/logo_bicicleta_principal.png"
+                                    alt="Bicicleta BRIZ"
+                                    className="h-[52px] w-auto shrink-0 object-contain brightness-0 invert transition-transform duration-200 group-hover:scale-[1.02] sm:h-[65px] lg:h-[80px]"
+                                />
+                                <img
+                                    src="/logo_briz_principal.png"
+                                    alt="BRIZ"
+                                    className="-ml-3 h-[36px] w-auto shrink-0 object-contain brightness-0 invert sm:h-[44px] sm:-ml-4 lg:h-[54px] lg:-ml-5"
+                                />
+                            </Link>
+
+                            <TireTrackSeparator />
+
+                            <span className="hidden font-maiandra text-[10px] font-bold uppercase leading-tight tracking-wider text-white drop-shadow-sm md:block sm:text-xs lg:text-sm shrink-0">
                                 Centro de la Bicicleta
                             </span>
-                        </Link>
+                        </div>
 
-                        <div className="hidden items-center gap-2 lg:flex">
-                            {navLinks.map((link) => {
-                                const active = isActive(link.href);
-                                return (
-                                    <Link
-                                        key={link.label}
-                                        to={link.href}
-                                        onClick={(event) => handleNavClick(event, link.href)}
-                                        className={`relative rounded-full px-4 py-2 font-cocon text-sm font-bold tracking-wide transition-all duration-200 hover:bg-white/24 ${active ? 'text-white' : 'text-brand-black'}`}
-                                    >
-                                        {link.label}
-                                        {active && (
-                                            <motion.span
-                                                layoutId="activeNavUnderline"
-                                                className="absolute inset-x-4 -bottom-1 h-[3px] rounded-full bg-white"
-                                            />
-                                        )}
-                                    </Link>
-                                );
-                            })}
+                        {/* Desktop Navigation */}
+                        <div className="hidden items-center gap-1 xl:gap-2 lg:flex h-full">
+                            <TireTrackSeparator />
+
+                            <div className="flex items-center gap-0.5 xl:gap-2">
+                                {group1Links.map((link) => {
+                                    const Icon = link.icon;
+                                    const active = isActive(link.href);
+                                    return (
+                                        <Link
+                                            key={link.label}
+                                            to={link.href}
+                                            onClick={(event) => handleNavClick(event, link.href)}
+                                            className={`relative flex flex-col items-center justify-center gap-1 rounded-xl px-2.5 py-1.5 text-center transition-all duration-300 hover:bg-white/20 hover:scale-[1.03] ${
+                                                active ? 'text-white' : 'text-brand-black'
+                                            }`}
+                                        >
+                                            <Icon className="h-6 w-6 shrink-0 transition-transform duration-200" strokeWidth={2.0} />
+                                            <span className="font-cocon text-[11px] font-bold tracking-wide leading-none">{link.label}</span>
+                                            {active && (
+                                                <motion.span
+                                                    layoutId="activeNavUnderline"
+                                                    className="absolute inset-x-2 -bottom-1 h-[3px] rounded-full bg-white"
+                                                />
+                                            )}
+                                        </Link>
+                                    );
+                                })}
+                            </div>
+
+                            <TireTrackSeparator />
+
+                            <div className="flex items-center gap-0.5 xl:gap-2">
+                                {group2Links.map((link) => {
+                                    const Icon = link.icon;
+                                    const active = isActive(link.href);
+                                    return (
+                                        <Link
+                                            key={link.label}
+                                            to={link.href}
+                                            onClick={(event) => handleNavClick(event, link.href)}
+                                            className={`relative flex flex-col items-center justify-center gap-1 rounded-xl px-2.5 py-1.5 text-center transition-all duration-300 hover:bg-white/20 hover:scale-[1.03] ${
+                                                active ? 'text-white' : 'text-brand-black'
+                                            }`}
+                                        >
+                                            <Icon className="h-6 w-6 shrink-0 transition-transform duration-200" strokeWidth={2.0} />
+                                            <span className="font-cocon text-[11px] font-bold tracking-wide leading-none">{link.label}</span>
+                                            {active && (
+                                                <motion.span
+                                                    layoutId="activeNavUnderline"
+                                                    className="absolute inset-x-2 -bottom-1 h-[3px] rounded-full bg-white"
+                                                />
+                                            )}
+                                        </Link>
+                                    );
+                                })}
+                            </div>
                         </div>
 
                         {/* Desktop User Auth Button */}
@@ -209,7 +285,7 @@ export default function Navbar() {
                         className="bg-brand-yellow px-4 pb-5 pt-3 shadow-[0_16px_30px_rgba(102,76,0,0.16)] lg:hidden"
                     >
                         <div className="flex flex-col gap-1">
-                            {navLinks.map((link) => {
+                            {allNavLinks.map((link) => {
                                 const Icon = link.icon;
                                 const active = isActive(link.href);
                                 return (
