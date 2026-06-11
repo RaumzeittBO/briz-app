@@ -32,6 +32,7 @@
   font-weight: normal;
   font-style: normal;
   font-display: swap;
+  unicode-range: U+0000-002F, U+003A-007F, U+00A0-00FF, U+0100-017F, U+0180-024F, U+2000-206F, U+2070-209F, U+20A0-20CF, U+2100-214F, U+2150-218F; /* Excluye U+0030-0039 (números 0-9) */
 }
 
 /* Maiandra GD — Textos de descripción / pequeños */

@@ -142,7 +142,7 @@ function TiltCard({ webSrc, mobileSrc, alt, idx }: TiltCardProps) {
     return (
         <div 
             ref={cardScrollRef} 
-            className="w-full flex justify-center py-10 px-4 md:px-0"
+            className="w-full flex justify-center py-14 px-2 sm:px-6 md:px-0"
         >
             <motion.div 
                 ref={cardRef}
@@ -157,7 +157,7 @@ function TiltCard({ webSrc, mobileSrc, alt, idx }: TiltCardProps) {
                 }}
                 whileHover={{ scale: 1.018 }}
                 transition={{ duration: 0.2 }}
-                className="relative bg-brand-yellow border-[6px] sm:border-[12px] border-brand-yellow outline outline-3 sm:outline-4 outline-brand-black shadow-[14px_14px_0_rgba(0,0,0,1)] sm:shadow-[20px_20px_0_rgba(0,0,0,1)] rounded-[1.8rem] sm:rounded-[2.4rem] w-full max-w-[96vw] md:max-w-[1140px] group transition-all hover:translate-y-[-4px] hover:shadow-[24px_24px_0_rgba(0,0,0,1)] select-none z-10"
+                className="relative bg-brand-yellow border-[6px] sm:border-[12px] border-brand-yellow outline outline-3 sm:outline-4 outline-brand-black shadow-[14px_14px_0_rgba(0,0,0,1)] sm:shadow-[20px_20px_0_rgba(0,0,0,1)] rounded-[1.8rem] sm:rounded-[2.4rem] w-full max-w-[98vw] md:max-w-[1480px] group transition-all hover:translate-y-[-4px] hover:shadow-[24px_24px_0_rgba(0,0,0,1)] select-none z-10"
             >
                 {/* Scrapbook corner tapes */}
                 <WashiTape className="-top-3 left-6 sm:left-14 rotate-[-12deg]" />
@@ -315,14 +315,6 @@ export default function AboutPage() {
 
             {/* Section Header */}
             <header className="mx-auto max-w-[1400px] px-6 pt-10 pb-6 text-center flex flex-col items-center space-y-4 relative z-10">
-                <motion.div
-                    initial={{ opacity: 0, scale: 0.82 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    className="inline-flex items-center gap-2 rounded-full bg-white border border-brand-yellow/35 px-4 py-2 font-maiandra text-xs uppercase tracking-widest text-[#9A7B00] shadow-[0_8px_20px_rgba(143,104,0,0.06)]"
-                >
-                    <Sparkles className="h-3.5 w-3.5 text-brand-yellow" strokeWidth={2.3} />
-                    Nuestra Historia
-                </motion.div>
                 <motion.h1 
                     initial={{ opacity: 0, y: 15 }}
                     animate={{ opacity: 1, y: 0 }}
@@ -342,7 +334,7 @@ export default function AboutPage() {
             </header>
 
             {/* Stack of Sections */}
-            <main className="mx-auto max-w-[1300px] w-full flex-1 flex flex-col items-center py-6 relative z-10">
+            <main className="mx-auto max-w-[1600px] w-full flex-1 flex flex-col items-center py-6 relative z-10">
                 {/* SECTION 1 */}
                 <TiltCard 
                     webSrc={`${assetBaseWeb}/1.webp`}
