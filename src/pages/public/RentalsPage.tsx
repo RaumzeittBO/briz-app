@@ -368,11 +368,11 @@ export default function RentalsPage() {
       ) : (
         <>
       {/* Filters & Search Row */}
-      <div className="sticky top-[80px] lg:top-[120px] z-40 bg-background/90 backdrop-blur-md border-b border-gray-100/50 py-5">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6">
-          <div className="flex flex-col md:flex-row items-center gap-4">
+      <div className="sticky top-[80px] lg:top-[120px] z-40 bg-background/90 backdrop-blur-md border-b border-gray-100/50 py-5 overflow-hidden">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 w-full">
+          <div className="flex flex-col md:flex-row md:flex-nowrap items-stretch md:items-center gap-4 min-w-0">
             {/* Search Input Card */}
-            <div className="flex-1 w-full max-w-xl relative">
+            <div className="w-full md:w-[320px] lg:w-[360px] shrink-0 relative">
               <div className="flex items-center bg-white border-2 border-brand-yellow rounded-full px-4 py-1.5 shadow-sm focus-within:ring-2 focus-within:ring-brand-yellow/30 transition-all">
                 <Input 
                   type="text" 
@@ -388,14 +388,14 @@ export default function RentalsPage() {
             </div>
             
             {/* Category filters & Cart */}
-            <div className="flex items-center justify-between md:justify-end gap-3 w-full md:w-auto flex-wrap">
-              <div className="flex gap-2 overflow-x-auto py-1">
+            <div className="flex items-center gap-3 w-full md:flex-1 md:min-w-0">
+              <div className="flex flex-1 min-w-0 gap-2 overflow-x-auto overflow-y-hidden py-1 px-1 scrollbar-none scroll-smooth">
                 {categories.map(c => (
                   <Button 
                     key={c} 
                     variant={category === c ? 'default' : 'outline'} 
                     size="sm"
-                    className={`rounded-full px-6 h-10 font-sans font-bold text-sm tracking-wide transition-all ${
+                    className={`shrink-0 whitespace-nowrap rounded-full px-6 h-10 font-sans font-bold text-sm tracking-wide transition-all ${
                       category === c 
                         ? 'bg-brand-yellow text-brand-black border-brand-yellow shadow-md scale-105' 
                         : 'bg-white text-gray-500 border-gray-200 hover:border-brand-yellow hover:text-brand-black'
