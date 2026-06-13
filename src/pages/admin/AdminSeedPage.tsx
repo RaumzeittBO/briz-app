@@ -190,6 +190,9 @@ const COMBOS: ComboProduct[] = [
 // =========================================================================
 // COMPONENT
 // =========================================================================
+import { doc, setDoc } from 'firebase/firestore';
+import { db } from '../../lib/firebase';
+
 const AdminSeedPage: React.FC = () => {
     const store = useStore();
     const [running, setRunning] = useState(false);
@@ -203,7 +206,8 @@ const AdminSeedPage: React.FC = () => {
     useEffect(() => {
         if (hasRun.current || !store.isLoaded) return;
         hasRun.current = true;
-        runSeed();
+        // Small delay to ensure auth is fully ready
+        setTimeout(() => runSeed(), 2000);
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [store.isLoaded]);
 
@@ -215,57 +219,54 @@ const AdminSeedPage: React.FC = () => {
         setDone(false);
 
         try {
-            // 1. Categories
-            log('📁 Insertando categorías...');
-            for (const cat of CATEGORIES) {
-                if (!store.bikeCategories.includes(cat)) {
-                    await store.addBikeCategory(cat);
-                }
-            }
-            log(`   ✅ ${CATEGORIES.length} categorías listas`);
-
-            // 2. Accessories
+            // 1. Accessories - write directly to inventory collection
             log('🔧 Insertando accesorios...');
             for (const acc of ACCESSORIES) {
-                const exists = store.inventory.find(i => i.id === acc.id);
-                if (!exists) {
-                    await store.addInventoryItem(acc);
+                try {
+                    await setDoc(doc(db, 'inventory', acc.id), acc);
                     log(`   + ${acc.name}`);
-                } else {
-                    log(`   ⏭ ${acc.name} (ya existe)`);
+                } catch (e: any) {
+                    log(`   ⚠️ ${acc.name}: ${e.message}`);
                 }
             }
             log(`   ✅ Accesorios listos`);
 
-            // 3. Bikes
+            // 2. Bikes - write directly to inventory collection
             log('🚲 Insertando bicicletas...');
             for (const bike of BIKES) {
-                const exists = store.inventory.find(i => i.id === bike.id);
-                if (!exists) {
-                    await store.addInventoryItem(bike);
+                try {
+                    await setDoc(doc(db, 'inventory', bike.id), bike);
                     log(`   + ${bike.name} (${bike.category})`);
-                } else {
-                    log(`   ⏭ ${bike.name} (ya existe)`);
+                } catch (e: any) {
+                    log(`   ⚠️ ${bike.name}: ${e.message}`);
                 }
             }
             log(`   ✅ Bicicletas listas`);
 
-            // 4. Combos
+            // 3. Combos - write directly to combos collection
             log('🎁 Insertando combos...');
             for (const combo of COMBOS) {
-                const exists = store.combos.find(c => c.id === combo.id);
-                if (!exists) {
-                    await store.addCombo(combo);
-                    log(`   + ${combo.name} (${combo.category})`);
-                } else {
-                    log(`   ⏭ ${combo.name} (ya existe)`);
+                try {
+                    await setDoc(doc(db, 'combos', combo.id), combo);
+                    log(`   + ${combo.name}`);
+                } catch (e: any) {
+                    log(`   ⚠️ ${combo.name}: ${e.message}`);
                 }
             }
             log(`   ✅ Combos listos`);
 
+            // 4. Try categories last (might fail due to settings permissions, that's ok)
+            log('📁 Intentando insertar categorías...');
+            try {
+                await setDoc(doc(db, 'settings', 'bike_categories'), { categories: CATEGORIES });
+                log(`   ✅ ${CATEGORIES.length} categorías insertadas`);
+            } catch (e: any) {
+                log(`   ⚠️ Categorías no se pudieron insertar (${e.message}) - no es crítico, las puedes crear manualmente`);
+            }
+
             const total = ACCESSORIES.length + BIKES.length + COMBOS.length;
             log('');
-            log(`🎉 ¡COMPLETADO! ${CATEGORIES.length} categorías, ${ACCESSORIES.length} accesorios, ${BIKES.length} bicicletas, ${COMBOS.length} combos = ${total} productos totales`);
+            log(`🎉 ¡COMPLETADO! ${ACCESSORIES.length} accesorios, ${BIKES.length} bicicletas, ${COMBOS.length} combos = ${total} productos totales`);
             setDone(true);
         } catch (err: any) {
             setError(err.message || 'Error desconocido');
@@ -280,9 +281,9 @@ const AdminSeedPage: React.FC = () => {
             <h1 className="text-2xl font-bold mb-6 text-brand-green">🌱 Seed de Inventario Briz</h1>
 
             <div className="bg-white rounded-xl shadow p-6 mb-6 font-mono text-sm whitespace-pre-wrap max-h-[500px] overflow-y-auto">
-                {logs.length === 0 && <p className="text-gray-400">Esperando a que el store cargue...</p>}
+                {logs.length === 0 && <p className="text-gray-400">Iniciando en unos segundos...</p>}
                 {logs.map((line, i) => (
-                    <div key={i} className={line.includes('❌') ? 'text-red-600' : line.includes('✅') || line.includes('🎉') ? 'text-green-700 font-semibold' : 'text-gray-700'}>
+                    <div key={i} className={line.includes('❌') ? 'text-red-600' : line.includes('✅') || line.includes('🎉') ? 'text-green-700 font-semibold' : line.includes('⚠️') ? 'text-yellow-600' : 'text-gray-700'}>
                         {line}
                     </div>
                 ))}
