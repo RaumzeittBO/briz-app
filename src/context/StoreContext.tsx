@@ -203,6 +203,7 @@ interface StoreContextType {
     customers: Customer[];
     serviceOrders: ServiceOrder[];
     routes: CyclingRoute[];
+    bikeCategories: string[];
     isLoaded: boolean;
     rentalSettings: RentalSettings;
     updateRentalSettings: (updates: Partial<RentalSettings>, qrFile: File | null) => Promise<void>;
@@ -211,6 +212,10 @@ interface StoreContextType {
     addRoute: (route: CyclingRoute) => Promise<void>;
     updateRoute: (id: string, updates: Partial<CyclingRoute>) => Promise<void>;
     deleteRoute: (id: string) => Promise<void>;
+
+    // Bike Categories CRUD
+    addBikeCategory: (category: string) => Promise<void>;
+    deleteBikeCategory: (category: string) => Promise<void>;
 
     // Inventory CRUD
     addInventoryItem: (item: InventoryItem) => Promise<void>;
@@ -464,6 +469,7 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
     const [customers, setCustomers] = useState<Customer[]>([]);
     const [serviceOrders, setServiceOrders] = useState<ServiceOrder[]>([]);
     const [routes, setRoutes] = useState<CyclingRoute[]>([]);
+    const [bikeCategories, setBikeCategories] = useState<string[]>([]);
     const [isLoaded, setIsLoaded] = useState(false);
 
     const [rentalSettings, setRentalSettings] = useState<RentalSettings>({
@@ -565,11 +571,26 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
             if (snap.empty) {
                 seedDefaultRoutes();
             }
+        }, (error) => {
+            console.error("Error fetching routes:", error);
+        });
+        const unsubBikeCats = onSnapshot(query(collection(db, 'bike_categories')), (snap) => {
+            if (snap.empty) {
+                const defaults = ['Urbana', 'Montaña', 'Ruta', 'Paseo'];
+                defaults.forEach(async (cat) => {
+                    await setDoc(doc(db, 'bike_categories', cat), { name: cat });
+                });
+                setBikeCategories(defaults);
+            } else {
+                setBikeCategories(snap.docs.map(doc => doc.id));
+            }
+        }, (error) => {
+            console.error("Error fetching bike categories:", error);
         });
 
         setIsLoaded(true);
         return () => {
-            unsubInv(); unsubCombos(); unsubRentals(); unsubSales(); unsubCustomers(); unsubSO(); unsubSettings(); unsubRoutes();
+            unsubInv(); unsubCombos(); unsubRentals(); unsubSales(); unsubCustomers(); unsubSO(); unsubSettings(); unsubRoutes(); unsubBikeCats();
         };
     }, []);
 
@@ -806,6 +827,16 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
     };
     const deleteRoute = async (id: string) => {
         await deleteDoc(doc(db, 'routes', id));
+    };
+
+    const addBikeCategory = async (cat: string) => {
+        const trimmed = cat.trim();
+        if (trimmed) {
+            await setDoc(doc(db, 'bike_categories', trimmed), { name: trimmed });
+        }
+    };
+    const deleteBikeCategory = async (cat: string) => {
+        await deleteDoc(doc(db, 'bike_categories', cat));
     };
 
     const addCombo = async (combo: ComboProduct) => {
@@ -1075,7 +1106,8 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
         addServiceOrder, updateServiceOrder, deleteServiceOrder,
         getItemStock, getComboAvailability, calculatePrice, resetAllData,
         currentCustomer, loginCustomer, registerCustomer, logoutCustomer,
-        routes, addRoute, updateRoute, deleteRoute
+        routes, addRoute, updateRoute, deleteRoute,
+        bikeCategories, addBikeCategory, deleteBikeCategory
     };
 
     return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;

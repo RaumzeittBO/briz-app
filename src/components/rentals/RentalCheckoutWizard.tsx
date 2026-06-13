@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
     ArrowLeft, Minus, Plus, X, Calendar, Clock, Heart, 
@@ -506,8 +506,8 @@ export default function RentalCheckoutWizard({
                         </div>
 
                         {/* Product Image */}
-                        <div className="relative aspect-[4/3] bg-white border border-gray-100 rounded-[2.2rem] overflow-hidden shadow-md">
-                            <img src={selectedProduct.imageUrl || '/placeholder_bike.png'} alt={selectedProduct.name} className="w-full h-full object-cover" />
+                        <div className="relative aspect-[4/3] bg-white border border-gray-100 rounded-[2.2rem] overflow-hidden shadow-md flex items-center justify-center">
+                            <img src={selectedProduct.imageUrl || '/placeholder_bike.png'} alt={selectedProduct.name} className="w-full h-full object-contain p-4" />
                             <div className="absolute bottom-5 right-5 flex gap-2">
                                 <button className="w-10 h-10 rounded-full bg-white/90 hover:bg-white text-brand-black shadow-lg flex items-center justify-center border border-gray-100 cursor-pointer">
                                     <Heart className="w-5 h-5 text-red-500 fill-red-500" />
@@ -622,7 +622,7 @@ export default function RentalCheckoutWizard({
                                                 <img 
                                                     src={item.product.imageUrl || '/placeholder_bike.png'} 
                                                     alt={item.product.name} 
-                                                    className="w-16 h-16 object-cover rounded-xl border border-gray-100 shrink-0" 
+                                                    className="w-16 h-16 object-contain rounded-xl border border-gray-100 shrink-0" 
                                                 />
                                                 
                                                 {/* Text Info */}

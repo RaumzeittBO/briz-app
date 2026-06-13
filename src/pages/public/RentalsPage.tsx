@@ -232,12 +232,12 @@ export default function RentalsPage() {
                     onClick={() => openReservation(p)}
                   >
                     {/* Image Container - Rounded, full size, no overlay box covering the bike */}
-                    <div className="relative aspect-[4/3] bg-gray-50/70 overflow-hidden rounded-t-[1.8rem]">
+                    <div className="relative aspect-[4/3] bg-white overflow-hidden rounded-t-[1.8rem] flex items-center justify-center">
                       {p.imageUrl ? (
                         <img 
                           src={p.imageUrl} 
                           alt={p.name} 
-                          className="w-full h-full object-cover" 
+                          className="w-full h-full object-contain p-4" 
                         />
                       ) : (
                         <div className="w-full h-full flex items-center justify-center">

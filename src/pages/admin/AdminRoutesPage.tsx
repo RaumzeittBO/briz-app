@@ -66,32 +66,36 @@ export default function AdminRoutesPage() {
         setIsModalOpen(true);
     };
 
-    const handleSave = (e: React.FormEvent) => {
+    const handleSave = async (e: React.FormEvent) => {
         e.preventDefault();
+        try {
+            const highlights = highlightsStr
+                .split(',')
+                .map(item => item.trim())
+                .filter(Boolean);
 
-        const highlights = highlightsStr
-            .split(',')
-            .map(item => item.trim())
-            .filter(Boolean);
+            const routeData: CyclingRoute = {
+                id: currentId || `r-${Date.now()}`,
+                name,
+                difficulty,
+                distance,
+                duration,
+                description,
+                highlights,
+                image,
+                mapUrl
+            };
 
-        const routeData: CyclingRoute = {
-            id: currentId || `r-${Date.now()}`,
-            name,
-            difficulty,
-            distance,
-            duration,
-            description,
-            highlights,
-            image,
-            mapUrl
-        };
-
-        if (modalMode === 'add') {
-            addRoute(routeData);
-        } else if (currentId) {
-            updateRoute(currentId, routeData);
+            if (modalMode === 'add') {
+                await addRoute(routeData);
+            } else if (currentId) {
+                await updateRoute(currentId, routeData);
+            }
+            setIsModalOpen(false);
+        } catch (error: any) {
+            console.error('Error saving route:', error);
+            alert(`Error al guardar la ruta: ${error.message || error}`);
         }
-        setIsModalOpen(false);
     };
 
     const getDifficultyColor = (diff: CyclingRoute['difficulty']) => {

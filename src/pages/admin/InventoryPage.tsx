@@ -1,6 +1,7 @@
 import { useState } from 'react';
 
 import { Badge } from '@/components/ui/badge';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -25,7 +26,7 @@ function defaultCombo(): ComboProduct {
 }
 
 export default function InventoryPage() {
-  const { inventory, combos, addInventoryItem, updateInventoryItem, deleteInventoryItem, addCombo, updateCombo, deleteCombo, getComboAvailability } = useStore();
+  const { inventory, combos, addInventoryItem, updateInventoryItem, deleteInventoryItem, addCombo, updateCombo, deleteCombo, getComboAvailability, bikeCategories, addBikeCategory } = useStore();
 
   const [tab, setTab] = useState('bikes');
   const [search, setSearch] = useState('');
@@ -312,6 +313,43 @@ export default function InventoryPage() {
                     <Label className="text-[10px] text-white/40 font-bold uppercase tracking-wider">Nombre</Label>
                     <Input value={editItem.name} onChange={e=>setEditItem({...editItem,name:e.target.value})} className="bg-black/40 border-white/10 h-12 font-black text-lg rounded-xl mt-1 text-white" placeholder={modal.type==='bike'?'Ej: Urbana':'Ej: Canasta metálica'} required/>
                   </div>
+
+                  {/* Category Selection for Bikes */}
+                  {modal.type === 'bike' && (
+                    <div>
+                      <div className="flex justify-between items-center mb-1">
+                        <Label className="text-[10px] text-white/40 font-bold uppercase tracking-wider">Categoría de Bicicleta</Label>
+                        <button 
+                          type="button" 
+                          onClick={() => {
+                            const newCat = prompt('Ingrese el nombre de la nueva categoría (ej. Urbana, Montaña, Ruta):');
+                            if (newCat && newCat.trim()) {
+                              addBikeCategory(newCat.trim());
+                              setEditItem({ ...editItem, category: newCat.trim() });
+                            }
+                          }}
+                          className="text-[9px] font-black uppercase text-brand-yellow hover:underline cursor-pointer"
+                        >
+                          + Crear Categoría
+                        </button>
+                      </div>
+                      <Select 
+                        value={editItem.category || ''} 
+                        onValueChange={(val) => setEditItem({ ...editItem, category: val })}
+                      >
+                        <SelectTrigger className="h-12 bg-black/40 border-white/10 rounded-xl text-white">
+                          <SelectValue placeholder="Seleccione una categoría" />
+                        </SelectTrigger>
+                        <SelectContent className="bg-brand-charcoal border-white/10 text-white">
+                          {bikeCategories.map((cat) => (
+                            <SelectItem key={cat} value={cat} className="focus:bg-white/5 focus:text-white cursor-pointer">
+                              {cat}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
 
                   {/* Description */}
                   <div>

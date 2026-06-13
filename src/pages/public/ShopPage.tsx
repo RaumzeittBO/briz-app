@@ -192,12 +192,12 @@ export default function ShopPage() {
                                     className="bg-white border border-gray-100/80 rounded-[1.8rem] shadow-sm hover:shadow-xl transition-all duration-300 h-full flex flex-col overflow-hidden"
                                 >
                                     {/* Image Container */}
-                                    <div className="relative aspect-[4/3] bg-gray-50/70 overflow-hidden rounded-t-[1.8rem]">
+                                    <div className="relative aspect-[4/3] bg-white overflow-hidden rounded-t-[1.8rem] flex items-center justify-center">
                                         {item.image ? (
                                             <img 
                                                 src={item.image} 
                                                 alt={item.name} 
-                                                className="w-full h-full object-cover" 
+                                                className="w-full h-full object-contain p-4" 
                                             />
                                         ) : (
                                             <div className="w-full h-full flex items-center justify-center bg-gray-50">
