@@ -25,6 +25,7 @@ import CustomersPage from '@/pages/admin/CustomersPage';
 import ReportsPage from '@/pages/admin/ReportsPage';
 import SettingsPage from '@/pages/admin/SettingsPage';
 import AdminRoutesPage from '@/pages/admin/AdminRoutesPage';
+import AdminSeedPage from '@/pages/admin/AdminSeedPage';
 
 // Protected route wrapper
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -61,6 +62,7 @@ function AppRoutes() {
         <Route path="routes" element={<AdminRoutesPage />} />
         <Route path="reports" element={<ReportsPage />} />
         <Route path="settings" element={<SettingsPage />} />
+        <Route path="seed" element={<AdminSeedPage />} />
       </Route>
 
       {/* Catch-all */}
