@@ -95,11 +95,6 @@ export default function RentalsPage() {
 
     // Single inventory items available for rental
     inventory.filter(i => i.active && i.availableForRental).forEach(i => {
-      const totalStock = i.hasWheelSizes && i.wheelSizes
-        ? i.wheelSizes.reduce((s, ws) => s + ws.stock, 0)
-        : (i.stock ?? 0);
-      if (totalStock <= 0) return;
-
       items.push({
         id: i.id, name: i.name, description: i.description, details: i.details, imageUrl: i.imageUrl,
         type: 'single', itemType: i.itemType,
@@ -115,8 +110,6 @@ export default function RentalsPage() {
     // Combos
     combos.filter(c => c.active && c.availableForRental).forEach(c => {
       const avail = getComboAvailability(c.id);
-      if (avail <= 0) return;
-
       const comps = c.components.map(comp => {
         const item = inventory.find(i => i.id === comp.inventoryItemId);
         return { name: item?.name || '?', qty: comp.quantity, requiresWheelSize: comp.requiresWheelSize };
@@ -255,12 +248,14 @@ export default function RentalsPage() {
                 <motion.div 
                   key={p.id}
                   className="min-w-[270px] sm:min-w-[320px] max-w-[320px] snap-start flex-shrink-0"
-                  whileHover={{ y: -6 }}
+                  whileHover={avail > 0 ? { y: -6 } : undefined}
                   transition={{ duration: 0.3 }}
                 >
                   <Card 
-                    className="bg-white border border-gray-100/80 rounded-[1.8rem] shadow-sm hover:shadow-xl transition-all duration-300 h-full flex flex-col overflow-hidden cursor-pointer"
-                    onClick={() => openReservation(p)}
+                    className={`bg-white border border-gray-100/80 rounded-[1.8rem] shadow-sm transition-all duration-300 h-full flex flex-col overflow-hidden ${avail > 0 ? 'cursor-pointer hover:shadow-xl' : 'cursor-not-allowed opacity-75'}`}
+                    onClick={() => {
+                      if (avail > 0) openReservation(p);
+                    }}
                   >
                     {/* Image Container - Rounded, full size, no overlay box covering the bike */}
                     <div className="relative aspect-[4/3] bg-white overflow-hidden rounded-t-[1.8rem] flex items-center justify-center">
@@ -297,11 +292,6 @@ export default function RentalsPage() {
                         <p className="text-xs font-sans text-gray-400 mt-1 line-clamp-2 leading-relaxed">
                           {p.description || 'Disponible para alquiler'}
                         </p>
-                        {p.details && (
-                          <p className="text-[10px] font-sans text-gray-500 mt-2 line-clamp-1 leading-relaxed">
-                            {p.details}
-                          </p>
-                        )}
                       </div>
 
                       {/* Pricing breakdown */}

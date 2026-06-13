@@ -339,10 +339,10 @@ export default function Navbar() {
                                         key={link.label}
                                         to={link.href}
                                         onClick={(event) => handleNavClick(event, link.href)}
-                                        className={`flex items-center gap-3 rounded-2xl px-4 py-3.5 font-cocon text-base font-bold text-brand-black transition-colors ${active ? 'bg-white/34' : 'bg-white/12 hover:bg-white/22'}`}
+                                        className={`flex min-w-0 items-center gap-3 rounded-2xl px-4 py-3.5 font-cocon text-base font-bold text-brand-black transition-colors ${active ? 'bg-white/34' : 'bg-white/12 hover:bg-white/22'}`}
                                     >
                                         <Icon className="h-5 w-5 shrink-0" strokeWidth={2.2} />
-                                        <span>{link.label}</span>
+                                        <span className="min-w-0 flex-1 whitespace-normal break-words leading-tight">{link.label}</span>
                                     </Link>
                                 );
                             })}

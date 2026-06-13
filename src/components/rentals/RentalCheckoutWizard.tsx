@@ -47,6 +47,31 @@ export default function RentalCheckoutWizard({
     // Step 1 local states
     const [detailWheelSize, setDetailWheelSize] = useState<string>('');
     const [detailQty, setDetailQty] = useState<number>(1);
+    const [favoriteIds, setFavoriteIds] = useState<string[]>([]);
+
+    const selectedAvailability = useMemo(() => {
+        if (!selectedProduct) return 0;
+        if (selectedProduct.hasWheelSizes && selectedProduct.wheelSizes) {
+            return selectedProduct.wheelSizes.reduce((sum: number, ws: any) => sum + (ws.stock || 0), 0);
+        }
+        return selectedProduct.comboAvailability ?? selectedProduct.stock ?? 0;
+    }, [selectedProduct]);
+
+    const isFavorite = selectedProduct ? favoriteIds.includes(selectedProduct.id) : false;
+
+    useEffect(() => {
+        if (!currentCustomer || typeof window === 'undefined') {
+            setFavoriteIds([]);
+            return;
+        }
+
+        try {
+            const stored = window.localStorage.getItem(`briz_favorites_${currentCustomer.id}`);
+            setFavoriteIds(stored ? JSON.parse(stored) : []);
+        } catch {
+            setFavoriteIds([]);
+        }
+    }, [currentCustomer?.id]);
 
     // Initialize wheel size selection if available
     useEffect(() => {
@@ -124,6 +149,10 @@ export default function RentalCheckoutWizard({
     // Step handlers
     const handleAddToCart = () => {
         if (!selectedProduct) return;
+        if (selectedAvailability <= 0) {
+            alert('Este producto esta agotado.');
+            return;
+        }
         const cartItemId = detailWheelSize ? `${selectedProduct.id}-${detailWheelSize}` : selectedProduct.id;
         
         setCart(prev => {
@@ -146,6 +175,10 @@ export default function RentalCheckoutWizard({
 
     const handleContinueStep1 = () => {
         if (!selectedProduct) return;
+        if (selectedAvailability <= 0) {
+            alert('Este producto esta agotado.');
+            return;
+        }
         // If cart is empty, add current selection first
         if (cart.length === 0) {
             const cartItemId = detailWheelSize ? `${selectedProduct.id}-${detailWheelSize}` : selectedProduct.id;
@@ -157,6 +190,55 @@ export default function RentalCheckoutWizard({
             }]);
         }
         setStep(2);
+    };
+
+    const handleToggleFavorite = () => {
+        if (!selectedProduct) return;
+        if (!currentCustomer) {
+            setAuthOpen(true);
+            return;
+        }
+
+        setFavoriteIds(prev => {
+            const next = prev.includes(selectedProduct.id)
+                ? prev.filter(id => id !== selectedProduct.id)
+                : [...prev, selectedProduct.id];
+            try {
+                window.localStorage.setItem(`briz_favorites_${currentCustomer.id}`, JSON.stringify(next));
+            } catch {
+                // Favorites are a convenience until a persisted customer list is added.
+            }
+            return next;
+        });
+    };
+
+    const handleShareSelectedProduct = async () => {
+        if (!selectedProduct) return;
+
+        const shareData = {
+            title: `${selectedProduct.name} | Briz`,
+            text: `Mira este alquiler en Briz: ${selectedProduct.name}`,
+            url: window.location.href,
+        };
+
+        try {
+            if (navigator.share && (!navigator.canShare || navigator.canShare(shareData))) {
+                await navigator.share(shareData);
+                return;
+            }
+
+            await navigator.clipboard.writeText(shareData.url);
+            alert('Enlace de alquiler copiado al portapapeles.');
+        } catch (error) {
+            if ((error as DOMException)?.name === 'AbortError') return;
+
+            try {
+                await navigator.clipboard.writeText(shareData.url);
+                alert('Enlace de alquiler copiado al portapapeles.');
+            } catch {
+                alert('No se pudo compartir el enlace en este dispositivo.');
+            }
+        }
     };
 
     const handleRemoveCartItem = (id: string) => {
@@ -509,15 +591,19 @@ export default function RentalCheckoutWizard({
                         <div className="relative aspect-[4/3] bg-white border border-gray-100 rounded-[2.2rem] overflow-hidden shadow-md flex items-center justify-center">
                             <img src={selectedProduct.imageUrl || '/placeholder_bike.png'} alt={selectedProduct.name} className="w-full h-full object-contain p-4" />
                             <div className="absolute bottom-5 right-5 flex gap-2">
-                                <button className="w-10 h-10 rounded-full bg-white/90 hover:bg-white text-brand-black shadow-lg flex items-center justify-center border border-gray-100 cursor-pointer">
-                                    <Heart className="w-5 h-5 text-red-500 fill-red-500" />
+                                <button
+                                    type="button"
+                                    onClick={handleToggleFavorite}
+                                    aria-pressed={isFavorite}
+                                    title={currentCustomer ? 'Guardar en favoritos' : 'Inicia sesion para guardar favoritos'}
+                                    className="w-10 h-10 rounded-full bg-white/90 hover:bg-white text-brand-black shadow-lg flex items-center justify-center border border-gray-100 cursor-pointer"
+                                >
+                                    <Heart className={`w-5 h-5 ${isFavorite ? 'text-red-500 fill-red-500' : 'text-gray-600'}`} />
                                 </button>
                                 <button 
+                                    type="button"
                                     className="w-10 h-10 rounded-full bg-white/90 hover:bg-white text-brand-black shadow-lg flex items-center justify-center border border-gray-100 cursor-pointer"
-                                    onClick={() => {
-                                        navigator.clipboard.writeText(window.location.href);
-                                        alert('¡Enlace de alquiler copiado al portapapeles!');
-                                    }}
+                                    onClick={handleShareSelectedProduct}
                                 >
                                     <Share2 className="w-5 h-5 text-gray-700" />
                                 </button>
@@ -528,12 +614,6 @@ export default function RentalCheckoutWizard({
                         <p className="text-xs sm:text-sm font-medium text-brand-black leading-relaxed text-justify font-sans bg-white/50 p-5 rounded-2xl border border-black/5">
                             {selectedProduct.description || 'Alquila tu bicicleta ideal para pasear o entrenar por la ciudad con total comodidad y estilo.'}
                         </p>
-                        {selectedProduct.details && (
-                            <p className="text-xs font-medium text-gray-500 leading-relaxed font-sans bg-white/50 p-4 rounded-xl border border-black/5">
-                                {selectedProduct.details}
-                            </p>
-                        )}
-
                         {/* Wheel Sizes Select (if applicable) */}
                         {selectedProduct.hasWheelSizes && selectedProduct.wheelSizes && selectedProduct.wheelSizes.length > 0 && (
                             <div className="space-y-2">
@@ -553,7 +633,7 @@ export default function RentalCheckoutWizard({
                                                         : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300'
                                             }`}
                                         >
-                                            Aro {ws.size} ({ws.stock} disp.)
+                                            Aro {ws.size}{ws.stock <= 0 ? ' - Agotado' : ''}
                                         </button>
                                     ))}
                                 </div>
@@ -574,15 +654,17 @@ export default function RentalCheckoutWizard({
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-4">
                             <Button 
                                 onClick={handleAddToCart}
+                                disabled={selectedAvailability <= 0}
                                 className="w-full bg-white border-2 border-brand-yellow hover:bg-brand-yellow/10 text-brand-black font-black rounded-2xl h-14 uppercase text-xs tracking-widest font-sans cursor-pointer"
                             >
                                 <ShoppingBag className="w-4 h-4 mr-2" /> Añadir al Carrito
                             </Button>
                             <Button 
                                 onClick={handleContinueStep1}
+                                disabled={selectedAvailability <= 0}
                                 className="w-full bg-brand-yellow hover:bg-brand-yellow-light text-brand-black font-black rounded-2xl h-14 uppercase text-xs tracking-widest font-sans cursor-pointer shadow-md shadow-brand-yellow/10"
                             >
-                                Continuar
+                                {selectedAvailability <= 0 ? 'Agotado' : 'Continuar'}
                             </Button>
                         </div>
                     </motion.div>
