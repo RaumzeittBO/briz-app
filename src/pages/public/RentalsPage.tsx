@@ -11,6 +11,7 @@ import { useCart } from '@/context/CartContext';
 import CustomerAuthModal from '@/components/layout/CustomerAuthModal';
 import RentalCheckoutWizard from '@/components/rentals/RentalCheckoutWizard';
 import type { RentalCartItem } from '@/components/rentals/RentalCheckoutWizard';
+import { RENTAL_SEED_CATEGORIES } from '@/data/rentalSeedData';
 
 
 
@@ -28,6 +29,33 @@ type DisplayProduct = {
   pricePerHour: number; priceFrom5thHour: number; pricePerDay: number; pricePerWeek: number; pricePerMonth: number;
 };
 
+const CATEGORY_PRIORITY = ['Urbanas', 'Montañeras'];
+
+function sortCategories(a: string, b: string) {
+  const aPriority = CATEGORY_PRIORITY.indexOf(a);
+  const bPriority = CATEGORY_PRIORITY.indexOf(b);
+  if (aPriority !== -1 || bPriority !== -1) {
+    if (aPriority === -1) return 1;
+    if (bPriority === -1) return -1;
+    return aPriority - bPriority;
+  }
+  if (a === 'Accesorios') return 1;
+  if (b === 'Accesorios') return -1;
+  const seedA = RENTAL_SEED_CATEGORIES.indexOf(a);
+  const seedB = RENTAL_SEED_CATEGORIES.indexOf(b);
+  if (seedA !== -1 || seedB !== -1) {
+    if (seedA === -1) return 1;
+    if (seedB === -1) return -1;
+    return seedA - seedB;
+  }
+  return a.localeCompare(b);
+}
+
+function productCategories(product: DisplayProduct) {
+  const mainCategory = product.category || (product.itemType === 'accessory' ? 'Accesorios' : 'Otros');
+  return [mainCategory, ...(product.secondaryCategories || [])];
+}
+
 
 
 export default function RentalsPage() {
@@ -35,7 +63,7 @@ export default function RentalsPage() {
   const { totalItems } = useCart();
 
   const [search, setSearch] = useState('');
-  const [category, setCategory] = useState('Bicicletas');
+  const [category, setCategory] = useState('Todas');
   const [selected, setSelected] = useState<DisplayProduct | null>(null);
   
   // Dynamic Scroll Container Refs
@@ -144,14 +172,17 @@ export default function RentalsPage() {
   }, [inventory, combos, getComboAvailability]);
 
   const categories = useMemo(() => {
-    return ['Bicicletas', 'Accesorios', 'Todas'];
-  }, []);
+    const productCategorySet = new Set<string>();
+    products.forEach(product => {
+      productCategories(product).forEach(cat => productCategorySet.add(cat));
+    });
+    return ['Todas', ...Array.from(productCategorySet).sort(sortCategories)];
+  }, [products]);
 
   const filtered = useMemo(() => {
     return products.filter(p => {
       if (category !== 'Todas') {
-        const cat = p.type === 'combo' ? 'Bicicletas' : (p.itemType === 'bike' ? 'Bicicletas' : 'Accesorios');
-        if (cat !== category) return false;
+        if (!productCategories(p).includes(category)) return false;
       }
       const q = search.toLowerCase();
       return p.name.toLowerCase().includes(q) || p.description.toLowerCase().includes(q) || (p.details || '').toLowerCase().includes(q);
@@ -169,8 +200,7 @@ export default function RentalsPage() {
   const productsByCategory = useMemo(() => {
     const groups: Record<string, DisplayProduct[]> = {};
     filtered.forEach(p => {
-      const cat = p.category || (p.itemType === 'accessory' ? 'Accesorios' : 'Otros');
-      const cats = [cat, ...(p.secondaryCategories || [])];
+      const cats = category === 'Todas' ? productCategories(p) : [category];
       cats.forEach(groupName => {
         if (!groups[groupName]) {
           groups[groupName] = [];
@@ -179,14 +209,10 @@ export default function RentalsPage() {
       });
     });
     return groups;
-  }, [filtered]);
+  }, [filtered, category]);
 
   const categoriesToRender = useMemo(() => {
-    return Object.keys(productsByCategory).sort((a, b) => {
-      if (a === 'Accesorios') return 1;
-      if (b === 'Accesorios') return -1;
-      return a.localeCompare(b);
-    });
+    return Object.keys(productsByCategory).sort(sortCategories);
   }, [productsByCategory]);
 
   // Render method for horizontal slider

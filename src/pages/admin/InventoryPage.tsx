@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -8,12 +8,33 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Search, Plus, Edit, Trash2, Image as ImageIcon, Bike, Wrench, Layers, X } from 'lucide-react';
 import { useStore } from '@/context/StoreContext';
 import type { InventoryItem, ComboProduct, WheelSizeEntry, ComboComponent } from '@/context/StoreContext';
+import { RENTAL_SEED_CATEGORIES } from '@/data/rentalSeedData';
 
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
 
 const WHEEL_OPTIONS = ['12','16','20','24','26','27','28','29'];
+const NON_BIKE_CATEGORIES = new Set(['Accesorios', 'Combinados']);
+const CATEGORY_PRIORITY = ['Urbanas', 'Montañeras'];
+
+function sortCategories(a: string, b: string) {
+  const aPriority = CATEGORY_PRIORITY.indexOf(a);
+  const bPriority = CATEGORY_PRIORITY.indexOf(b);
+  if (aPriority !== -1 || bPriority !== -1) {
+    if (aPriority === -1) return 1;
+    if (bPriority === -1) return -1;
+    return aPriority - bPriority;
+  }
+  const seedA = RENTAL_SEED_CATEGORIES.indexOf(a);
+  const seedB = RENTAL_SEED_CATEGORIES.indexOf(b);
+  if (seedA !== -1 || seedB !== -1) {
+    if (seedA === -1) return 1;
+    if (seedB === -1) return -1;
+    return seedA - seedB;
+  }
+  return a.localeCompare(b);
+}
 
 function defaultBike(): InventoryItem {
   return { id: `inv_${Date.now()}_${Math.random().toString(36).slice(2,7)}`, itemType:'bike', name:'', description:'', imageUrl:'', active:true, availableForRental:true, availableForSale:false, hasWheelSizes:true, wheelSizes:[{size:'26',stock:0}], pricePerHour:0, priceFrom5thHour:0, pricePerDay:0, pricePerWeek:0, pricePerMonth:0, price1Hour:0, price2Hours:0, price3Hours:0, price4Hours:0, price8Hours:0, price24Hours:0, price1Week:0, price1Month:0 };
@@ -33,6 +54,7 @@ export default function InventoryPage() {
   const [modal, setModal] = useState<{open:boolean; mode:'add'|'edit'; type:'bike'|'accessory'|'combo'}>({open:false,mode:'add',type:'bike'});
   const [editItem, setEditItem] = useState<any>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<{id:string; type:string; name:string} | null>(null);
+  const [localCategories, setLocalCategories] = useState<string[]>([]);
 
   const bikes = inventory.filter(i => i.itemType === 'bike');
   const accessories = inventory.filter(i => i.itemType === 'accessory');
@@ -40,6 +62,21 @@ export default function InventoryPage() {
   const filteredBikes = bikes.filter(b => b.name.toLowerCase().includes(q));
   const filteredAccessories = accessories.filter(a => a.name.toLowerCase().includes(q));
   const filteredCombos = combos.filter(c => c.name.toLowerCase().includes(q));
+  const availableBikeCategories = useMemo(() => {
+    const categories = new Set<string>();
+    RENTAL_SEED_CATEGORIES.forEach(cat => categories.add(cat));
+    bikeCategories.forEach(cat => categories.add(cat));
+    localCategories.forEach(cat => categories.add(cat));
+    inventory.forEach(item => {
+      if (item.itemType === 'bike' && item.category) categories.add(item.category);
+    });
+    combos.forEach(combo => {
+      if (combo.category) categories.add(combo.category);
+    });
+    return Array.from(categories)
+      .filter(cat => cat.trim() && !NON_BIKE_CATEGORIES.has(cat))
+      .sort(sortCategories);
+  }, [bikeCategories, combos, inventory, localCategories]);
 
   const openAdd = (type: 'bike'|'accessory'|'combo') => {
     setEditItem(type==='bike'?defaultBike():type==='accessory'?defaultAccessory():defaultCombo());
@@ -324,8 +361,10 @@ export default function InventoryPage() {
                           onClick={() => {
                             const newCat = prompt('Ingrese el nombre de la nueva categoría (ej. Urbana, Montaña, Ruta):');
                             if (newCat && newCat.trim()) {
-                              addBikeCategory(newCat.trim());
-                              setEditItem({ ...editItem, category: newCat.trim() });
+                              const trimmed = newCat.trim();
+                              setLocalCategories(prev => prev.includes(trimmed) ? prev : [...prev, trimmed]);
+                              addBikeCategory(trimmed).catch((err) => console.warn('No se pudo guardar la categoría global:', err));
+                              setEditItem({ ...editItem, category: trimmed });
                             }
                           }}
                           className="text-[9px] font-black uppercase text-brand-yellow hover:underline cursor-pointer"
@@ -341,7 +380,7 @@ export default function InventoryPage() {
                           <SelectValue placeholder="Seleccione una categoría" />
                         </SelectTrigger>
                         <SelectContent className="bg-brand-charcoal border-white/10 text-white">
-                          {bikeCategories.map((cat) => (
+                          {availableBikeCategories.map((cat) => (
                             <SelectItem key={cat} value={cat} className="focus:bg-white/5 focus:text-white cursor-pointer">
                               {cat}
                             </SelectItem>
