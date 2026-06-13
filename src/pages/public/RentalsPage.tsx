@@ -15,10 +15,11 @@ import type { RentalCartItem } from '@/components/rentals/RentalCheckoutWizard';
 
 
 type DisplayProduct = {
-  id: string; name: string; description: string; imageUrl: string;
+  id: string; name: string; description: string; details?: string; imageUrl: string;
   type: 'single' | 'combo';
   itemType?: 'bike' | 'accessory';
   category?: string;
+  secondaryCategories?: string[];
   hasWheelSizes: boolean;
   wheelSizes?: { size: string; stock: number }[];
   stock?: number;
@@ -72,7 +73,7 @@ export default function RentalsPage() {
       if (totalStock <= 0) return;
 
       items.push({
-        id: i.id, name: i.name, description: i.description, imageUrl: i.imageUrl,
+        id: i.id, name: i.name, description: i.description, details: i.details, imageUrl: i.imageUrl,
         type: 'single', itemType: i.itemType,
         category: i.category,
         hasWheelSizes: i.hasWheelSizes,
@@ -129,9 +130,10 @@ export default function RentalsPage() {
       }
 
       items.push({
-        id: c.id, name: c.name, description: c.description, imageUrl: c.imageUrl,
+        id: c.id, name: c.name, description: c.description, details: c.details, imageUrl: c.imageUrl,
         type: 'combo', hasWheelSizes: hasWS, wheelSizes: ws,
         category: c.category || 'Bicicletas',
+        secondaryCategories: c.secondaryCategories,
         comboAvailability: avail, components: comps,
         pricePerHour: c.pricePerHour, priceFrom5thHour: c.priceFrom5thHour,
         pricePerDay: c.pricePerDay, pricePerWeek: c.pricePerWeek, pricePerMonth: c.pricePerMonth,
@@ -152,7 +154,7 @@ export default function RentalsPage() {
         if (cat !== category) return false;
       }
       const q = search.toLowerCase();
-      return p.name.toLowerCase().includes(q) || p.description.toLowerCase().includes(q);
+      return p.name.toLowerCase().includes(q) || p.description.toLowerCase().includes(q) || (p.details || '').toLowerCase().includes(q);
     });
   }, [products, category, search]);
 
@@ -168,10 +170,13 @@ export default function RentalsPage() {
     const groups: Record<string, DisplayProduct[]> = {};
     filtered.forEach(p => {
       const cat = p.category || (p.itemType === 'accessory' ? 'Accesorios' : 'Otros');
-      if (!groups[cat]) {
-        groups[cat] = [];
-      }
-      groups[cat].push(p);
+      const cats = [cat, ...(p.secondaryCategories || [])];
+      cats.forEach(groupName => {
+        if (!groups[groupName]) {
+          groups[groupName] = [];
+        }
+        groups[groupName].push(p);
+      });
     });
     return groups;
   }, [filtered]);
@@ -266,6 +271,11 @@ export default function RentalsPage() {
                         <p className="text-xs font-sans text-gray-400 mt-1 line-clamp-2 leading-relaxed">
                           {p.description || 'Disponible para alquiler'}
                         </p>
+                        {p.details && (
+                          <p className="text-[10px] font-sans text-gray-500 mt-2 line-clamp-1 leading-relaxed">
+                            {p.details}
+                          </p>
+                        )}
                       </div>
 
                       {/* Pricing breakdown */}

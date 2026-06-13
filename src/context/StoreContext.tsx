@@ -13,6 +13,11 @@ import {
 import { db, storage } from '../lib/firebase';
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { cyclingRoutes as DEFAULT_ROUTES, type CyclingRoute } from '../data/mockData';
+import {
+    RENTAL_SEED_CATEGORIES,
+    RENTAL_SEED_COMBOS,
+    RENTAL_SEED_INVENTORY,
+} from '../data/rentalSeedData';
 export type { CyclingRoute };
 
 // ===========================
@@ -30,6 +35,7 @@ export interface InventoryItem {
     name: string;
     category?: string;
     description: string;
+    details?: string;
     imageUrl: string;
     active: boolean;
 
@@ -72,7 +78,9 @@ export interface ComboProduct {
     id: string;
     name: string;
     category?: string;
+    secondaryCategories?: string[];
     description: string;
+    details?: string;
     imageUrl: string;
     active: boolean;
     availableForRental: boolean;
@@ -188,7 +196,7 @@ export interface ServiceOrder {
     phone: string;
     bikeType: string;
     issue: string;
-    status: 'Recibido' | 'En revisión' | 'En reparación' | 'Listo' | 'Entregado';
+    status: 'Recibido' | 'En revisiÃ³n' | 'En reparaciÃ³n' | 'Listo' | 'Entregado';
     estimatedDelivery: string;
     costEstimate: number;
     notes: string;
@@ -281,185 +289,8 @@ export const useStore = () => {
 // DEFAULT SEED DATA
 // ===========================
 
-const DEFAULT_INVENTORY: InventoryItem[] = [
-    {
-        id: 'b1',
-        itemType: 'bike',
-        name: 'Briz Urban Pro',
-        category: 'Urbana',
-        description: 'Bicicleta urbana ligera, perfecta para las calles de Cochabamba. Ideal para commuting diario.',
-        imageUrl: 'https://images.unsplash.com/photo-1485965120184-e220f721d03e?auto=format&fit=crop&w=600&q=80',
-        active: true,
-        availableForRental: true,
-        availableForSale: true,
-        hasWheelSizes: true,
-        wheelSizes: [
-            { size: '26', stock: 5 },
-            { size: '27.5', stock: 3 },
-            { size: '29', stock: 2 }
-        ],
-        pricePerHour: 15,
-        priceFrom5thHour: 10,
-        pricePerDay: 60,
-        pricePerWeek: 300,
-        pricePerMonth: 900,
-        price1Hour: 15,
-        price2Hours: 30,
-        price3Hours: 45,
-        price4Hours: 60,
-        price8Hours: 100,
-        price24Hours: 60,
-        price1Week: 300,
-        price1Month: 900,
-        salePrice: 2800
-    },
-    {
-        id: 'b2',
-        itemType: 'bike',
-        name: 'Briz Mountain X1',
-        category: 'Montaña',
-        description: 'MTB de alto rendimiento con suspensión delantera. Conquista los senderos de Tunari.',
-        imageUrl: 'https://images.unsplash.com/photo-1576435465679-64a037f487fb?auto=format&fit=crop&w=600&q=80',
-        active: true,
-        availableForRental: true,
-        availableForSale: true,
-        hasWheelSizes: true,
-        wheelSizes: [
-            { size: '26', stock: 2 },
-            { size: '27.5', stock: 5 },
-            { size: '29', stock: 5 }
-        ],
-        pricePerHour: 25,
-        priceFrom5thHour: 15,
-        pricePerDay: 100,
-        pricePerWeek: 500,
-        pricePerMonth: 1500,
-        price1Hour: 25,
-        price2Hours: 50,
-        price3Hours: 75,
-        price4Hours: 100,
-        price8Hours: 160,
-        price24Hours: 100,
-        price1Week: 500,
-        price1Month: 1500,
-        salePrice: 4500
-    },
-    {
-        id: 'b3',
-        itemType: 'bike',
-        name: 'Briz Road Elite',
-        category: 'Ruta',
-        description: 'Bicicleta de ruta aerodinámica para los ciclistas que buscan velocidad y rendimiento.',
-        imageUrl: 'https://images.unsplash.com/photo-1532298229144-0ec0c57515c7?auto=format&fit=crop&w=600&q=80',
-        active: true,
-        availableForRental: true,
-        availableForSale: true,
-        hasWheelSizes: true,
-        wheelSizes: [
-            { size: '27.5', stock: 2 },
-            { size: '29', stock: 3 }
-        ],
-        pricePerHour: 30,
-        priceFrom5thHour: 20,
-        pricePerDay: 120,
-        pricePerWeek: 600,
-        pricePerMonth: 1800,
-        price1Hour: 30,
-        price2Hours: 60,
-        price3Hours: 90,
-        price4Hours: 120,
-        price8Hours: 200,
-        price24Hours: 120,
-        price1Week: 600,
-        price1Month: 1800,
-        salePrice: 5200
-    },
-    {
-        id: 'p1',
-        itemType: 'accessory',
-        name: 'Casco Urbano Briz',
-        category: 'Accesorios',
-        description: 'Casco ligero con ventilación superior. Diseño moderno y seguro.',
-        imageUrl: 'https://images.unsplash.com/photo-1557053910-d9eedeed1d7d?auto=format&fit=crop&w=600&q=80',
-        active: true,
-        availableForRental: true,
-        availableForSale: true,
-        hasWheelSizes: false,
-        stock: 20,
-        pricePerHour: 5,
-        priceFrom5thHour: 5,
-        pricePerDay: 10,
-        pricePerWeek: 40,
-        pricePerMonth: 120,
-        price1Hour: 5,
-        price2Hours: 10,
-        price3Hours: 10,
-        price4Hours: 10,
-        price8Hours: 10,
-        price24Hours: 10,
-        price1Week: 40,
-        price1Month: 120,
-        salePrice: 180
-    },
-    {
-        id: 'p2',
-        itemType: 'accessory',
-        name: 'Candado U-Lock Premium',
-        category: 'Accesorios',
-        description: 'Candado de alta seguridad tipo U. Protege tu bicicleta en la ciudad.',
-        imageUrl: 'https://images.unsplash.com/photo-1549492423-40028e32c8c6?auto=format&fit=crop&w=600&q=80',
-        active: true,
-        availableForRental: true,
-        availableForSale: true,
-        hasWheelSizes: false,
-        stock: 30,
-        pricePerHour: 5,
-        priceFrom5thHour: 5,
-        pricePerDay: 10,
-        pricePerWeek: 40,
-        pricePerMonth: 120,
-        price1Hour: 5,
-        price2Hours: 10,
-        price3Hours: 10,
-        price4Hours: 10,
-        price8Hours: 10,
-        price24Hours: 10,
-        price1Week: 40,
-        price1Month: 120,
-        salePrice: 120
-    }
-];
-
-const DEFAULT_COMBOS: ComboProduct[] = [
-    {
-        id: 'combo_1',
-        name: 'Combo Urbano Briz',
-        category: 'Bicicletas',
-        description: 'Briz Urban Pro + Casco Urbano + Candado U-Lock con precio preferencial.',
-        imageUrl: 'https://images.unsplash.com/photo-1485965120184-e220f721d03e?auto=format&fit=crop&w=600&q=80',
-        active: true,
-        availableForRental: true,
-        availableForSale: false,
-        components: [
-            { inventoryItemId: 'b1', quantity: 1, requiresWheelSize: true },
-            { inventoryItemId: 'p1', quantity: 1, requiresWheelSize: false },
-            { inventoryItemId: 'p2', quantity: 1, requiresWheelSize: false }
-        ],
-        pricePerHour: 20,
-        priceFrom5thHour: 12,
-        pricePerDay: 75,
-        pricePerWeek: 350,
-        pricePerMonth: 1100,
-        price1Hour: 20,
-        price2Hours: 40,
-        price3Hours: 60,
-        price4Hours: 75,
-        price8Hours: 120,
-        price24Hours: 75,
-        price1Week: 350,
-        price1Month: 1100
-    }
-];
+const DEFAULT_INVENTORY: InventoryItem[] = RENTAL_SEED_INVENTORY;
+const DEFAULT_COMBOS: ComboProduct[] = RENTAL_SEED_COMBOS;
 
 export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
     const [inventory, setInventory] = useState<InventoryItem[]>([]);
@@ -578,7 +409,7 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
             if (snap.exists()) {
                 setBikeCategories(snap.data().categories || []);
             } else {
-                const defaults = ['Urbana', 'Montaña', 'Ruta', 'Paseo'];
+                const defaults = RENTAL_SEED_CATEGORIES;
                 setDoc(doc(db, 'settings', 'bike_categories'), { categories: defaults });
                 setBikeCategories(defaults);
             }
@@ -661,11 +492,11 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
             base = p2h > 0 ? p2h : (pricing.pricePerHour * 2);
         } else if (d === '3 horas') {
             base = p3h > 0 ? p3h : (pricing.pricePerHour * 3);
-        } else if (d === '4 horas' || d === 'medio día') {
+        } else if (d === '4 horas' || d === 'medio dÃ­a') {
             base = p4h > 0 ? p4h : (pricing.pricePerHour * 4);
         } else if (d === '8 horas') {
             base = p8h > 0 ? p8h : ((p4h > 0 ? p4h : pricing.pricePerHour * 4) + 4 * (pricing.priceFrom5thHour || 0));
-        } else if (d === '24 horas' || d === '1 día' || d === 'día completo') {
+        } else if (d === '24 horas' || d === '1 dÃ­a' || d === 'dÃ­a completo') {
             base = p24h > 0 ? p24h : pricing.pricePerDay;
         } else if (d === '1 semana') {
             base = p1w > 0 ? p1w : pricing.pricePerWeek;
@@ -713,7 +544,7 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
     ): Promise<Customer> => {
         const emailExists = customers.some(c => c.email?.toLowerCase().trim() === customerData.email?.toLowerCase().trim());
         if (emailExists) {
-            throw new Error('El correo electrónico ya está registrado.');
+            throw new Error('El correo electrÃ³nico ya estÃ¡ registrado.');
         }
 
         const id = generateId('cust');
@@ -884,7 +715,7 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
             createdDate: nowStr
         };
         
-        // Firestore does NOT accept undefined values — strip them before writing
+        // Firestore does NOT accept undefined values â€” strip them before writing
         const cleanData: Record<string, any> = {};
         for (const [key, value] of Object.entries(newRental)) {
             if (value !== undefined) {
@@ -913,7 +744,7 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
         const invCopy = [...inventory];
 
         const updateStock = (itemId: string, qty: number, wsSize?: string) => {
-            if (itemId.startsWith('srv_') || itemId.startsWith('acc_')) return true;
+            if (itemId.startsWith('srv_')) return true;
             const itemIdx = invCopy.findIndex(i => i.id === itemId);
             if (itemIdx < 0) return false;
             const item = { ...invCopy[itemIdx] };
@@ -965,7 +796,7 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
         if (rental.status === 'confirmed' || rental.status === 'Confirmado') {
             const batch = writeBatch(db);
             const restoreStock = (itemId: string, qty: number, wsSize?: string) => {
-                if (itemId.startsWith('srv_') || itemId.startsWith('acc_')) return;
+                if (itemId.startsWith('srv_')) return;
                 const item = inventory.find(i => i.id === itemId);
                 if (!item) return;
                 const updated = { ...item };

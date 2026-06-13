@@ -528,6 +528,11 @@ export default function RentalCheckoutWizard({
                         <p className="text-xs sm:text-sm font-medium text-brand-black leading-relaxed text-justify font-sans bg-white/50 p-5 rounded-2xl border border-black/5">
                             {selectedProduct.description || 'Alquila tu bicicleta ideal para pasear o entrenar por la ciudad con total comodidad y estilo.'}
                         </p>
+                        {selectedProduct.details && (
+                            <p className="text-xs font-medium text-gray-500 leading-relaxed font-sans bg-white/50 p-4 rounded-xl border border-black/5">
+                                {selectedProduct.details}
+                            </p>
+                        )}
 
                         {/* Wheel Sizes Select (if applicable) */}
                         {selectedProduct.hasWheelSizes && selectedProduct.wheelSizes && selectedProduct.wheelSizes.length > 0 && (
