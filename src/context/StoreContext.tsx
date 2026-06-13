@@ -574,15 +574,13 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
         }, (error) => {
             console.error("Error fetching routes:", error);
         });
-        const unsubBikeCats = onSnapshot(query(collection(db, 'bike_categories')), (snap) => {
-            if (snap.empty) {
-                const defaults = ['Urbana', 'Montaña', 'Ruta', 'Paseo'];
-                defaults.forEach(async (cat) => {
-                    await setDoc(doc(db, 'bike_categories', cat), { name: cat });
-                });
-                setBikeCategories(defaults);
+        const unsubBikeCats = onSnapshot(doc(db, 'settings', 'bike_categories'), (snap) => {
+            if (snap.exists()) {
+                setBikeCategories(snap.data().categories || []);
             } else {
-                setBikeCategories(snap.docs.map(doc => doc.id));
+                const defaults = ['Urbana', 'Montaña', 'Ruta', 'Paseo'];
+                setDoc(doc(db, 'settings', 'bike_categories'), { categories: defaults });
+                setBikeCategories(defaults);
             }
         }, (error) => {
             console.error("Error fetching bike categories:", error);
@@ -831,12 +829,14 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
 
     const addBikeCategory = async (cat: string) => {
         const trimmed = cat.trim();
-        if (trimmed) {
-            await setDoc(doc(db, 'bike_categories', trimmed), { name: trimmed });
+        if (trimmed && !bikeCategories.includes(trimmed)) {
+            const updated = [...bikeCategories, trimmed];
+            await setDoc(doc(db, 'settings', 'bike_categories'), { categories: updated });
         }
     };
     const deleteBikeCategory = async (cat: string) => {
-        await deleteDoc(doc(db, 'bike_categories', cat));
+        const updated = bikeCategories.filter(c => c !== cat);
+        await setDoc(doc(db, 'settings', 'bike_categories'), { categories: updated });
     };
 
     const addCombo = async (combo: ComboProduct) => {
