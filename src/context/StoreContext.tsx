@@ -203,6 +203,15 @@ export interface ServiceOrder {
     date: string;
 }
 
+const LOCAL_ROUTES_KEY = 'briz_local_routes';
+
+function mergeRoutes(remoteRoutes: CyclingRoute[], localRoutes: CyclingRoute[]) {
+    const byId = new Map<string, CyclingRoute>();
+    remoteRoutes.forEach(route => byId.set(route.id, route));
+    localRoutes.forEach(route => byId.set(route.id, route));
+    return Array.from(byId.values());
+}
+
 interface StoreContextType {
     inventory: InventoryItem[];
     combos: ComboProduct[];
@@ -300,6 +309,7 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
     const [customers, setCustomers] = useState<Customer[]>([]);
     const [serviceOrders, setServiceOrders] = useState<ServiceOrder[]>([]);
     const [routes, setRoutes] = useState<CyclingRoute[]>([]);
+    const [localRoutes, setLocalRoutes] = useState<CyclingRoute[]>(() => safeJSON<CyclingRoute[]>(LOCAL_ROUTES_KEY, []));
     const [bikeCategories, setBikeCategories] = useState<string[]>([]);
     const [isLoaded, setIsLoaded] = useState(false);
 
@@ -648,14 +658,45 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
         await deleteDoc(doc(db, 'inventory', id));
     };
 
+    const saveLocalRoutes = (updater: (current: CyclingRoute[]) => CyclingRoute[]) => {
+        setLocalRoutes(current => {
+            const next = updater(current);
+            localStorage.setItem(LOCAL_ROUTES_KEY, JSON.stringify(next));
+            return next;
+        });
+    };
+
     const addRoute = async (route: CyclingRoute) => {
-        await setDoc(doc(db, 'routes', route.id), route);
+        try {
+            await setDoc(doc(db, 'routes', route.id), route);
+            saveLocalRoutes(current => current.filter(r => r.id !== route.id));
+        } catch (error) {
+            console.warn('Firestore routes write failed; saving route locally:', error);
+            saveLocalRoutes(current => [...current.filter(r => r.id !== route.id), route]);
+        }
     };
     const updateRoute = async (id: string, updates: Partial<CyclingRoute>) => {
-        await updateDoc(doc(db, 'routes', id), updates);
+        const existing = mergeRoutes(routes, localRoutes).find(route => route.id === id);
+        try {
+            await updateDoc(doc(db, 'routes', id), updates);
+            saveLocalRoutes(current => current.filter(r => r.id !== id));
+        } catch (error) {
+            console.warn('Firestore routes update failed; saving route locally:', error);
+            if (existing) {
+                saveLocalRoutes(current => [
+                    ...current.filter(r => r.id !== id),
+                    { ...existing, ...updates, id }
+                ]);
+            }
+        }
     };
     const deleteRoute = async (id: string) => {
-        await deleteDoc(doc(db, 'routes', id));
+        try {
+            await deleteDoc(doc(db, 'routes', id));
+        } catch (error) {
+            console.warn('Firestore routes delete failed; deleting local fallback only:', error);
+        }
+        saveLocalRoutes(current => current.filter(r => r.id !== id));
     };
 
     const addBikeCategory = async (cat: string) => {
@@ -925,6 +966,8 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
         await batch.commit();
     };
 
+    const mergedRoutes = mergeRoutes(routes, localRoutes);
+
     const value: StoreContextType = {
         inventory, combos, rentals, sales, customers, serviceOrders, isLoaded,
         rentalSettings, updateRentalSettings,
@@ -937,7 +980,7 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
         addServiceOrder, updateServiceOrder, deleteServiceOrder,
         getItemStock, getComboAvailability, calculatePrice, resetAllData,
         currentCustomer, loginCustomer, registerCustomer, logoutCustomer,
-        routes, addRoute, updateRoute, deleteRoute,
+        routes: mergedRoutes, addRoute, updateRoute, deleteRoute,
         bikeCategories, addBikeCategory, deleteBikeCategory
     };
 
