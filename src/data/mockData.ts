@@ -29,6 +29,7 @@ export interface CyclingRoute {
     description: string;
     highlights: string[];
     image: string;
+    mapUrl?: string;
 }
 
 export const cyclingRoutes: CyclingRoute[] = [

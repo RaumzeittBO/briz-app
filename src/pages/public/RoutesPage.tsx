@@ -3,7 +3,7 @@ import { MapPin, Clock, Route } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { cyclingRoutes } from '@/data/mockData';
+import { useStore } from '@/context/StoreContext';
 
 const fadeUp = { initial: { opacity: 0, y: 30 }, whileInView: { opacity: 1, y: 0 }, viewport: { once: true }, transition: { duration: 0.6 } };
 
@@ -14,17 +14,32 @@ const difficultyColor: Record<string, string> = {
 };
 
 export default function RoutesPage() {
+    const { routes } = useStore();
+
     return (
         <div className="pt-[80px] lg:pt-[120px] bg-background min-h-screen flex flex-col">
 
             <section className="py-24 sm:py-32 bg-gray-50/50 flex-1">
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                     <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-8">
-                        {cyclingRoutes.map((route, i) => (
-                            <motion.div key={route.id} initial={{ opacity: 0, y: 30 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: (i % 6) * 0.1, duration: 0.5 }} className="h-full">
-                                <Card className="group h-full bg-white border-4 border-brand-black rounded-2xl shadow-[8px_8px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-1 hover:translate-y-1 transition-all duration-300 flex flex-col overflow-hidden relative">
-                                    <div className="h-[240px] bg-gray-50 flex items-center justify-center relative overflow-hidden">
+                        {routes.map((route, i) => {
+                            const headerContent = (
+                                <>
+                                    {route.image ? (
+                                        <img src={route.image} className="absolute inset-0 w-full h-full object-cover group-hover:scale-110 transition-transform duration-1000" alt={route.name} />
+                                    ) : (
                                         <div className="absolute inset-0 bg-brand-charcoal/5 group-hover:bg-brand-yellow/10 transition-colors duration-700" />
+                                    )}
+                                    
+                                    {route.mapUrl && (
+                                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center z-20">
+                                            <span className="text-white font-black text-xs uppercase tracking-widest bg-brand-charcoal/90 px-4 py-2.5 rounded-full border-2 border-brand-yellow/50 shadow-lg flex items-center gap-1.5 transform translate-y-2 group-hover:translate-y-0 transition-transform duration-300">
+                                                Abrir en Google Maps
+                                            </span>
+                                        </div>
+                                    )}
+
+                                    {!route.image && (
                                         <div className="text-center p-6 relative z-10">
                                             <motion.div 
                                                 whileHover={{ scale: 1.1, rotate: 5 }}
@@ -34,29 +49,45 @@ export default function RoutesPage() {
                                             </motion.div>
                                             <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest group-hover:text-brand-charcoal/50 transition-colors">Visualizar Ruta</p>
                                         </div>
-                                        <Badge className={`absolute top-6 right-6 px-4 py-2 font-black text-[10px] uppercase tracking-widest rounded-full shadow-lg border-0 ${difficultyColor[route.difficulty]}`}>{route.difficulty}</Badge>
-                                    </div>
-                                    <CardContent className="p-8 sm:p-10 flex-1 flex flex-col z-10 bg-white relative">
-                                        <div className="mb-6">
-                                            <h3 className="font-black text-2xl text-brand-charcoal group-hover:text-brand-yellow transition-colors leading-tight mb-3">{route.name}</h3>
-                                            <p className="text-sm sm:text-base text-gray-400 font-bold leading-relaxed flex-1 opacity-80">{route.description}</p>
+                                    )}
+                                    <Badge className={`absolute top-6 right-6 px-4 py-2 font-black text-[10px] uppercase tracking-widest rounded-full shadow-lg border-0 z-30 ${difficultyColor[route.difficulty]}`}>{route.difficulty}</Badge>
+                                </>
+                            );
+
+                            return (
+                                <motion.div key={route.id} initial={{ opacity: 0, y: 30 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: (i % 6) * 0.1, duration: 0.5 }} className="h-full">
+                                    <Card className="group h-full bg-white border-4 border-brand-black rounded-2xl shadow-[8px_8px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-1 hover:translate-y-1 transition-all duration-300 flex flex-col overflow-hidden relative">
+                                        <div className="h-[240px] bg-gray-50 flex items-center justify-center relative overflow-hidden">
+                                            {route.mapUrl ? (
+                                                <a href={route.mapUrl} target="_blank" rel="noopener noreferrer" className="absolute inset-0 w-full h-full cursor-pointer z-10">
+                                                    {headerContent}
+                                                </a>
+                                            ) : (
+                                                headerContent
+                                            )}
                                         </div>
-                                        <div className="mt-auto space-y-6 pt-6 border-t border-gray-50">
-                                            <div className="flex items-center gap-8 text-[11px] font-black uppercase tracking-widest text-brand-charcoal/60">
-                                                <span className="flex items-center gap-2 group-hover:text-brand-yellow transition-colors"><Route className="w-4 h-4 text-brand-yellow" strokeWidth={2} /> {route.distance}</span>
-                                                <span className="flex items-center gap-2 group-hover:text-brand-yellow transition-colors"><Clock className="w-4 h-4 text-brand-yellow" strokeWidth={2} /> {route.duration}</span>
+                                        <CardContent className="p-8 sm:p-10 flex-1 flex flex-col z-10 bg-white relative">
+                                            <div className="mb-6">
+                                                <h3 className="font-black text-2xl text-brand-charcoal group-hover:text-brand-yellow transition-colors leading-tight mb-3">{route.name}</h3>
+                                                <p className="text-sm sm:text-base text-gray-400 font-bold leading-relaxed flex-1 opacity-80">{route.description}</p>
                                             </div>
-                                            <div className="flex flex-wrap gap-2">
-                                                {route.highlights.map((h, j) => (
-                                                    <Badge key={j} variant="secondary" className="text-[9px] font-black uppercase tracking-widest bg-gray-50 text-gray-400 hover:bg-brand-yellow hover:text-brand-black transition-all px-3 py-1.5 rounded-full border-0">{h}</Badge>
-                                                ))}
+                                            <div className="mt-auto space-y-6 pt-6 border-t border-gray-50">
+                                                <div className="flex items-center gap-8 text-[11px] font-black uppercase tracking-widest text-brand-charcoal/60">
+                                                    <span className="flex items-center gap-2 group-hover:text-brand-yellow transition-colors"><Route className="w-4 h-4 text-brand-yellow" strokeWidth={2} /> {route.distance}</span>
+                                                    <span className="flex items-center gap-2 group-hover:text-brand-yellow transition-colors"><Clock className="w-4 h-4 text-brand-yellow" strokeWidth={2} /> {route.duration}</span>
+                                                </div>
+                                                <div className="flex flex-wrap gap-2">
+                                                    {route.highlights.map((h, j) => (
+                                                        <Badge key={j} variant="secondary" className="text-[9px] font-black uppercase tracking-widest bg-gray-50 text-gray-400 hover:bg-brand-yellow hover:text-brand-black transition-all px-3 py-1.5 rounded-full border-0">{h}</Badge>
+                                                    ))}
+                                                </div>
                                             </div>
-                                        </div>
-                                    </CardContent>
-                                    <div className="absolute bottom-0 left-0 w-full h-1 bg-brand-yellow scale-x-0 group-hover:scale-x-100 transition-transform duration-500 origin-left" />
-                                </Card>
-                            </motion.div>
-                        ))}
+                                        </CardContent>
+                                        <div className="absolute bottom-0 left-0 w-full h-1 bg-brand-yellow scale-x-0 group-hover:scale-x-100 transition-transform duration-500 origin-left" />
+                                    </Card>
+                                </motion.div>
+                            );
+                        })}
                     </div>
                 </div>
             </section>

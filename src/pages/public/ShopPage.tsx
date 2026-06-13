@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useState, useMemo, useRef } from 'react';
 import { motion } from 'framer-motion';
-import { Search, ShoppingCart, MessageCircle, X, Plus, Minus } from 'lucide-react';
+import { Search, ShoppingCart, MessageCircle, X, Plus, Minus, ChevronRight, Bike, Wrench } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -31,7 +31,7 @@ type ShopItem = {
     image: string;
 };
 
-const productCategories = ['Bicicletas', 'Accesorios', 'Todos'];
+const productCategories = ['Bicicletas', 'Accesorios', 'Todas'];
 
 export default function ShopPage() {
     const { inventory, combos, addSale, addOrUpdateCustomer } = useStore();
@@ -41,6 +41,16 @@ export default function ShopPage() {
     const [category, setCategory] = useState('Bicicletas');
     const [showCart, setShowCart] = useState(false);
     const [checkoutStep, setCheckoutStep] = useState<'cart' | 'checkout'>('cart');
+
+    // Dynamic Scroll Container Refs
+    const scrollRefs = useRef<Record<string, HTMLDivElement | null>>({});
+
+    const scrollRight = (catKey: string) => {
+        const ref = scrollRefs.current[catKey];
+        if (ref) {
+            ref.scrollBy({ left: 320, behavior: 'smooth' });
+        }
+    };
 
     // Form state
     const [name, setName] = useState('');
@@ -55,7 +65,7 @@ export default function ShopPage() {
             id: i.id,
             itemType: i.itemType,
             name: i.name,
-            category: i.itemType === 'bike' ? 'Bicicletas' : 'Accesorios',
+            category: i.category || (i.itemType === 'bike' ? 'Bicicletas' : 'Accesorios'),
             price: i.salePrice ?? 0,
             description: i.description,
             image: i.imageUrl,
@@ -67,7 +77,7 @@ export default function ShopPage() {
             id: c.id,
             itemType: 'product' as any,
             name: c.name,
-            category: 'Bicicletas',
+            category: c.category || 'Bicicletas',
             price: c.salePrice ?? 0,
             description: c.description,
             image: c.imageUrl,
@@ -75,11 +85,37 @@ export default function ShopPage() {
 
     const allItems: ShopItem[] = [...productItems, ...comboItems];
 
-    const filtered = allItems.filter(item => {
-        const matchSearch = item.name.toLowerCase().includes(search.toLowerCase());
-        if (category === 'Todos') return matchSearch;
-        return item.category === category && matchSearch;
-    });
+    const filtered = useMemo(() => {
+        return allItems.filter(item => {
+            const q = search.toLowerCase();
+            const matchSearch = item.name.toLowerCase().includes(q) || item.description.toLowerCase().includes(q);
+            if (category === 'Todas') return matchSearch;
+            
+            const tabCat = item.itemType === 'bike' ? 'Bicicletas' : 'Accesorios';
+            return tabCat === category && matchSearch;
+        });
+    }, [allItems, category, search]);
+
+    // Group products dynamically by their category field
+    const productsByCategory = useMemo(() => {
+        const groups: Record<string, ShopItem[]> = {};
+        filtered.forEach(p => {
+            const cat = p.category || (p.itemType === 'accessory' ? 'Accesorios' : 'Otros');
+            if (!groups[cat]) {
+                groups[cat] = [];
+            }
+            groups[cat].push(p);
+        });
+        return groups;
+    }, [filtered]);
+
+    const categoriesToRender = useMemo(() => {
+        return Object.keys(productsByCategory).sort((a, b) => {
+            if (a === 'Accesorios') return 1;
+            if (b === 'Accesorios') return -1;
+            return a.localeCompare(b);
+        });
+    }, [productsByCategory]);
 
     const handleCheckout = (e: React.FormEvent) => {
         e.preventDefault();
@@ -118,10 +154,129 @@ export default function ShopPage() {
         setNotes('');
     };
 
+    const renderCategorySlider = (
+        title: string, 
+        productsList: ShopItem[], 
+        catKey: string
+    ) => {
+        if (productsList.length === 0) return null;
+
+        return (
+            <div className="relative py-10 border-b border-gray-100 last:border-b-0">
+                {/* Category Header */}
+                <div className="flex justify-between items-end mb-6">
+                    <div className="space-y-1">
+                        <h2 className="font-tan text-2xl sm:text-4xl uppercase tracking-wider text-brand-yellow [-webkit-text-stroke:1.5px_#000] drop-shadow-[2px_2px_0_rgba(0,0,0,1)]">
+                            {title}
+                        </h2>
+                        <p className="text-[10px] sm:text-xs font-black uppercase text-gray-400 tracking-widest font-maiandra">
+                            {productsList.length} {productsList.length === 1 ? 'Producto' : 'Productos'}
+                        </p>
+                    </div>
+                </div>
+
+                {/* Horizontal Slider Area */}
+                <div className="relative group/slider">
+                    <div 
+                        ref={(el) => { scrollRefs.current[catKey] = el; }}
+                        className="flex overflow-x-auto gap-6 pb-6 pt-2 scrollbar-none snap-x snap-mandatory scroll-smooth px-1"
+                    >
+                        {productsList.map((item) => (
+                            <motion.div 
+                                key={item.id}
+                                className="min-w-[270px] sm:min-w-[320px] max-w-[320px] snap-start flex-shrink-0"
+                                whileHover={{ y: -6 }}
+                                transition={{ duration: 0.3 }}
+                            >
+                                <Card 
+                                    className="bg-white border border-gray-100/80 rounded-[1.8rem] shadow-sm hover:shadow-xl transition-all duration-300 h-full flex flex-col overflow-hidden"
+                                >
+                                    {/* Image Container */}
+                                    <div className="relative aspect-[4/3] bg-gray-50/70 overflow-hidden rounded-t-[1.8rem]">
+                                        {item.image ? (
+                                            <img 
+                                                src={item.image} 
+                                                alt={item.name} 
+                                                className="w-full h-full object-cover" 
+                                            />
+                                        ) : (
+                                            <div className="w-full h-full flex items-center justify-center bg-gray-50">
+                                                {item.itemType === 'bike' ? (
+                                                    <Bike className="w-12 h-12 text-brand-yellow/30" />
+                                                ) : (
+                                                    <Wrench className="w-12 h-12 text-brand-yellow/30" />
+                                                )}
+                                            </div>
+                                        )}
+                                        
+                                        <Badge className="absolute top-4 right-4 text-[9px] font-black uppercase px-2 py-1 border-0 bg-brand-yellow text-brand-black">
+                                            {item.itemType === 'bike' ? 'Bicicleta' : 'Accesorio'}
+                                        </Badge>
+                                    </div>
+
+                                    <CardContent className="p-5 flex-1 flex flex-col justify-between bg-white">
+                                        <div>
+                                            <h3 className="font-tangkiwood text-lg sm:text-xl text-brand-black leading-tight truncate">
+                                                {item.name}
+                                            </h3>
+                                            <p className="text-xs font-sans text-gray-400 mt-1 line-clamp-2 leading-relaxed">
+                                                {item.description || 'Disponible para compra'}
+                                            </p>
+                                        </div>
+
+                                        {/* Pricing and Buttons */}
+                                        <div className="pt-4 border-t border-gray-50 mt-4">
+                                            <div className="flex items-baseline gap-1 mb-4">
+                                                <span className="text-xs font-bold text-gray-400">Bs.</span>
+                                                <span className="font-tan text-2xl text-brand-black leading-none">
+                                                    {item.price}
+                                                </span>
+                                            </div>
+                                            
+                                            <div className="grid grid-cols-2 gap-2">
+                                                <Button 
+                                                    className="h-10 bg-brand-yellow text-brand-black hover:bg-brand-yellow-light shadow-md hover:-translate-y-0.5 transition-all rounded-full border-0 font-black text-xs flex items-center justify-center gap-1"
+                                                    onClick={() => addToCart({ id: item.id, name: item.name, price: item.price, itemType: item.itemType, image: item.image })}
+                                                >
+                                                    <ShoppingCart className="w-3.5 h-3.5" strokeWidth={2} /> Añadir
+                                                </Button>
+                                                <a 
+                                                    href="https://wa.me/59177860277" 
+                                                    target="_blank" 
+                                                    rel="noopener noreferrer" 
+                                                    className="block"
+                                                >
+                                                    <Button 
+                                                        variant="outline" 
+                                                        className="w-full h-10 text-brand-charcoal border-gray-100 hover:border-brand-yellow hover:bg-brand-yellow/5 transition-all rounded-full font-black text-xs flex items-center justify-center gap-1"
+                                                    >
+                                                        <MessageCircle className="w-3.5 h-3.5" strokeWidth={2} /> Consultar
+                                                    </Button>
+                                                </a>
+                                            </div>
+                                        </div>
+                                    </CardContent>
+                                </Card>
+                            </motion.div>
+                        ))}
+                    </div>
+
+                    {/* Navigation right arrow */}
+                    <button 
+                        onClick={() => scrollRight(catKey)}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 z-10 bg-white/90 hover:bg-white text-brand-black shadow-lg rounded-full w-11 h-11 flex items-center justify-center border border-gray-200 transition-transform active:scale-95 opacity-0 group-hover/slider:opacity-100 pointer-events-none group-hover/slider:pointer-events-auto duration-300"
+                        aria-label="Deslizar a la derecha"
+                    >
+                        <ChevronRight className="w-6 h-6 text-brand-black" strokeWidth={2.5} />
+                    </button>
+                </div>
+            </div>
+        );
+    };
 
     return (
-        <div className="pt-[80px] lg:pt-[120px] bg-background min-h-screen flex flex-col">
-            <div className="sticky top-[80px] lg:top-[120px] z-40 bg-background/95 backdrop-blur-md border-b border-gray-100">
+        <div className="pt-[80px] lg:pt-[120px] bg-[#FFFDF3] min-h-screen flex flex-col">
+            <div className="sticky top-[80px] lg:top-[120px] z-40 bg-[#FFFDF3]/95 backdrop-blur-md border-b border-gray-100">
                 <section className="pt-6 pb-6">
                     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                         <motion.div {...fadeUp} className="max-w-4xl mx-auto relative z-30 mb-6">
@@ -166,70 +321,20 @@ export default function ShopPage() {
                 </section>
             </div>
 
-            {/* Product Grid */}
-            <section className="py-12 sm:py-16 min-h-[50vh] bg-gray-50/50 flex-1">
+            {/* Product Sliders */}
+            <section className="py-12 sm:py-16 min-h-[50vh] bg-background flex-1">
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-full">
                     {filtered.length === 0 ? (
                         <div className="text-center flex items-center justify-center h-full py-24">
                             <p className="text-gray-500 font-medium text-lg">No encontramos productos que coincidan con tu búsqueda.</p>
                         </div>
                     ) : (
-                        <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 sm:gap-8 pb-12">                            {filtered.map((item, i) => {
-                                const itemCategory = item.itemType === 'bike' ? 'Bicicleta' : item.category;
-                                return (
-                                    <motion.div 
-                                        key={item.id} 
-                                        initial={{ opacity: 0, y: 30 }}
-                                        whileInView={{ opacity: 1, y: 0 }}
-                                        viewport={{ once: true }}
-                                        transition={{ delay: (i % 8) * 0.05, duration: 0.5 }}
-                                        className="h-full"
-                                    >
-                                        <Card className="group bg-white border border-gray-100 rounded-[2rem] shadow-sm hover:shadow-[0_16px_40px_rgba(255,210,0,0.18)] hover:border-brand-yellow/30 transition-all duration-300 h-full flex flex-col relative overflow-hidden hover:-translate-y-1">
-                                            <div className="relative h-[260px] bg-gray-50 flex items-center justify-center overflow-hidden">
-                                                {item.image ? (
-                                                    <img src={item.image} alt={item.name} className="absolute inset-0 w-full h-full object-cover group-hover:scale-110 transition-transform duration-1000 opacity-90 group-hover:opacity-100" />
-                                                ) : (
-                                                    <div className="text-center p-4">
-                                                        <div className="w-20 h-20 mx-auto rounded-3xl bg-white shadow-sm flex items-center justify-center mb-3 group-hover:shadow-md transition-all group-hover:scale-110 duration-500">
-                                                            <span className="text-3xl">{item.itemType === 'bike' ? '🚲' : '🔧'}</span>
-                                                        </div>
-                                                        <p className="text-xs text-gray-400 font-bold uppercase tracking-widest">Briz Quality</p>
-                                                    </div>
-                                                )}
-                                                <div className="absolute inset-0 bg-gradient-to-t from-black/20 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
-                                                
-                                                <Badge className="absolute top-6 right-6 text-[10px] font-black px-4 py-2 bg-white/90 backdrop-blur-md text-brand-charcoal shadow-lg border-0 uppercase tracking-widest rounded-full">
-                                                    {itemCategory}
-                                                </Badge>
-                                            </div>
-                                            <CardContent className="p-8 flex-1 flex flex-col z-10 bg-white">
-                                                <div className="flex-1 mb-6">
-                                                    <h3 className="font-black text-xl sm:text-2xl text-brand-charcoal group-hover:text-brand-yellow transition-colors leading-tight mb-3 pr-2 line-clamp-2">{item.name}</h3>
-                                                    <p className="text-sm text-gray-500 font-medium leading-relaxed line-clamp-2 opacity-80">{item.description}</p>
-                                                </div>
-                                                <div className="space-y-6 pt-6 border-t border-gray-50 mt-auto">
-                                                    <div className="flex items-baseline gap-1">
-                                                        <span className="text-sm font-bold text-gray-400">Bs.</span>
-                                                        <p className="font-black text-3xl text-brand-charcoal">{item.price}</p>
-                                                    </div>
-                                                    <div className="grid grid-cols-2 gap-3">
-                                                        <Button className="h-14 bg-brand-yellow text-brand-black hover:bg-brand-yellow-light shadow-xl hover:shadow-brand-yellow/20 hover:-translate-y-1 transition-all rounded-full border-0 font-black text-sm"
-                                                            onClick={() => addToCart({ id: item.id, name: item.name, price: item.price, itemType: item.itemType, image: item.image })}>
-                                                            <ShoppingCart className="w-4 h-4 mr-2" strokeWidth={1.5} /> Añadir
-                                                        </Button>
-                                                        <a href="https://wa.me/59177860277" target="_blank" rel="noopener noreferrer" className="block">
-                                                            <Button variant="outline" className="w-full h-14 text-brand-charcoal border-gray-100 hover:border-brand-yellow hover:bg-brand-yellow/5 transition-all rounded-full font-black text-sm">
-                                                                <MessageCircle className="w-4 h-4 mr-2" strokeWidth={1.5} /> Consultar
-                              </Button>
-                            </a>
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  </motion.div>
-                );
-              })}
+                        <div className="space-y-10">
+                            {categoriesToRender.map(catName => (
+                                <div key={catName}>
+                                    {renderCategorySlider(catName, productsByCategory[catName], catName)}
+                                </div>
+                            ))}
                         </div>
                     )}
                 </div>

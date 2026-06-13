@@ -24,6 +24,7 @@ import AdminServicePage from '@/pages/admin/AdminServicePage';
 import CustomersPage from '@/pages/admin/CustomersPage';
 import ReportsPage from '@/pages/admin/ReportsPage';
 import SettingsPage from '@/pages/admin/SettingsPage';
+import AdminRoutesPage from '@/pages/admin/AdminRoutesPage';
 
 // Protected route wrapper
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -57,6 +58,7 @@ function AppRoutes() {
         <Route path="sales" element={<AdminSalesPage />} />
         <Route path="service" element={<AdminServicePage />} />
         <Route path="customers" element={<CustomersPage />} />
+        <Route path="routes" element={<AdminRoutesPage />} />
         <Route path="reports" element={<ReportsPage />} />
         <Route path="settings" element={<SettingsPage />} />
       </Route>

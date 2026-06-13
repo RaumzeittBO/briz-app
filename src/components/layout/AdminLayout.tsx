@@ -3,7 +3,7 @@ import { Link, Outlet, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
     LayoutDashboard, Bike, Package, ShoppingCart, Wrench, Users, BarChart3,
-    Settings, Menu, ChevronLeft, LogOut, Bell, Lock
+    Settings, Menu, ChevronLeft, LogOut, Bell, Lock, MapPinned
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -27,6 +27,7 @@ export default function AdminLayout() {
         { label: 'Ventas', href: '/admin/sales', icon: ShoppingCart },
         { label: 'Servicio', href: '/admin/service', icon: Wrench },
         { label: 'Clientes', href: '/admin/customers', icon: Users },
+        { label: 'Ciclotours', href: '/admin/routes', icon: MapPinned },
         { label: 'Reportes', href: '/admin/reports', icon: BarChart3 },
         { label: 'Configuración', href: '/admin/settings', icon: Settings },
     ];

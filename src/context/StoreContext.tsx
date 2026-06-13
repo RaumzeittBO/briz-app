@@ -12,6 +12,8 @@ import {
 } from 'firebase/firestore';
 import { db, storage } from '../lib/firebase';
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { cyclingRoutes as DEFAULT_ROUTES, type CyclingRoute } from '../data/mockData';
+export type { CyclingRoute };
 
 // ===========================
 // TYPES
@@ -200,9 +202,15 @@ interface StoreContextType {
     sales: Sale[];
     customers: Customer[];
     serviceOrders: ServiceOrder[];
+    routes: CyclingRoute[];
     isLoaded: boolean;
     rentalSettings: RentalSettings;
     updateRentalSettings: (updates: Partial<RentalSettings>, qrFile: File | null) => Promise<void>;
+
+    // Routes CRUD
+    addRoute: (route: CyclingRoute) => Promise<void>;
+    updateRoute: (id: string, updates: Partial<CyclingRoute>) => Promise<void>;
+    deleteRoute: (id: string) => Promise<void>;
 
     // Inventory CRUD
     addInventoryItem: (item: InventoryItem) => Promise<void>;
@@ -455,6 +463,7 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
     const [sales, setSales] = useState<Sale[]>([]);
     const [customers, setCustomers] = useState<Customer[]>([]);
     const [serviceOrders, setServiceOrders] = useState<ServiceOrder[]>([]);
+    const [routes, setRoutes] = useState<CyclingRoute[]>([]);
     const [isLoaded, setIsLoaded] = useState(false);
 
     const [rentalSettings, setRentalSettings] = useState<RentalSettings>({
@@ -490,6 +499,21 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
             await batch.commit();
         } catch (e) {
             console.error('Failed to seed default combos:', e);
+        }
+    };
+
+    const seedDefaultRoutes = async () => {
+        try {
+            const batch = writeBatch(db);
+            DEFAULT_ROUTES.forEach(route => {
+                batch.set(doc(db, 'routes', route.id), {
+                    ...route,
+                    mapUrl: 'https://maps.google.com'
+                });
+            });
+            await batch.commit();
+        } catch (e) {
+            console.error('Failed to seed default routes:', e);
         }
     };
 
@@ -536,10 +560,16 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
                 setRentalSettings(snap.data() as RentalSettings);
             }
         });
+        const unsubRoutes = onSnapshot(query(collection(db, 'routes')), (snap) => {
+            setRoutes(snap.docs.map(doc => ({ ...doc.data() } as CyclingRoute)));
+            if (snap.empty) {
+                seedDefaultRoutes();
+            }
+        });
 
         setIsLoaded(true);
         return () => {
-            unsubInv(); unsubCombos(); unsubRentals(); unsubSales(); unsubCustomers(); unsubSO(); unsubSettings();
+            unsubInv(); unsubCombos(); unsubRentals(); unsubSales(); unsubCustomers(); unsubSO(); unsubSettings(); unsubRoutes();
         };
     }, []);
 
@@ -766,6 +796,16 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
     };
     const deleteInventoryItem = async (id: string) => {
         await deleteDoc(doc(db, 'inventory', id));
+    };
+
+    const addRoute = async (route: CyclingRoute) => {
+        await setDoc(doc(db, 'routes', route.id), route);
+    };
+    const updateRoute = async (id: string, updates: Partial<CyclingRoute>) => {
+        await updateDoc(doc(db, 'routes', id), updates);
+    };
+    const deleteRoute = async (id: string) => {
+        await deleteDoc(doc(db, 'routes', id));
     };
 
     const addCombo = async (combo: ComboProduct) => {
@@ -1034,7 +1074,8 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
         addOrUpdateCustomer, updateCustomer, deleteCustomer,
         addServiceOrder, updateServiceOrder, deleteServiceOrder,
         getItemStock, getComboAvailability, calculatePrice, resetAllData,
-        currentCustomer, loginCustomer, registerCustomer, logoutCustomer
+        currentCustomer, loginCustomer, registerCustomer, logoutCustomer,
+        routes, addRoute, updateRoute, deleteRoute
     };
 
     return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;

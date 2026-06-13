@@ -1392,7 +1392,7 @@ function CommunitySection() {
                         whileInView={{ opacity: 1, y: 0, scale: 1 }}
                         viewport={{ once: true }}
                         transition={{ duration: 0.6, ease: 'easeOut' }}
-                        className="font-tan uppercase text-3xl xs:text-4xl sm:text-5xl lg:text-[6.5rem] xl:text-[7.5rem] leading-[1.05]"
+                        className="font-tan uppercase text-3xl xs:text-4xl sm:text-5xl lg:text-[5.2rem] xl:text-[6.2rem] leading-[1.05]"
                         style={{ WebkitTextStroke: '2px #FFD200', color: '#063D47', textShadow: '4px 4px 0px rgba(6,61,71,0.28)' }}
                     >
                         Comunidad
@@ -1445,10 +1445,10 @@ function CommunitySection() {
                         {/* Interactive Polaroid Image */}
                         <div className="overflow-hidden bg-[#E6F5F2] relative aspect-[1.15/1]">
                             <SmartImage
-                                src={`${assetBase}/5.webp`}
-                                fallbackSrcs={[`/menu-principal-celular/5.webp`, `${assetBase}/web2.webp`]}
+                                src={`${assetBase}/comunidad.webp?v=2`}
+                                fallbackSrcs={[`/menu-principal-celular/comunidad.webp`, `${assetBase}/web2.webp`]}
                                 alt="Ciclistas en la comunidad Briz"
-                                placeholderLabel="5.webp"
+                                placeholderLabel="comunidad.webp"
                                 className="w-full h-full object-cover rounded-sm grayscale-[15%] group-hover:grayscale-0 transition-all duration-500 scale-102 group-hover:scale-105"
                             />
                         </div>
@@ -1608,49 +1608,20 @@ function FinalInspirationalSection() {
                 {/* Right Column: Rip-Paper Sticker & Main Polaroid Image */}
                 <div className="relative mx-auto w-full max-w-[480px] lg:max-w-none px-4 sm:px-6 z-10 flex flex-col items-center justify-center space-y-10 lg:space-y-12">
                     {/* Rip-Paper Header Sticker */}
+                    {/* Sticker Content: vive.webp */}
                     <motion.div
                         initial={{ opacity: 0, y: -24, rotate: -4 }}
                         whileInView={{ opacity: 1, y: 0, rotate: -2 }}
                         viewport={{ once: true }}
                         transition={{ duration: 0.6, ease: 'easeOut' }}
-                        className="bg-[#FFFDF3] border-3 border-brand-black px-8 py-5 shadow-[5px_5px_0_rgba(0,0,0,1)] rounded-md rotate-[-2deg] relative inline-block w-full max-w-[88vw] sm:max-w-[440px] z-20"
+                        className="relative w-full max-w-[88vw] sm:max-w-[440px] z-20"
                     >
-                        {/* Pink slash illustration (Left) */}
-                        <svg className="absolute -left-6 lg:-left-10 -top-6 lg:-top-8 w-10 h-10 lg:w-16 lg:h-16 text-brand-pink fill-current drop-shadow-sm select-none" viewBox="0 0 120 120">
-                            <path d="M30 60c0-10 15-25 25-15s5 20-5 25-20 0-20-10z M50 35c5-10 25-5 20 10s-15 10-20-10z M40 85c-10 5-20-15-5-20s15 15 5 20z" />
-                        </svg>
-
-                        {/* Orange splash illustration (Right) */}
-                        <svg className="absolute -right-6 lg:-right-9 -top-5 lg:-top-7 w-10 h-10 lg:w-16 lg:h-16 text-brand-orange fill-current drop-shadow-sm select-none" viewBox="0 0 120 120">
-                            <path d="M90 60c0 10-15 25-25 15s-5-20 5-25 20 0 20 10z M70 35c-5-10-25-5-20 10s15 10 20-10z M80 85c10 5 20-15 5-20s-15 15-5 20z" />
-                        </svg>
-
-                        {/* Sticker Content */}
-                        <div className="flex flex-col items-center justify-center text-center">
-                            <div className="flex items-center gap-1">
-                                <span 
-                                    className="font-tan uppercase text-lg sm:text-2xl text-brand-yellow-vibrant"
-                                    style={{ WebkitTextStroke: '1px #000', textShadow: '2px 2px 0px rgba(0,0,0,1)' }}
-                                >
-                                    ¡VIVE
-                                </span>
-                                <span className="font-gochi text-brand-black text-base sm:text-xl font-bold ml-1 mr-1">
-                                     la experiencia
-                                </span>
-                                <span className="font-scripter text-xl sm:text-3xl leading-none font-bold text-brand-pink">
-                                    Briz!
-                                </span>
-                            </div>
-                            <div className="relative inline-block mt-1.5 pb-1">
-                                <span className="font-gochi text-brand-charcoal text-sm sm:text-lg font-bold">
-                                    porque con Briz, eres feliz.
-                                </span>
-                                {/* Doodled underline */}
-                                <svg className="absolute bottom-[-2px] left-1/4 w-1/2 h-2 text-brand-yellow" viewBox="0 0 100 10" preserveAspectRatio="none">
-                                    <path d="M0 5 Q 50 9, 100 3" stroke="currentColor" strokeWidth="3.5" fill="none" strokeLinecap="round" />
-                                </svg>
-                            </div>
-                        </div>
+                        <SmartImage
+                            src="/vive.webp?v=1"
+                            alt="Vive la experiencia Briz"
+                            placeholderLabel="vive.webp"
+                            className="w-full h-auto object-contain border-3 border-brand-black shadow-[5px_5px_0_rgba(0,0,0,1)] rounded-md rotate-[-2deg]"
+                        />
                     </motion.div>
 
                     {/* Main Polaroid Image Container */}
@@ -1664,10 +1635,9 @@ function FinalInspirationalSection() {
                         {/* Polaroid Image Area */}
                         <div className="overflow-hidden bg-[#FFEEC7] relative aspect-[1.12/1]">
                             <SmartImage
-                                src={`${assetBase}/6.webp`}
-                                fallbackSrcs={[`/menu-principal-celular/6.webp`, `${assetBase}/1.webp`]}
-                                alt="Experiencia Briz Feliz"
-                                placeholderLabel="6.webp"
+                                src="/pedalea.webp?v=1"
+                                alt="Pedalea Conecta Inspira"
+                                placeholderLabel="pedalea.webp"
                                 className="w-full h-full object-cover scale-102 group-hover:scale-105 transition-transform duration-500 rounded-sm"
                             />
                         </div>
