@@ -324,6 +324,21 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
     // Customer Session state
     const [currentCustomer, setCurrentCustomer] = useState<Customer | null>(null);
 
+    useEffect(() => {
+        const refreshLocalRoutes = () => {
+            setLocalRoutes(safeJSON<CyclingRoute[]>(LOCAL_ROUTES_KEY, []));
+        };
+        const handleStorage = (event: StorageEvent) => {
+            if (event.key === LOCAL_ROUTES_KEY) refreshLocalRoutes();
+        };
+        window.addEventListener('storage', handleStorage);
+        window.addEventListener('briz_local_routes_updated', refreshLocalRoutes);
+        return () => {
+            window.removeEventListener('storage', handleStorage);
+            window.removeEventListener('briz_local_routes_updated', refreshLocalRoutes);
+        };
+    }, []);
+
     // Seeding methods
     const seedDefaultInventory = async () => {
         try {
@@ -662,6 +677,7 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
         setLocalRoutes(current => {
             const next = updater(current);
             localStorage.setItem(LOCAL_ROUTES_KEY, JSON.stringify(next));
+            window.setTimeout(() => window.dispatchEvent(new Event('briz_local_routes_updated')), 0);
             return next;
         });
     };

@@ -8,9 +8,9 @@ import { useStore } from '@/context/StoreContext';
 const fadeUp = { initial: { opacity: 0, y: 30 }, whileInView: { opacity: 1, y: 0 }, viewport: { once: true }, transition: { duration: 0.6 } };
 
 const difficultyColor: Record<string, string> = {
-    'Fácil': 'bg-green-500/15 text-green-600 border-green-500/30',
+    'FÃƒÂ¡cil': 'bg-green-500/15 text-green-600 border-green-500/30',
     'Moderado': 'bg-yellow-500/15 text-yellow-600 border-yellow-500/30',
-    'Difícil': 'bg-red-500/15 text-red-600 border-red-500/30',
+    'DifÃƒÂ­cil': 'bg-red-500/15 text-red-600 border-red-500/30',
 };
 
 export default function RoutesPage() {
@@ -93,38 +93,45 @@ export default function RoutesPage() {
             </section>
 
             {/* Map placeholder */}
-            <section className="py-24 sm:py-32 bg-brand-charcoal text-white relative overflow-hidden">
+            <section className="py-24 sm:py-32 bg-[#FFFDF3] text-[#203253] relative overflow-hidden">
                 <div className="absolute inset-0 pointer-events-none">
-                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-brand-yellow/5 rounded-full blur-[120px] mix-blend-screen" />
-                    <div className="absolute inset-0 bg-[url('/noise.png')] opacity-[0.03] mix-blend-overlay"></div>
+                    <div className="absolute left-[-8%] top-12 h-44 w-44 rounded-full bg-brand-yellow/35 blur-3xl" />
+                    <div className="absolute right-[-6%] bottom-12 h-56 w-56 rounded-full bg-brand-cyan/20 blur-3xl" />
+                    <svg className="absolute left-[-4%] top-[22%] hidden h-40 w-96 text-brand-yellow/50 sm:block" viewBox="0 0 420 120" fill="none" aria-hidden="true">
+                        <path d="M8 92C64 32 134 126 202 62C265 3 334 23 414 10" stroke="currentColor" strokeWidth="8" strokeLinecap="round" strokeDasharray="14 18" />
+                    </svg>
                 </div>
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
                     <motion.div {...fadeUp} className="text-center mb-16 space-y-6">
-                        <h2 className="text-4xl sm:text-6xl font-black mb-6 tracking-tight">Explora el <span className="text-brand-yellow">mapa ciclista</span></h2>
-                        <p className="text-xl sm:text-2xl text-white/50 font-medium max-w-2xl mx-auto leading-relaxed">Muy pronto: Un mapa interactivo con todas las rutas recomendadas, puntos de interés, talleres aliados y paradas de descanso en Cochabamba.</p>
+                        <h2 className="font-tan text-4xl sm:text-6xl mb-6 tracking-tight text-[#203253]">Explora el <span className="text-brand-yellow [-webkit-text-stroke:1px_#203253]">mapa ciclista</span></h2>
+                        <p className="text-xl sm:text-2xl text-[#203253]/65 font-medium max-w-2xl mx-auto leading-relaxed">Muy pronto: Un mapa interactivo con todas las rutas recomendadas, puntos de interes, talleres aliados y paradas de descanso en Cochabamba.</p>
                     </motion.div>
                     <div className="max-w-5xl mx-auto">
-                        <motion.div 
+                        <motion.div
                             initial={{ opacity: 0, scale: 0.95 }}
                             whileInView={{ opacity: 1, scale: 1 }}
                             viewport={{ once: true }}
-                            className="aspect-video rounded-[3rem] bg-white/5 border border-white/10 backdrop-blur-md flex items-center justify-center relative overflow-hidden shadow-2xl group ring-1 ring-white/10"
+                            className="aspect-video rounded-[3rem] bg-white border-4 border-brand-yellow/80 flex items-center justify-center relative overflow-hidden shadow-[0_18px_36px_rgba(120,87,0,0.14)] group"
                         >
-                            <div className="absolute inset-0 bg-gradient-to-tr from-brand-yellow/10 via-transparent to-brand-pink/10 opacity-30 group-hover:opacity-60 transition-opacity duration-1000" />
+                            <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_25%,rgba(255,210,0,0.28),transparent_30%),radial-gradient(circle_at_82%_70%,rgba(36,169,197,0.18),transparent_28%)]" />
+                            <svg className="absolute inset-x-8 bottom-8 h-28 text-brand-orange/35" viewBox="0 0 560 120" fill="none" aria-hidden="true">
+                                <path d="M10 88C90 42 142 116 230 62C307 15 364 28 444 20C494 15 526 28 550 48" stroke="currentColor" strokeWidth="10" strokeLinecap="round" />
+                                <path d="M16 76C96 34 146 101 230 54C304 13 366 24 440 15C490 9 528 20 552 39" stroke="#FFD200" strokeWidth="4" strokeLinecap="round" strokeDasharray="12 14" />
+                            </svg>
                             <div className="text-center space-y-8 relative z-10 p-12">
-                                <motion.div 
-                                    animate={{ 
+                                <motion.div
+                                    animate={{
                                         y: [0, -15, 0],
                                         scale: [1, 1.05, 1]
                                     }}
                                     transition={{ duration: 5, repeat: Infinity, ease: "easeInOut" }}
-                                    className="w-28 h-28 mx-auto rounded-full bg-brand-yellow flex items-center justify-center mb-4 shadow-[0_20px_50px_rgba(255,210,0,0.3)] group-hover:bg-white transition-colors duration-500"
+                                    className="w-28 h-28 mx-auto rounded-full bg-brand-yellow flex items-center justify-center mb-4 shadow-[0_20px_50px_rgba(255,210,0,0.28)] ring-8 ring-white transition-colors duration-500"
                                 >
-                                    <MapPin className="w-12 h-12 text-brand-black" strokeWidth={1.5} />
+                                    <MapPin className="w-12 h-12 text-[#203253]" strokeWidth={1.5} />
                                 </motion.div>
                                 <div>
-                                    <h3 className="text-3xl sm:text-4xl font-black text-white group-hover:text-brand-yellow transition-colors italic">Próximamente</h3>
-                                    <div className="w-20 h-2 bg-brand-yellow mx-auto rounded-full mt-4 opacity-30 group-hover:opacity-100 transition-opacity" />
+                                    <h3 className="font-tangkiwood text-3xl sm:text-4xl text-[#203253] transition-colors italic">Proximamente</h3>
+                                    <div className="w-20 h-2 bg-brand-yellow mx-auto rounded-full mt-4 opacity-80" />
                                 </div>
                             </div>
                         </motion.div>
@@ -134,24 +141,25 @@ export default function RoutesPage() {
 
             {/* CTA */}
             <section className="py-24 sm:py-32 bg-brand-yellow relative overflow-hidden">
-                <div className="absolute inset-0 bg-[url('/noise.png')] opacity-[0.05] mix-blend-overlay"></div>
-                <div className="absolute top-[-10%] left-[-5%] w-[400px] h-[400px] bg-white/20 rounded-full blur-[100px] mix-blend-screen" />
+                <div className="absolute inset-0 bg-[url('/noise.png')] opacity-[0.04] mix-blend-overlay"></div>
+                <div className="absolute top-[-10%] left-[-5%] w-[400px] h-[400px] bg-white/30 rounded-full blur-[100px]" />
+                <div className="absolute bottom-[-15%] right-[-6%] w-[360px] h-[360px] bg-brand-pink/15 rounded-full blur-[90px]" />
                 <div className="max-w-4xl mx-auto px-4 text-center space-y-12 relative z-10">
                     <motion.div {...fadeUp} className="space-y-8">
-                        <h2 className="text-5xl sm:text-6xl lg:text-7xl font-black text-brand-charcoal tracking-tight leading-[1.1]">
-                            ¿Listo para <span className="text-white drop-shadow-md">explorar</span>?
+                        <h2 className="font-tan text-5xl sm:text-6xl lg:text-7xl text-[#203253] tracking-tight leading-[1.1]">
+                            Listo para <span className="text-white drop-shadow-md">explorar</span>?
                         </h2>
-                        <p className="text-xl sm:text-3xl font-bold text-brand-charcoal/80 max-w-2xl mx-auto leading-relaxed italic">
+                        <p className="text-xl sm:text-3xl font-bold text-[#203253]/75 max-w-2xl mx-auto leading-relaxed italic">
                             Alquila una bicicleta Premium y descubre los mejores rincones a tu propio ritmo.
                         </p>
                         <div className="flex flex-col sm:flex-row gap-6 justify-center pt-8">
                             <a href="/rentals" className="w-full sm:w-auto">
-                                <Button className="h-20 px-12 rounded-full bg-brand-charcoal text-white hover:bg-white hover:text-brand-charcoal font-black text-xl shadow-2xl hover:shadow-[0_20px_50px_rgba(0,0,0,0.3)] hover:-translate-y-2 transition-all w-full border-0">
+                                <Button className="h-20 px-12 rounded-full bg-white text-[#203253] hover:bg-brand-cyan hover:text-white font-black text-xl shadow-[0_18px_34px_rgba(120,87,0,0.16)] hover:-translate-y-2 transition-all w-full border-0">
                                     Alquilar una bici
                                 </Button>
                             </a>
                             <a href="https://wa.me/59177860277" target="_blank" rel="noopener noreferrer" className="w-full sm:w-auto">
-                                <Button variant="outline" className="h-20 px-12 rounded-full bg-white/15 border-brand-charcoal/20 text-brand-charcoal hover:bg-white hover:border-white hover:text-brand-charcoal font-black text-xl backdrop-blur-md shadow-lg hover:-translate-y-2 transition-all w-full border-2">
+                                <Button variant="outline" className="h-20 px-12 rounded-full bg-brand-cyan/15 border-white/70 text-[#203253] hover:bg-white hover:border-white hover:text-[#203253] font-black text-xl backdrop-blur-md shadow-lg hover:-translate-y-2 transition-all w-full border-2">
                                     Consultar WhatsApp
                                 </Button>
                             </a>
