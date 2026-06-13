@@ -25,7 +25,13 @@ export async function runSeedAll(): Promise<{ success: boolean; message: string 
     const removedInventory = await clearCollection('inventory');
     const removedCombos = await clearCollection('combos');
 
-    await setDoc(doc(db, 'settings', 'bike_categories'), { categories: RENTAL_SEED_CATEGORIES });
+    let categoryMessage = '';
+    try {
+      await setDoc(doc(db, 'settings', 'bike_categories'), { categories: RENTAL_SEED_CATEGORIES });
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Permiso denegado';
+      categoryMessage = ` No se pudo actualizar settings/bike_categories (${message}), pero cada producto conserva su categoria interna.`;
+    }
 
     const inventoryBatch = writeBatch(db);
     RENTAL_SEED_INVENTORY.forEach(item => {
@@ -47,7 +53,8 @@ export async function runSeedAll(): Promise<{ success: boolean; message: string 
       success: true,
       message:
         `Seed completado: se eliminaron ${removedInventory} items y ${removedCombos} combinados previos. ` +
-        `Se cargaron ${visibleRentalItems} productos de alquiler visibles con datos reales.`,
+        `Se cargaron ${visibleRentalItems} productos de alquiler visibles con datos reales.` +
+        categoryMessage,
     };
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Error desconocido';

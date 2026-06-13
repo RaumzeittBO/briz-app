@@ -65,8 +65,14 @@ const AdminSeedPage: React.FC = () => {
       log(`   Listos: ${RENTAL_SEED_COMBOS.length} combinados`);
 
       log('Actualizando categorías...');
-      await setDoc(doc(db, 'settings', 'bike_categories'), { categories: RENTAL_SEED_CATEGORIES });
-      log(`   Listas: ${RENTAL_SEED_CATEGORIES.length} categorías`);
+      try {
+        await setDoc(doc(db, 'settings', 'bike_categories'), { categories: RENTAL_SEED_CATEGORIES });
+        log(`   Listas: ${RENTAL_SEED_CATEGORIES.length} categorías`);
+      } catch (categoryError: unknown) {
+        const categoryMessage = categoryError instanceof Error ? categoryError.message : 'Permiso denegado';
+        log(`   Aviso: no se pudo actualizar settings/bike_categories (${categoryMessage})`);
+        log('   Los productos igual quedaron cargados con su categoría interna.');
+      }
 
       const visibleRentalItems =
         RENTAL_SEED_INVENTORY.filter(item => item.active && item.availableForRental).length +
