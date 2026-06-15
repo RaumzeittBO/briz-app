@@ -52,7 +52,7 @@ export default function SettingsPage() {
             setTimeout(() => setSuccessMessage(''), 5000);
         } catch (error) {
             console.error(error);
-            alert('Error al guardar la configuración de pagos.');
+            alert(error instanceof Error ? error.message : 'Error al guardar la configuración de pagos.');
         } finally {
             setSaving(false);
         }

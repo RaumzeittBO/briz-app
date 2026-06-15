@@ -963,9 +963,31 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
         await deleteDoc(doc(db, 'serviceOrders', id));
     };
 
-    const fileToDataUrl = (file: File) => new Promise<string>((resolve, reject) => {
+    const fileToCompressedDataUrl = (file: File) => new Promise<string>((resolve, reject) => {
         const reader = new FileReader();
-        reader.onload = () => resolve(String(reader.result || ''));
+        reader.onload = () => {
+            const image = new Image();
+            image.onload = () => {
+                const maxSide = 900;
+                const scale = Math.min(1, maxSide / Math.max(image.width, image.height));
+                const width = Math.max(1, Math.round(image.width * scale));
+                const height = Math.max(1, Math.round(image.height * scale));
+                const canvas = document.createElement('canvas');
+                canvas.width = width;
+                canvas.height = height;
+                const ctx = canvas.getContext('2d');
+                if (!ctx) {
+                    reject(new Error('No se pudo procesar la imagen del QR.'));
+                    return;
+                }
+                ctx.fillStyle = '#ffffff';
+                ctx.fillRect(0, 0, width, height);
+                ctx.drawImage(image, 0, 0, width, height);
+                resolve(canvas.toDataURL('image/png'));
+            };
+            image.onerror = () => reject(new Error('No se pudo leer la imagen del QR.'));
+            image.src = String(reader.result || '');
+        };
         reader.onerror = () => reject(reader.error);
         reader.readAsDataURL(file);
     });
@@ -991,8 +1013,8 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
                 const result = await withTimeout(uploadBytes(pathRef, qrFile), 15000, 'La subida del QR tardó demasiado.');
                 qrCodeUrl = await withTimeout(getDownloadURL(result.ref), 10000, 'No se pudo obtener el enlace del QR.');
             } catch (error) {
-                console.warn('QR upload failed; saving data URL fallback:', error);
-                qrCodeUrl = await fileToDataUrl(qrFile);
+                console.warn('QR upload failed; saving compressed Firestore fallback:', error);
+                qrCodeUrl = await fileToCompressedDataUrl(qrFile);
             }
         }
         const newSettings = {
@@ -1000,12 +1022,13 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
             ...updates,
             qrCodeUrl
         };
-        setRentalSettings(newSettings);
-        localStorage.setItem(LOCAL_RENTAL_SETTINGS_KEY, JSON.stringify(newSettings));
         try {
             await withTimeout(setDoc(doc(db, 'settings', 'rental_settings'), newSettings), 12000, 'La configuración tardó demasiado en guardarse.');
+            setRentalSettings(newSettings);
+            localStorage.setItem(LOCAL_RENTAL_SETTINGS_KEY, JSON.stringify(newSettings));
         } catch (error) {
-            console.warn('Firestore rental settings save failed; local settings were kept:', error);
+            console.error('Firestore rental settings save failed:', error);
+            throw new Error('No se pudo guardar el QR globalmente. Revisa permisos de Firestore o intenta con una imagen más liviana.');
         }
     };
 
