@@ -247,6 +247,12 @@ export default function Navbar() {
                                                 <p className="text-[10px] text-white/40 font-bold uppercase tracking-wider font-maiandra">Cliente</p>
                                                 <p className="text-xs font-bold text-white truncate font-cocon">{currentCustomer.name}</p>
                                             </div>
+                                            <Link
+                                                to="/profile"
+                                                className="w-full flex items-center gap-2 text-left px-3 py-2 text-xs font-bold text-white/80 hover:bg-white/5 rounded-xl mt-1 transition-colors font-cocon"
+                                            >
+                                                <User className="w-3.5 h-3.5" /> Mi perfil
+                                            </Link>
                                             <button 
                                                 onClick={logoutCustomer} 
                                                 className="w-full flex items-center gap-2 text-left px-3 py-2 text-xs font-bold text-red-400 hover:bg-red-500/10 rounded-xl mt-1 transition-colors font-cocon"
@@ -359,6 +365,14 @@ export default function Navbar() {
                                             )}
                                             <span className="truncate">{currentCustomer.name}</span>
                                         </div>
+                                        <Link
+                                            to="/profile"
+                                            onClick={() => setMobileOpen(false)}
+                                            className="w-full flex min-w-0 items-center gap-3 rounded-2xl px-4 py-3 bg-white/12 text-brand-black font-cocon text-sm font-bold hover:bg-white/22 transition-all text-left"
+                                        >
+                                            <User className="h-5 w-5 shrink-0" strokeWidth={2.2} />
+                                            <span className="min-w-0 flex-1 whitespace-normal break-words leading-tight">Mi perfil</span>
+                                        </Link>
                                         <button 
                                             onClick={() => {
                                                 logoutCustomer();

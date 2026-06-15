@@ -6,7 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { useStore } from '@/context/StoreContext';
 import type { Customer } from '@/context/StoreContext';
-import { Search, Edit, User, UserPlus } from 'lucide-react';
+import { Search, Edit, User, UserPlus, Eye, FileText } from 'lucide-react';
 
 export default function CustomersPage() {
     const { customers, updateCustomer, addOrUpdateCustomer, deleteCustomer, sales, rentals } = useStore();
@@ -16,6 +16,7 @@ export default function CustomersPage() {
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [modalMode, setModalMode] = useState<'add' | 'edit'>('add');
     const [current, setCurrent] = useState<Partial<Customer>>({});
+    const [detailsCustomer, setDetailsCustomer] = useState<Customer | null>(null);
 
     const filtered = customers.filter(c =>
         c.name.toLowerCase().includes(search.toLowerCase()) ||
@@ -158,7 +159,14 @@ export default function CustomersPage() {
                                     </span>
                                 </div>
 
-                                <button 
+                                <button
+                                    onClick={() => setDetailsCustomer(c)}
+                                    className="w-full py-4 text-brand-yellow hover:text-brand-black hover:bg-brand-yellow text-[10px] font-black uppercase tracking-[0.2em] transition-all border-t border-white/5 flex items-center justify-center gap-2"
+                                >
+                                    <Eye className="w-4 h-4" /> Ver detalles
+                                </button>
+
+                                <button
                                     onClick={() => handleDelete(c.id, c.name)} 
                                     className="w-full py-4 text-white/20 hover:text-red-400 hover:bg-red-500/5 text-[10px] font-black uppercase tracking-[0.2em] transition-all border-t border-white/5"
                                 >
@@ -177,6 +185,90 @@ export default function CustomersPage() {
                     <p className="text-white/50">Prueba con otro término de búsqueda o agrega uno nuevo.</p>
                 </div>
             )}
+
+            <Dialog open={Boolean(detailsCustomer)} onOpenChange={(open) => !open && setDetailsCustomer(null)}>
+                <DialogContent className="max-w-5xl bg-brand-charcoal border-white/10 text-white p-0 overflow-hidden">
+                    {detailsCustomer && (
+                        <>
+                            <DialogHeader className="p-8 pb-6 border-b border-white/5 bg-[#1A1A1A]">
+                                <DialogTitle className="text-3xl font-black text-white flex items-center gap-3 tracking-tight">
+                                    <div className="p-2 bg-brand-yellow/10 rounded-xl">
+                                        <Eye className="w-6 h-6 text-brand-yellow" strokeWidth={2.5} />
+                                    </div>
+                                    Detalles del cliente
+                                </DialogTitle>
+                            </DialogHeader>
+                            <div className="p-8 space-y-8 max-h-[78vh] overflow-y-auto">
+                                <div className="grid lg:grid-cols-[1.2fr_0.8fr] gap-8">
+                                    <div className="space-y-5">
+                                        <div>
+                                            <p className="text-white/30 font-bold uppercase tracking-widest text-[10px]">Nombre completo</p>
+                                            <h2 className="text-4xl font-black text-white mt-1">{detailsCustomer.name}</h2>
+                                        </div>
+                                        <div className="grid sm:grid-cols-2 gap-4">
+                                            {[
+                                                ['WhatsApp', detailsCustomer.phone],
+                                                ['CI / Documento', detailsCustomer.ci],
+                                                ['Correo', detailsCustomer.email || 'No registrado'],
+                                                ['Nacionalidad', detailsCustomer.nacionalidad || 'No registrada'],
+                                                ['Departamento', detailsCustomer.departamento || 'No registrado'],
+                                                ['Como nos conoció', detailsCustomer.comoNosConociste || 'No registrado'],
+                                                ['Rentas', String(rentals.filter(r => r.customerPhone === detailsCustomer.phone || r.customerCI === detailsCustomer.ci).length)],
+                                                ['Compras', String(sales.filter(s => s.customerPhone === detailsCustomer.phone || s.customerCI === detailsCustomer.ci).length)],
+                                            ].map(([label, value]) => (
+                                                <div key={label} className="rounded-2xl border border-white/5 bg-white/[0.03] p-4">
+                                                    <p className="text-white/30 font-bold uppercase tracking-widest text-[10px]">{label}</p>
+                                                    <p className="text-lg font-black text-white mt-1 break-words">{value}</p>
+                                                </div>
+                                            ))}
+                                        </div>
+                                        {detailsCustomer.notes && (
+                                            <div className="rounded-2xl border border-white/5 bg-white/[0.03] p-4">
+                                                <p className="text-white/30 font-bold uppercase tracking-widest text-[10px]">Notas</p>
+                                                <p className="text-base font-bold text-white/80 mt-1">{detailsCustomer.notes}</p>
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    <div className="space-y-5">
+                                        <div className="rounded-3xl border border-white/5 bg-black/25 p-4">
+                                            <p className="text-white/30 font-bold uppercase tracking-widest text-[10px] mb-3">Foto del cliente</p>
+                                            <div className="aspect-square rounded-2xl overflow-hidden bg-white/5 border border-white/10 flex items-center justify-center">
+                                                {detailsCustomer.autofotoUrl ? (
+                                                    <a href={detailsCustomer.autofotoUrl} target="_blank" rel="noreferrer" className="w-full h-full">
+                                                        <img src={detailsCustomer.autofotoUrl} className="w-full h-full object-cover" alt={`Foto de ${detailsCustomer.name}`} />
+                                                    </a>
+                                                ) : (
+                                                    <User className="w-16 h-16 text-white/20" />
+                                                )}
+                                            </div>
+                                        </div>
+
+                                        <div className="rounded-3xl border border-white/5 bg-black/25 p-4">
+                                            <p className="text-white/30 font-bold uppercase tracking-widest text-[10px] mb-3">Documento subido</p>
+                                            <div className="min-h-72 rounded-2xl overflow-hidden bg-white/5 border border-white/10 flex items-center justify-center">
+                                                {detailsCustomer.documentoUrl ? (
+                                                    detailsCustomer.documentoUrl.toLowerCase().includes('.pdf') ? (
+                                                        <a href={detailsCustomer.documentoUrl} target="_blank" rel="noreferrer" className="flex flex-col items-center gap-3 text-brand-yellow font-black uppercase text-xs">
+                                                            <FileText className="w-16 h-16" /> Abrir documento PDF
+                                                        </a>
+                                                    ) : (
+                                                        <a href={detailsCustomer.documentoUrl} target="_blank" rel="noreferrer" className="w-full">
+                                                            <img src={detailsCustomer.documentoUrl} className="w-full max-h-[420px] object-contain" alt={`Documento de ${detailsCustomer.name}`} />
+                                                        </a>
+                                                    )
+                                                ) : (
+                                                    <FileText className="w-16 h-16 text-white/20" />
+                                                )}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </>
+                    )}
+                </DialogContent>
+            </Dialog>
 
             {/* Modal de Cliente */}
             <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>

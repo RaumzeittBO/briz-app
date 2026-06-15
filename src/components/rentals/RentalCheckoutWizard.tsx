@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
     ArrowLeft, Minus, Plus, X, Calendar, Clock, Heart, 
-    Share2, CreditCard, CheckCircle2, ShoppingBag, MessageSquare
+    Share2, CreditCard, CheckCircle2, ShoppingBag, MessageSquare, MapPin
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -29,6 +29,27 @@ interface RentalCheckoutWizardProps {
     setStep: (step: number) => void;
     onClose: () => void;
     setAuthOpen: (open: boolean) => void;
+}
+
+const STORE_ADDRESS = 'Av. Rodriguez Morales (Zona el pueblito)';
+const STORE_MAP_URL = 'https://maps.app.goo.gl/WeUipumWSXCMwPqL9';
+const WHATSAPP_NUMBER = '59177860277';
+
+function durationToHours(duration: string) {
+    const normalized = duration.toLowerCase();
+    if (normalized.includes('semana')) return 24 * 7;
+    if (normalized.includes('mes')) return 24 * 30;
+    const match = normalized.match(/\d+/);
+    return match ? Number(match[0]) : 24;
+}
+
+function addHoursToTime(time: string, hours: number) {
+    const [hour, minute] = time.split(':').map(Number);
+    const totalMinutes = (hour * 60) + minute + (hours * 60);
+    const normalized = ((totalMinutes % 1440) + 1440) % 1440;
+    const nextHour = Math.floor(normalized / 60);
+    const nextMinute = normalized % 60;
+    return `${String(nextHour).padStart(2, '0')}:${String(nextMinute).padStart(2, '0')}`;
 }
 
 export default function RentalCheckoutWizard({
@@ -116,6 +137,7 @@ export default function RentalCheckoutWizard({
     const [discountRate, setDiscountRate] = useState(0); // 0.10 for 10%
     const [paymentMethod, setPaymentMethod] = useState<'transfer' | 'qr' | 'cash'>('qr');
     const [reservationCode, setReservationCode] = useState('');
+    const [confirmedTotal, setConfirmedTotal] = useState(0);
 
     // Dynamic computations for subtotals and totals
     const itemsSubtotal = useMemo(() => {
@@ -146,12 +168,35 @@ export default function RentalCheckoutWizard({
         return rawTotal * (1 - discountRate);
     }, [rawTotal, discountRate]);
 
-    // Step handlers
-    const handleAddToCart = () => {
-        if (!selectedProduct) return;
+    const returnDateNote = useMemo(() => {
+        const hours = durationToHours(duration);
+        if (hours >= 24) return 'La devolución corresponde al día acordado según la duración elegida.';
+        const [startHour] = pickupTime.split(':').map(Number);
+        return startHour + hours >= 24 ? 'La devolución será al día siguiente.' : '';
+    }, [duration, pickupTime]);
+
+    useEffect(() => {
+        setReturnTime(addHoursToTime(pickupTime, durationToHours(duration)));
+    }, [pickupTime, duration]);
+
+    const amountToShow = step === 5 ? confirmedTotal : finalTotal;
+    const proofWhatsappUrl = useMemo(() => {
+        const message = [
+            'Hola, adjunto comprobante de pago de mi alquiler.',
+            `Código: ${reservationCode}`,
+            `Nombre: ${currentCustomer?.name || ''}`,
+            `WhatsApp: ${currentCustomer?.phone || ''}`,
+            `CI: ${currentCustomer?.ci || ''}`,
+            `Total: Bs. ${amountToShow.toFixed(2)}`
+        ].join('\n');
+        return `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(message)}`;
+    }, [reservationCode, currentCustomer, amountToShow]);
+
+    const addSelectedProductToCart = () => {
+        if (!selectedProduct) return false;
         if (selectedAvailability <= 0) {
             alert('Este producto esta agotado.');
-            return;
+            return false;
         }
         const cartItemId = detailWheelSize ? `${selectedProduct.id}-${detailWheelSize}` : selectedProduct.id;
         
@@ -167,28 +212,19 @@ export default function RentalCheckoutWizard({
                 quantity: detailQty 
             }];
         });
-        
+        return true;
+    };
+
+    // Step handlers
+    const handleAddToCart = () => {
+        if (!addSelectedProductToCart()) return;
         alert(`¡${selectedProduct.name} añadido al carrito!`);
         setSelectedProduct(null);
         onClose();
     };
 
     const handleContinueStep1 = () => {
-        if (!selectedProduct) return;
-        if (selectedAvailability <= 0) {
-            alert('Este producto esta agotado.');
-            return;
-        }
-        // If cart is empty, add current selection first
-        if (cart.length === 0) {
-            const cartItemId = detailWheelSize ? `${selectedProduct.id}-${detailWheelSize}` : selectedProduct.id;
-            setCart([{ 
-                id: cartItemId, 
-                product: selectedProduct, 
-                selectedWheelSize: detailWheelSize || undefined, 
-                quantity: detailQty 
-            }]);
-        }
+        if (!addSelectedProductToCart()) return;
         setStep(2);
     };
 
@@ -509,6 +545,7 @@ export default function RentalCheckoutWizard({
                 firstRental.total = firstRental.total * (1 - discountRate);
                 firstRental.notes += ` [Descuento aplicado: ${discountRate * 100}%]`;
             }
+            setConfirmedTotal(finalTotal);
             const createdFirst = await addRental(firstRental);
             const sharedCode = createdFirst.reservationCode;
 
@@ -524,7 +561,7 @@ export default function RentalCheckoutWizard({
                     ...item,
                     id: newId,
                     reservationCode: sharedCode,
-                    paymentStatus: paymentMethod === 'qr' ? 'pending_review' : 'unpaid',
+                    paymentStatus: paymentMethod === 'qr' || paymentMethod === 'transfer' ? 'pending_review' : 'unpaid',
                     status: 'pending',
                     createdAt: new Date().toISOString(),
                     updatedAt: new Date().toISOString(),
@@ -697,9 +734,6 @@ export default function RentalCheckoutWizard({
                                 {/* Items List */}
                                 <div className="space-y-3">
                                     {cart.map(item => {
-                                        // Unit price for 24h default representation
-                                        const unitPrice = calculatePrice(item.product.type || 'single', item.product.id, '24 horas', 1);
-                                        const subTotal = unitPrice * item.quantity;
                                         return (
                                             <div 
                                                 key={item.id} 
@@ -716,9 +750,9 @@ export default function RentalCheckoutWizard({
                                                 <div className="flex-1 min-w-0">
                                                     <h3 className="font-bold text-brand-black text-sm truncate uppercase font-sans">{item.product.name}</h3>
                                                     <p className="text-[10px] text-brand-black/40 font-bold uppercase font-maiandra mt-0.5">
-                                                        {item.selectedWheelSize ? `Aro ${item.selectedWheelSize} • ` : ''}Tarifa Diaria (24h)
+                                                        {item.selectedWheelSize ? `Aro ${item.selectedWheelSize} - ` : ''}{item.quantity} unidad{item.quantity > 1 ? 'es' : ''}
                                                     </p>
-                                                    <p className="font-black text-brand-yellow-vibrant text-xs mt-1 font-sans">Bs. {subTotal.toFixed(2)}</p>
+                                                    <p className="font-black text-brand-yellow-vibrant text-xs mt-1 font-sans">La duración y el total se calculan en el siguiente paso.</p>
                                                 </div>
 
                                                 {/* Qty +/- Controls */}
@@ -801,17 +835,18 @@ export default function RentalCheckoutWizard({
 
                                 <div className="space-y-2">
                                     <Label className="text-[10px] text-brand-black/50 font-bold uppercase tracking-widest font-maiandra flex items-center gap-1.5"><Clock className="w-3.5 h-3.5 text-brand-yellow-vibrant" /> Hora Devolución</Label>
-                                    <select 
+                                    <Input
+                                        readOnly
                                         value={returnTime} 
-                                        onChange={e => setReturnTime(e.target.value)} 
                                         className="w-full px-4 bg-gray-50 border border-gray-200 h-12 text-sm text-brand-black font-bold rounded-xl focus:border-brand-yellow focus:outline-none font-sans"
-                                    >
-                                        {['09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00', '18:00', '19:00', '20:00'].map(t => (
-                                            <option key={t} value={t}>{t}</option>
-                                        ))}
-                                    </select>
+                                    />
                                 </div>
                             </div>
+                            {returnDateNote && (
+                                <p className="text-[10px] text-brand-black/45 font-bold uppercase font-maiandra leading-relaxed">
+                                    {returnDateNote}
+                                </p>
+                            )}
                         </div>
 
                         {/* Duration Selector Rate */}
@@ -897,6 +932,9 @@ export default function RentalCheckoutWizard({
                             <p className="text-[9px] text-brand-black/40 font-bold uppercase font-maiandra leading-relaxed">
                                 Dentro el casco urbano de Cochabamba.
                             </p>
+                            <div className="rounded-2xl border border-brand-yellow/30 bg-brand-yellow/10 p-3 text-[10px] font-bold uppercase leading-relaxed text-brand-black/60 font-maiandra">
+                                Si deseas recoger la bicicleta de nuestras instalaciones, te dejamos el mapa al finalizar el pedido.
+                            </div>
 
                             <div className="grid grid-cols-2 gap-3 py-2">
                                 <div className="flex items-center space-x-3 p-3 bg-gray-50 border border-gray-200/50 rounded-2xl">
@@ -1188,7 +1226,7 @@ export default function RentalCheckoutWizard({
                                     <div>
                                         <p className="text-[10px] text-brand-black/40 font-bold uppercase font-maiandra">Método de pago</p>
                                         <p className="font-bold text-brand-charcoal text-sm mt-0.5">
-                                            {paymentMethod === 'qr' ? 'QR' : paymentMethod === 'transfer' ? 'Transferencia' : 'Efectivo'} . BOB {finalTotal.toFixed(2)}
+                                            {paymentMethod === 'qr' ? 'QR' : paymentMethod === 'transfer' ? 'Transferencia' : 'Efectivo'} . BOB {amountToShow.toFixed(2)}
                                         </p>
                                     </div>
 
@@ -1200,10 +1238,44 @@ export default function RentalCheckoutWizard({
                                 </div>
                             </div>
 
+                            <div className="bg-white/80 border border-brand-yellow/15 p-5 rounded-2xl space-y-3 text-xs font-sans">
+                                <div className="flex items-start gap-3">
+                                    <MapPin className="w-5 h-5 text-brand-yellow-vibrant shrink-0 mt-0.5" />
+                                    <div>
+                                        <p className="font-black text-brand-black text-sm">Mapa de la tienda</p>
+                                        <p className="font-bold text-brand-charcoal/70 mt-1">{STORE_ADDRESS}</p>
+                                    </div>
+                                </div>
+                                <a
+                                    href={STORE_MAP_URL}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="inline-flex w-full items-center justify-center rounded-2xl bg-brand-yellow px-4 py-3 text-xs font-black uppercase tracking-widest text-brand-black hover:bg-brand-yellow-light"
+                                >
+                                    Abrir mapa de la tienda
+                                </a>
+                            </div>
+
+                            {(paymentMethod === 'qr' || paymentMethod === 'transfer') && (
+                                <div className="bg-white/80 border border-brand-yellow/15 p-5 rounded-2xl space-y-3 text-center">
+                                    <p className="text-xs font-bold text-brand-charcoal/70 leading-relaxed font-sans">
+                                        Envia el comprobante de pago al numero de WhatsApp para confirmar tu pedido.
+                                    </p>
+                                    <a
+                                        href={proofWhatsappUrl}
+                                        target="_blank"
+                                        rel="noreferrer"
+                                        className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-brand-charcoal px-4 py-3 text-xs font-black uppercase tracking-widest text-brand-yellow hover:bg-brand-black"
+                                    >
+                                        <MessageSquare className="w-4 h-4" /> Enviar comprobante por WhatsApp
+                                    </a>
+                                </div>
+                            )}
+
                             {/* WhatsApp link support */}
                             <div className="pt-2 text-center border-t border-brand-yellow/10">
                                 <a 
-                                    href={`https://wa.me/59177860277?text=Hola%20Briz,%20acabo%20de%20realizar%20una%20solicitud%20de%20alquiler.%20Código:%20${reservationCode}`}
+                                    href={`https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(`Hola Briz, acabo de realizar una solicitud de alquiler. Código: ${reservationCode}`)}`}
                                     target="_blank" 
                                     rel="noreferrer" 
                                     className="text-xs font-black text-brand-yellow hover:text-brand-yellow-light inline-flex items-center gap-1.5 bg-brand-charcoal px-4 py-2 rounded-xl"

@@ -204,6 +204,7 @@ export interface ServiceOrder {
 }
 
 const LOCAL_ROUTES_KEY = 'briz_local_routes';
+const LOCAL_RENTAL_SETTINGS_KEY = 'briz_rental_settings';
 
 function mergeRoutes(remoteRoutes: CyclingRoute[], localRoutes: CyclingRoute[]) {
     const byId = new Map<string, CyclingRoute>();
@@ -313,13 +314,13 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
     const [bikeCategories, setBikeCategories] = useState<string[]>([]);
     const [isLoaded, setIsLoaded] = useState(false);
 
-    const [rentalSettings, setRentalSettings] = useState<RentalSettings>({
+    const [rentalSettings, setRentalSettings] = useState<RentalSettings>(() => safeJSON<RentalSettings>(LOCAL_RENTAL_SETTINGS_KEY, {
         bankName: 'Banco Nacional de Bolivia (BNB)',
         accountNumber: '3501818797',
         accountOwner: 'Litzy Jhoselyn Gutierrez Jarillo',
         ownerCI: '9399367 CB',
         qrCodeUrl: '/images/qr_pago.png'
-    });
+    }));
 
     // Customer Session state
     const [currentCustomer, setCurrentCustomer] = useState<Customer | null>(null);
@@ -419,8 +420,12 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
         });
         const unsubSettings = onSnapshot(doc(db, 'settings', 'rental_settings'), (snap) => {
             if (snap.exists()) {
-                setRentalSettings(snap.data() as RentalSettings);
+                const remoteSettings = snap.data() as RentalSettings;
+                setRentalSettings(remoteSettings);
+                localStorage.setItem(LOCAL_RENTAL_SETTINGS_KEY, JSON.stringify(remoteSettings));
             }
+        }, (error) => {
+            console.error("Error fetching rental settings:", error);
         });
         const unsubRoutes = onSnapshot(query(collection(db, 'routes')), (snap) => {
             setRoutes(snap.docs.map(doc => ({ ...doc.data() } as CyclingRoute)));
@@ -757,7 +762,8 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
         }
         
         const reservationCode = `${yearPrefix}${String(seq).padStart(4, '0')}`;
-        const paymentStatus: Rental['paymentStatus'] = rental.paymentMethod.toLowerCase() === 'qr' ? 'pending_review' : 'unpaid';
+        const method = rental.paymentMethod.toLowerCase();
+        const paymentStatus: Rental['paymentStatus'] = method === 'qr' || method.includes('transfer') ? 'pending_review' : 'unpaid';
         const nowStr = new Date().toISOString();
 
         const newRental: Rental = {
@@ -957,20 +963,50 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
         await deleteDoc(doc(db, 'serviceOrders', id));
     };
 
+    const fileToDataUrl = (file: File) => new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result || ''));
+        reader.onerror = () => reject(reader.error);
+        reader.readAsDataURL(file);
+    });
+
+    const withTimeout = async <T,>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> => {
+        let timeoutId: ReturnType<typeof setTimeout> | undefined;
+        const timeout = new Promise<never>((_, reject) => {
+            timeoutId = setTimeout(() => reject(new Error(message)), timeoutMs);
+        });
+        try {
+            return await Promise.race([promise, timeout]);
+        } finally {
+            if (timeoutId) clearTimeout(timeoutId);
+        }
+    };
+
     const updateRentalSettings = async (updates: Partial<RentalSettings>, qrFile: File | null) => {
         let qrCodeUrl = updates.qrCodeUrl || rentalSettings.qrCodeUrl;
         if (qrFile) {
-            const fileExt = qrFile.name.split('.').pop() || 'png';
-            const pathRef = storageRef(storage, `settings/qr_pago.${fileExt}`);
-            const result = await uploadBytes(pathRef, qrFile);
-            qrCodeUrl = await getDownloadURL(result.ref);
+            try {
+                const fileExt = qrFile.name.split('.').pop() || 'png';
+                const pathRef = storageRef(storage, `settings/qr_pago_${Date.now()}.${fileExt}`);
+                const result = await withTimeout(uploadBytes(pathRef, qrFile), 15000, 'La subida del QR tardó demasiado.');
+                qrCodeUrl = await withTimeout(getDownloadURL(result.ref), 10000, 'No se pudo obtener el enlace del QR.');
+            } catch (error) {
+                console.warn('QR upload failed; saving data URL fallback:', error);
+                qrCodeUrl = await fileToDataUrl(qrFile);
+            }
         }
         const newSettings = {
             ...rentalSettings,
             ...updates,
             qrCodeUrl
         };
-        await setDoc(doc(db, 'settings', 'rental_settings'), newSettings);
+        setRentalSettings(newSettings);
+        localStorage.setItem(LOCAL_RENTAL_SETTINGS_KEY, JSON.stringify(newSettings));
+        try {
+            await withTimeout(setDoc(doc(db, 'settings', 'rental_settings'), newSettings), 12000, 'La configuración tardó demasiado en guardarse.');
+        } catch (error) {
+            console.warn('Firestore rental settings save failed; local settings were kept:', error);
+        }
     };
 
     const resetAllData = async () => {

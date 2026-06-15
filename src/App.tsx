@@ -13,6 +13,7 @@ import RoutesPage from '@/pages/public/RoutesPage';
 import AboutPage from '@/pages/public/AboutPage';
 import ContactPage from '@/pages/public/ContactPage';
 import CommunityPage from '@/pages/public/CommunityPage';
+import ProfilePage from '@/pages/public/ProfilePage';
 
 // Admin pages
 import LoginPage from '@/pages/admin/LoginPage';
@@ -49,6 +50,7 @@ function AppRoutes() {
         <Route path="/community" element={<CommunityPage />} />
         <Route path="/about" element={<AboutPage />} />
         <Route path="/contact" element={<ContactPage />} />
+        <Route path="/profile" element={<ProfilePage />} />
       </Route>
 
       {/* Admin routes — protected */}
