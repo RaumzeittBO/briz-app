@@ -132,7 +132,7 @@ export default function Navbar() {
             `}</style>
 
             <div className="relative bg-brand-yellow">
-                <nav className="mx-auto" style={{ maxWidth: 1640, paddingLeft: 24, paddingRight: 24 }}>
+                <nav className="mx-auto" style={{ maxWidth: 1560, paddingLeft: 20, paddingRight: 20 }}>
                     {/* ═══════════ DESKTOP NAVBAR ═══════════ */}
                     <div className="hidden lg:flex items-center justify-between" style={{ height: 120 }}>
                         {/* Left: Logos + Centro text */}
@@ -156,15 +156,15 @@ export default function Navbar() {
                         </Link>
 
                         {/* Tire Track 1 */}
-                        <TireTrackSeparator className="mx-3" style={{ height: 80, width: 20 }} />
+                        <TireTrackSeparator className="mx-2.5" style={{ height: 76, width: 18 }} />
 
                         {/* Centro de la Bicicleta text */}
-                        <span className="font-maiandra font-black uppercase leading-none tracking-widest text-white drop-shadow-sm shrink-0" style={{ fontSize: 22 }}>
+                        <span className="font-cocon font-black uppercase leading-none tracking-wider text-white drop-shadow-sm shrink-0" style={{ fontSize: 22 }}>
                             Centro de la Bicicleta
                         </span>
 
                         {/* Tire Track 2 */}
-                        <TireTrackSeparator className="mx-3" style={{ height: 80, width: 20 }} />
+                        <TireTrackSeparator className="mx-2.5" style={{ height: 76, width: 18 }} />
 
                         {/* Group 1 buttons */}
                         <div className="flex items-center" style={{ gap: 6 }}>
@@ -195,7 +195,7 @@ export default function Navbar() {
                         </div>
 
                         {/* Tire Track 3 */}
-                        <TireTrackSeparator className="mx-3" style={{ height: 80, width: 20 }} />
+                        <TireTrackSeparator className="mx-2.5" style={{ height: 76, width: 18 }} />
 
                         {/* Group 2 buttons */}
                         <div className="flex items-center" style={{ gap: 6 }}>
@@ -299,7 +299,7 @@ export default function Navbar() {
                         <TireTrackSeparator className="mx-1.5" style={{ height: 50, width: 14 }} />
 
                         {/* Centro de la Bicicleta text - mobile */}
-                        <span className="font-maiandra font-black uppercase leading-none tracking-wider text-white drop-shadow-sm shrink-0 whitespace-nowrap" style={{ fontSize: 'min(11px, 2.8vw)' }}>
+                        <span className="font-cocon font-black uppercase leading-none tracking-wide text-white drop-shadow-sm shrink-0 whitespace-nowrap" style={{ fontSize: 'min(11px, 2.8vw)' }}>
                             Centro de la Bicicleta
                         </span>
 
