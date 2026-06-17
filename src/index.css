@@ -302,10 +302,16 @@
   font-family: 'TAN Songbird', serif;
   line-height: 1.5 !important;
   letter-spacing: 0.04em !important;
+  text-transform: uppercase;
 }
 
 .font-tangkiwood {
   font-family: 'TAN Tangkiwood', serif;
+  text-transform: uppercase;
+}
+
+.font-tan *,
+.font-tangkiwood * {
   text-transform: uppercase;
 }
 

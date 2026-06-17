@@ -17,7 +17,7 @@ const fadeUp = {
 
 export default function ServicePage() {
     return (
-        <div className="pt-[80px] lg:pt-[120px]">
+        <div className="pt-[64px] lg:pt-[86px]">
 
             {/* Services Grid */}
             <section className="py-24 sm:py-32 bg-gray-50/50">
@@ -25,7 +25,32 @@ export default function ServicePage() {
                     <motion.div {...fadeUp} className="text-center mb-16 sm:mb-20">
                         <h2 className="text-4xl sm:text-5xl font-black mb-6 tracking-tight text-brand-charcoal">Nuestros <span className="text-brand-yellow">Servicios</span></h2>
                         <p className="text-lg sm:text-xl text-gray-500 font-medium max-w-2xl mx-auto">Desde revisiones rápidas hasta mantenimiento integral experto.</p>
-                    </motion.div>                    <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-8 sm:gap-10">
+                    </motion.div>
+
+                    <motion.div
+                        initial={{ opacity: 0, y: 26, scale: 0.98 }}
+                        whileInView={{ opacity: 1, y: 0, scale: 1 }}
+                        viewport={{ once: true, amount: 0.35 }}
+                        transition={{ duration: 0.7, ease: 'easeOut' }}
+                        className="group relative mb-16 overflow-hidden rounded-[2rem] bg-brand-charcoal shadow-[0_28px_80px_rgba(0,0,0,0.12)] sm:rounded-[2.6rem]"
+                    >
+                        <div className="absolute inset-0 z-10 bg-gradient-to-r from-black/70 via-black/20 to-transparent" />
+                        <img
+                            src="/images/hero-bg.jpeg"
+                            alt="Taller mecanico Briz"
+                            className="h-[340px] w-full object-cover transition duration-700 group-hover:scale-105 sm:h-[430px] lg:h-[500px]"
+                        />
+                        <div className="absolute inset-x-4 bottom-4 z-20 rounded-[1.5rem] border border-white/18 bg-white/10 p-5 text-white shadow-2xl backdrop-blur-md sm:inset-x-8 sm:bottom-8 sm:max-w-xl sm:p-7">
+                            <p className="mb-2 text-[10px] font-black uppercase tracking-[0.24em] text-brand-yellow">Taller Briz</p>
+                            <h3 className="text-3xl font-black leading-tight sm:text-5xl">Mecanica precisa para volver a rodar</h3>
+                            <p className="mt-3 text-sm font-bold leading-relaxed text-white/75 sm:text-base">
+                                Diagnostico, ajuste y mantenimiento con una vista clara antes de elegir el servicio.
+                            </p>
+                        </div>
+                        <div className="pointer-events-none absolute inset-4 z-20 rounded-[1.55rem] border border-white/0 transition duration-500 group-hover:inset-5 group-hover:border-white/30 sm:rounded-[2rem]" />
+                    </motion.div>
+
+                    <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-8 sm:gap-10">
                         {services.map((service, i) => (
                             <motion.div key={service.id} initial={{ opacity: 0, y: 30 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: (i % 6) * 0.1, duration: 0.5 }} className="h-full">
                                 <Card className="h-full bg-white border-4 border-brand-black rounded-2xl shadow-[8px_8px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-1 hover:translate-y-1 transition-all duration-300 flex flex-col group relative overflow-hidden">

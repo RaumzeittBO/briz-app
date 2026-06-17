@@ -34,10 +34,10 @@ function TikTokIcon({ className }: { className?: string }) {
 
 export default function Footer() {
     return (
-        <footer className="relative mt-auto bg-brand-yellow text-brand-black font-cocon">
+        <footer className="relative mt-auto bg-brand-yellow text-white font-cocon">
             <div className="mx-auto flex min-h-[72px] max-w-[1480px] flex-col items-center justify-between gap-5 px-5 py-4 sm:flex-row sm:px-10 lg:px-12">
                 <div className="flex min-w-0 flex-col items-center gap-3 text-center sm:flex-row sm:gap-8 sm:text-left">
-                    <span className="shrink-0 text-sm font-black sm:text-xl">Contactanos:</span>
+                    <span className="shrink-0 text-sm font-black text-white sm:text-xl">Contactanos:</span>
 
                     <div className="flex items-center gap-3 sm:gap-5">
                         {contactLinks.map((link) => {
@@ -50,7 +50,7 @@ export default function Footer() {
                                     target="_blank"
                                     rel="noopener noreferrer"
                                     aria-label={link.label}
-                                    className="briz-social-icon flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-white/45 bg-brand-black/90 text-white shadow-sm transition-all duration-300 hover:-translate-y-1 hover:scale-110 hover:bg-brand-black sm:h-13 sm:w-13"
+                                    className="briz-social-icon flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-white/70 bg-white text-brand-black shadow-[0_8px_18px_rgba(0,0,0,0.14)] transition-all duration-300 hover:-translate-y-1 hover:scale-110 hover:bg-white hover:text-brand-yellow sm:h-13 sm:w-13"
                                 >
                                     <Icon className="h-5 w-5 sm:h-7 sm:w-7" strokeWidth={2.5} />
                                 </a>
@@ -62,7 +62,7 @@ export default function Footer() {
                             target="_blank"
                             rel="noopener noreferrer"
                             aria-label="TikTok"
-                            className="briz-social-icon flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-white/45 bg-brand-black/90 text-white shadow-sm transition-all duration-300 hover:-translate-y-1 hover:scale-110 hover:bg-brand-black sm:h-13 sm:w-13"
+                            className="briz-social-icon flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-white/70 bg-white text-brand-black shadow-[0_8px_18px_rgba(0,0,0,0.14)] transition-all duration-300 hover:-translate-y-1 hover:scale-110 hover:bg-white hover:text-brand-yellow sm:h-13 sm:w-13"
                         >
                             <TikTokIcon className="h-5 w-5 sm:h-7 sm:w-7" />
                         </a>
@@ -73,7 +73,7 @@ export default function Footer() {
                     <img
                         src="/logo de briz.png"
                         alt="BRIZ"
-                        className="h-14 w-auto max-w-[150px] object-contain brightness-0 invert sm:h-16 sm:max-w-[180px] lg:h-[72px] lg:max-w-[220px]"
+                        className="h-[72px] w-auto max-w-[195px] object-contain brightness-0 invert sm:h-[84px] sm:max-w-[235px] lg:h-[94px] lg:max-w-[286px]"
                     />
                 </Link>
             </div>
