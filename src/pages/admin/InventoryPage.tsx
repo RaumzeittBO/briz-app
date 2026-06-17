@@ -46,6 +46,111 @@ function defaultCombo(): ComboProduct {
   return { id: `combo_${Date.now()}_${Math.random().toString(36).slice(2,7)}`, name:'', description:'', imageUrl:'', active:true, availableForRental:true, availableForSale:false, components:[], pricePerHour:0, priceFrom5thHour:0, pricePerDay:0, pricePerWeek:0, pricePerMonth:0, price1Hour:0, price2Hours:0, price3Hours:0, price4Hours:0, price8Hours:0, price24Hours:0, price1Week:0, price1Month:0 };
 }
 
+const toEditableNumber = (value: unknown) => value === '' || value === undefined || value === null ? '' : Number(value);
+const toStoredNumber = (value: unknown, fallback = 0) => value === '' || value === undefined || value === null ? fallback : Number(value);
+
+function PriceFields({ editItem, setEditItem }: any) {
+  const handlePriceChange = (key: string, rawValue: string) => {
+    const value = rawValue === '' ? '' : Number(rawValue);
+    const updates: any = { [key]: value };
+    if (key === 'price1Hour') updates.pricePerHour = value;
+    else if (key === 'price24Hours') updates.pricePerDay = value;
+    else if (key === 'price1Week') updates.pricePerWeek = value;
+    else if (key === 'price1Month') updates.pricePerMonth = value;
+    setEditItem({ ...editItem, ...updates });
+  };
+
+  const fields = [
+    { l: '1 Hora', k: 'price1Hour' },
+    { l: '2 Horas', k: 'price2Hours' },
+    { l: '3 Horas', k: 'price3Hours' },
+    { l: '4 Horas', k: 'price4Hours' },
+    { l: '8 Horas', k: 'price8Hours' },
+    { l: '24 Horas (1 Día)', k: 'price24Hours' },
+    { l: '1 Semana', k: 'price1Week' },
+    { l: '1 Mes', k: 'price1Month' },
+    { l: 'Hora adicional (5ta+)', k: 'priceFrom5thHour' }
+  ];
+
+  return (
+    <div className="space-y-4">
+      {editItem.availableForRental && (
+        <div className="space-y-3">
+          <h4 className="text-xs font-black text-brand-yellow uppercase tracking-widest">Precios de Alquiler (Bs.)</h4>
+          <div className="grid grid-cols-2 gap-3">
+            {fields.map(p => (
+              <div key={p.k} className="space-y-1">
+                <Label className="text-[10px] text-white/40 font-bold uppercase">{p.l}</Label>
+                <Input
+                  type="number"
+                  min={0}
+                  value={toEditableNumber((editItem as any)[p.k])}
+                  onChange={e => handlePriceChange(p.k, e.target.value)}
+                  className="bg-black/40 border-white/10 h-10 font-bold text-brand-yellow rounded-xl"
+                />
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {editItem.availableForSale && (
+        <div className="space-y-2 pt-2 border-t border-white/5">
+          <h4 className="text-xs font-black text-blue-400 uppercase tracking-widest">Precio de Venta (Bs.)</h4>
+          <div className="space-y-1">
+            <Label className="text-[10px] text-white/40 font-bold uppercase">Precio final de venta</Label>
+            <Input
+              type="number"
+              min={0}
+              value={toEditableNumber(editItem.salePrice)}
+              onChange={e => setEditItem({ ...editItem, salePrice: e.target.value === '' ? '' : Number(e.target.value) })}
+              className="bg-black/40 border-white/10 h-10 font-bold text-blue-400 rounded-xl"
+            />
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function normalizeInventoryDraft(draft: any) {
+  const numericKeys = [
+    'stock',
+    'salePrice',
+    'pricePerHour',
+    'priceFrom5thHour',
+    'pricePerDay',
+    'pricePerWeek',
+    'pricePerMonth',
+    'price1Hour',
+    'price2Hours',
+    'price3Hours',
+    'price4Hours',
+    'price8Hours',
+    'price24Hours',
+    'price1Week',
+    'price1Month',
+  ];
+
+  const normalized = { ...draft };
+  numericKeys.forEach(key => {
+    if (key in normalized) normalized[key] = toStoredNumber(normalized[key], 0);
+  });
+  if (Array.isArray(normalized.wheelSizes)) {
+    normalized.wheelSizes = normalized.wheelSizes.map((ws: WheelSizeEntry) => ({
+      ...ws,
+      stock: toStoredNumber((ws as any).stock, 0),
+    }));
+  }
+  if (Array.isArray(normalized.components)) {
+    normalized.components = normalized.components.map((component: ComboComponent) => ({
+      ...component,
+      quantity: toStoredNumber((component as any).quantity, 1),
+    }));
+  }
+  return normalized;
+}
+
 export default function InventoryPage() {
   const { inventory, combos, addInventoryItem, updateInventoryItem, deleteInventoryItem, addCombo, updateCombo, deleteCombo, getComboAvailability, bikeCategories, addBikeCategory } = useStore();
 
@@ -89,10 +194,11 @@ export default function InventoryPage() {
 
   const handleSave = () => {
     if (!editItem) return;
+    const draft = normalizeInventoryDraft(editItem);
     if (modal.type === 'combo') {
-      modal.mode === 'add' ? addCombo(editItem) : updateCombo(editItem.id, editItem);
+      modal.mode === 'add' ? addCombo(draft) : updateCombo(draft.id, draft);
     } else {
-      modal.mode === 'add' ? addInventoryItem(editItem) : updateInventoryItem(editItem.id, editItem);
+      modal.mode === 'add' ? addInventoryItem(draft) : updateInventoryItem(draft.id, draft);
     }
     setModal({...modal, open:false});
   };
@@ -138,69 +244,6 @@ export default function InventoryPage() {
   const updateComponent = (idx:number, updates:Partial<ComboComponent>) => {
     const c = editItem.components.map((comp:ComboComponent, i:number) => i===idx ? {...comp,...updates} : comp);
     setEditItem({...editItem, components:c});
-  };
-
-  const PriceFields = ({ editItem, setEditItem }: any) => {
-    const handlePriceChange = (key: string, value: number) => {
-      const updates: any = { [key]: value };
-      if (key === 'price1Hour') updates.pricePerHour = value;
-      else if (key === 'price24Hours') updates.pricePerDay = value;
-      else if (key === 'price1Week') updates.pricePerWeek = value;
-      else if (key === 'price1Month') updates.pricePerMonth = value;
-      setEditItem({ ...editItem, ...updates });
-    };
-
-    const fields = [
-      { l: '1 Hora', k: 'price1Hour' },
-      { l: '2 Horas', k: 'price2Hours' },
-      { l: '3 Horas', k: 'price3Hours' },
-      { l: '4 Horas', k: 'price4Hours' },
-      { l: '8 Horas', k: 'price8Hours' },
-      { l: '24 Horas (1 Día)', k: 'price24Hours' },
-      { l: '1 Semana', k: 'price1Week' },
-      { l: '1 Mes', k: 'price1Month' },
-      { l: 'Hora adicional (5ta+)', k: 'priceFrom5thHour' }
-    ];
-
-    return (
-      <div className="space-y-4">
-        {editItem.availableForRental && (
-          <div className="space-y-3">
-            <h4 className="text-xs font-black text-brand-yellow uppercase tracking-widest">Precios de Alquiler (Bs.)</h4>
-            <div className="grid grid-cols-2 gap-3">
-              {fields.map(p => (
-                <div key={p.k} className="space-y-1">
-                  <Label className="text-[10px] text-white/40 font-bold uppercase">{p.l}</Label>
-                  <Input 
-                    type="number" 
-                    min={0} 
-                    value={(editItem as any)[p.k] || 0} 
-                    onChange={e => handlePriceChange(p.k, Number(e.target.value))} 
-                    className="bg-black/40 border-white/10 h-10 font-bold text-brand-yellow rounded-xl" 
-                  />
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {editItem.availableForSale && (
-          <div className="space-y-2 pt-2 border-t border-white/5">
-            <h4 className="text-xs font-black text-blue-400 uppercase tracking-widest">Precio de Venta (Bs.)</h4>
-            <div className="space-y-1">
-              <Label className="text-[10px] text-white/40 font-bold uppercase">Precio final de venta</Label>
-              <Input 
-                type="number" 
-                min={0} 
-                value={editItem.salePrice || 0} 
-                onChange={e => setEditItem({ ...editItem, salePrice: Number(e.target.value) })} 
-                className="bg-black/40 border-white/10 h-10 font-bold text-blue-400 rounded-xl" 
-              />
-            </div>
-          </div>
-        )}
-      </div>
-    );
   };
 
   const ItemRow = ({item, type, openEdit, setDeleteConfirm}:{item:InventoryItem; type:'bike'|'accessory'; openEdit:any; setDeleteConfirm:any}) => (
@@ -440,7 +483,7 @@ export default function InventoryPage() {
                             </div>
                             <div className="w-20">
                               <Label className="text-[9px] text-white/30 font-bold uppercase">Stock</Label>
-                              <Input type="number" min={0} value={ws.stock} onChange={e=>updateWS(idx,'stock',Number(e.target.value))} className="bg-transparent border-0 border-b border-white/10 h-8 font-black text-brand-yellow text-center text-lg p-0"/>
+                              <Input type="number" min={0} value={toEditableNumber(ws.stock)} onChange={e=>updateWS(idx,'stock',e.target.value === '' ? '' : Number(e.target.value))} className="bg-transparent border-0 border-b border-white/10 h-8 font-black text-brand-yellow text-center text-lg p-0"/>
                             </div>
                             <Button type="button" variant="ghost" size="icon" className="text-red-400/40 hover:text-red-400 w-7 h-7 rounded-lg mt-3" onClick={()=>removeWheelSize(idx)}>
                               <X className="w-3 h-3"/>
@@ -455,7 +498,7 @@ export default function InventoryPage() {
                   {modal.type === 'accessory' && (
                     <div className="bg-white/5 p-4 rounded-xl border border-white/5">
                       <Label className="text-[10px] text-white/40 font-bold uppercase tracking-wider">Stock Disponible</Label>
-                      <Input type="number" min={0} value={editItem.stock??0} onChange={e=>setEditItem({...editItem,stock:Number(e.target.value)})} className="bg-black/40 border-white/10 h-16 font-black text-4xl text-brand-yellow text-center rounded-xl mt-2"/>
+                      <Input type="number" min={0} value={toEditableNumber(editItem.stock)} onChange={e=>setEditItem({...editItem,stock:e.target.value === '' ? '' : Number(e.target.value)})} className="bg-black/40 border-white/10 h-16 font-black text-4xl text-brand-yellow text-center rounded-xl mt-2"/>
                     </div>
                   )}
 
@@ -484,7 +527,7 @@ export default function InventoryPage() {
                             </select>
                             <div className="relative flex-1 max-w-[80px]">
                               <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[9px] font-black text-white/20 uppercase">Cant.</span>
-                              <Input type="number" min={1} value={comp.quantity} onChange={e=>updateComponent(idx,{quantity:Number(e.target.value)})} className="bg-black/20 border-white/5 h-10 pl-10 pr-2 font-black text-brand-yellow rounded-xl text-right" />
+                              <Input type="number" min={1} value={toEditableNumber(comp.quantity)} onChange={e=>updateComponent(idx,{quantity:e.target.value === '' ? '' as any : Number(e.target.value)})} className="bg-black/20 border-white/5 h-10 pl-10 pr-2 font-black text-brand-yellow rounded-xl text-right" />
                             </div>
                             {selectedItem?.hasWheelSizes && <Badge className="bg-brand-yellow/10 text-brand-yellow text-[8px] font-bold border-0">Requiere aro</Badge>}
                             <Button type="button" variant="ghost" size="icon" className="text-red-400/40 hover:text-red-400 w-7 h-7 rounded-lg" onClick={()=>removeComponent(idx)}>
