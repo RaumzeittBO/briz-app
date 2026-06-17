@@ -34,6 +34,16 @@ interface RentalCheckoutWizardProps {
 const STORE_ADDRESS = 'Av. Rodriguez Morales (Zona el pueblito)';
 const STORE_MAP_URL = 'https://maps.app.goo.gl/WeUipumWSXCMwPqL9';
 const WHATSAPP_NUMBER = '59177860277';
+const PRICE_TIER_DEFS = [
+    { label: '1 Hora', value: '1 hora', accent: false },
+    { label: '2 Horas', value: '2 horas', accent: false },
+    { label: '3 Horas', value: '3 horas', accent: false },
+    { label: '4 Horas', value: '4 horas', accent: true },
+    { label: '8 Horas', value: '8 horas', accent: false },
+    { label: '24 Horas', value: '24 horas', accent: true },
+    { label: '1 Semana', value: '1 semana', accent: true },
+    { label: '1 Mes', value: '1 mes', accent: true },
+];
 
 function durationToHours(duration: string) {
     const normalized = duration.toLowerCase();
@@ -77,6 +87,14 @@ export default function RentalCheckoutWizard({
         }
         return selectedProduct.comboAvailability ?? selectedProduct.stock ?? 0;
     }, [selectedProduct]);
+
+    const selectedPriceTiers = useMemo(() => {
+        if (!selectedProduct) return [];
+        return PRICE_TIER_DEFS.map(tier => ({
+            ...tier,
+            price: calculatePrice(selectedProduct.type || 'single', selectedProduct.id, tier.value, 1)
+        })).filter(tier => tier.price > 0);
+    }, [selectedProduct, calculatePrice]);
 
     const isFavorite = selectedProduct ? favoriteIds.includes(selectedProduct.id) : false;
 
@@ -146,6 +164,13 @@ export default function RentalCheckoutWizard({
             return sum + (unitPrice * item.quantity);
         }, 0);
     }, [cart, duration, calculatePrice]);
+
+    const cartHourlyEstimate = useMemo(() => {
+        return cart.reduce((sum, item) => {
+            const unitPrice = calculatePrice(item.product.type || 'single', item.product.id, '1 hora', 1);
+            return sum + (unitPrice * item.quantity);
+        }, 0);
+    }, [cart, calculatePrice]);
 
     const accessoriesSubtotal = useMemo(() => {
         const cascoPrice = accessories.casco * 10;
@@ -651,6 +676,26 @@ export default function RentalCheckoutWizard({
                         <p className="text-xs sm:text-sm font-medium text-brand-black leading-relaxed text-justify font-sans bg-white/50 p-5 rounded-2xl border border-black/5">
                             {selectedProduct.description || 'Alquila tu bicicleta ideal para pasear o entrenar por la ciudad con total comodidad y estilo.'}
                         </p>
+
+                        <div className="bg-white border border-gray-100 rounded-2xl p-4 shadow-sm">
+                            <div className="grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-4">
+                                {selectedPriceTiers.map(tier => (
+                                    <button
+                                        key={tier.value}
+                                        type="button"
+                                        onClick={() => setDuration(tier.value)}
+                                        className="group text-left rounded-xl border border-transparent p-2 transition-all hover:border-brand-yellow hover:bg-brand-yellow/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-yellow"
+                                    >
+                                        <span className={`block font-black leading-none text-xl sm:text-2xl ${tier.accent ? 'text-red-600' : 'text-brand-black'}`}>
+                                            Bs. {tier.price}
+                                        </span>
+                                        <span className={`block font-maiandra text-[10px] font-black uppercase leading-none ${tier.accent ? 'text-red-300' : 'text-gray-300'}`}>
+                                            / {tier.label}
+                                        </span>
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
                         {/* Wheel Sizes Select (if applicable) */}
                         {selectedProduct.hasWheelSizes && selectedProduct.wheelSizes && selectedProduct.wheelSizes.length > 0 && (
                             <div className="space-y-2">
@@ -734,6 +779,7 @@ export default function RentalCheckoutWizard({
                                 {/* Items List */}
                                 <div className="space-y-3">
                                     {cart.map(item => {
+                                        const hourlyPrice = calculatePrice(item.product.type || 'single', item.product.id, '1 hora', 1);
                                         return (
                                             <div 
                                                 key={item.id} 
@@ -749,10 +795,12 @@ export default function RentalCheckoutWizard({
                                                 {/* Text Info */}
                                                 <div className="flex-1 min-w-0">
                                                     <h3 className="font-bold text-brand-black text-sm truncate uppercase font-sans">{item.product.name}</h3>
+                                                    <p className="font-black text-brand-yellow-vibrant text-xs mt-1 font-sans">
+                                                        Bs. {hourlyPrice} / 1 hora
+                                                    </p>
                                                     <p className="text-[10px] text-brand-black/40 font-bold uppercase font-maiandra mt-0.5">
                                                         {item.selectedWheelSize ? `Aro ${item.selectedWheelSize} - ` : ''}{item.quantity} unidad{item.quantity > 1 ? 'es' : ''}
                                                     </p>
-                                                    <p className="font-black text-brand-yellow-vibrant text-xs mt-1 font-sans">La duración y el total se calculan en el siguiente paso.</p>
                                                 </div>
 
                                                 {/* Qty +/- Controls */}
@@ -773,6 +821,23 @@ export default function RentalCheckoutWizard({
                                             </div>
                                         );
                                     })}
+                                </div>
+
+                                <div className="rounded-2xl border border-brand-yellow/30 bg-brand-yellow/10 p-4">
+                                    <div className="flex items-center justify-between gap-3">
+                                        <div>
+                                            <p className="text-[10px] font-black uppercase tracking-widest text-brand-black/45 font-maiandra">
+                                                Total estimado del carrito
+                                            </p>
+                                            <p className="text-xs font-bold text-brand-black/55 font-sans">
+                                                Para comparar rapido antes de elegir fecha y duracion.
+                                            </p>
+                                        </div>
+                                        <div className="text-right shrink-0">
+                                            <p className="text-2xl font-black leading-none text-brand-black">Bs. {cartHourlyEstimate}</p>
+                                            <p className="text-[10px] font-black uppercase leading-none text-brand-black/35 font-maiandra">/ 1 hora</p>
+                                        </div>
+                                    </div>
                                 </div>
 
                                 {/* Actions */}

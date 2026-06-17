@@ -56,6 +56,16 @@ function productCategories(product: DisplayProduct) {
   return [mainCategory, ...(product.secondaryCategories || [])];
 }
 
+function getRentalPriceTiers(product: DisplayProduct) {
+  return [
+    { label: '1 Hora', value: product.pricePerHour, accent: false },
+    { label: '2 Horas', value: product.pricePerHour * 2, accent: false },
+    { label: 'Dia', value: product.pricePerDay, accent: false },
+    { label: 'Semana', value: product.pricePerWeek, accent: true },
+    { label: 'Mes', value: product.pricePerMonth, accent: true },
+  ].filter(tier => Number(tier.value) > 0);
+}
+
 
 
 export default function RentalsPage() {
@@ -240,10 +250,11 @@ export default function RentalsPage() {
         <div className="relative group/slider">
           <div 
             ref={(el) => { scrollRefs.current[catKey] = el; }}
-            className="flex overflow-x-auto gap-6 pb-6 pt-2 scrollbar-none snap-x snap-mandatory scroll-smooth px-1"
+            className="briz-rental-slider flex overflow-x-auto gap-6 pb-6 pt-2 snap-x snap-mandatory scroll-smooth px-1"
           >
             {productsList.map((p) => {
               const avail = getAvailableStock(p);
+              const tiers = getRentalPriceTiers(p);
               return (
                 <motion.div 
                   key={p.id}
@@ -295,7 +306,21 @@ export default function RentalsPage() {
                       </div>
 
                       {/* Pricing breakdown */}
-                      <div className="pt-4 border-t border-gray-50 mt-4 flex justify-between items-end">
+                      <div className="pt-4 border-t border-gray-50 mt-4">
+                        <div className="grid grid-cols-2 gap-x-3 gap-y-2 sm:grid-cols-3">
+                          {tiers.map(tier => (
+                            <div key={tier.label} className="min-w-0">
+                              <span className={`block font-black leading-none text-base sm:text-lg ${tier.accent ? 'text-red-600' : 'text-brand-black'}`}>
+                                Bs. {tier.value}
+                              </span>
+                              <span className={`block font-maiandra text-[9px] font-black uppercase leading-none ${tier.accent ? 'text-red-300' : 'text-gray-300'}`}>
+                                / {tier.label}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                      <div className="hidden">
                         <div>
                           <span className="block font-maiandra text-[9px] text-gray-400 uppercase tracking-widest leading-none mb-1">
                             DESDE
@@ -334,7 +359,7 @@ export default function RentalsPage() {
   };
 
   return (
-    <div className="pt-[80px] lg:pt-[120px] bg-[#FFFDF3] min-h-screen">
+    <div className="pt-[64px] lg:pt-[86px] bg-[#FFFDF3] min-h-screen">
       {selected ? (
         <div className="max-w-3xl mx-auto px-4 py-10">
           <RentalCheckoutWizard 
@@ -358,7 +383,7 @@ export default function RentalsPage() {
       ) : (
         <>
       {/* Filters & Search Row */}
-      <div className="sticky top-[80px] lg:top-[120px] z-40 bg-background/90 backdrop-blur-md border-b border-gray-100/50 py-5 overflow-hidden">
+      <div className="sticky top-[64px] lg:top-[86px] z-40 bg-background/90 backdrop-blur-md border-b border-gray-100/50 py-5 overflow-hidden">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 w-full">
           <div className="flex flex-col md:flex-row md:flex-nowrap items-stretch md:items-center gap-4 min-w-0">
             {/* Search Input Card */}

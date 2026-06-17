@@ -250,6 +250,7 @@ interface StoreContextType {
     confirmRental: (id: string, actor?: string) => Promise<boolean>;
     cancelRental: (id: string, actor?: string) => Promise<void>;
     deleteRental: (id: string) => Promise<void>;
+    updateRental: (id: string, updates: Partial<Rental>, actor?: string) => Promise<void>;
     updateRentalPaymentStatus: (id: string, paymentStatus: Rental['paymentStatus'], actor?: string) => Promise<void>;
     markRentalExpired: (id: string, actor?: string) => Promise<void>;
 
@@ -903,6 +904,21 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
         });
     };
 
+    const updateRental = async (id: string, updates: Partial<Rental>, actor?: string) => {
+        const cleanUpdates: Record<string, any> = {};
+        for (const [key, value] of Object.entries(updates)) {
+            if (value !== undefined && key !== 'id' && key !== 'reservationCode' && key !== 'createdAt' && key !== 'createdDate') {
+                cleanUpdates[key] = value;
+            }
+        }
+
+        await updateDoc(doc(db, 'rentals', id), {
+            ...cleanUpdates,
+            updatedAt: new Date().toISOString(),
+            lastUpdatedBy: actor || 'admin'
+        });
+    };
+
     const markRentalExpired = async (id: string, actor?: string) => {
         await updateDoc(doc(db, 'rentals', id), {
             status: 'expired',
@@ -1049,7 +1065,7 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
         addInventoryItem, updateInventoryItem, deleteInventoryItem,
         addCombo, updateCombo, deleteCombo,
         addRental, confirmRental, cancelRental, deleteRental,
-        updateRentalPaymentStatus, markRentalExpired,
+        updateRental, updateRentalPaymentStatus, markRentalExpired,
         addSale, updateSaleStatus, deleteSale,
         addOrUpdateCustomer, updateCustomer, deleteCustomer,
         addServiceOrder, updateServiceOrder, deleteServiceOrder,

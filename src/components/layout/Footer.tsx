@@ -3,7 +3,7 @@ import { Facebook, Instagram, MapPin, MessageCircle } from 'lucide-react';
 
 const contactLinks = [
     {
-        label: 'Ubicación',
+        label: 'Ubicacion',
         href: 'https://maps.app.goo.gl/tgqw7ZK51Y68Q7L7A?g_st=iwb',
         icon: MapPin,
     },
@@ -35,18 +35,11 @@ function TikTokIcon({ className }: { className?: string }) {
 export default function Footer() {
     return (
         <footer className="relative mt-auto bg-brand-yellow text-brand-black font-cocon">
-            <div className="pointer-events-none absolute -top-[30px] left-0 right-0 h-[38px] overflow-hidden" aria-hidden="true">
-                <svg viewBox="0 0 1440 44" className="h-full w-full" preserveAspectRatio="none">
-                    <path d="M0 16C180 33 358 37 552 28C754 18 914 5 1116 11C1256 15 1362 23 1440 30V44H0V16Z" fill="#FFD200" />
-                    <path d="M0 16C180 33 358 37 552 28C754 18 914 5 1116 11C1256 15 1362 23 1440 30" fill="none" stroke="#FFFFFF" strokeWidth="5" strokeLinecap="round" />
-                </svg>
-            </div>
+            <div className="mx-auto flex min-h-[72px] max-w-[1480px] flex-col items-center justify-between gap-5 px-5 py-4 sm:flex-row sm:px-10 lg:px-12">
+                <div className="flex min-w-0 flex-col items-center gap-3 text-center sm:flex-row sm:gap-8 sm:text-left">
+                    <span className="shrink-0 text-sm font-black sm:text-xl">Contactanos:</span>
 
-            <div className="mx-auto flex flex-col sm:flex-row min-h-[88px] max-w-[1480px] items-center justify-between gap-6 px-5 py-6 sm:px-10 lg:px-12">
-                <div className="flex flex-col sm:flex-row min-w-0 items-center gap-3 sm:gap-8 text-center sm:text-left">
-                    <span className="shrink-0 text-sm font-black sm:text-2xl">Contáctanos:</span>
-
-                    <div className="flex items-center gap-3 sm:gap-9">
+                    <div className="flex items-center gap-3 sm:gap-5">
                         {contactLinks.map((link) => {
                             const Icon = link.icon;
 
@@ -57,9 +50,9 @@ export default function Footer() {
                                     target="_blank"
                                     rel="noopener noreferrer"
                                     aria-label={link.label}
-                                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white text-brand-yellow transition-transform duration-200 hover:-translate-y-0.5 hover:scale-105 sm:h-16 sm:w-16"
+                                    className="briz-social-icon flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-white/45 bg-brand-black/90 text-white shadow-sm transition-all duration-300 hover:-translate-y-1 hover:scale-110 hover:bg-brand-black sm:h-13 sm:w-13"
                                 >
-                                    <Icon className="h-6 w-6 sm:h-10 sm:w-10" strokeWidth={2.7} />
+                                    <Icon className="h-5 w-5 sm:h-7 sm:w-7" strokeWidth={2.5} />
                                 </a>
                             );
                         })}
@@ -69,23 +62,18 @@ export default function Footer() {
                             target="_blank"
                             rel="noopener noreferrer"
                             aria-label="TikTok"
-                            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border-2 border-white text-white transition-transform duration-200 hover:-translate-y-0.5 hover:scale-105 sm:h-16 sm:w-16 sm:border-[3px]"
+                            className="briz-social-icon flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-white/45 bg-brand-black/90 text-white shadow-sm transition-all duration-300 hover:-translate-y-1 hover:scale-110 hover:bg-brand-black sm:h-13 sm:w-13"
                         >
-                            <TikTokIcon className="h-6 w-6 sm:h-10 sm:w-10" />
+                            <TikTokIcon className="h-5 w-5 sm:h-7 sm:w-7" />
                         </a>
                     </div>
                 </div>
 
-                <Link to="/" className="flex shrink-0 flex-col items-center justify-center gap-0" aria-label="BRIZ inicio">
+                <Link to="/" className="flex shrink-0 items-center justify-center" aria-label="BRIZ inicio">
                     <img
-                        src="/logo_bicicleta_principal.png"
-                        alt="Bicicleta BRIZ"
-                        className="h-12 w-20 object-contain brightness-0 invert sm:h-[82px] sm:w-[126px] lg:h-[104px] lg:w-[166px]"
-                    />
-                    <img
-                        src="/logo_briz_principal.png"
+                        src="/logo de briz.png"
                         alt="BRIZ"
-                        className="-mt-2 h-6 w-auto max-w-[56px] object-contain brightness-0 invert sm:-mt-3 sm:h-10 sm:max-w-[88px] lg:h-11 lg:max-w-[102px]"
+                        className="h-14 w-auto max-w-[150px] object-contain brightness-0 invert sm:h-16 sm:max-w-[180px] lg:h-[72px] lg:max-w-[220px]"
                     />
                 </Link>
             </div>

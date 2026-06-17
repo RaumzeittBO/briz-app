@@ -306,6 +306,7 @@
 
 .font-tangkiwood {
   font-family: 'TAN Tangkiwood', serif;
+  text-transform: uppercase;
 }
 
 .font-gochi {
@@ -318,6 +319,53 @@
 
 .font-cocon {
   font-family: 'Cocon', sans-serif;
+}
+
+.briz-rental-slider {
+  scrollbar-width: thin;
+  scrollbar-color: #FFD200 transparent;
+}
+
+.briz-rental-slider::-webkit-scrollbar {
+  height: 6px;
+}
+
+.briz-rental-slider::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.briz-rental-slider::-webkit-scrollbar-thumb {
+  background: #FFD200;
+  border: 1px solid #FFFDF3;
+  border-radius: 999px;
+}
+
+.briz-rental-slider::-webkit-scrollbar-thumb:hover {
+  background: #E5BD00;
+}
+
+.briz-social-icon {
+  position: relative;
+  overflow: hidden;
+}
+
+.briz-social-icon::after {
+  content: '';
+  position: absolute;
+  inset: -35%;
+  background: linear-gradient(120deg, transparent 35%, rgba(255, 255, 255, 0.42) 50%, transparent 65%);
+  transform: translateX(-140%) rotate(12deg);
+  transition: transform 520ms ease;
+}
+
+.briz-social-icon:hover::after,
+.briz-social-icon:focus-visible::after {
+  transform: translateX(140%) rotate(12deg);
+}
+
+.briz-social-icon svg {
+  position: relative;
+  z-index: 1;
 }
 
 .font-scripter {

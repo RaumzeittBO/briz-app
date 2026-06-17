@@ -22,7 +22,11 @@ import {
   Wallet,
   ExternalLink,
   ShieldCheck,
-  AlertTriangle
+  AlertTriangle,
+  Edit3,
+  Save,
+  Minus,
+  Plus
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { generateAdminReplyWhatsAppLink } from '@/lib/whatsapp';
@@ -81,6 +85,38 @@ export interface GroupedRental {
   items: Rental[];
   total: number;
 }
+
+type RentalEditItem = {
+  id: string;
+  quantity: number;
+  total: number;
+};
+
+type RentalEditForm = {
+  date: string;
+  pickupTime: string;
+  duration: string;
+  deliveryService: boolean;
+  pickupService: boolean;
+  mapsLink: string;
+  notes: string;
+  items: RentalEditItem[];
+};
+
+const buildEditForm = (group: GroupedRental): RentalEditForm => ({
+  date: group.items[0]?.date || '',
+  pickupTime: group.items[0]?.pickupTime || '',
+  duration: group.items[0]?.duration || '',
+  deliveryService: Boolean(group.deliveryService),
+  pickupService: Boolean(group.pickupService),
+  mapsLink: group.mapsLink || '',
+  notes: group.notes || '',
+  items: group.items.map(item => ({
+    id: item.id,
+    quantity: item.quantity,
+    total: item.total || 0,
+  })),
+});
 
 const getGroupedRentals = (rentalsList: Rental[]): GroupedRental[] => {
   const groups: Record<string, GroupedRental> = {};
@@ -181,6 +217,7 @@ export default function AdminRentalsPage() {
     confirmRental, 
     cancelRental, 
     deleteRental, 
+    updateRental,
     updateRentalPaymentStatus, 
     markRentalExpired, 
     inventory,
@@ -191,9 +228,13 @@ export default function AdminRentalsPage() {
   const [filter, setFilter] = useState<string>('all');
   const [selected, setSelected] = useState<GroupedRental | null>(null);
   const [showClientProfile, setShowClientProfile] = useState(false);
+  const [editingOrder, setEditingOrder] = useState(false);
+  const [editForm, setEditForm] = useState<RentalEditForm | null>(null);
 
   useEffect(() => {
     setShowClientProfile(false);
+    setEditingOrder(false);
+    setEditForm(selected ? buildEditForm(selected) : null);
   }, [selected]);
   
   // Real-time Sound Notification state
@@ -334,6 +375,65 @@ export default function AdminRentalsPage() {
     if (!confirm('¿Eliminar definitivamente este registro de la base de datos? Esta acción es irreversible.')) return;
     group.items.forEach(item => deleteRental(item.id));
     if (selected?.id === group.id) setSelected(null);
+  };
+
+  const updateEditItem = (id: string, updates: Partial<RentalEditItem>) => {
+    setEditForm(prev => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        items: prev.items.map(item => item.id === id ? { ...item, ...updates } : item)
+      };
+    });
+  };
+
+  const handleSaveEditedGroup = async () => {
+    if (!selected || !editForm) return;
+    const editedById = new Map(editForm.items.map(item => [item.id, item]));
+
+    for (const item of selected.items) {
+      const editedItem = editedById.get(item.id);
+      await updateRental(item.id, {
+        date: editForm.date,
+        pickupTime: editForm.pickupTime,
+        duration: editForm.duration,
+        deliveryService: editForm.deliveryService,
+        pickupService: editForm.pickupService,
+        mapsLink: editForm.mapsLink,
+        notes: editForm.notes,
+        quantity: Math.max(1, editedItem?.quantity ?? item.quantity),
+        total: Math.max(0, editedItem?.total ?? item.total),
+      }, 'admin (edicion pedido)');
+    }
+
+    setEditingOrder(false);
+    const updatedSelected: GroupedRental = {
+      ...selected,
+      deliveryService: editForm.deliveryService,
+      pickupService: editForm.pickupService,
+      mapsLink: editForm.mapsLink,
+      notes: editForm.notes,
+      updatedAt: new Date().toISOString(),
+      lastUpdatedBy: 'admin (edicion pedido)',
+      total: editForm.items.reduce((sum, item) => sum + Math.max(0, item.total), 0),
+      items: selected.items.map(item => {
+        const editedItem = editedById.get(item.id);
+        return {
+          ...item,
+          date: editForm.date,
+          pickupTime: editForm.pickupTime,
+          duration: editForm.duration,
+          deliveryService: editForm.deliveryService,
+          pickupService: editForm.pickupService,
+          mapsLink: editForm.mapsLink,
+          notes: editForm.notes,
+          quantity: Math.max(1, editedItem?.quantity ?? item.quantity),
+          total: Math.max(0, editedItem?.total ?? item.total),
+        };
+      })
+    };
+    setSelected(updatedSelected);
+    setEditForm(buildEditForm(updatedSelected));
   };
 
   const formatDateTime = (isoString?: string) => {
@@ -701,6 +801,18 @@ export default function AdminRentalsPage() {
                   <Badge className={`${paymentStatusColors[selected.paymentStatus || 'unpaid']} text-[9px] px-2 py-0.5 rounded-lg border-0`}>
                     {paymentStatusLabels[selected.paymentStatus || 'unpaid']}
                   </Badge>
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={() => {
+                      setEditForm(buildEditForm(selected));
+                      setEditingOrder(!editingOrder);
+                    }}
+                    className="mt-1 h-8 rounded-lg bg-white/10 px-3 text-[10px] font-black uppercase text-white hover:bg-brand-yellow hover:text-brand-black"
+                  >
+                    <Edit3 className="mr-1.5 h-3.5 w-3.5" />
+                    {editingOrder ? 'Ver detalle' : 'Editar pedido'}
+                  </Button>
                 </div>
               </DialogHeader>
 
@@ -800,6 +912,124 @@ export default function AdminRentalsPage() {
                     );
                   })()}
                 </div>
+
+                {editingOrder && editForm && (
+                  <div className="bg-brand-yellow/10 p-4 rounded-2xl border border-brand-yellow/25 space-y-4">
+                    <h4 className="text-[10px] text-brand-yellow font-black uppercase tracking-widest flex items-center gap-1">
+                      <Edit3 className="w-3.5 h-3.5" /> Editar pedido del cliente
+                    </h4>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      <div>
+                        <p className="text-[9px] text-white/35 font-bold uppercase mb-1">Nueva fecha</p>
+                        <Input
+                          type="date"
+                          value={editForm.date}
+                          onChange={e => setEditForm(prev => prev ? { ...prev, date: e.target.value } : prev)}
+                          className="h-10 rounded-xl bg-black/35 border-white/10 text-white text-xs font-bold"
+                        />
+                      </div>
+                      <div>
+                        <p className="text-[9px] text-white/35 font-bold uppercase mb-1">Hora</p>
+                        <Input
+                          type="time"
+                          value={editForm.pickupTime}
+                          onChange={e => setEditForm(prev => prev ? { ...prev, pickupTime: e.target.value } : prev)}
+                          className="h-10 rounded-xl bg-black/35 border-white/10 text-white text-xs font-bold"
+                        />
+                      </div>
+                      <div>
+                        <p className="text-[9px] text-white/35 font-bold uppercase mb-1">Duracion</p>
+                        <select
+                          value={editForm.duration}
+                          onChange={e => setEditForm(prev => prev ? { ...prev, duration: e.target.value } : prev)}
+                          className="h-10 w-full rounded-xl border border-white/10 bg-black/35 px-3 text-xs font-bold text-white outline-none"
+                        >
+                          {['1 hora', '2 horas', '3 horas', '4 horas', '8 horas', '24 horas', '1 semana', '1 mes'].map(value => (
+                            <option key={value} value={value}>{value}</option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <p className="text-[9px] text-white/35 font-bold uppercase">Bicicletas / productos</p>
+                      {selected.items.map(item => {
+                        const editable = editForm.items.find(editItem => editItem.id === item.id);
+                        if (!editable) return null;
+
+                        return (
+                          <div key={item.id} className="grid grid-cols-1 gap-2 rounded-xl border border-white/5 bg-black/25 p-3 sm:grid-cols-[1fr_auto_auto] sm:items-center">
+                            <div className="min-w-0">
+                              <p className="truncate text-xs font-black text-white">{item.productNameSnapshot || item.productName}</p>
+                              <p className="text-[9px] font-bold uppercase text-white/30">{item.selectedWheelSize ? `Aro ${item.selectedWheelSize}` : 'Sin aro seleccionado'}</p>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <Button type="button" size="icon" className="h-8 w-8 rounded-lg bg-white/10 text-white hover:bg-white/20" onClick={() => updateEditItem(item.id, { quantity: Math.max(1, editable.quantity - 1) })}>
+                                <Minus className="h-3.5 w-3.5" />
+                              </Button>
+                              <span className="w-8 text-center text-sm font-black text-white">{editable.quantity}</span>
+                              <Button type="button" size="icon" className="h-8 w-8 rounded-lg bg-brand-yellow text-brand-black hover:bg-brand-yellow-light" onClick={() => updateEditItem(item.id, { quantity: editable.quantity + 1 })}>
+                                <Plus className="h-3.5 w-3.5" />
+                              </Button>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <span className="text-[10px] font-black uppercase text-white/35">Bs.</span>
+                              <Input
+                                type="number"
+                                min="0"
+                                value={editable.total}
+                                onChange={e => updateEditItem(item.id, { total: Number(e.target.value) || 0 })}
+                                className="h-9 w-24 rounded-lg bg-black/35 border-white/10 text-white text-xs font-bold"
+                              />
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <label className="flex items-center gap-2 rounded-xl bg-black/25 p-3 text-xs font-bold text-white/70">
+                        <input
+                          type="checkbox"
+                          checked={editForm.deliveryService}
+                          onChange={e => setEditForm(prev => prev ? { ...prev, deliveryService: e.target.checked } : prev)}
+                        />
+                        Entrega a domicilio
+                      </label>
+                      <label className="flex items-center gap-2 rounded-xl bg-black/25 p-3 text-xs font-bold text-white/70">
+                        <input
+                          type="checkbox"
+                          checked={editForm.pickupService}
+                          onChange={e => setEditForm(prev => prev ? { ...prev, pickupService: e.target.checked } : prev)}
+                        />
+                        Recojo a domicilio
+                      </label>
+                    </div>
+
+                    <Input
+                      placeholder="Nuevo enlace de Google Maps"
+                      value={editForm.mapsLink}
+                      onChange={e => setEditForm(prev => prev ? { ...prev, mapsLink: e.target.value } : prev)}
+                      className="h-10 rounded-xl bg-black/35 border-white/10 text-white text-xs font-bold"
+                    />
+
+                    <textarea
+                      placeholder="Notas del pedido, cambios o instrucciones"
+                      value={editForm.notes}
+                      onChange={e => setEditForm(prev => prev ? { ...prev, notes: e.target.value } : prev)}
+                      className="min-h-20 w-full rounded-xl border border-white/10 bg-black/35 px-3 py-2 text-xs font-bold text-white outline-none focus:border-brand-yellow"
+                    />
+
+                    <Button
+                      type="button"
+                      onClick={handleSaveEditedGroup}
+                      className="h-11 w-full rounded-xl bg-brand-yellow text-xs font-black uppercase text-brand-black hover:bg-brand-yellow-light"
+                    >
+                      <Save className="mr-2 h-4 w-4" /> Guardar cambios del pedido
+                    </Button>
+                  </div>
+                )}
 
                 {/* Rental Products Snapshot Card */}
                 <div className="bg-black/40 p-4 rounded-2xl border border-white/5 space-y-2">

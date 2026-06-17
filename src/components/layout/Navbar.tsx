@@ -134,7 +134,7 @@ export default function Navbar() {
             <div className="relative bg-brand-yellow">
                 <nav className="mx-auto" style={{ maxWidth: 1560, paddingLeft: 20, paddingRight: 20 }}>
                     {/* ═══════════ DESKTOP NAVBAR ═══════════ */}
-                    <div className="hidden lg:flex items-center justify-between" style={{ height: 120 }}>
+                    <div className="hidden lg:flex items-center justify-between" style={{ height: 86 }}>
                         {/* Left: Logos + Centro text */}
                         <Link 
                             to="/" 
@@ -145,26 +145,26 @@ export default function Navbar() {
                                 src="/logo_bicicleta_principal.png"
                                 alt="Bicicleta BRIZ"
                                 className="w-auto shrink-0 object-contain brightness-0 invert transition-transform duration-200 group-hover:scale-[1.02]"
-                                style={{ height: 110 }}
+                                style={{ height: 80 }}
                             />
                             <img
                                 src="/logo_briz_principal.png"
                                 alt="BRIZ"
                                 className="w-auto shrink-0 object-contain brightness-0 invert"
-                                style={{ height: 80, marginLeft: -6 }}
+                                style={{ height: 56, marginLeft: -6 }}
                             />
                         </Link>
 
                         {/* Tire Track 1 */}
-                        <TireTrackSeparator className="mx-2.5" style={{ height: 76, width: 18 }} />
+                        <TireTrackSeparator className="mx-2.5" style={{ height: 56, width: 16 }} />
 
                         {/* Centro de la Bicicleta text */}
-                        <span className="font-cocon font-black uppercase leading-none tracking-wider text-white drop-shadow-sm shrink-0" style={{ fontSize: 22 }}>
+                        <span className="font-cocon font-black uppercase leading-none tracking-wider text-white drop-shadow-sm shrink-0" style={{ fontSize: 18 }}>
                             Centro de la Bicicleta
                         </span>
 
                         {/* Tire Track 2 */}
-                        <TireTrackSeparator className="mx-2.5" style={{ height: 76, width: 18 }} />
+                        <TireTrackSeparator className="mx-2.5" style={{ height: 56, width: 16 }} />
 
                         {/* Group 1 buttons */}
                         <div className="flex items-center" style={{ gap: 6 }}>
@@ -179,10 +179,10 @@ export default function Navbar() {
                                         className={`relative flex flex-col items-center justify-center gap-1 rounded-xl text-center transition-all duration-300 hover:bg-white/20 hover:scale-[1.03] ${
                                             active ? 'text-white' : 'text-brand-black'
                                         }`}
-                                        style={{ paddingLeft: 8, paddingRight: 8, paddingTop: 6, paddingBottom: 6 }}
+                                        style={{ paddingLeft: 7, paddingRight: 7, paddingTop: 4, paddingBottom: 4 }}
                                     >
-                                        <Icon className="shrink-0 transition-transform duration-200" style={{ width: 32, height: 32 }} strokeWidth={2.0} />
-                                        <span className="font-cocon font-bold tracking-wide leading-none" style={{ fontSize: 12 }}>{link.label}</span>
+                                        <Icon className="shrink-0 transition-transform duration-200" style={{ width: 24, height: 24 }} strokeWidth={2.0} />
+                                        <span className="font-cocon font-bold tracking-wide leading-none" style={{ fontSize: 11 }}>{link.label}</span>
                                         {active && (
                                             <motion.span
                                                 layoutId="activeNavUnderline"
@@ -195,7 +195,7 @@ export default function Navbar() {
                         </div>
 
                         {/* Tire Track 3 */}
-                        <TireTrackSeparator className="mx-2.5" style={{ height: 76, width: 18 }} />
+                        <TireTrackSeparator className="mx-2.5" style={{ height: 56, width: 16 }} />
 
                         {/* Group 2 buttons */}
                         <div className="flex items-center" style={{ gap: 6 }}>
@@ -210,10 +210,10 @@ export default function Navbar() {
                                         className={`relative flex flex-col items-center justify-center gap-1 rounded-xl text-center transition-all duration-300 hover:bg-white/20 hover:scale-[1.03] ${
                                             active ? 'text-white' : 'text-brand-black'
                                         }`}
-                                        style={{ paddingLeft: 8, paddingRight: 8, paddingTop: 6, paddingBottom: 6 }}
+                                        style={{ paddingLeft: 7, paddingRight: 7, paddingTop: 4, paddingBottom: 4 }}
                                     >
-                                        <Icon className="shrink-0 transition-transform duration-200" style={{ width: 32, height: 32 }} strokeWidth={2.0} />
-                                        <span className="font-cocon font-bold tracking-wide leading-none" style={{ fontSize: 12 }}>{link.label}</span>
+                                        <Icon className="shrink-0 transition-transform duration-200" style={{ width: 24, height: 24 }} strokeWidth={2.0} />
+                                        <span className="font-cocon font-bold tracking-wide leading-none" style={{ fontSize: 11 }}>{link.label}</span>
                                         {active && (
                                             <motion.span
                                                 layoutId="activeNavUnderline2"
@@ -274,7 +274,7 @@ export default function Navbar() {
                     </div>
 
                     {/* ═══════════ MOBILE NAVBAR ═══════════ */}
-                    <div className="flex lg:hidden items-center justify-between" style={{ height: 80 }}>
+                    <div className="flex lg:hidden items-center justify-between" style={{ height: 64 }}>
                         {/* Left: Logos */}
                         <Link 
                             to="/" 
@@ -285,18 +285,18 @@ export default function Navbar() {
                                 src="/logo_bicicleta_principal.png"
                                 alt="Bicicleta BRIZ"
                                 className="w-auto shrink-0 object-contain brightness-0 invert"
-                                style={{ height: 75 }}
+                                style={{ height: 58 }}
                             />
                             <img
                                 src="/logo_briz_principal.png"
                                 alt="BRIZ"
                                 className="w-auto shrink-0 object-contain brightness-0 invert"
-                                style={{ height: 44, marginLeft: -4 }}
+                                style={{ height: 34, marginLeft: -4 }}
                             />
                         </Link>
 
                         {/* Tire Track separator - mobile */}
-                        <TireTrackSeparator className="mx-1.5" style={{ height: 50, width: 14 }} />
+                        <TireTrackSeparator className="mx-1.5" style={{ height: 40, width: 12 }} />
 
                         {/* Centro de la Bicicleta text - mobile */}
                         <span className="font-cocon font-black uppercase leading-none tracking-wide text-white drop-shadow-sm shrink-0 whitespace-nowrap" style={{ fontSize: 'min(11px, 2.8vw)' }}>
@@ -319,12 +319,6 @@ export default function Navbar() {
                     </div>
                 </nav>
 
-                <div className="pointer-events-none absolute -bottom-[28px] left-0 right-0 h-[36px] overflow-hidden" aria-hidden="true">
-                    <svg viewBox="0 0 1440 42" className="h-full w-full" preserveAspectRatio="none">
-                        <path d="M0 0H1440V15C1230 8 1032 10 850 20C650 31 488 32 308 25C172 20 76 13 0 8V0Z" fill="#FFD200" />
-                        <path d="M0 9C76 14 172 21 308 26C488 33 650 32 850 21C1032 11 1230 9 1440 16" fill="none" stroke="#FFFFFF" strokeWidth="5" strokeLinecap="round" />
-                    </svg>
-                </div>
             </div>
 
             <AnimatePresence>
