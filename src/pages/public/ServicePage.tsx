@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Wrench, CheckCircle, Clock, Shield, Star, XCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -5,8 +6,6 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Badge } from '@/components/ui/badge';
-import { services } from '@/data/mockData';
 
 const fadeUp = {
     initial: { opacity: 0, y: 30 },
@@ -102,23 +101,21 @@ const extraServices = [
 ];
 
 export default function ServicePage() {
+    const [selectedPlanIndex, setSelectedPlanIndex] = useState(0);
+    const selectedPlan = maintenancePlans[selectedPlanIndex];
+
     return (
         <div className="pt-[64px] lg:pt-[86px]">
 
-            {/* Services Grid */}
-            <section className="py-24 sm:py-32 bg-gray-50/50">
+            {/* Mechanics hero */}
+            <section className="py-12 sm:py-16 bg-gray-50/50">
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                    <motion.div {...fadeUp} className="text-center mb-16 sm:mb-20">
-                        <h2 className="text-4xl sm:text-5xl font-black mb-6 tracking-tight text-brand-charcoal">Nuestros <span className="text-brand-yellow">Servicios</span></h2>
-                        <p className="text-lg sm:text-xl text-gray-500 font-medium max-w-2xl mx-auto">Desde revisiones rápidas hasta mantenimiento integral experto.</p>
-                    </motion.div>
-
                     <motion.div
                         initial={{ opacity: 0, y: 26, scale: 0.98 }}
                         whileInView={{ opacity: 1, y: 0, scale: 1 }}
                         viewport={{ once: true, amount: 0.35 }}
                         transition={{ duration: 0.7, ease: 'easeOut' }}
-                        className="group relative mb-16 overflow-hidden rounded-[2rem] bg-brand-charcoal shadow-[0_28px_80px_rgba(0,0,0,0.12)] sm:rounded-[2.6rem]"
+                        className="group relative overflow-hidden rounded-[2rem] bg-brand-charcoal shadow-[0_28px_80px_rgba(0,0,0,0.12)] sm:rounded-[2.6rem]"
                     >
                         <div className="absolute inset-0 z-10 bg-gradient-to-r from-black/70 via-black/20 to-transparent" />
                         <img
@@ -136,120 +133,98 @@ export default function ServicePage() {
                         <div className="pointer-events-none absolute inset-4 z-20 rounded-[1.55rem] border border-white/0 transition duration-500 group-hover:inset-5 group-hover:border-white/30 sm:rounded-[2rem]" />
                     </motion.div>
 
-                    <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-8 sm:gap-10">
-                        {services.map((service, i) => (
-                            <motion.div key={service.id} initial={{ opacity: 0, y: 30 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: (i % 6) * 0.1, duration: 0.5 }} className="h-full">
-                                <Card className="h-full bg-white border-4 border-brand-black rounded-2xl shadow-[8px_8px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-1 hover:translate-y-1 transition-all duration-300 flex flex-col group relative overflow-hidden">
-                                    <div className="absolute top-0 right-0 w-32 h-32 bg-brand-yellow/5 rounded-bl-[4rem] group-hover:bg-brand-yellow/10 transition-colors" />
-                                    <CardContent className="p-8 sm:p-10 flex flex-col flex-1 relative z-10">
-                                        <div className="flex items-center justify-between mb-8">
-                                            <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-3xl bg-gray-50 group-hover:bg-brand-yellow flex items-center justify-center transition-all duration-500 shadow-sm group-hover:scale-110">
-                                                <Wrench className="w-8 h-8 sm:w-10 sm:h-10 text-gray-400 group-hover:text-white transition-colors" strokeWidth={1.5} />
-                                            </div>
-                                            <Badge variant="secondary" className="text-[10px] font-black bg-gray-50 text-gray-400 rounded-full px-4 py-2 uppercase tracking-widest border-0 group-hover:bg-brand-yellow/20 group-hover:text-brand-charcoal transition-colors">
-                                                <Clock className="w-3.5 h-3.5 mr-2" strokeWidth={1.5} /> {service.duration}
-                                            </Badge>
-                                        </div>
-                                        <h3 className="text-2xl sm:text-3xl font-black text-brand-charcoal mb-4 group-hover:text-brand-yellow transition-colors leading-tight">{service.name}</h3>
-                                        <p className="text-sm sm:text-base text-gray-400 font-bold leading-relaxed flex-1 opacity-80 group-hover:opacity-100 transition-opacity">{service.description}</p>
-                                        <div className="flex items-center justify-between pt-8 border-t border-gray-50 mt-8">
-                                            <div className="flex items-baseline gap-1">
-                                                <span className="text-sm font-bold text-gray-400">Bs</span>
-                                                <p className="text-3xl sm:text-4xl font-black text-brand-charcoal">{service.price}</p>
-                                            </div>
-                                            <a href="https://wa.me/59177860277" target="_blank" rel="noopener noreferrer">
-                                                <Button className="rounded-full h-12 px-8 bg-brand-charcoal text-white hover:bg-brand-yellow hover:text-brand-black shadow-xl hover:-translate-y-1.5 hover:shadow-brand-yellow/20 transition-all duration-300 font-black text-base border-0">
-                                                    Solicitar
-                                                </Button>
-                                            </a>
-                                        </div>
-                                    </CardContent>
-                                    <div className="absolute bottom-0 left-0 w-full h-1 bg-brand-yellow scale-x-0 group-hover:scale-x-100 transition-transform duration-500 origin-left" />
-                                </Card>
-                            </motion.div>
-                        ))}
-                    </div>
                 </div>
             </section>
 
-            {/* Maintenance Packages */}
-            <section className="py-24 sm:py-32 bg-brand-charcoal text-white relative overflow-hidden">
-                <div className="absolute inset-0 pointer-events-none">
-                    <div className="absolute bottom-[-20%] left-1/4 w-[600px] h-[600px] bg-brand-yellow/10 rounded-full blur-[120px]" />
-                </div>
-                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
-                    <motion.div {...fadeUp} className="text-center mb-16 sm:mb-20">
-                        <h2 className="text-4xl sm:text-5xl font-black mb-6 tracking-tight">Planes de <span className="text-brand-yellow">Mantenimiento</span></h2>
-                        <p className="text-lg sm:text-xl text-white/70 font-medium max-w-2xl mx-auto">Elige el nivel de revisión que necesita tu bicicleta.</p>
+            {/* Maintenance packages */}
+            <section className="py-12 sm:py-20 bg-white">
+                <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+                    <motion.div {...fadeUp} className="text-center mb-7 sm:mb-10">
+                        <h2 className="text-3xl sm:text-5xl font-black tracking-tight text-brand-charcoal">Planes de <span className="text-brand-yellow">Mantenimiento</span></h2>
+                        <p className="mt-3 text-sm sm:text-lg text-brand-charcoal/60 font-bold">Selecciona un plan para ver todo su alcance.</p>
                     </motion.div>
-                    <div className="grid lg:grid-cols-3 gap-10 max-w-6xl mx-auto items-stretch">
-                        {maintenancePlans.map((pkg, i) => (
-                            <motion.div key={i} initial={{ opacity: 0, y: 30 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: i * 0.15 }} className="h-full">
-                                <div className={`relative rounded-[2rem] p-7 sm:p-8 h-full flex flex-col transition-all duration-500 hover:-translate-y-2 ${pkg.featured ? 'bg-brand-yellow text-brand-charcoal border-0 shadow-[0_30px_60px_rgba(255,210,0,0.4)] z-10' : 'bg-white/5 border border-white/10 backdrop-blur-md shadow-2xl hover:bg-white/10'}`}>
-                                    {pkg.featured && (
-                                        <div className="absolute -top-4 left-1/2 -translate-x-1/2">
-                                            <Badge className="bg-brand-charcoal text-white font-black px-5 py-2 uppercase tracking-widest text-[10px] rounded-full shadow-2xl border-0">Más completo</Badge>
-                                        </div>
-                                    )}
-                                    <div className="mb-6">
-                                        <p className={`text-[10px] font-black uppercase tracking-[0.2em] ${pkg.featured ? 'text-brand-charcoal/60' : 'text-brand-yellow'}`}>{pkg.name}</p>
-                                        <h3 className="text-2xl font-black mt-2 mb-3 tracking-tight uppercase leading-tight">{pkg.title}</h3>
-                                        <div className="flex items-baseline gap-2">
-                                            <span className="text-sm font-black uppercase tracking-widest opacity-60">Bs.</span>
-                                            <span className={`text-4xl font-black ${pkg.featured ? 'text-brand-charcoal' : 'text-brand-yellow'} tracking-tighter`}>{pkg.price}</span>
-                                        </div>
-                                    </div>
-                                    <div className={`rounded-2xl p-4 mb-6 ${pkg.featured ? 'bg-brand-charcoal/8' : 'bg-white/5'}`}>
-                                        <p className={`text-[10px] font-black uppercase tracking-widest mb-2 ${pkg.featured ? 'text-brand-charcoal/55' : 'text-white/45'}`}>Ideal para</p>
-                                        <p className={`text-sm font-bold leading-relaxed ${pkg.featured ? 'text-brand-charcoal/85' : 'text-white/80'}`}>{pkg.ideal}</p>
-                                    </div>
-                                    <div className="flex-1 mb-8">
-                                        <p className={`text-[11px] font-black uppercase tracking-widest mb-4 ${pkg.featured ? 'text-brand-charcoal/60' : 'text-brand-yellow'}`}>Qué incluye</p>
-                                        <ul className="space-y-3">
-                                        {pkg.includes.map((item, j) => (
-                                            <li key={j} className="flex items-start gap-3 text-sm font-bold">
-                                                <div className={`mt-1 flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center ${pkg.featured ? 'bg-brand-charcoal' : 'bg-brand-yellow'}`}>
-                                                    <CheckCircle className={`w-3.5 h-3.5 ${pkg.featured ? 'text-white' : 'text-brand-black'}`} strokeWidth={3} />
-                                                </div>
-                                                <span className={pkg.featured ? 'text-brand-charcoal/90' : 'text-white/80'}>{item}</span>
-                                            </li>
-                                        ))}
-                                        </ul>
-                                    </div>
-                                    <div className={`border-t pt-5 mb-8 ${pkg.featured ? 'border-brand-charcoal/15' : 'border-white/10'}`}>
-                                        <p className={`text-[11px] font-black uppercase tracking-widest mb-3 ${pkg.featured ? 'text-brand-charcoal/60' : 'text-white/45'}`}>No incluye</p>
-                                        <ul className="space-y-2">
-                                            {pkg.excludes.map((item) => (
-                                                <li key={item} className={`flex items-start gap-2 text-xs font-bold ${pkg.featured ? 'text-brand-charcoal/70' : 'text-white/65'}`}>
-                                                    <XCircle className="w-4 h-4 shrink-0 text-red-400" /> {item}
-                                                </li>
-                                            ))}
-                                        </ul>
-                                    </div>
-                                    <a href="https://wa.me/59177860277" target="_blank" rel="noopener noreferrer" className="mt-auto">
-                                        <Button className={`w-full h-16 rounded-full font-black text-lg transition-all duration-300 ${pkg.featured ? 'bg-brand-charcoal text-white hover:bg-black shadow-xl hover:shadow-2xl' : 'bg-white/10 text-white hover:bg-brand-yellow hover:text-brand-black border border-white/20 hover:border-brand-yellow shadow-lg'}`}>
-                                            Agendar Turno
-                                        </Button>
-                                    </a>
-                                </div>
-                            </motion.div>
-                        ))}
+
+                    <div className="grid grid-cols-3 gap-2 sm:gap-4">
+                        {maintenancePlans.map((pkg, index) => {
+                            const theme = [
+                                'bg-brand-yellow text-brand-charcoal border-brand-yellow',
+                                'bg-brand-cyan text-white border-brand-cyan',
+                                'bg-brand-pink text-white border-brand-pink',
+                            ][index];
+                            const active = selectedPlanIndex === index;
+                            return (
+                                <button
+                                    key={pkg.name}
+                                    type="button"
+                                    onClick={() => setSelectedPlanIndex(index)}
+                                    className={`min-h-32 sm:min-h-40 rounded-2xl border p-3 sm:p-5 text-left transition-transform ${theme} ${active ? 'scale-[1.03] shadow-lg ring-2 ring-brand-charcoal/20' : 'opacity-80 hover:opacity-100'}`}
+                                >
+                                    <p className="text-[9px] sm:text-[11px] font-black uppercase tracking-widest opacity-80">{pkg.name}</p>
+                                    <p className="mt-2 text-xs sm:text-lg font-black leading-tight line-clamp-2">{pkg.title}</p>
+                                    <p className="mt-3 text-base sm:text-2xl font-black">Bs. {pkg.price}</p>
+                                </button>
+                            );
+                        })}
                     </div>
+
+                    <motion.article
+                        key={selectedPlan.name}
+                        initial={{ opacity: 0, y: 12 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="mt-5 rounded-3xl border border-brand-charcoal/10 bg-[#FFFDF3] p-5 sm:mt-8 sm:p-8"
+                    >
+                        <div className="flex flex-col gap-4 border-b border-brand-charcoal/10 pb-5 sm:flex-row sm:items-start sm:justify-between">
+                            <div>
+                                <p className="text-[10px] font-black uppercase tracking-widest text-brand-charcoal/45">{selectedPlan.name}</p>
+                                <h3 className="mt-1 text-2xl sm:text-3xl font-black uppercase leading-tight text-brand-charcoal">{selectedPlan.title}</h3>
+                            </div>
+                            <p className="shrink-0 text-xl sm:text-2xl font-black text-brand-charcoal">Bs. {selectedPlan.price}</p>
+                        </div>
+                        <div className="mt-5 rounded-2xl bg-white p-4">
+                            <p className="text-[10px] font-black uppercase tracking-widest text-brand-charcoal/45">Ideal para</p>
+                            <p className="mt-2 text-sm font-bold leading-relaxed text-brand-charcoal/75">{selectedPlan.ideal}</p>
+                        </div>
+                        <div className="mt-6 grid gap-6 lg:grid-cols-[1fr_0.36fr]">
+                            <div>
+                                <p className="text-xs font-black uppercase tracking-widest text-brand-charcoal">Qué incluye</p>
+                                <ul className="mt-4 grid gap-3 sm:grid-cols-2">
+                                    {selectedPlan.includes.map(item => (
+                                        <li key={item} className="flex items-start gap-2 text-sm font-bold leading-snug text-brand-charcoal/75">
+                                            <CheckCircle className="mt-0.5 h-4 w-4 shrink-0 text-brand-cyan" strokeWidth={2.5} /> {item}
+                                        </li>
+                                    ))}
+                                </ul>
+                            </div>
+                            <div className="rounded-2xl bg-white p-4">
+                                <p className="text-xs font-black uppercase tracking-widest text-brand-charcoal">No incluye</p>
+                                <ul className="mt-4 space-y-2">
+                                    {selectedPlan.excludes.map(item => (
+                                        <li key={item} className="flex items-start gap-2 text-xs font-bold text-brand-charcoal/65">
+                                            <XCircle className="h-4 w-4 shrink-0 text-brand-pink" /> {item}
+                                        </li>
+                                    ))}
+                                </ul>
+                            </div>
+                        </div>
+                        <a href="https://wa.me/59177860277" target="_blank" rel="noopener noreferrer" className="mt-6 block">
+                            <Button className="h-12 w-full rounded-xl bg-brand-cyan font-black text-white hover:bg-brand-cyan/85 sm:w-auto sm:px-8">Agendar este plan</Button>
+                        </a>
+                    </motion.article>
                 </div>
             </section>
 
             {/* Extra services */}
-            <section className="py-20 sm:py-28 bg-[#FFFDF3]">
+            <section className="py-12 sm:py-20 bg-[#FFFDF3]">
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                    <motion.div {...fadeUp} className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between mb-10 sm:mb-12">
+                    <motion.div {...fadeUp} className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between mb-6 sm:mb-9">
                         <div>
                             <p className="text-[10px] font-black uppercase tracking-[0.22em] text-brand-yellow-vibrant">Mecánica Briz</p>
-                            <h2 className="mt-2 text-4xl sm:text-5xl font-black tracking-tight text-brand-charcoal">Servicios <span className="text-brand-yellow">extra</span></h2>
+                            <h2 className="mt-2 text-3xl sm:text-5xl font-black tracking-tight text-brand-charcoal">Servicios <span className="text-brand-yellow">extra</span></h2>
                         </div>
                         <p className="max-w-md text-sm font-bold leading-relaxed text-brand-charcoal/60">Puedes solicitarlos por separado o añadirlos al mantenimiento que elijas.</p>
                     </motion.div>
 
-                    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                    <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-4">
                         {extraServices.map(([service, price], index) => (
                             <motion.div
                                 key={service}
@@ -257,17 +232,17 @@ export default function ServicePage() {
                                 whileInView={{ opacity: 1, y: 0 }}
                                 viewport={{ once: true }}
                                 transition={{ delay: (index % 3) * 0.06 }}
-                                className="flex min-h-28 items-center justify-between gap-4 rounded-2xl border border-brand-yellow/20 bg-white p-5 shadow-sm"
+                                className="flex min-h-28 flex-col justify-between gap-3 rounded-xl border border-brand-yellow/20 bg-white p-3.5 shadow-sm"
                             >
-                                <div className="flex min-w-0 items-center gap-3">
-                                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brand-yellow/15 text-brand-yellow-vibrant">
-                                        <Wrench className="h-5 w-5" strokeWidth={2.3} />
+                                <div className="flex min-w-0 items-start gap-2.5">
+                                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-brand-yellow/15 text-brand-yellow-vibrant">
+                                        <Wrench className="h-4 w-4" strokeWidth={2.3} />
                                     </div>
-                                    <p className="text-sm font-black leading-snug text-brand-charcoal">{service}</p>
+                                    <p className="text-xs font-black leading-snug text-brand-charcoal">{service}</p>
                                 </div>
-                                <div className="shrink-0 text-right">
-                                    <p className="text-[9px] font-black uppercase tracking-widest text-brand-charcoal/40">Precio</p>
-                                    <p className="mt-1 font-black text-brand-charcoal">{price}</p>
+                                <div className="w-full border-t border-brand-yellow/15 pt-2">
+                                    <p className="text-[8px] font-black uppercase tracking-widest text-brand-charcoal/40">Precio</p>
+                                    <p className="mt-0.5 text-sm font-black text-brand-charcoal">{price}</p>
                                 </div>
                             </motion.div>
                         ))}
