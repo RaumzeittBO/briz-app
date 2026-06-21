@@ -327,26 +327,26 @@
   font-family: 'Cocon', sans-serif;
 }
 
-.briz-rental-slider {
+.briz-horizontal-slider {
   scrollbar-width: thin;
   scrollbar-color: #FFD200 transparent;
 }
 
-.briz-rental-slider::-webkit-scrollbar {
-  height: 6px;
+.briz-horizontal-slider::-webkit-scrollbar {
+  height: 4px;
 }
 
-.briz-rental-slider::-webkit-scrollbar-track {
+.briz-horizontal-slider::-webkit-scrollbar-track {
   background: transparent;
 }
 
-.briz-rental-slider::-webkit-scrollbar-thumb {
+.briz-horizontal-slider::-webkit-scrollbar-thumb {
   background: #FFD200;
   border: 1px solid #FFFDF3;
   border-radius: 999px;
 }
 
-.briz-rental-slider::-webkit-scrollbar-thumb:hover {
+.briz-horizontal-slider::-webkit-scrollbar-thumb:hover {
   background: #E5BD00;
 }
 

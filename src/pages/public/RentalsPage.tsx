@@ -250,7 +250,7 @@ export default function RentalsPage() {
         <div className="relative group/slider">
           <div 
             ref={(el) => { scrollRefs.current[catKey] = el; }}
-            className="briz-rental-slider flex overflow-x-auto gap-6 pb-6 pt-2 snap-x snap-mandatory scroll-smooth px-1"
+            className="briz-horizontal-slider flex overflow-x-auto gap-6 pb-6 pt-2 snap-x snap-mandatory scroll-smooth px-1"
           >
             {productsList.map((p) => {
               const avail = getAvailableStock(p);
@@ -404,7 +404,7 @@ export default function RentalsPage() {
             
             {/* Category filters & Cart */}
             <div className="flex items-center gap-3 w-full md:flex-1 md:min-w-0">
-              <div className="flex flex-1 min-w-0 gap-2 overflow-x-auto overflow-y-hidden py-1 px-1 scrollbar-none scroll-smooth">
+              <div className="briz-horizontal-slider flex flex-1 min-w-0 gap-2 overflow-x-auto overflow-y-hidden py-1 px-1 scroll-smooth">
                 {categories.map(c => (
                   <Button 
                     key={c} 

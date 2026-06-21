@@ -179,7 +179,7 @@ export default function ShopPage() {
                 <div className="relative group/slider">
                     <div 
                         ref={(el) => { scrollRefs.current[catKey] = el; }}
-                        className="flex overflow-x-auto gap-6 pb-6 pt-2 scrollbar-none snap-x snap-mandatory scroll-smooth px-1"
+                        className="briz-horizontal-slider flex overflow-x-auto gap-6 pb-6 pt-2 snap-x snap-mandatory scroll-smooth px-1"
                     >
                         {productsList.map((item) => (
                             <motion.div 
@@ -310,7 +310,7 @@ export default function ShopPage() {
                             </Card>
                         </motion.div>
 
-                        <motion.div {...fadeUp} transition={{ delay: 0.1 }} className="flex gap-2 overflow-x-auto pb-2 sm:pb-0 w-full justify-center hide-scrollbar snap-x px-1 py-1">
+                        <motion.div {...fadeUp} transition={{ delay: 0.1 }} className="briz-horizontal-slider flex gap-2 overflow-x-auto pb-2 sm:pb-0 w-full justify-center snap-x px-1 py-1">
                             {productCategories.map(c => (
                                 <Button key={c} variant={category === c ? 'default' : 'outline'} size="sm"
                                     className={`rounded-full px-6 h-10 font-bold tracking-wide shadow-sm whitespace-nowrap snap-start flex-shrink-0 transition-all ${category === c ? 'bg-brand-yellow text-brand-black border-brand-yellow shadow-[0_4px_14px_rgba(255,210,0,0.4)] scale-105' : 'bg-white text-gray-600 border-gray-200 hover:border-brand-charcoal hover:text-brand-charcoal hover:bg-gray-50'}`}

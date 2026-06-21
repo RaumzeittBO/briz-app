@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Wrench, CheckCircle, Clock, Shield, Star, XCircle } from 'lucide-react';
+import { Wrench, CheckCircle, Clock, Shield, Star, XCircle, ShoppingCart, Trash2, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -100,9 +100,24 @@ const extraServices = [
     ['Regulado de frenos', '10 - 15 Bs'],
 ];
 
+type QuoteItem = { id: string; name: string; price: string };
+
+function priceRange(price: string) {
+    const values = [...price.replace(',', '.').matchAll(/\d+(?:\.\d+)?/g)].map(match => Number(match[0]));
+    return { min: values[0] || 0, max: values[1] || values[0] || 0 };
+}
+
 export default function ServicePage() {
     const [selectedPlanIndex, setSelectedPlanIndex] = useState(0);
+    const [quoteItems, setQuoteItems] = useState<QuoteItem[]>([]);
     const selectedPlan = maintenancePlans[selectedPlanIndex];
+    const quoteTotal = quoteItems.reduce((total, item) => {
+        const range = priceRange(item.price);
+        return { min: total.min + range.min, max: total.max + range.max };
+    }, { min: 0, max: 0 });
+    const addToQuote = (item: QuoteItem) => setQuoteItems(current => current.some(entry => entry.id === item.id) ? current : [...current, item]);
+    const removeFromQuote = (id: string) => setQuoteItems(current => current.filter(item => item.id !== id));
+    const quoteLink = `https://wa.me/59177860277?text=${encodeURIComponent(`Hola Briz, deseo una cotización mecánica.\n\nServicios:\n${quoteItems.map(item => `- ${item.name}: Bs. ${item.price}`).join('\n')}\n\nTotal estimado: Bs. ${quoteTotal.min}${quoteTotal.max !== quoteTotal.min ? ` - ${quoteTotal.max}` : ''}`)}`;
 
     return (
         <div className="pt-[64px] lg:pt-[86px]">
@@ -119,7 +134,7 @@ export default function ServicePage() {
                     >
                         <div className="absolute inset-0 z-10 bg-gradient-to-r from-black/70 via-black/20 to-transparent" />
                         <img
-                            src="/images/hero-bg.jpeg"
+                            src="/images/mechanics-hero-briz.jpg"
                             alt="Taller mecanico Briz"
                             className="h-[340px] w-full object-cover transition duration-700 group-hover:scale-105 sm:h-[430px] lg:h-[500px]"
                         />
@@ -147,9 +162,9 @@ export default function ServicePage() {
                     <div className="grid grid-cols-3 gap-2 sm:gap-4">
                         {maintenancePlans.map((pkg, index) => {
                             const theme = [
-                                'bg-brand-yellow text-brand-charcoal border-brand-yellow',
+                                'bg-[#E9D7B7] text-brand-charcoal border-[#E9D7B7]',
                                 'bg-brand-cyan text-white border-brand-cyan',
-                                'bg-brand-pink text-white border-brand-pink',
+                                'bg-brand-yellow text-brand-charcoal border-brand-yellow',
                             ][index];
                             const active = selectedPlanIndex === index;
                             return (
@@ -206,9 +221,14 @@ export default function ServicePage() {
                                 </ul>
                             </div>
                         </div>
-                        <a href="https://wa.me/59177860277" target="_blank" rel="noopener noreferrer" className="mt-6 block">
-                            <Button className="h-12 w-full rounded-xl bg-brand-cyan font-black text-white hover:bg-brand-cyan/85 sm:w-auto sm:px-8">Agendar este plan</Button>
-                        </a>
+                        <Button
+                            type="button"
+                            onClick={() => addToQuote({ id: `plan_${selectedPlanIndex}`, name: `${selectedPlan.name} - ${selectedPlan.title}`, price: selectedPlan.price })}
+                            disabled={quoteItems.some(item => item.id === `plan_${selectedPlanIndex}`)}
+                            className="mt-6 h-12 w-full rounded-xl bg-brand-cyan font-black text-white hover:bg-brand-cyan/85 disabled:opacity-55 sm:w-auto sm:px-8"
+                        >
+                            <Plus className="mr-2 h-4 w-4" /> {quoteItems.some(item => item.id === `plan_${selectedPlanIndex}`) ? 'Añadido a cotización' : 'Añadir a cotización'}
+                        </Button>
                     </motion.article>
                 </div>
             </section>
@@ -243,10 +263,50 @@ export default function ServicePage() {
                                 <div className="w-full border-t border-brand-yellow/15 pt-2">
                                     <p className="text-[8px] font-black uppercase tracking-widest text-brand-charcoal/40">Precio</p>
                                     <p className="mt-0.5 text-sm font-black text-brand-charcoal">{price}</p>
+                                    <button
+                                        type="button"
+                                        onClick={() => addToQuote({ id: `extra_${index}`, name: service, price })}
+                                        disabled={quoteItems.some(item => item.id === `extra_${index}`)}
+                                        className="mt-2 inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-wide text-brand-cyan hover:text-brand-charcoal disabled:text-brand-charcoal/35"
+                                    >
+                                        <Plus className="h-3.5 w-3.5" /> {quoteItems.some(item => item.id === `extra_${index}`) ? 'Añadido' : 'Agregar'}
+                                    </button>
                                 </div>
                             </motion.div>
                         ))}
                     </div>
+
+                    {quoteItems.length > 0 && (
+                        <motion.div
+                            initial={{ opacity: 0, y: 12 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            className="mt-6 rounded-2xl border border-brand-cyan/25 bg-white p-4 shadow-sm sm:p-5"
+                        >
+                            <div className="flex items-center justify-between gap-3 border-b border-brand-cyan/15 pb-3">
+                                <div className="flex items-center gap-2 text-brand-charcoal">
+                                    <ShoppingCart className="h-5 w-5 text-brand-cyan" />
+                                    <h3 className="font-black">Cotización de mecánica</h3>
+                                </div>
+                                <span className="text-sm font-black text-brand-charcoal">Bs. {quoteTotal.min}{quoteTotal.max !== quoteTotal.min ? ` - ${quoteTotal.max}` : ''}</span>
+                            </div>
+                            <div className="mt-3 space-y-2">
+                                {quoteItems.map(item => (
+                                    <div key={item.id} className="flex items-center justify-between gap-3 text-sm">
+                                        <span className="font-bold text-brand-charcoal/75">{item.name}</span>
+                                        <div className="flex shrink-0 items-center gap-2">
+                                            <span className="font-black text-brand-charcoal">Bs. {item.price}</span>
+                                            <button type="button" onClick={() => removeFromQuote(item.id)} className="rounded-lg p-1 text-brand-pink hover:bg-brand-pink/10" aria-label={`Eliminar ${item.name}`}>
+                                                <Trash2 className="h-4 w-4" />
+                                            </button>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                            <a href={quoteLink} target="_blank" rel="noopener noreferrer" className="mt-4 block">
+                                <Button className="h-11 w-full rounded-xl bg-brand-cyan font-black text-white hover:bg-brand-cyan/85 sm:w-auto sm:px-6">Solicitar cotización por WhatsApp</Button>
+                            </a>
+                        </motion.div>
+                    )}
                 </div>
             </section>
 
