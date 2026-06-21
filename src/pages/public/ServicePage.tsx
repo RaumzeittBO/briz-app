@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion';
-import { Wrench, CheckCircle, Clock, Shield, Star } from 'lucide-react';
+import { Wrench, CheckCircle, Clock, Shield, Star, XCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -14,6 +14,92 @@ const fadeUp = {
     viewport: { once: true },
     transition: { duration: 0.6 },
 };
+
+const maintenancePlans = [
+    {
+        name: 'Plan 1',
+        title: 'Regulado general',
+        price: '50 - 70',
+        ideal: 'Bicicletas que funcionan correctamente pero necesitan ajustes y calibración general.',
+        includes: [
+            'Diagnóstico rápido externo',
+            'Ajuste de ejes',
+            'Regulado de frenos',
+            'Regulado de caja de cambios',
+            'Ajuste de sillín',
+            'Otros ajustes menores',
+        ],
+        excludes: ['Reparaciones', 'Desarme de componentes', 'Sustitución de piezas', 'Repuestos'],
+    },
+    {
+        name: 'Plan 2',
+        title: 'Mantenimiento general profundo',
+        price: '190 - 250',
+        ideal: 'Bicicletas de gama baja a media que necesitan una revisión completa y mantenimiento integral.',
+        includes: [
+            'Diagnóstico mecánico general',
+            'Desmontaje integral de componentes principales',
+            'Limpieza técnica completa del cuadro y componentes',
+            'Mantenimiento, limpieza, engrase y ajuste del buje delantero',
+            'Mantenimiento, limpieza, engrase y ajuste del buje trasero',
+            'Mantenimiento, limpieza, engrase y ajuste de la caja pedalera / eje central',
+            'Mantenimiento, limpieza, engrase y ajuste del juego de dirección',
+            'Revisión, mantenimiento y ajuste de frenos delanteros y traseros',
+            'Revisión y lubricación de cables y fundas',
+            'Ajuste y regulación del cambio trasero',
+            'Ajuste y regulación del desviador delantero (si aplica)',
+            'Limpieza y mantenimiento de transmisión: cadena, piñón, platos y bielas',
+            'Centrado básico de ruedas',
+            'Revisión de tensión de radios',
+            'Ajuste general de tornillería',
+            'Instalación de repuestos necesarios',
+            'Ajustes menores complementarios',
+            'Prueba final de funcionamiento y seguridad',
+        ],
+        excludes: ['Mantenimiento de horquilla', 'Mantenimiento de frenos hidráulicos', 'Líquido de frenos', 'Repuestos'],
+        featured: true,
+    },
+    {
+        name: 'Plan 3',
+        title: 'Mantenimiento gama alta',
+        price: '300',
+        ideal: 'Bicicletas de alta gama, MTB avanzadas, bicicletas de ruta y bicicletas con componentes premium.',
+        includes: [
+            'Diagnóstico mecánico general',
+            'Desmontaje integral de componentes principales',
+            'Limpieza técnica completa del cuadro y componentes',
+            'Mantenimiento, limpieza, engrase y ajuste del buje delantero',
+            'Mantenimiento, limpieza, engrase y ajuste del buje trasero',
+            'Mantenimiento, limpieza, engrase y ajuste de la caja pedalera / eje central',
+            'Mantenimiento, limpieza, engrase y ajuste del juego de dirección',
+            'Revisión, mantenimiento y ajuste de frenos delanteros y traseros',
+            'Revisión y lubricación de cables y fundas',
+            'Ajuste y regulación del cambio trasero',
+            'Ajuste y regulación del desviador delantero (si aplica)',
+            'Limpieza y mantenimiento de transmisión: cadena, piñón, platos y bielas',
+            'Centrado básico de ruedas',
+            'Revisión de tensión de radios',
+            'Ajuste general de tornillería',
+            'Instalación de repuestos necesarios',
+            'Ajustes menores complementarios',
+            'Prueba final de funcionamiento y seguridad',
+        ],
+        excludes: ['Mantenimiento de horquilla', 'Mantenimiento de frenos hidráulicos', 'Líquido de frenos', 'Repuestos'],
+    },
+];
+
+const extraServices = [
+    ['Diagnóstico externo', '10 Bs'],
+    ['Blindaje antipinchazo (ambas llantas)', '150 Bs'],
+    ['Instalación de líquido autosellante', '130 Bs'],
+    ['Mantenimiento horquilla básica', '50 - 80 Bs'],
+    ['Mantenimiento horquilla gama alta sin aire', '100 Bs'],
+    ['Mantenimiento horquilla gama alta con aire', '250 Bs'],
+    ['Mantenimiento frenos hidráulicos completo', '70 - 90 Bs'],
+    ['Mantenimiento frenos hidráulicos (aumento de líquido)', '40 - 60 Bs'],
+    ['Inflado de llantas', '1,5 - 2 Bs por llanta'],
+    ['Regulado de frenos', '10 - 15 Bs'],
+];
 
 export default function ServicePage() {
     return (
@@ -93,44 +179,95 @@ export default function ServicePage() {
                 </div>
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
                     <motion.div {...fadeUp} className="text-center mb-16 sm:mb-20">
-                        <h2 className="text-4xl sm:text-5xl font-black mb-6 tracking-tight">Paquetes de <span className="text-brand-yellow">Mantenimiento</span></h2>
-                        <p className="text-lg sm:text-xl text-white/70 font-medium max-w-2xl mx-auto">Soluciones completas para dejar tu bici como nueva.</p>
+                        <h2 className="text-4xl sm:text-5xl font-black mb-6 tracking-tight">Planes de <span className="text-brand-yellow">Mantenimiento</span></h2>
+                        <p className="text-lg sm:text-xl text-white/70 font-medium max-w-2xl mx-auto">Elige el nivel de revisión que necesita tu bicicleta.</p>
                     </motion.div>
                     <div className="grid lg:grid-cols-3 gap-10 max-w-6xl mx-auto items-stretch">
-                        {[
-                            { name: 'Básico', price: 80, items: ['Revisión general', 'Inflado de neumáticos', 'Ajuste de frenos', 'Lubricación de cadena'] },
-                            { name: 'Completo', price: 180, items: ['Todo del Básico', 'Ajuste de cambios', 'Limpieza profunda', 'Revisión de rodamientos', 'Ajuste de radios'], featured: true },
-                            { name: 'Premium', price: 300, items: ['Todo del Completo', 'Cambio de cables', 'Cambio de pastillas', 'Cambio de cámara', 'Garantía 30 días'] },
-                        ].map((pkg, i) => (
+                        {maintenancePlans.map((pkg, i) => (
                             <motion.div key={i} initial={{ opacity: 0, y: 30 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: i * 0.15 }} className="h-full">
-                                <div className={`relative rounded-[3rem] p-10 h-full flex flex-col transition-all duration-500 hover:-translate-y-4 ${pkg.featured ? 'bg-brand-yellow text-brand-charcoal border-0 shadow-[0_30px_60px_rgba(255,210,0,0.4)] md:scale-110 z-10' : 'bg-white/5 border border-white/10 backdrop-blur-md shadow-2xl hover:bg-white/10'}`}>
+                                <div className={`relative rounded-[2rem] p-7 sm:p-8 h-full flex flex-col transition-all duration-500 hover:-translate-y-2 ${pkg.featured ? 'bg-brand-yellow text-brand-charcoal border-0 shadow-[0_30px_60px_rgba(255,210,0,0.4)] z-10' : 'bg-white/5 border border-white/10 backdrop-blur-md shadow-2xl hover:bg-white/10'}`}>
                                     {pkg.featured && (
-                                        <div className="absolute -top-6 left-1/2 -translate-x-1/2">
-                                            <Badge className="bg-brand-charcoal text-white font-black px-6 py-2 uppercase tracking-widest text-[10px] rounded-full shadow-2xl border-0">Recomendado</Badge>
+                                        <div className="absolute -top-4 left-1/2 -translate-x-1/2">
+                                            <Badge className="bg-brand-charcoal text-white font-black px-5 py-2 uppercase tracking-widest text-[10px] rounded-full shadow-2xl border-0">Más completo</Badge>
                                         </div>
                                     )}
-                                    <div className="mb-10">
-                                        <h3 className="text-3xl font-black mb-4 tracking-tight">{pkg.name}</h3>
+                                    <div className="mb-6">
+                                        <p className={`text-[10px] font-black uppercase tracking-[0.2em] ${pkg.featured ? 'text-brand-charcoal/60' : 'text-brand-yellow'}`}>{pkg.name}</p>
+                                        <h3 className="text-2xl font-black mt-2 mb-3 tracking-tight uppercase leading-tight">{pkg.title}</h3>
                                         <div className="flex items-baseline gap-2">
                                             <span className="text-sm font-black uppercase tracking-widest opacity-60">Bs.</span>
-                                            <span className={`text-6xl font-black ${pkg.featured ? 'text-brand-charcoal' : 'text-brand-yellow'} tracking-tighter`}>{pkg.price}</span>
+                                            <span className={`text-4xl font-black ${pkg.featured ? 'text-brand-charcoal' : 'text-brand-yellow'} tracking-tighter`}>{pkg.price}</span>
                                         </div>
                                     </div>
-                                    <ul className="space-y-5 flex-1 mb-12">
-                                        {pkg.items.map((item, j) => (
-                                            <li key={j} className="flex items-start gap-4 text-base font-bold">
+                                    <div className={`rounded-2xl p-4 mb-6 ${pkg.featured ? 'bg-brand-charcoal/8' : 'bg-white/5'}`}>
+                                        <p className={`text-[10px] font-black uppercase tracking-widest mb-2 ${pkg.featured ? 'text-brand-charcoal/55' : 'text-white/45'}`}>Ideal para</p>
+                                        <p className={`text-sm font-bold leading-relaxed ${pkg.featured ? 'text-brand-charcoal/85' : 'text-white/80'}`}>{pkg.ideal}</p>
+                                    </div>
+                                    <div className="flex-1 mb-8">
+                                        <p className={`text-[11px] font-black uppercase tracking-widest mb-4 ${pkg.featured ? 'text-brand-charcoal/60' : 'text-brand-yellow'}`}>Qué incluye</p>
+                                        <ul className="space-y-3">
+                                        {pkg.includes.map((item, j) => (
+                                            <li key={j} className="flex items-start gap-3 text-sm font-bold">
                                                 <div className={`mt-1 flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center ${pkg.featured ? 'bg-brand-charcoal' : 'bg-brand-yellow'}`}>
                                                     <CheckCircle className={`w-3.5 h-3.5 ${pkg.featured ? 'text-white' : 'text-brand-black'}`} strokeWidth={3} />
                                                 </div>
                                                 <span className={pkg.featured ? 'text-brand-charcoal/90' : 'text-white/80'}>{item}</span>
                                             </li>
                                         ))}
-                                    </ul>
+                                        </ul>
+                                    </div>
+                                    <div className={`border-t pt-5 mb-8 ${pkg.featured ? 'border-brand-charcoal/15' : 'border-white/10'}`}>
+                                        <p className={`text-[11px] font-black uppercase tracking-widest mb-3 ${pkg.featured ? 'text-brand-charcoal/60' : 'text-white/45'}`}>No incluye</p>
+                                        <ul className="space-y-2">
+                                            {pkg.excludes.map((item) => (
+                                                <li key={item} className={`flex items-start gap-2 text-xs font-bold ${pkg.featured ? 'text-brand-charcoal/70' : 'text-white/65'}`}>
+                                                    <XCircle className="w-4 h-4 shrink-0 text-red-400" /> {item}
+                                                </li>
+                                            ))}
+                                        </ul>
+                                    </div>
                                     <a href="https://wa.me/59177860277" target="_blank" rel="noopener noreferrer" className="mt-auto">
                                         <Button className={`w-full h-16 rounded-full font-black text-lg transition-all duration-300 ${pkg.featured ? 'bg-brand-charcoal text-white hover:bg-black shadow-xl hover:shadow-2xl' : 'bg-white/10 text-white hover:bg-brand-yellow hover:text-brand-black border border-white/20 hover:border-brand-yellow shadow-lg'}`}>
                                             Agendar Turno
                                         </Button>
                                     </a>
+                                </div>
+                            </motion.div>
+                        ))}
+                    </div>
+                </div>
+            </section>
+
+            {/* Extra services */}
+            <section className="py-20 sm:py-28 bg-[#FFFDF3]">
+                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                    <motion.div {...fadeUp} className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between mb-10 sm:mb-12">
+                        <div>
+                            <p className="text-[10px] font-black uppercase tracking-[0.22em] text-brand-yellow-vibrant">Mecánica Briz</p>
+                            <h2 className="mt-2 text-4xl sm:text-5xl font-black tracking-tight text-brand-charcoal">Servicios <span className="text-brand-yellow">extra</span></h2>
+                        </div>
+                        <p className="max-w-md text-sm font-bold leading-relaxed text-brand-charcoal/60">Puedes solicitarlos por separado o añadirlos al mantenimiento que elijas.</p>
+                    </motion.div>
+
+                    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                        {extraServices.map(([service, price], index) => (
+                            <motion.div
+                                key={service}
+                                initial={{ opacity: 0, y: 16 }}
+                                whileInView={{ opacity: 1, y: 0 }}
+                                viewport={{ once: true }}
+                                transition={{ delay: (index % 3) * 0.06 }}
+                                className="flex min-h-28 items-center justify-between gap-4 rounded-2xl border border-brand-yellow/20 bg-white p-5 shadow-sm"
+                            >
+                                <div className="flex min-w-0 items-center gap-3">
+                                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brand-yellow/15 text-brand-yellow-vibrant">
+                                        <Wrench className="h-5 w-5" strokeWidth={2.3} />
+                                    </div>
+                                    <p className="text-sm font-black leading-snug text-brand-charcoal">{service}</p>
+                                </div>
+                                <div className="shrink-0 text-right">
+                                    <p className="text-[9px] font-black uppercase tracking-widest text-brand-charcoal/40">Precio</p>
+                                    <p className="mt-1 font-black text-brand-charcoal">{price}</p>
                                 </div>
                             </motion.div>
                         ))}
