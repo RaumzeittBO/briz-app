@@ -17,6 +17,7 @@ export default function CustomersPage() {
     const [modalMode, setModalMode] = useState<'add' | 'edit'>('add');
     const [current, setCurrent] = useState<Partial<Customer>>({});
     const [detailsCustomer, setDetailsCustomer] = useState<Customer | null>(null);
+    const isPdfDocument = (url?: string) => Boolean(url && (url.toLowerCase().includes('.pdf') || url.startsWith('data:application/pdf')));
 
     const filtered = customers.filter(c =>
         c.name.toLowerCase().includes(search.toLowerCase()) ||
@@ -248,10 +249,12 @@ export default function CustomersPage() {
                                             <p className="text-white/30 font-bold uppercase tracking-widest text-[10px] mb-3">Documento subido</p>
                                             <div className="min-h-72 rounded-2xl overflow-hidden bg-white/5 border border-white/10 flex items-center justify-center">
                                                 {detailsCustomer.documentoUrl ? (
-                                                    detailsCustomer.documentoUrl.toLowerCase().includes('.pdf') ? (
-                                                        <a href={detailsCustomer.documentoUrl} target="_blank" rel="noreferrer" className="flex flex-col items-center gap-3 text-brand-yellow font-black uppercase text-xs">
-                                                            <FileText className="w-16 h-16" /> Abrir documento PDF
-                                                        </a>
+                                                    isPdfDocument(detailsCustomer.documentoUrl) ? (
+                                                        <iframe
+                                                            src={detailsCustomer.documentoUrl}
+                                                            title={`Documento de ${detailsCustomer.name}`}
+                                                            className="h-[420px] w-full bg-white"
+                                                        />
                                                     ) : (
                                                         <a href={detailsCustomer.documentoUrl} target="_blank" rel="noreferrer" className="w-full">
                                                             <img src={detailsCustomer.documentoUrl} className="w-full max-h-[420px] object-contain" alt={`Documento de ${detailsCustomer.name}`} />

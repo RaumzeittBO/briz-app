@@ -364,6 +364,32 @@
   transition: transform 520ms ease;
 }
 
+/* Transitional light/glass layer for legacy admin screens. */
+.admin-light-theme main [class*="bg-brand-charcoal"],
+.admin-light-theme main [class*="bg-[#1A1A1A]"],
+.admin-light-theme main [class*="bg-[#151515]"],
+.admin-light-theme main [class*="bg-[#141414]"] {
+  background-color: rgba(255, 255, 255, 0.82) !important;
+  border-color: rgba(255, 210, 0, 0.22) !important;
+  color: #203253;
+}
+
+.admin-light-theme main [class*="bg-black/20"],
+.admin-light-theme main [class*="bg-black/25"],
+.admin-light-theme main [class*="bg-black/30"],
+.admin-light-theme main [class*="bg-black/40"] {
+  background-color: rgba(255, 249, 232, 0.9) !important;
+}
+
+.admin-light-theme main [class*="text-white"] {
+  color: #203253 !important;
+}
+
+.admin-light-theme main [class*="text-white/"],
+.admin-light-theme main [class*="placeholder:text-white/"] {
+  color: rgba(32, 50, 83, 0.62) !important;
+}
+
 .briz-social-icon:hover::after,
 .briz-social-icon:focus-visible::after {
   transform: translateX(140%) rotate(12deg);

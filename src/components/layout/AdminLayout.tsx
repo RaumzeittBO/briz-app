@@ -110,7 +110,7 @@ export default function AdminLayout() {
     );
 
     return (
-        <div className="min-h-screen bg-[#FFF9E8] flex">
+        <div className="admin-light-theme min-h-screen bg-[#FFF9E8] flex">
             {/* Desktop sidebar */}
             <aside className={`hidden lg:flex flex-col border-r border-brand-yellow/25 bg-white/65 backdrop-blur-xl transition-all duration-500 ease-in-out ${sidebarOpen ? 'w-72' : 'w-20'
                 }`}>
