@@ -69,6 +69,17 @@ export default function DashboardPage() {
     return Object.values(counts).sort((a, b) => b.count - a.count).slice(0, 5);
   }, [confirmedRentals]);
 
+  const topCustomers = useMemo(() => {
+    const counts: Record<string, { name: string; rentals: number; spent: number }> = {};
+    confirmedRentals.forEach(rental => {
+      const key = rental.customerCI || rental.customerPhone || rental.customerName;
+      if (!counts[key]) counts[key] = { name: rental.customerName, rentals: 0, spent: 0 };
+      counts[key].rentals += rental.quantity;
+      counts[key].spent += rental.total;
+    });
+    return Object.values(counts).sort((a, b) => b.rentals - a.rentals || b.spent - a.spent).slice(0, 5);
+  }, [confirmedRentals]);
+
   // Recent rentals chart (last 7 days)
   const chartData = useMemo(() => {
     const days: { name: string; alquileres: number; ingresos: number }[] = [];
@@ -94,13 +105,13 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-6 pb-20">
-      <div className="flex items-center justify-between border-b border-white/10 pb-5">
+      <div className="flex items-center justify-between border-b border-brand-yellow/25 pb-5">
         <div>
-          <h1 className="text-3xl font-black text-white flex items-center gap-3 tracking-tight">
-            <div className="p-2 bg-brand-yellow/10 rounded-xl"><LayoutDashboard className="w-6 h-6 text-brand-yellow"/></div>
+          <h1 className="text-3xl font-black text-brand-charcoal flex items-center gap-3 tracking-tight">
+            <div className="p-2 bg-brand-yellow/25 rounded-xl"><LayoutDashboard className="w-6 h-6 text-brand-yellow-vibrant"/></div>
             Resumen
           </h1>
-          <p className="text-white/40 text-sm font-medium">Métricas reales de tu negocio</p>
+          <p className="text-brand-charcoal/55 text-sm font-medium">Lo importante de Tienda, alquileres y clientes en un vistazo.</p>
         </div>
         <Button variant="ghost" size="sm" className="text-red-400/40 hover:text-red-400 hover:bg-red-400/10 rounded-lg text-[10px] font-bold uppercase"
           onClick={() => { if (confirm('¿Resetear TODOS los datos?')) resetAllData(); }}>
@@ -111,12 +122,12 @@ export default function DashboardPage() {
       {/* KPI Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {stats.map((s, i) => (
-          <Card key={i} className="bg-[#1A1A1A] border-white/5 rounded-xl">
+          <Card key={i} className="bg-white/75 backdrop-blur border-brand-yellow/20 rounded-2xl shadow-sm">
             <CardContent className="p-5 flex items-center gap-3">
               <div className={`p-2.5 rounded-xl ${s.color}`}><s.icon className="w-5 h-5"/></div>
               <div>
-                <p className="text-3xl font-black text-white">{s.value}</p>
-                <p className="text-[10px] font-bold text-white/40 uppercase tracking-wider">{s.label}</p>
+                <p className="text-3xl font-black text-brand-charcoal">{s.value}</p>
+                <p className="text-[10px] font-bold text-brand-charcoal/50 uppercase tracking-wider">{s.label}</p>
               </div>
             </CardContent>
           </Card>
@@ -130,12 +141,12 @@ export default function DashboardPage() {
           { period: 'Semana', r: rentalsWeek, s: salesWeek, i: incomeWeek },
           { period: 'Mes', r: rentalsMonth, s: salesMonth, i: incomeMonth },
         ].map((p, idx) => (
-          <Card key={idx} className="bg-[#1A1A1A] border-white/5 rounded-xl">
+          <Card key={idx} className="bg-white/70 backdrop-blur border-brand-yellow/20 rounded-2xl shadow-sm">
             <CardContent className="p-5 space-y-3">
               <p className="text-[10px] font-black text-brand-yellow uppercase tracking-widest">{p.period}</p>
               <div className="grid grid-cols-3 gap-2 text-center">
-                <div><p className="text-xl font-black text-white">{p.r}</p><p className="text-[9px] text-white/30 font-bold uppercase">Alquileres</p></div>
-                <div><p className="text-xl font-black text-white">{p.s}</p><p className="text-[9px] text-white/30 font-bold uppercase">Ventas</p></div>
+                <div><p className="text-xl font-black text-brand-charcoal">{p.r}</p><p className="text-[9px] text-brand-charcoal/45 font-bold uppercase">Alquileres</p></div>
+                <div><p className="text-xl font-black text-brand-charcoal">{p.s}</p><p className="text-[9px] text-brand-charcoal/45 font-bold uppercase">Ventas</p></div>
                 <div><p className="text-xl font-black text-brand-yellow">Bs.{p.i}</p><p className="text-[9px] text-white/30 font-bold uppercase">Ingresos</p></div>
               </div>
             </CardContent>
@@ -226,6 +237,21 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
       </div>
+
+      <Card className="bg-white/75 backdrop-blur border-brand-yellow/20 rounded-2xl shadow-sm overflow-hidden">
+        <CardHeader className="border-b border-brand-yellow/15 pb-3">
+          <CardTitle className="text-brand-charcoal text-sm font-bold"><Users className="w-4 h-4 inline mr-2 text-brand-cyan"/>Clientes que más alquilan</CardTitle>
+        </CardHeader>
+        <CardContent className="pt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+          {topCustomers.length > 0 ? topCustomers.map((customer, index) => (
+            <div key={customer.name} className="rounded-xl bg-[#FFF9E8] border border-brand-yellow/15 p-4">
+              <p className="text-[10px] font-black text-brand-cyan uppercase tracking-widest">Top {index + 1}</p>
+              <p className="mt-2 font-black text-brand-charcoal truncate">{customer.name}</p>
+              <p className="mt-1 text-xs font-bold text-brand-charcoal/55">{customer.rentals} alquiler{customer.rentals === 1 ? '' : 'es'} · Bs. {customer.spent}</p>
+            </div>
+          )) : <p className="col-span-full py-6 text-center text-sm font-bold text-brand-charcoal/45">Aún no hay alquileres confirmados.</p>}
+        </CardContent>
+      </Card>
     </div>
   );
 }

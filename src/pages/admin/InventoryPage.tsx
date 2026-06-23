@@ -247,17 +247,17 @@ export default function InventoryPage() {
   };
 
   const ItemRow = ({item, type, openEdit, setDeleteConfirm}:{item:InventoryItem; type:'bike'|'accessory'; openEdit:any; setDeleteConfirm:any}) => (
-    <div className="flex items-center gap-4 p-4 bg-white/[0.02] rounded-2xl border border-white/5 hover:border-white/10 transition-all">
-      <div className="w-14 h-14 bg-black/40 rounded-xl overflow-hidden flex items-center justify-center border border-white/10 shrink-0">
-        {item.imageUrl ? <img src={item.imageUrl} alt={item.name} className="w-full h-full object-cover"/> : <ImageIcon className="w-5 h-5 text-white/20"/>}
+    <div className="flex items-center gap-4 p-4 bg-white/75 backdrop-blur rounded-2xl border border-brand-yellow/20 hover:border-brand-yellow/60 transition-all shadow-sm">
+      <div className="w-14 h-14 bg-[#FFF9E8] rounded-xl overflow-hidden flex items-center justify-center border border-brand-yellow/20 shrink-0">
+        {item.imageUrl ? <img src={item.imageUrl} alt={item.name} className="w-full h-full object-cover"/> : <ImageIcon className="w-5 h-5 text-brand-charcoal/30"/>}
       </div>
       <div className="flex-1 min-w-0">
-        <p className="text-white font-black text-sm truncate">{item.name}</p>
+        <p className="text-brand-charcoal font-black text-sm truncate">{item.name}</p>
         <div className="flex flex-wrap gap-1 mt-1">
           {item.hasWheelSizes && item.wheelSizes ? item.wheelSizes.map(ws=>(
             <Badge key={ws.size} className="bg-brand-yellow/10 text-brand-yellow border-brand-yellow/20 text-[9px] font-bold rounded-md">Aro {ws.size}: {ws.stock}</Badge>
           )) : (
-            <span className="text-brand-yellow font-black text-lg">{item.stock ?? 0}</span>
+            <span className="text-brand-charcoal font-black text-lg">Stock: {item.stock ?? 0}</span>
           )}
         </div>
       </div>
@@ -265,7 +265,7 @@ export default function InventoryPage() {
         {item.active?'Activo':'Inactivo'}
       </Badge>
       <div className="flex gap-1 shrink-0">
-        <Button variant="ghost" size="icon" className="w-9 h-9 rounded-xl bg-white/5 text-white/50 hover:bg-brand-yellow hover:text-brand-black" onClick={()=>openEdit(item,type)}><Edit className="w-4 h-4"/></Button>
+        <Button variant="ghost" size="icon" className="w-9 h-9 rounded-xl bg-brand-yellow/15 text-brand-charcoal hover:bg-brand-yellow" onClick={()=>openEdit(item,type)}><Edit className="w-4 h-4"/></Button>
         <Button variant="ghost" size="icon" className="w-9 h-9 rounded-xl bg-white/5 text-red-400/60 hover:bg-red-500 hover:text-white" onClick={()=>setDeleteConfirm({id:item.id, type, name:item.name})}><Trash2 className="w-4 h-4"/></Button>
       </div>
     </div>
@@ -273,26 +273,26 @@ export default function InventoryPage() {
 
   return (
     <div className="space-y-6 pb-20">
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-white/10 pb-5">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-brand-yellow/25 pb-5">
         <div>
-          <h1 className="text-3xl font-black text-white tracking-tight">Inventario</h1>
-          <p className="text-white/40 text-sm font-medium">Gestiona bicicletas, accesorios y productos combinados</p>
+          <h1 className="text-3xl font-black text-brand-charcoal tracking-tight">Inventario</h1>
+          <p className="text-brand-charcoal/55 text-sm font-medium">Consulta stock, categoría y disponibilidad de un vistazo.</p>
         </div>
         <div className="relative w-full sm:w-72">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30"/>
-          <Input placeholder="Buscar..." value={search} onChange={e=>setSearch(e.target.value)} className="pl-9 bg-brand-charcoal border-white/10 h-10 rounded-xl text-sm font-bold text-white"/>
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-brand-charcoal/35"/>
+          <Input placeholder="Buscar producto..." value={search} onChange={e=>setSearch(e.target.value)} className="pl-9 bg-white/75 border-brand-yellow/25 h-11 rounded-xl text-sm font-bold text-brand-charcoal"/>
         </div>
       </div>
 
       <Tabs value={tab} onValueChange={setTab} className="space-y-4">
-        <TabsList className="bg-brand-charcoal border border-white/10 p-1 rounded-xl h-auto flex flex-wrap">
-          <TabsTrigger value="bikes" className="rounded-lg px-4 py-2 text-xs font-black data-[state=active]:bg-brand-yellow data-[state=active]:text-brand-black flex items-center gap-2">
+        <TabsList className="bg-white/70 border border-brand-yellow/25 p-1.5 rounded-xl h-auto flex flex-wrap gap-1">
+          <TabsTrigger value="bikes" className="rounded-lg px-4 py-2 text-xs font-black text-brand-charcoal/60 data-[state=active]:bg-brand-yellow data-[state=active]:text-brand-black flex items-center gap-2">
             <Bike className="w-4 h-4"/> Bicicletas ({bikes.length})
           </TabsTrigger>
-          <TabsTrigger value="accessories" className="rounded-lg px-4 py-2 text-xs font-black data-[state=active]:bg-brand-yellow data-[state=active]:text-brand-black flex items-center gap-2">
+          <TabsTrigger value="accessories" className="rounded-lg px-4 py-2 text-xs font-black text-brand-charcoal/60 data-[state=active]:bg-brand-yellow data-[state=active]:text-brand-black flex items-center gap-2">
             <Wrench className="w-4 h-4"/> Accesorios ({accessories.length})
           </TabsTrigger>
-          <TabsTrigger value="combos" className="rounded-lg px-4 py-2 text-xs font-black data-[state=active]:bg-brand-yellow data-[state=active]:text-brand-black flex items-center gap-2">
+          <TabsTrigger value="combos" className="rounded-lg px-4 py-2 text-xs font-black text-brand-charcoal/60 data-[state=active]:bg-brand-yellow data-[state=active]:text-brand-black flex items-center gap-2">
             <Layers className="w-4 h-4"/> Combinados ({combos.length})
           </TabsTrigger>
         </TabsList>

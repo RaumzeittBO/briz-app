@@ -110,9 +110,9 @@ export default function AdminLayout() {
     );
 
     return (
-        <div className="min-h-screen bg-brand-black flex">
+        <div className="min-h-screen bg-[#FFF9E8] flex">
             {/* Desktop sidebar */}
-            <aside className={`hidden lg:flex flex-col border-r border-white/5 bg-[#0F0F0F] transition-all duration-500 ease-in-out ${sidebarOpen ? 'w-72' : 'w-20'
+            <aside className={`hidden lg:flex flex-col border-r border-brand-yellow/25 bg-white/65 backdrop-blur-xl transition-all duration-500 ease-in-out ${sidebarOpen ? 'w-72' : 'w-20'
                 }`}>
                 <SidebarContent />
             </aside>
@@ -133,7 +133,7 @@ export default function AdminLayout() {
                             animate={{ x: 0 }}
                             exit={{ x: -280 }}
                             transition={{ type: 'spring', damping: 25 }}
-                            className="fixed left-0 top-0 bottom-0 w-64 bg-brand-charcoal z-50 lg:hidden"
+                            className="fixed left-0 top-0 bottom-0 w-64 bg-[#FFF9E8] z-50 lg:hidden"
                         >
                             <SidebarContent />
                         </motion.aside>
@@ -142,9 +142,9 @@ export default function AdminLayout() {
             </AnimatePresence>
 
             {/* Main content */}
-            <div className="flex-1 flex flex-col min-w-0 bg-[#0A0A0A]">
+            <div className="flex-1 flex flex-col min-w-0 bg-[#FFF9E8]">
                 {/* Top bar */}
-                <header className="h-20 border-b border-white/5 flex items-center justify-between px-8 bg-[#0F0F0F]/50 backdrop-blur-xl sticky top-0 z-30">
+                <header className="h-20 border-b border-brand-yellow/20 flex items-center justify-between px-5 lg:px-8 bg-white/65 backdrop-blur-xl sticky top-0 z-30">
                     <button
                         onClick={() => setMobileSidebarOpen(true)}
                         className="lg:hidden text-white/40 hover:text-white p-2 hover:bg-white/5 rounded-xl transition-colors"
@@ -190,7 +190,7 @@ export default function AdminLayout() {
                 </header>
 
                 {/* Page content */}
-                <main className="flex-1 p-8 lg:p-10 overflow-y-auto">
+                <main className="flex-1 p-5 lg:p-8 overflow-y-auto">
                     <Outlet />
                 </main>
             </div>
