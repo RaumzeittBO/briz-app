@@ -597,68 +597,31 @@ function HeroCollage({ variant }: { variant: 'mobile' | 'desktop' }) {
             id="heroCollage"
             className={
                 isMobile
-                    ? 'relative mx-auto mt-6 mb-6 block w-[98vw] max-w-[650px] px-2 lg:hidden'
-                    : 'relative mx-auto hidden w-full max-w-none lg:ml-[-4.5rem] lg:mr-[-6rem] lg:mt-[-1rem] lg:block'
+                    ? 'relative mx-auto mt-6 mb-6 block w-full max-w-[620px] px-1 lg:hidden'
+                    : 'relative mx-auto hidden w-full max-w-none lg:ml-[-3rem] lg:mr-[-4rem] lg:mt-[-1rem] lg:block'
             }
         >
-        <motion.div
-            initial={{ opacity: 0, scale: 0.96, x: isMobile ? 0 : 20 }}
-            animate={{ opacity: 1, scale: 1, x: 0 }}
-            transition={{ duration: 0.85, delay: 0.08, ease: 'easeOut' }}
-        >
             <motion.div
-                className="absolute left-[20%] top-[-6%] h-28 w-28 rounded-full border-2 border-brand-yellow/35 opacity-80 sm:h-48 sm:w-48"
-                animate={{ rotate: 360, scale: [1, 1.06, 1] }}
-                transition={{ rotate: { duration: 22, repeat: Infinity, ease: 'linear' }, scale: { duration: 5, repeat: Infinity, ease: 'easeInOut' } }}
-            />
-            <div className="absolute left-[25%] top-[-2%] h-20 w-20 rounded-full bg-brand-yellow/35 blur-2xl sm:h-32 sm:w-32" />
-            <svg className="absolute left-[4%] top-[2%] hidden h-44 w-36 text-[#C69F08]/45 sm:block" viewBox="0 0 120 160" fill="none" aria-hidden="true">
-                <path d="M58 154C43 104 47 55 84 8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-                <path d="M60 88C30 77 18 58 23 35" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-                <path d="M66 69C89 61 101 43 102 20" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-            </svg>
-            <motion.div
-                whileHover={{ scale: 1.025, y: -5, rotate: 0.25 }}
-                animate={{ y: [0, -10, 0], rotate: [0.35, -0.25, 0.35] }}
-                transition={{
-                    y: { duration: 6.2, repeat: Infinity, ease: 'easeInOut' },
-                    rotate: { duration: 6.2, repeat: Infinity, ease: 'easeInOut' },
-                    scale: { duration: 0.25 },
-                }}
-                className={isMobile ? 'relative mx-auto w-full' : 'relative ml-auto w-[min(74vw,1040px)] xl:w-[min(72vw,1120px)]'}
+                initial={{ opacity: 0, scale: 0.94, x: isMobile ? 0 : 20 }}
+                animate={{ opacity: 1, scale: 1, x: 0 }}
+                transition={{ duration: 0.85, delay: 0.08, ease: 'easeOut' }}
+                className={`hero-showcase-frame ${isMobile ? 'hero-showcase-mobile' : 'hero-showcase-desktop'}`}
             >
-                <SmartImage
-                    src={`${assetBase}/hero-collage-principal.webp?v=3`}
-                    fallbackSrcs={[`/menu-principal-celular/hero-collage-principal.webp?v=3`]}
-                    alt="Collage principal de bicicletas y experiencias Briz"
-                    placeholderLabel="hero-collage-principal.webp"
-                    loading="eager"
-                    fetchPriority="high"
-                    className="block h-auto w-full object-contain drop-shadow-[0_30px_40px_rgba(82,57,0,0.22)]"
-                    placeholderClassName="aspect-[1.25/1] rounded-[2.4rem] bg-[linear-gradient(135deg,#FFF4B8,#FFFDF3_48%,#DFF3EF)] shadow-[0_28px_70px_rgba(106,74,0,0.16)]"
-                />
-                <motion.span
-                    className="absolute bottom-[5%] left-[18%] -z-10 h-[34%] w-[70%] rounded-full bg-brand-yellow/35 blur-3xl"
-                    animate={{ scale: [0.9, 1.08, 0.9], opacity: [0.32, 0.64, 0.32] }}
-                    transition={{ duration: 5.8, repeat: Infinity, ease: 'easeInOut' }}
-                    aria-hidden="true"
-                />
+                <span className="hero-showcase-glow" aria-hidden="true" />
+                <span className="hero-showcase-spark hero-showcase-spark-one" aria-hidden="true" />
+                <span className="hero-showcase-spark hero-showcase-spark-two" aria-hidden="true" />
+                <span className="hero-showcase-spark hero-showcase-spark-three" aria-hidden="true" />
+                <div className="hero-showcase-inner">
+                    <img
+                        src="/WEB.png"
+                        alt="Experiencias Briz sobre dos ruedas en Cochabamba"
+                        className="hero-showcase-image"
+                        loading="eager"
+                        fetchPriority="high"
+                    />
+                </div>
+                <span className="hero-showcase-bike" aria-hidden="true"><Bike /></span>
             </motion.div>
-            <motion.div
-                animate={{ y: [0, -9, 0], rotate: [0, -6, 0] }}
-                transition={{ duration: 4.4, repeat: Infinity, ease: 'easeInOut' }}
-                className="absolute bottom-[8%] left-[4%] hidden sm:grid h-12 w-12 place-items-center rounded-full bg-brand-yellow text-white shadow-[0_12px_26px_rgba(135,97,0,0.2)] ring-4 ring-white sm:h-14 sm:w-14"
-            >
-                <Bike className="h-6 w-6 sm:h-7 sm:w-7" />
-            </motion.div>
-            <motion.div
-                animate={{ y: [0, 8, 0], rotate: [0, 8, 0] }}
-                transition={{ duration: 4.9, repeat: Infinity, ease: 'easeInOut', delay: 0.3 }}
-                className="absolute right-[5%] top-[14%] hidden sm:grid h-11 w-11 place-items-center rounded-full bg-[#67B852] text-white shadow-[0_12px_24px_rgba(39,104,28,0.2)] ring-4 ring-white sm:h-12 sm:w-12"
-            >
-                <Sparkles className="h-5 w-5 sm:h-6 sm:w-6" />
-            </motion.div>
-        </motion.div>
         </EditableLayer>
     );
 }
