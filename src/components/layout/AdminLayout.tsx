@@ -40,19 +40,19 @@ export default function AdminLayout() {
     const SidebarContent = () => (
         <div className="flex flex-col h-full">
             {/* Logo */}
-            <div className="p-6 flex items-center justify-between border-b border-white/5 mb-2">
+            <div className="p-6 flex items-center justify-between border-b border-brand-yellow/20 mb-2">
                 <Link to="/admin" className="flex items-center gap-3">
-                    <div className="p-1 bg-white/[0.03] border border-white/10 rounded-xl">
+                    <div className="p-1 bg-white border border-brand-yellow/25 rounded-xl">
                         <img src="/images/briz-logo.jpg" alt="Briz" className="h-10 w-10 rounded-full object-cover" />
                     </div>
                     {sidebarOpen && (
                         <div className="leading-none">
-                            <span className="text-lg font-black text-white tracking-tighter">Briz <span className="text-brand-yellow">OS</span></span>
-                            <p className="text-[8px] font-bold text-white/30 tracking-widest uppercase mt-1">Management Portal</p>
+                            <span className="text-lg font-black text-brand-charcoal tracking-tighter">Briz <span className="text-brand-yellow-vibrant">OS</span></span>
+                            <p className="text-[8px] font-bold text-brand-charcoal/45 tracking-widest uppercase mt-1">Panel administrativo</p>
                         </div>
                     )}
                 </Link>
-                <button onClick={() => setSidebarOpen(!sidebarOpen)} className="hidden lg:block text-white/20 hover:text-white transition-colors">
+                <button onClick={() => setSidebarOpen(!sidebarOpen)} className="hidden lg:block text-brand-charcoal/35 hover:text-brand-charcoal transition-colors">
                     <ChevronLeft className={`w-5 h-5 transition-transform duration-500 ${!sidebarOpen ? 'rotate-180' : ''}`} />
                 </button>
             </div>
@@ -70,7 +70,7 @@ export default function AdminLayout() {
                             className={`flex items-center gap-4 px-4 py-3.5 rounded-2xl text-xs font-black uppercase tracking-widest transition-all duration-300 group
                                 ${active 
                                     ? 'bg-brand-yellow text-brand-black shadow-[0_10px_30px_rgba(255,210,0,0.2)]' 
-                                    : 'text-white/30 hover:text-white hover:bg-white/[0.03]'
+                                    : 'text-brand-charcoal/60 hover:text-brand-charcoal hover:bg-white/70'
                                 }`}
                         >
                             <Icon className={`w-5 h-5 flex-shrink-0 transition-transform duration-300 ${active ? 'scale-110' : 'group-hover:scale-110'}`} />
@@ -90,10 +90,10 @@ export default function AdminLayout() {
             </nav>
 
             {/* Bottom Actions */}
-            <div className="p-5 border-t border-white/5 space-y-2">
+            <div className="p-5 border-t border-brand-yellow/20 space-y-2">
                 <Link
                     to="/"
-                    className="flex items-center gap-4 px-4 py-3.5 rounded-2xl text-[10px] uppercase tracking-[0.2em] font-black text-white/30 hover:text-white hover:bg-white/[0.03] transition-all group"
+                    className="flex items-center gap-4 px-4 py-3.5 rounded-2xl text-[10px] uppercase tracking-[0.2em] font-black text-brand-charcoal/55 hover:text-brand-charcoal hover:bg-white/70 transition-all group"
                 >
                     <LogOut className="w-5 h-5 transition-transform group-hover:-translate-x-1" strokeWidth={3} />
                     {(sidebarOpen || mobileSidebarOpen) && <span>Portal Público</span>}
@@ -147,12 +147,12 @@ export default function AdminLayout() {
                 <header className="h-20 border-b border-brand-yellow/20 flex items-center justify-between px-5 lg:px-8 bg-white/65 backdrop-blur-xl sticky top-0 z-30">
                     <button
                         onClick={() => setMobileSidebarOpen(true)}
-                        className="lg:hidden text-white/40 hover:text-white p-2 hover:bg-white/5 rounded-xl transition-colors"
+                        className="lg:hidden text-brand-charcoal/55 hover:text-brand-charcoal p-2 hover:bg-brand-yellow/15 rounded-xl transition-colors"
                     >
                         <Menu className="w-6 h-6" />
                     </button>
                     <div className="hidden lg:flex items-center">
-                        <h2 className="text-white/20 font-black uppercase tracking-[0.3em] text-[10px]">Briz Management Console v2.0</h2>
+                        <h2 className="text-brand-charcoal/40 font-black uppercase tracking-[0.3em] text-[10px]">Briz Panel de Gestión</h2>
                     </div>
                     <div className="flex items-center gap-6">
                         <Button
@@ -166,7 +166,7 @@ export default function AdminLayout() {
                         <Button 
                             variant="ghost" 
                             size="icon" 
-                            className="text-white/40 hover:text-white hover:bg-white/5 relative w-11 h-11 rounded-xl transition-all"
+                            className="text-brand-charcoal/50 hover:text-brand-charcoal hover:bg-brand-yellow/15 relative w-11 h-11 rounded-xl transition-all"
                             onClick={() => {
                                 if (totalNotifications === 0) alert('No hay notificaciones nuevas');
                                 else alert(`Tienes ${totalNotifications} notificaciones nuevas`);
@@ -177,13 +177,13 @@ export default function AdminLayout() {
                         </Button>
                         <div className="flex items-center gap-3 pl-2 group cursor-pointer">
                             <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-brand-yellow to-brand-yellow/50 p-[1px] shadow-lg shadow-brand-yellow/10">
-                                <div className="w-full h-full bg-[#1A1A1A] rounded-[14px] flex items-center justify-center">
-                                    <span className="text-brand-yellow text-xs font-black">AD</span>
+                                <div className="w-full h-full bg-white rounded-[14px] flex items-center justify-center">
+                                    <span className="text-brand-yellow-vibrant text-xs font-black">AD</span>
                                 </div>
                             </div>
                             <div className="hidden sm:block leading-none">
-                                <p className="text-sm font-black text-white">Administrador</p>
-                                <p className="text-[10px] font-bold text-white/30 uppercase tracking-widest mt-1">Super User</p>
+                                <p className="text-sm font-black text-brand-charcoal">Administrador</p>
+                                <p className="text-[10px] font-bold text-brand-charcoal/45 uppercase tracking-widest mt-1">Panel Briz</p>
                             </div>
                         </div>
                     </div>
