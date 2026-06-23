@@ -9,7 +9,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { useStore } from '@/context/StoreContext';
 import type { ServiceOrder } from '@/context/StoreContext';
-import { Plus, Trash2, Wrench, Calendar, DollarSign, Pen } from 'lucide-react';
+import { Plus, Trash2, Wrench, Calendar, DollarSign, Pen, Image } from 'lucide-react';
 
 const statusColors: Record<string, string> = {
     'Recibido': 'bg-blue-500/15 text-blue-500 border-blue-500/20 text-xs',
@@ -152,6 +152,16 @@ export default function AdminServicePage() {
                                             </TableCell>
                                             <TableCell className="text-right pr-6 py-4">
                                                 <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                    {so.bikeImageUrl && (
+                                                        <Button
+                                                            variant="ghost"
+                                                            size="sm"
+                                                            onClick={() => handleOpenModal(so)}
+                                                            className="h-9 rounded-full px-3 text-brand-yellow hover:bg-brand-yellow hover:text-brand-charcoal"
+                                                        >
+                                                            <Image className="mr-1.5 h-4 w-4" /> Foto
+                                                        </Button>
+                                                    )}
                                                     <Button
                                                         variant="ghost"
                                                         size="sm"
@@ -303,6 +313,17 @@ export default function AdminServicePage() {
                                 </div>
                             </div>
                         </div>
+
+                        {currentOrder.bikeImageUrl && (
+                            <div className="rounded-2xl border border-brand-yellow/20 bg-white/5 p-4">
+                                <div className="mb-3 flex items-center gap-2 text-sm font-black text-brand-yellow">
+                                    <Image className="h-4 w-4" /> Foto de la bicicleta
+                                </div>
+                                <a href={currentOrder.bikeImageUrl} target="_blank" rel="noreferrer" className="block overflow-hidden rounded-xl">
+                                    <img src={currentOrder.bikeImageUrl} alt={`Bicicleta de ${currentOrder.customer || 'cliente'}`} className="max-h-72 w-full object-contain" />
+                                </a>
+                            </div>
+                        )}
 
                         <DialogFooter className="pt-6 mt-4 border-t border-white/5 flex gap-3">
                             <Button type="button" variant="ghost" onClick={() => setIsModalOpen(false)} className="hover:bg-white/5 h-12 px-6">Cancelar</Button>

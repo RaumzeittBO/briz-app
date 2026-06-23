@@ -1,11 +1,13 @@
 import { useState } from 'react';
+import type { ChangeEvent, FormEvent } from 'react';
 import { motion } from 'framer-motion';
-import { Wrench, CheckCircle, Clock, Shield, Star, XCircle, ShoppingCart, Trash2, Plus } from 'lucide-react';
+import { Wrench, CheckCircle, Clock, Shield, Star, XCircle, ShoppingCart, Trash2, Plus, ImagePlus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { useStore } from '@/context/StoreContext';
 
 const fadeUp = {
     initial: { opacity: 0, y: 30 },
@@ -19,7 +21,7 @@ const maintenancePlans = [
         name: 'Plan 1',
         title: 'Regulado general',
         price: '50 - 70',
-        ideal: 'Bicicletas que funcionan correctamente pero necesitan ajustes y calibración general.',
+        ideal: 'Ideal para bicicletas con componentes en buen estado que requieren regulado para su buen funcionamiento.',
         includes: [
             'Diagnóstico rápido externo',
             'Ajuste de ejes',
@@ -100,6 +102,19 @@ const extraServices = [
     ['Regulado de frenos', '10 - 15 Bs'],
 ];
 
+const popularServices = [
+    maintenancePlans[0],
+    maintenancePlans[1],
+    {
+        name: 'Servicio 3',
+        title: 'Blindaje antipinchazo',
+        price: '150',
+        ideal: 'Protección para ambas llantas, ideal para reducir pinchazos durante tus recorridos.',
+        includes: ['Aplicación de blindaje antipinchazo en ambas llantas'],
+        excludes: ['Reparación de llantas dañadas', 'Cámaras o cubiertas nuevas'],
+    },
+];
+
 type QuoteItem = { id: string; name: string; price: string };
 
 function priceRange(price: string) {
@@ -110,7 +125,11 @@ function priceRange(price: string) {
 export default function ServicePage() {
     const [selectedPlanIndex, setSelectedPlanIndex] = useState(0);
     const [quoteItems, setQuoteItems] = useState<QuoteItem[]>([]);
-    const selectedPlan = maintenancePlans[selectedPlanIndex];
+    const [request, setRequest] = useState({ name: '', phone: '', bikeType: '', issue: '', date: '' });
+    const [bikeImageUrl, setBikeImageUrl] = useState('');
+    const [isSending, setIsSending] = useState(false);
+    const { addServiceOrder } = useStore();
+    const selectedPlan = popularServices[selectedPlanIndex];
     const quoteTotal = quoteItems.reduce((total, item) => {
         const range = priceRange(item.price);
         return { min: total.min + range.min, max: total.max + range.max };
@@ -118,6 +137,48 @@ export default function ServicePage() {
     const addToQuote = (item: QuoteItem) => setQuoteItems(current => current.some(entry => entry.id === item.id) ? current : [...current, item]);
     const removeFromQuote = (id: string) => setQuoteItems(current => current.filter(item => item.id !== id));
     const quoteLink = `https://wa.me/59177860277?text=${encodeURIComponent(`Hola Briz, deseo una cotización mecánica.\n\nServicios:\n${quoteItems.map(item => `- ${item.name}: Bs. ${item.price}`).join('\n')}\n\nTotal estimado: Bs. ${quoteTotal.min}${quoteTotal.max !== quoteTotal.min ? ` - ${quoteTotal.max}` : ''}`)}`;
+
+    const handleBikeImage = (event: ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0];
+        if (!file) return;
+        if (!file.type.startsWith('image/')) { alert('Selecciona una imagen de la bicicleta.'); event.target.value = ''; return; }
+        const reader = new FileReader();
+        reader.onload = () => {
+            const image = new Image();
+            image.onload = () => {
+                const maxSide = 900;
+                const scale = Math.min(1, maxSide / Math.max(image.width, image.height));
+                const canvas = document.createElement('canvas');
+                canvas.width = Math.max(1, Math.round(image.width * scale));
+                canvas.height = Math.max(1, Math.round(image.height * scale));
+                const context = canvas.getContext('2d');
+                if (!context) return;
+                context.drawImage(image, 0, 0, canvas.width, canvas.height);
+                setBikeImageUrl(canvas.toDataURL('image/jpeg', 0.78));
+            };
+            image.src = String(reader.result || '');
+        };
+        reader.readAsDataURL(file);
+    };
+
+    const handleRequest = async (event: FormEvent<HTMLFormElement>) => {
+        event.preventDefault();
+        setIsSending(true);
+        try {
+            await addServiceOrder({
+                customer: request.name, phone: request.phone, bikeType: request.bikeType, issue: request.issue,
+                status: 'Recibido', estimatedDelivery: request.date || new Date().toISOString().slice(0, 10),
+                costEstimate: 0, notes: quoteItems.length ? `Servicios solicitados: ${quoteItems.map(item => item.name).join(', ')}` : '',
+                bikeImageUrl: bikeImageUrl || undefined,
+            });
+            setRequest({ name: '', phone: '', bikeType: '', issue: '', date: '' });
+            setBikeImageUrl(''); setQuoteItems([]);
+            alert('Solicitud enviada. Te contactaremos para confirmar tu turno.');
+        } catch (error) {
+            console.error('Error al agendar servicio:', error);
+            alert('No pudimos enviar la solicitud. Intenta nuevamente.');
+        } finally { setIsSending(false); }
+    };
 
     return (
         <div className="pt-[64px] lg:pt-[86px]">
@@ -132,20 +193,11 @@ export default function ServicePage() {
                         transition={{ duration: 0.7, ease: 'easeOut' }}
                         className="group relative overflow-hidden rounded-[2rem] bg-brand-charcoal shadow-[0_28px_80px_rgba(0,0,0,0.12)] sm:rounded-[2.6rem]"
                     >
-                        <div className="absolute inset-0 z-10 bg-gradient-to-r from-black/70 via-black/20 to-transparent" />
                         <img
                             src="/images/mechanics-hero-briz.jpg"
                             alt="Taller mecanico Briz"
                             className="h-[340px] w-full object-cover transition duration-700 group-hover:scale-105 sm:h-[430px] lg:h-[500px]"
                         />
-                        <div className="absolute inset-x-4 bottom-4 z-20 rounded-[1.5rem] border border-white/18 bg-white/10 p-5 text-white shadow-2xl backdrop-blur-md sm:inset-x-8 sm:bottom-8 sm:max-w-xl sm:p-7">
-                            <p className="mb-2 text-[10px] font-black uppercase tracking-[0.24em] text-brand-yellow">Taller Briz</p>
-                            <h3 className="text-3xl font-black leading-tight sm:text-5xl">Mecanica precisa para volver a rodar</h3>
-                            <p className="mt-3 text-sm font-bold leading-relaxed text-white/75 sm:text-base">
-                                Diagnostico, ajuste y mantenimiento con una vista clara antes de elegir el servicio.
-                            </p>
-                        </div>
-                        <div className="pointer-events-none absolute inset-4 z-20 rounded-[1.55rem] border border-white/0 transition duration-500 group-hover:inset-5 group-hover:border-white/30 sm:rounded-[2rem]" />
                     </motion.div>
 
                 </div>
@@ -155,12 +207,12 @@ export default function ServicePage() {
             <section className="py-12 sm:py-20 bg-white">
                 <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
                     <motion.div {...fadeUp} className="text-center mb-7 sm:mb-10">
-                        <h2 className="text-3xl sm:text-5xl font-black tracking-tight text-brand-charcoal">Planes de <span className="text-brand-yellow">Mantenimiento</span></h2>
-                        <p className="mt-3 text-sm sm:text-lg text-brand-charcoal/60 font-bold">Selecciona un plan para ver todo su alcance.</p>
+                        <h2 className="text-3xl sm:text-5xl font-black tracking-tight text-brand-charcoal">Servicios más <span className="text-brand-yellow">solicitados</span></h2>
+                        <p className="mt-3 text-sm sm:text-lg text-brand-charcoal/60 font-bold">Selecciona un servicio para ver todo su alcance.</p>
                     </motion.div>
 
-                    <div className="grid grid-cols-3 gap-2 sm:gap-4">
-                        {maintenancePlans.map((pkg, index) => {
+                    <div className="grid gap-3 sm:grid-cols-3 sm:gap-4">
+                        {popularServices.map((pkg, index) => {
                             const theme = [
                                 'bg-[#E9D7B7] text-brand-charcoal border-[#E9D7B7]',
                                 'bg-brand-cyan text-white border-brand-cyan',
@@ -172,11 +224,15 @@ export default function ServicePage() {
                                     key={pkg.name}
                                     type="button"
                                     onClick={() => setSelectedPlanIndex(index)}
-                                    className={`min-h-32 sm:min-h-40 rounded-2xl border p-3 sm:p-5 text-left transition-transform ${theme} ${active ? 'scale-[1.03] shadow-lg ring-2 ring-brand-charcoal/20' : 'opacity-80 hover:opacity-100'}`}
+                                    className={`min-h-0 rounded-2xl border p-4 text-left transition-transform sm:min-h-40 sm:p-5 ${theme} ${active ? 'shadow-lg ring-2 ring-brand-charcoal/20' : 'opacity-80 hover:opacity-100'}`}
                                 >
-                                    <p className="text-[9px] sm:text-[11px] font-black uppercase tracking-widest opacity-80">{pkg.name}</p>
-                                    <p className="mt-2 text-xs sm:text-lg font-black leading-tight line-clamp-2">{pkg.title}</p>
-                                    <p className="mt-3 text-base sm:text-2xl font-black">Bs. {pkg.price}</p>
+                                    <div className="flex items-center justify-between gap-4 sm:block">
+                                        <div>
+                                            <p className="text-[10px] font-black uppercase tracking-widest opacity-80">{pkg.name}</p>
+                                            <p className="mt-1 text-base font-black leading-tight sm:mt-2 sm:text-lg">{pkg.title}</p>
+                                        </div>
+                                        <p className="shrink-0 text-lg font-black sm:mt-3 sm:text-2xl">Bs. {pkg.price}</p>
+                                    </div>
                                 </button>
                             );
                         })}
@@ -223,11 +279,11 @@ export default function ServicePage() {
                         </div>
                         <Button
                             type="button"
-                            onClick={() => addToQuote({ id: `plan_${selectedPlanIndex}`, name: `${selectedPlan.name} - ${selectedPlan.title}`, price: selectedPlan.price })}
-                            disabled={quoteItems.some(item => item.id === `plan_${selectedPlanIndex}`)}
+                            onClick={() => addToQuote({ id: `popular_${selectedPlanIndex}`, name: `${selectedPlan.name} - ${selectedPlan.title}`, price: selectedPlan.price })}
+                            disabled={quoteItems.some(item => item.id === `popular_${selectedPlanIndex}`)}
                             className="mt-6 h-12 w-full rounded-xl bg-brand-cyan font-black text-white hover:bg-brand-cyan/85 disabled:opacity-55 sm:w-auto sm:px-8"
                         >
-                            <Plus className="mr-2 h-4 w-4" /> {quoteItems.some(item => item.id === `plan_${selectedPlanIndex}`) ? 'Añadido a cotización' : 'Añadir a cotización'}
+                            <Plus className="mr-2 h-4 w-4" /> {quoteItems.some(item => item.id === `popular_${selectedPlanIndex}`) ? 'Añadido a cotización' : 'Añadir a cotización'}
                         </Button>
                     </motion.article>
                 </div>
@@ -239,7 +295,7 @@ export default function ServicePage() {
                     <motion.div {...fadeUp} className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between mb-6 sm:mb-9">
                         <div>
                             <p className="text-[10px] font-black uppercase tracking-[0.22em] text-brand-yellow-vibrant">Mecánica Briz</p>
-                            <h2 className="mt-2 text-3xl sm:text-5xl font-black tracking-tight text-brand-charcoal">Servicios <span className="text-brand-yellow">extra</span></h2>
+                            <h2 className="mt-2 text-3xl sm:text-5xl font-black tracking-tight text-brand-charcoal">Otros <span className="text-brand-yellow">servicios</span></h2>
                         </div>
                         <p className="max-w-md text-sm font-bold leading-relaxed text-brand-charcoal/60">Puedes solicitarlos por separado o añadirlos al mantenimiento que elijas.</p>
                     </motion.div>
@@ -361,36 +417,43 @@ export default function ServicePage() {
                         <Card className="bg-white rounded-[3rem] shadow-[0_40px_100px_rgba(0,0,0,0.08)] border-0 overflow-hidden relative group">
                             <div className="absolute top-0 left-0 w-full h-3 bg-gradient-to-r from-brand-yellow via-brand-pink to-brand-charcoal" />
                             <CardContent className="p-10 sm:p-16">
-                                <form onSubmit={(e) => { e.preventDefault(); alert('¡Solicitud enviada! (Demo)'); }} className="space-y-8">
+                                <form onSubmit={handleRequest} className="space-y-8">
                                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-8">
                                         <div className="space-y-3">
                                             <Label className="text-brand-charcoal font-black text-xs uppercase tracking-widest ml-1 opacity-60">Nombre Completo</Label>
-                                            <Input placeholder="Tu nombre" required className="h-16 rounded-2xl bg-gray-50 border-0 focus-visible:ring-2 focus-visible:ring-brand-yellow/50 focus-visible:bg-white transition-all text-base font-bold shadow-inner" />
+                                            <Input value={request.name} onChange={event => setRequest(current => ({ ...current, name: event.target.value }))} placeholder="Tu nombre" required className="h-16 rounded-2xl bg-gray-50 border-0 focus-visible:ring-2 focus-visible:ring-brand-yellow/50 focus-visible:bg-white transition-all text-base font-bold shadow-inner" />
                                         </div>
                                         <div className="space-y-3">
                                             <Label className="text-brand-charcoal font-black text-xs uppercase tracking-widest ml-1 opacity-60">Teléfono WhatsApp</Label>
-                                            <Input placeholder="+591 7..." required className="h-16 rounded-2xl bg-gray-50 border-0 focus-visible:ring-2 focus-visible:ring-brand-yellow/50 focus-visible:bg-white transition-all text-base font-bold shadow-inner" />
+                                            <Input value={request.phone} onChange={event => setRequest(current => ({ ...current, phone: event.target.value }))} placeholder="+591 7..." required className="h-16 rounded-2xl bg-gray-50 border-0 focus-visible:ring-2 focus-visible:ring-brand-yellow/50 focus-visible:bg-white transition-all text-base font-bold shadow-inner" />
                                         </div>
                                     </div>
                                     <div className="space-y-3">
                                         <Label className="text-brand-charcoal font-black text-xs uppercase tracking-widest ml-1 opacity-60">Tipo de bicicleta</Label>
-                                        <Input placeholder="Ej: Mountain bike, urbana, ruta..." required className="h-16 rounded-2xl bg-gray-50 border-0 focus-visible:ring-2 focus-visible:ring-brand-yellow/50 focus-visible:bg-white transition-all text-base font-bold shadow-inner" />
+                                        <Input value={request.bikeType} onChange={event => setRequest(current => ({ ...current, bikeType: event.target.value }))} placeholder="Ej: Mountain bike, urbana, ruta..." required className="h-16 rounded-2xl bg-gray-50 border-0 focus-visible:ring-2 focus-visible:ring-brand-yellow/50 focus-visible:bg-white transition-all text-base font-bold shadow-inner" />
                                     </div>
                                     <div className="space-y-3">
                                         <Label className="text-brand-charcoal font-black text-xs uppercase tracking-widest ml-1 opacity-60">Falla o Servicio Necesitado</Label>
-                                        <Textarea placeholder="Describe brevemente qué necesita tu bicicleta..." rows={4} required className="rounded-2xl bg-gray-50 border-0 focus-visible:ring-2 focus-visible:ring-brand-yellow/50 focus-visible:bg-white transition-all text-base font-bold shadow-inner resize-none p-5" />
+                                        <Textarea value={request.issue} onChange={event => setRequest(current => ({ ...current, issue: event.target.value }))} placeholder="Describe brevemente qué necesita tu bicicleta..." rows={4} required className="rounded-2xl bg-gray-50 border-0 focus-visible:ring-2 focus-visible:ring-brand-yellow/50 focus-visible:bg-white transition-all text-base font-bold shadow-inner resize-none p-5" />
                                     </div>
                                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-8">
                                         <div className="space-y-3">
                                             <Label className="text-brand-charcoal font-black text-xs uppercase tracking-widest ml-1 opacity-60">Fecha Sugerida</Label>
-                                            <Input type="date" className="h-16 rounded-2xl bg-gray-50 border-0 focus-visible:ring-2 focus-visible:ring-brand-yellow/50 focus-visible:bg-white transition-all text-base font-bold shadow-inner" />
+                                            <Input type="date" value={request.date} onChange={event => setRequest(current => ({ ...current, date: event.target.value }))} className="h-16 rounded-2xl bg-gray-50 border-0 focus-visible:ring-2 focus-visible:ring-brand-yellow/50 focus-visible:bg-white transition-all text-base font-bold shadow-inner" />
                                         </div>
-                                        <div className="space-y-3 flex items-end">
-                                            <Button type="submit" className="w-full h-16 bg-brand-charcoal text-white hover:bg-brand-yellow hover:text-brand-black shadow-2xl hover:shadow-brand-yellow/30 hover:-translate-y-2 transition-all duration-500 rounded-2xl font-black text-xl border-0 uppercase tracking-tighter">
-                                                Agendar Ahora
-                                            </Button>
+                                        <div className="space-y-3">
+                                            <Label className="text-brand-charcoal font-black text-xs uppercase tracking-widest ml-1 opacity-60">Foto de la bicicleta</Label>
+                                            <label className="flex h-16 cursor-pointer items-center gap-3 rounded-2xl bg-gray-50 px-5 font-bold text-brand-charcoal/70 transition hover:bg-brand-yellow/10">
+                                                <ImagePlus className="h-5 w-5 text-brand-yellow-vibrant" />
+                                                <span className="truncate">{bikeImageUrl ? 'Foto seleccionada' : 'Agregar foto (opcional)'}</span>
+                                                <input type="file" accept="image/*" onChange={handleBikeImage} className="sr-only" />
+                                            </label>
                                         </div>
                                     </div>
+                                    {bikeImageUrl && <img src={bikeImageUrl} alt="Vista previa de la bicicleta" className="h-40 w-full rounded-2xl object-cover" />}
+                                    <Button disabled={isSending} type="submit" className="w-full h-16 bg-brand-charcoal text-white hover:bg-brand-yellow hover:text-brand-black shadow-2xl hover:shadow-brand-yellow/30 hover:-translate-y-2 transition-all duration-500 rounded-2xl font-black text-xl border-0 uppercase tracking-tighter disabled:opacity-60">
+                                        {isSending ? 'Agendando...' : 'Agendar Ahora'}
+                                    </Button>
                                 </form>
                             </CardContent>
                         </Card>

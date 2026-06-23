@@ -188,25 +188,25 @@ export default function CustomersPage() {
             )}
 
             <Dialog open={Boolean(detailsCustomer)} onOpenChange={(open) => !open && setDetailsCustomer(null)}>
-                <DialogContent className="max-w-5xl bg-brand-charcoal border-white/10 text-white p-0 overflow-hidden">
+                <DialogContent className="max-w-6xl max-h-[92vh] overflow-hidden border border-brand-yellow/25 bg-[#FFF9E8] p-0 text-brand-charcoal shadow-2xl">
                     {detailsCustomer && (
                         <>
-                            <DialogHeader className="p-8 pb-6 border-b border-white/5 bg-[#1A1A1A]">
-                                <DialogTitle className="text-3xl font-black text-white flex items-center gap-3 tracking-tight">
+                            <DialogHeader className="border-b border-brand-yellow/20 bg-white/75 p-5 sm:p-7">
+                                <DialogTitle className="flex items-center gap-3 text-2xl font-black tracking-tight text-brand-charcoal sm:text-3xl">
                                     <div className="p-2 bg-brand-yellow/10 rounded-xl">
                                         <Eye className="w-6 h-6 text-brand-yellow" strokeWidth={2.5} />
                                     </div>
                                     Detalles del cliente
                                 </DialogTitle>
                             </DialogHeader>
-                            <div className="p-8 space-y-8 max-h-[78vh] overflow-y-auto">
-                                <div className="grid lg:grid-cols-[1.2fr_0.8fr] gap-8">
+                            <div className="max-h-[78vh] space-y-6 overflow-y-auto p-4 sm:p-7">
+                                <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1.05fr_0.95fr]">
                                     <div className="space-y-5">
                                         <div>
-                                            <p className="text-white/30 font-bold uppercase tracking-widest text-[10px]">Nombre completo</p>
-                                            <h2 className="text-4xl font-black text-white mt-1">{detailsCustomer.name}</h2>
+                                            <p className="text-[10px] font-bold uppercase tracking-widest text-brand-charcoal/45">Nombre completo</p>
+                                            <h2 className="mt-1 text-3xl font-black text-brand-charcoal sm:text-4xl">{detailsCustomer.name}</h2>
                                         </div>
-                                        <div className="grid sm:grid-cols-2 gap-4">
+                                        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                                             {[
                                                 ['WhatsApp', detailsCustomer.phone],
                                                 ['CI / Documento', detailsCustomer.ci],
@@ -217,51 +217,51 @@ export default function CustomersPage() {
                                                 ['Rentas', String(rentals.filter(r => r.customerPhone === detailsCustomer.phone || r.customerCI === detailsCustomer.ci).length)],
                                                 ['Compras', String(sales.filter(s => s.customerPhone === detailsCustomer.phone || s.customerCI === detailsCustomer.ci).length)],
                                             ].map(([label, value]) => (
-                                                <div key={label} className="rounded-2xl border border-white/5 bg-white/[0.03] p-4">
-                                                    <p className="text-white/30 font-bold uppercase tracking-widest text-[10px]">{label}</p>
-                                                    <p className="text-lg font-black text-white mt-1 break-words">{value}</p>
+                                                <div key={label} className="rounded-2xl border border-brand-yellow/15 bg-white p-4 shadow-sm">
+                                                    <p className="text-[10px] font-bold uppercase tracking-widest text-brand-charcoal/45">{label}</p>
+                                                    <p className="mt-1 break-words text-base font-black text-brand-charcoal sm:text-lg">{value}</p>
                                                 </div>
                                             ))}
                                         </div>
                                         {detailsCustomer.notes && (
-                                            <div className="rounded-2xl border border-white/5 bg-white/[0.03] p-4">
-                                                <p className="text-white/30 font-bold uppercase tracking-widest text-[10px]">Notas</p>
-                                                <p className="text-base font-bold text-white/80 mt-1">{detailsCustomer.notes}</p>
+                                            <div className="rounded-2xl border border-brand-yellow/15 bg-white p-4 shadow-sm">
+                                                <p className="text-[10px] font-bold uppercase tracking-widest text-brand-charcoal/45">Notas</p>
+                                                <p className="mt-1 text-base font-bold text-brand-charcoal/80">{detailsCustomer.notes}</p>
                                             </div>
                                         )}
                                     </div>
 
                                     <div className="space-y-5">
-                                        <div className="rounded-3xl border border-white/5 bg-black/25 p-4">
-                                            <p className="text-white/30 font-bold uppercase tracking-widest text-[10px] mb-3">Foto del cliente</p>
-                                            <div className="aspect-square rounded-2xl overflow-hidden bg-white/5 border border-white/10 flex items-center justify-center">
+                                        <div className="rounded-3xl border border-brand-yellow/15 bg-white p-4 shadow-sm">
+                                            <p className="mb-3 text-[10px] font-bold uppercase tracking-widest text-brand-charcoal/45">Foto del cliente</p>
+                                            <div className="aspect-[4/3] rounded-2xl overflow-hidden bg-brand-yellow/5 border border-brand-yellow/15 flex items-center justify-center">
                                                 {detailsCustomer.autofotoUrl ? (
                                                     <a href={detailsCustomer.autofotoUrl} target="_blank" rel="noreferrer" className="w-full h-full">
                                                         <img src={detailsCustomer.autofotoUrl} className="w-full h-full object-cover" alt={`Foto de ${detailsCustomer.name}`} />
                                                     </a>
                                                 ) : (
-                                                    <User className="w-16 h-16 text-white/20" />
+                                                    <User className="w-16 h-16 text-brand-charcoal/20" />
                                                 )}
                                             </div>
                                         </div>
 
-                                        <div className="rounded-3xl border border-white/5 bg-black/25 p-4">
-                                            <p className="text-white/30 font-bold uppercase tracking-widest text-[10px] mb-3">Documento subido</p>
-                                            <div className="min-h-72 rounded-2xl overflow-hidden bg-white/5 border border-white/10 flex items-center justify-center">
+                                        <div className="rounded-3xl border border-brand-yellow/15 bg-white p-4 shadow-sm">
+                                            <p className="mb-3 text-[10px] font-bold uppercase tracking-widest text-brand-charcoal/45">Documento subido</p>
+                                            <div className="min-h-[420px] rounded-2xl overflow-hidden bg-brand-yellow/5 border border-brand-yellow/15 flex items-center justify-center">
                                                 {detailsCustomer.documentoUrl ? (
                                                     isPdfDocument(detailsCustomer.documentoUrl) ? (
                                                         <iframe
                                                             src={detailsCustomer.documentoUrl}
                                                             title={`Documento de ${detailsCustomer.name}`}
-                                                            className="h-[420px] w-full bg-white"
+                                                            className="h-[520px] w-full bg-white"
                                                         />
                                                     ) : (
                                                         <a href={detailsCustomer.documentoUrl} target="_blank" rel="noreferrer" className="w-full">
-                                                            <img src={detailsCustomer.documentoUrl} className="w-full max-h-[420px] object-contain" alt={`Documento de ${detailsCustomer.name}`} />
+                                                            <img src={detailsCustomer.documentoUrl} className="h-[520px] w-full object-contain" alt={`Documento de ${detailsCustomer.name}`} />
                                                         </a>
                                                     )
                                                 ) : (
-                                                    <FileText className="w-16 h-16 text-white/20" />
+                                                    <FileText className="w-16 h-16 text-brand-charcoal/20" />
                                                 )}
                                             </div>
                                         </div>

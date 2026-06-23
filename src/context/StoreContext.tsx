@@ -200,6 +200,7 @@ export interface ServiceOrder {
     estimatedDelivery: string;
     costEstimate: number;
     notes: string;
+    bikeImageUrl?: string;
     date: string;
 }
 
