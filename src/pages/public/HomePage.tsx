@@ -597,8 +597,8 @@ function HeroCollage({ variant }: { variant: 'mobile' | 'desktop' }) {
             id="heroCollage"
             className={
                 isMobile
-                    ? 'relative mx-auto mt-6 mb-6 block w-full max-w-[620px] px-1 lg:hidden'
-                    : 'relative mx-auto hidden w-full max-w-none lg:ml-[-3rem] lg:mr-[-4rem] lg:mt-[-1rem] lg:block'
+                    ? 'relative mx-auto mt-10 mb-12 block w-full max-w-[620px] px-1 lg:hidden'
+                    : 'relative mx-auto hidden w-full max-w-[780px] lg:ml-auto lg:mr-0 lg:mt-0 lg:block'
             }
         >
             <motion.div
@@ -641,8 +641,8 @@ function HeroSection() {
             <LeafStem className="pointer-events-none absolute left-2 top-[34rem] hidden h-36 w-20 text-brand-yellow/50 lg:block" />
             <LeafStem className="pointer-events-none absolute right-2 top-40 hidden h-44 w-24 scale-x-[-1] text-brand-yellow/50 lg:block" />
 
-            <div className="mx-auto max-w-[1400px] px-4 pb-8 sm:px-6 lg:px-10">
-                <div className="grid min-h-[690px] items-center gap-0 py-7 sm:gap-7 lg:grid-cols-[0.42fr_0.58fr] lg:gap-0 lg:py-8">
+            <div className="mx-auto max-w-[1400px] px-4 pb-12 sm:px-6 lg:px-10">
+                <div className="grid items-center gap-10 py-10 sm:gap-12 lg:min-h-[740px] lg:grid-cols-[0.44fr_0.56fr] lg:gap-12 lg:py-12">
                     <motion.div
                         initial={{ opacity: 0, x: -26 }}
                         animate={{ opacity: 1, x: 0 }}

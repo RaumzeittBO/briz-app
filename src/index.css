@@ -1308,6 +1308,18 @@
   animation: hero-showcase-shine 8s ease-in-out infinite;
 }
 
+.hero-showcase-frame::after {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  inset: 0.8rem -0.8rem -0.8rem 0.8rem;
+  border: 1px solid rgba(36, 169, 197, 0.35);
+  border-radius: inherit;
+  background: rgba(255, 255, 255, 0.16);
+  box-shadow: 0 16px 35px rgba(36, 169, 197, 0.12);
+  animation: hero-showcase-layer 6.8s ease-in-out infinite;
+}
+
 .hero-showcase-inner {
   position: relative;
   overflow: hidden;
@@ -1331,8 +1343,8 @@
 
 .hero-showcase-mobile {
   width: 100%;
-  margin-top: 1.65rem;
-  margin-bottom: 2.4rem;
+  margin-top: 2.5rem;
+  margin-bottom: 3rem;
 }
 
 .hero-showcase-desktop {
@@ -1404,6 +1416,11 @@
   62%, 100% { background-position: -50% 0; opacity: 0; }
 }
 
+@keyframes hero-showcase-layer {
+  0%, 100% { transform: translate3d(0, 0, 0); opacity: 0.45; }
+  50% { transform: translate3d(4px, 5px, 0); opacity: 0.8; }
+}
+
 @keyframes hero-showcase-glow {
   0%, 100% { opacity: 0.38; transform: scaleX(0.9); }
   50% { opacity: 0.72; transform: scaleX(1.08); }
@@ -1428,11 +1445,13 @@
 
   .hero-showcase-inner { border-radius: 1.35rem; }
   .hero-showcase-bike { right: 0.8rem; bottom: 0.8rem; }
+  .hero-showcase-frame::after { inset: 0.55rem -0.4rem -0.4rem 0.4rem; }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .hero-showcase-frame,
   .hero-showcase-frame::before,
+  .hero-showcase-frame::after,
   .hero-showcase-glow,
   .hero-showcase-bike,
   .hero-showcase-spark { animation: none; }
