@@ -942,10 +942,9 @@ function AnimatedArtworkDivider() {
 
 function AnimatedArtworkSection({ desktopSrc, mobileSrc, alt, tone }: { desktopSrc: string; mobileSrc: string; alt: string; tone: 'cream' | 'green' }) {
     return <section className={`relative isolate overflow-hidden ${tone === 'cream' ? 'bg-[#FFF7E8]' : 'bg-[#50C879]'}`}>
-        <motion.div initial={{ opacity: 0, scale: .985 }} whileInView={{ opacity: 1, scale: 1 }} viewport={{ once: true, amount: .18 }} transition={{ duration: .8, ease: 'easeOut' }} className="relative mx-auto w-full max-w-[1920px]">
-            <div className="pointer-events-none absolute inset-[1.5%] z-10 rounded-[2.5rem] border border-white/35 shadow-[inset_0_1px_0_rgba(255,255,255,.7),0_18px_60px_rgba(10,58,65,.12)]" />
-            <div className="pointer-events-none absolute inset-[3%] z-10 rounded-[2rem] border border-white/20 bg-white/[.025] backdrop-blur-[1px]" />
-            <motion.div animate={{ x: ['-25%', '125%'] }} transition={{ duration: 8, repeat: Infinity, repeatDelay: 3, ease: 'easeInOut' }} className="pointer-events-none absolute inset-y-[7%] z-10 w-[18%] rotate-[14deg] bg-gradient-to-r from-transparent via-white/18 to-transparent blur-xl" />
+        <motion.div initial={{ opacity: 0, scale: .985 }} whileInView={{ opacity: 1, scale: 1 }} viewport={{ once: true, amount: .18 }} transition={{ duration: .8, ease: 'easeOut' }} className="relative mx-auto w-full max-w-[1920px] overflow-hidden">
+            <div className="pointer-events-none absolute inset-0 z-10 bg-[linear-gradient(115deg,rgba(255,255,255,.08),transparent_24%,transparent_76%,rgba(255,255,255,.06))] shadow-[inset_0_0_50px_rgba(255,255,255,.10)]" />
+            <motion.div animate={{ x: ['-35%', '135%'] }} transition={{ duration: 10, repeat: Infinity, repeatDelay: 4, ease: 'easeInOut' }} className="pointer-events-none absolute inset-y-0 z-10 w-[15%] -skew-x-12 bg-gradient-to-r from-transparent via-white/12 to-transparent blur-lg" />
             <picture><source media="(max-width: 767px)" srcSet={mobileSrc} /><img src={desktopSrc} alt={alt} className="block h-auto w-full" loading="lazy" /></picture>
         </motion.div>
         <AnimatedArtworkDivider />
