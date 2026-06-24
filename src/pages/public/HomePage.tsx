@@ -767,6 +767,7 @@ function HeroSection() {
 
                     <HeroCollage variant="desktop" />
                 </div>
+                <ExperienceSection embedded />
             </div>
         </section>
     );
@@ -1277,13 +1278,13 @@ function BrandSection() {
     );
 }
 
-function ExperienceSection() {
+function ExperienceSection({ embedded = false }: { embedded?: boolean }) {
     return (
-        <section id="experiencias" className="relative overflow-hidden bg-[#FFFDF3] px-4 py-8 sm:px-6 sm:py-12 lg:px-8">
-            <div className="mx-auto max-w-[1200px]">
-                <motion.div {...fadeUp} className="mb-5 flex items-center justify-between gap-4 sm:mb-7">
-                    <div className="flex min-w-0 flex-1 items-center gap-4">
-                        <h2 className="shrink-0 font-tan text-2xl text-brand-black sm:text-3xl lg:text-4xl">Elige tu experiencia</h2>
+        <section id="experiencias" className={`relative overflow-hidden px-0 py-8 sm:py-12 ${embedded ? 'bg-transparent' : 'bg-[#FFFDF3]'}`}>
+            <div className="mx-auto max-w-[1320px]">
+                <motion.div {...fadeUp} className="mb-5 flex flex-col items-center justify-between gap-3 text-center sm:mb-7 sm:flex-row sm:text-left">
+                    <div className="flex min-w-0 flex-1 items-center justify-center gap-3 sm:justify-start sm:gap-4">
+                        <h2 className="shrink-0 font-tan text-2xl leading-none text-brand-black sm:text-3xl lg:text-4xl"><span className="block font-cocon text-sm font-black uppercase tracking-wider text-brand-yellow">Elige tu</span>Experiencia</h2>
                         <RouteLine className="hidden h-12 flex-1 text-brand-yellow sm:block" />
                     </div>
                     <div className="hidden gap-2 sm:flex">
@@ -1296,7 +1297,7 @@ function ExperienceSection() {
                     </div>
                 </motion.div>
 
-                <div className="-mx-4 flex snap-x gap-4 overflow-x-auto px-4 pb-3 sm:mx-0 sm:grid sm:grid-cols-2 sm:overflow-visible sm:px-0 lg:grid-cols-4">
+                <div className="grid gap-3 pb-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-4">
                     {experiences.map((experience, index) => {
                         const Icon = experience.icon;
                         return (
@@ -1306,11 +1307,11 @@ function ExperienceSection() {
                                 whileInView={{ opacity: 1, y: 0 }}
                                 viewport={{ once: true, amount: 0.25 }}
                                 transition={{ delay: index * 0.08, duration: 0.45 }}
-                                className="w-[78vw] min-w-[16rem] snap-center sm:w-auto sm:min-w-0"
+                                className="min-w-0"
                             >
                                 <Link
                                     to={experience.href}
-                                    className="group relative block aspect-[0.82/1] overflow-hidden rounded-[1.55rem] bg-[#F5ECCE] shadow-[0_16px_32px_rgba(74,50,0,0.12)] transition duration-300 hover:-translate-y-1 hover:scale-[1.02]"
+                                    className="group relative block h-20 overflow-hidden rounded-[1.15rem] bg-[#F5ECCE] shadow-[0_10px_22px_rgba(74,50,0,0.12)] transition duration-300 hover:-translate-y-1 hover:scale-[1.02] sm:aspect-[0.82/1] sm:h-auto sm:rounded-[1.55rem] sm:shadow-[0_16px_32px_rgba(74,50,0,0.12)]"
                                 >
                                     <SmartImage
                                         src={experience.image}
@@ -1321,17 +1322,17 @@ function ExperienceSection() {
                                     />
                                     <div className="absolute inset-0 bg-gradient-to-t from-black/74 via-black/16 to-transparent" />
                                     <span
-                                        className="absolute bottom-[5.2rem] left-4 grid h-12 w-12 place-items-center rounded-full text-white shadow-lg ring-3 ring-white/80"
+                                        className="absolute left-4 top-1/2 grid h-10 w-10 -translate-y-1/2 place-items-center rounded-full text-white shadow-lg ring-3 ring-white/80 sm:bottom-[5.2rem] sm:top-auto sm:h-12 sm:w-12 sm:translate-y-0"
                                         style={{ backgroundColor: experience.color }}
                                     >
                                         <Icon className="h-6 w-6" strokeWidth={2.1} />
                                     </span>
-                                    <div className="absolute inset-x-0 bottom-0 p-4 pr-16">
-                                        <h3 className="font-tangkiwood text-2xl leading-none text-white drop-shadow">{experience.title}</h3>
-                                        <p className="mt-1 font-cocon text-sm text-white/88">{experience.subtitle}</p>
+                                    <div className="absolute left-16 right-14 top-1/2 -translate-y-1/2 sm:inset-x-0 sm:bottom-0 sm:top-auto sm:translate-y-0 sm:p-4 sm:pr-16">
+                                        <h3 className="font-tangkiwood text-sm leading-none text-white drop-shadow sm:text-2xl">{experience.title}</h3>
+                                        <p className="mt-1 font-cocon text-[10px] text-white/88 sm:text-sm">{experience.subtitle}</p>
                                     </div>
-                                    <span className="absolute bottom-4 right-4 grid h-11 w-11 place-items-center rounded-full bg-white text-brand-black transition group-hover:bg-brand-yellow">
-                                        <ArrowRight className="h-5 w-5" />
+                                    <span className="absolute right-4 top-1/2 grid h-9 w-9 -translate-y-1/2 place-items-center rounded-full bg-white text-brand-black transition group-hover:bg-brand-yellow sm:bottom-4 sm:top-auto sm:h-11 sm:w-11 sm:translate-y-0">
+                                        <ArrowRight className="h-4 w-4 sm:h-5 sm:w-5" />
                                     </span>
                                 </Link>
                             </motion.div>
@@ -1732,7 +1733,7 @@ function FinalInspirationalSection() {
     );
 }
 
-function StatsStrip() {
+export function StatsStrip() {
     return (
         <section className="bg-[#FFFDF3] px-4 py-4 sm:px-6 lg:px-8">
             <motion.div {...fadeUp} className="mx-auto max-w-[1200px] rounded-[1.7rem] bg-white/74 p-4 shadow-sm ring-1 ring-brand-yellow/18 sm:p-6">
@@ -1829,11 +1830,7 @@ export default function HomePage() {
                 <ContinuousSectionDivider />
                 <FinalInspirationalSection />
                 <ContinuousSectionDivider />
-                <StatsStrip />
-                <ContinuousSectionDivider />
                 <CTABanner />
-                <ContinuousSectionDivider />
-                <ExperienceSection />
                 {designEditorEnabled ? (
                     <DesignEditorPanel
                         config={config}
