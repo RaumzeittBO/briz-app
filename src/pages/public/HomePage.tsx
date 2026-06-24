@@ -1443,7 +1443,7 @@ function CommunitySection() {
                         whileInView={{ opacity: 1, y: 0, scale: 1 }}
                         viewport={{ once: true }}
                         transition={{ duration: 0.6, ease: 'easeOut' }}
-                        className="font-tan text-[2.7rem] uppercase leading-[.95] sm:text-5xl lg:text-[5.2rem] xl:text-[6.2rem]"
+                        className="w-full max-w-full font-tan text-[1.75rem] uppercase leading-[.95] tracking-[-0.04em] sm:text-5xl sm:tracking-normal lg:text-[5.2rem] xl:text-[6.2rem]"
                         style={{ WebkitTextStroke: '2px #FFD200', color: '#063D47', textShadow: '4px 4px 0px rgba(6,61,71,0.28)' }}
                     >
                         Comunidad
