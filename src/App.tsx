@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { AuthProvider, useAuth } from '@/context/AuthContext';
+import { CommunityProvider } from '@/context/CommunityContext';
 import PublicLayout from '@/components/layout/PublicLayout';
 import AdminLayout from '@/components/layout/AdminLayout';
 
@@ -27,6 +28,7 @@ import ReportsPage from '@/pages/admin/ReportsPage';
 import SettingsPage from '@/pages/admin/SettingsPage';
 import AdminRoutesPage from '@/pages/admin/AdminRoutesPage';
 import AdminSeedPage from '@/pages/admin/AdminSeedPage';
+import AdminCommunityPage from '@/pages/admin/AdminCommunityPage';
 
 // Protected route wrapper
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -60,6 +62,7 @@ function AppRoutes() {
         <Route path="inventory" element={<InventoryPage />} />
         <Route path="sales" element={<AdminSalesPage />} />
         <Route path="service" element={<AdminServicePage />} />
+        <Route path="community" element={<AdminCommunityPage />} />
         <Route path="customers" element={<CustomersPage />} />
         <Route path="routes" element={<AdminRoutesPage />} />
         <Route path="reports" element={<ReportsPage />} />
@@ -83,12 +86,14 @@ function App() {
     <TooltipProvider>
       <StoreProvider>
         <CartProvider>
-          <BrowserRouter>
-            <ScrollToTop />
-            <AuthProvider>
-              <AppRoutes />
-            </AuthProvider>
-          </BrowserRouter>
+          <CommunityProvider>
+            <BrowserRouter>
+              <ScrollToTop />
+              <AuthProvider>
+                <AppRoutes />
+              </AuthProvider>
+            </BrowserRouter>
+          </CommunityProvider>
         </CartProvider>
       </StoreProvider>
     </TooltipProvider>
