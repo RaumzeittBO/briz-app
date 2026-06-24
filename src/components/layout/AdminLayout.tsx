@@ -3,12 +3,13 @@ import { Link, Outlet, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
     LayoutDashboard, Bike, Package, ShoppingCart, Wrench, Users, BarChart3,
-    Settings, Menu, ChevronLeft, LogOut, Bell, Lock, MapPinned
+    Settings, Menu, ChevronLeft, LogOut, Bell, Lock, MapPinned, MessagesSquare
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { useAuth } from '@/context/AuthContext';
 import { useStore } from '@/context/StoreContext';
+import { useCommunity } from '@/context/CommunityContext';
 
 export default function AdminLayout() {
     const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -16,9 +17,11 @@ export default function AdminLayout() {
     const location = useLocation();
     const { logout, setEditMode } = useAuth();
     const { rentals } = useStore();
+    const { items } = useCommunity();
 
     const pendingRentals = rentals.filter(r => r.status === 'Pendiente').length;
-    const totalNotifications = pendingRentals;
+    const pendingCommunity = items.filter(item => item.status === 'pending').length;
+    const totalNotifications = pendingRentals + pendingCommunity;
 
     const adminLinks = [
         { label: 'Dashboard', href: '/admin', icon: LayoutDashboard },
@@ -28,6 +31,7 @@ export default function AdminLayout() {
         { label: 'Servicio', href: '/admin/service', icon: Wrench },
         { label: 'Clientes', href: '/admin/customers', icon: Users },
         { label: 'Ciclotours', href: '/admin/routes', icon: MapPinned },
+        { label: 'Comunidad', href: '/admin/community', icon: MessagesSquare, badge: pendingCommunity || undefined },
         { label: 'Reportes', href: '/admin/reports', icon: BarChart3 },
         { label: 'Configuración', href: '/admin/settings', icon: Settings },
     ];
