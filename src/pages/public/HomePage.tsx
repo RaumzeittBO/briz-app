@@ -1374,10 +1374,10 @@ function CommunityReviewsCarousel() {
     };
 
     return <>
-        <div className="w-full overflow-hidden rounded-[1.5rem] border-2 border-brand-black/15 bg-[#FFFDF3]/95 py-4 shadow-[5px_5px_0_rgba(6,61,71,.18)]">
-            <div className="mb-3 flex items-center justify-between px-5"><span className="flex items-center gap-2 font-cocon text-xs font-black uppercase tracking-wider text-[#063D47]"><MessageCircleHeart className="h-4 w-4 text-brand-pink" />Voces que pedalean</span><button onClick={openReview} className="text-xs font-black text-brand-pink underline-offset-4 hover:underline">Deja tu opinión</button></div>
+        <div className="min-w-0 w-full max-w-full overflow-hidden rounded-[1.35rem] border-2 border-brand-yellow/70 bg-[#063D47] py-4 shadow-[5px_5px_0_rgba(6,61,71,.2)]">
+            <div className="mb-3 flex flex-col items-center justify-between gap-2 px-4 text-center sm:flex-row sm:px-5 sm:text-left"><span className="flex items-center gap-2 font-cocon text-xs font-black uppercase tracking-wider text-white"><MessageCircleHeart className="h-4 w-4 text-brand-pink" />Opiniones</span><button onClick={openReview} className="rounded-full bg-brand-yellow px-3 py-1.5 text-xs font-black text-brand-black transition hover:bg-white">Deja tu opinión</button></div>
             <div className="group overflow-hidden"><motion.div className="flex w-max gap-4 px-4" animate={{ x: ['0%', '-50%'] }} transition={{ duration: Math.max(38, visibleReviews.length * 13), repeat: Infinity, ease: 'linear' }}>
-                {loopedReviews.map((review, index) => <article key={`${review.id}-${index}`} className="w-[285px] shrink-0 rounded-2xl bg-white p-4 text-left shadow-sm sm:w-[330px]"><div className="flex items-center gap-1 text-brand-yellow">{Array.from({ length: review.rating || 5 }).map((_, star) => <Star key={star} className="h-3.5 w-3.5 fill-current" />)}</div><p className="mt-2 line-clamp-3 min-h-[3.75rem] font-cocon text-sm leading-relaxed text-[#063D47]">“{review.content}”</p><div className="mt-3 flex items-center gap-2 border-t border-brand-yellow/20 pt-3"><div className="grid h-7 w-7 place-items-center overflow-hidden rounded-full bg-brand-yellow/30 text-[9px] font-black">{review.authorAvatar ? <img src={review.authorAvatar} alt="" className="h-full w-full object-cover" /> : review.authorName.slice(0, 2).toUpperCase()}</div><span className="text-xs font-black text-[#063D47]/70">{review.authorName}</span></div></article>)}
+                {loopedReviews.map((review, index) => <article key={`${review.id}-${index}`} className="w-[78vw] max-w-[300px] shrink-0 rounded-2xl bg-[#FFF8DF] p-4 text-left shadow-sm sm:w-[330px] sm:max-w-none"><div className="flex items-center gap-1 text-brand-pink">{Array.from({ length: review.rating || 5 }).map((_, star) => <Star key={star} className="h-3.5 w-3.5 fill-current" />)}</div><p className="mt-2 line-clamp-3 min-h-[3.75rem] font-cocon text-sm leading-relaxed text-[#063D47]">“{review.content}”</p><div className="mt-3 flex items-center gap-2 border-t border-[#063D47]/10 pt-3"><div className="grid h-7 w-7 place-items-center overflow-hidden rounded-full bg-brand-yellow text-[9px] font-black text-brand-black">{review.authorAvatar ? <img src={review.authorAvatar} alt="" className="h-full w-full object-cover" /> : review.authorName.slice(0, 2).toUpperCase()}</div><span className="text-xs font-black text-[#063D47]/70">{review.authorName}</span></div></article>)}
             </motion.div></div>
         </div>
         <CustomerAuthModal isOpen={authOpen} onClose={() => setAuthOpen(false)} onSuccess={() => { setAuthOpen(false); setReviewOpen(true); }} />
@@ -1387,7 +1387,7 @@ function CommunityReviewsCarousel() {
 
 function CommunitySection() {
     return (
-        <section className="relative isolate overflow-hidden bg-[#62C5B0] py-20 sm:py-28 lg:py-32 px-4 sm:px-6 lg:px-8">
+        <section className="relative isolate overflow-hidden bg-[#62C5B0] px-4 py-14 sm:px-6 sm:py-24 lg:px-8 lg:py-32">
             {/* Subtle grain texture overlay */}
             <SmartImage
                 src={`${assetBase}/fondo-textura.webp`}
@@ -1435,15 +1435,15 @@ function CommunitySection() {
                 ))}
             </div>
 
-            <div className="mx-auto grid max-w-[1760px] items-center gap-12 lg:grid-cols-[minmax(0,1.7fr)_minmax(320px,.55fr)] lg:gap-8">
+            <div className="mx-auto grid max-w-[1760px] grid-cols-1 items-center gap-10 lg:grid-cols-[minmax(0,1.7fr)_minmax(320px,.55fr)] lg:gap-8">
                 {/* Left Column: Title, description, opinions carousel and button */}
-                <div className="flex flex-col items-center text-center justify-center space-y-6 lg:space-y-7 w-full max-w-none mx-auto z-10 px-0 sm:px-2 lg:pr-3">
+                <div className="relative z-10 flex min-w-0 w-full max-w-none flex-col items-center justify-center space-y-5 px-0 text-center sm:space-y-6 sm:px-2 lg:space-y-7 lg:pr-3">
                     <motion.h2
                         initial={{ opacity: 0, y: 24, scale: 0.96 }}
                         whileInView={{ opacity: 1, y: 0, scale: 1 }}
                         viewport={{ once: true }}
                         transition={{ duration: 0.6, ease: 'easeOut' }}
-                        className="font-tan uppercase text-3xl xs:text-4xl sm:text-5xl lg:text-[5.2rem] xl:text-[6.2rem] leading-[1.05]"
+                        className="font-tan text-[2.7rem] uppercase leading-[.95] sm:text-5xl lg:text-[5.2rem] xl:text-[6.2rem]"
                         style={{ WebkitTextStroke: '2px #FFD200', color: '#063D47', textShadow: '4px 4px 0px rgba(6,61,71,0.28)' }}
                     >
                         Comunidad
@@ -1454,12 +1454,12 @@ function CommunitySection() {
                         whileInView={{ opacity: 1, y: 0 }}
                         viewport={{ once: true }}
                         transition={{ duration: 0.6, delay: 0.12, ease: 'easeOut' }}
-                        className="font-cocon text-lg sm:text-2xl leading-relaxed text-[#063D47] font-bold"
+                        className="max-w-[42rem] px-1 font-cocon text-base font-bold leading-relaxed text-[#063D47] sm:text-xl lg:text-2xl"
                     >
                         Te invitamos a ser parte de una comunidad que celebra la vida en movimiento, que se enamora de cada pedaleada y que inspira cambio.
                     </motion.p>
 
-                    <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.55, delay: 0.18 }} className="w-full">
+                    <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.55, delay: 0.18 }} className="min-w-0 w-full max-w-full">
                         <CommunityReviewsCarousel />
                     </motion.div>
 
@@ -1484,7 +1484,7 @@ function CommunitySection() {
                 </div>
 
                 {/* Right Column: Polaroid Scrapbook Collage */}
-                <div className="relative mx-auto w-full max-w-[480px] lg:max-w-none px-4 sm:px-6 z-10 mt-8 lg:mt-0 flex justify-center">
+                <div className="relative z-10 mx-auto mt-3 flex w-full max-w-[360px] justify-center px-4 sm:mt-8 sm:max-w-[480px] sm:px-6 lg:mt-0 lg:max-w-none">
                     <motion.div
                         initial={{ opacity: 0, y: 30, scale: 0.96, rotate: 4 }}
                         whileInView={{ opacity: 1, y: 0, scale: 1, rotate: 2 }}

@@ -91,27 +91,27 @@ export default function ContactPage() {
         <div className="pt-[80px] lg:pt-[120px]">
 
             {/* FAQ snippet */}
-            <section className="py-24 sm:py-32 bg-white relative overflow-hidden">
+            <section className="relative overflow-hidden bg-white py-14 sm:py-32">
                 <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full h-[600px] bg-brand-yellow/5 rounded-full blur-[120px] pointer-events-none" />
-                <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
-                    <motion.div {...fadeUp} className="text-center mb-16 space-y-4">
-                        <h2 className="text-5xl sm:text-7xl font-tan text-brand-black tracking-tight leading-none">Preguntas <span className="text-brand-yellow">frecuentes</span></h2>
+                <div className="relative z-10 mx-auto max-w-4xl px-4 sm:px-6 lg:px-8">
+                    <motion.div {...fadeUp} className="mb-9 space-y-3 text-center sm:mb-16 sm:space-y-4">
+                        <h2 className="font-tan text-4xl leading-[.9] tracking-tight text-brand-black sm:text-7xl">Preguntas <span className="text-brand-yellow">frecuentes</span></h2>
                         <div className="w-24 h-2 bg-brand-yellow mx-auto rounded-full shadow-sm" />
-                        <p className="text-gray-500 font-cocon font-bold text-lg max-w-2xl mx-auto pt-4">Resolvemos tus dudas más comunes de forma rápida.</p>
+                        <p className="mx-auto max-w-2xl pt-2 font-cocon text-base font-bold text-gray-500 sm:pt-4 sm:text-lg">Resolvemos tus dudas más comunes de forma rápida.</p>
                     </motion.div>
                     <Accordion type="single" collapsible className="space-y-5">
                         {customFaqs.map((faq, i) => (
-                            <motion.div 
+                            <motion.div className="min-w-0"
                                 key={i}
                                 initial={{ opacity: 0, y: 10 }}
                                 whileInView={{ opacity: 1, y: 0 }}
                                 transition={{ delay: i * 0.1 }}
                             >
-                                <AccordionItem value={`faq-${i}`} className="bg-gray-50/50 border border-gray-100 rounded-[2rem] px-8 data-[state=open]:border-brand-yellow/30 data-[state=open]:bg-white data-[state=open]:shadow-xl transition-all duration-300">
-                                    <AccordionTrigger className="hover:text-brand-yellow hover:no-underline text-left text-lg sm:text-xl font-black py-7 !no-underline group">
+                                <AccordionItem value={`faq-${i}`} className="rounded-[1.35rem] border border-gray-100 bg-gray-50/50 px-5 transition-all duration-300 data-[state=open]:border-brand-yellow/30 data-[state=open]:bg-white data-[state=open]:shadow-xl sm:rounded-[2rem] sm:px-8">
+                                    <AccordionTrigger className="min-w-0 break-words py-5 text-left text-base font-black hover:text-brand-yellow hover:no-underline !no-underline sm:py-7 sm:text-xl">
                                         {faq.question}
                                     </AccordionTrigger>
-                                    <AccordionContent className="pb-7 leading-relaxed opacity-80">{faq.answer}</AccordionContent>
+                                    <AccordionContent className="break-words pb-5 text-sm leading-relaxed opacity-80 sm:pb-7 sm:text-base">{faq.answer}</AccordionContent>
                                 </AccordionItem>
                             </motion.div>
                         ))}
