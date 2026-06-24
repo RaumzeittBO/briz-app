@@ -864,7 +864,7 @@ function ServiceStrip() {
 
                 <EditableLayer
                     id="servicesImage"
-                    className="relative mx-auto mt-6 mb-0 block w-[96vw] max-w-[96vw] sm:w-full sm:max-w-[32rem] sm:ml-0 px-2 lg:ml-auto lg:mr-[calc((1400px-100vw)/2)] lg:mt-0 lg:w-[min(54vw,760px)] lg:max-w-none"
+                    className="relative mx-auto mt-6 mb-0 block w-[96vw] max-w-[96vw] sm:w-full sm:max-w-[32rem] sm:ml-0 px-2 lg:ml-auto lg:mr-[calc((1400px-100vw)/2)] lg:mt-0 lg:w-[min(78vw,1080px)] lg:max-w-none"
                 >
                 <motion.div
                     initial={{ opacity: 0, x: 34, scale: 0.96 }}
@@ -1835,7 +1835,6 @@ export default function HomePage() {
         >
             <div className="overflow-hidden bg-[#FFFDF3]">
                 <HeroSection />
-                <ContinuousSectionDivider />
                 <ServiceStrip />
                 <ContinuousSectionDivider />
                 <WhyChooseBrizSection />
