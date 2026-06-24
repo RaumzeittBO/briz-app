@@ -932,11 +932,9 @@ function OptionalSticker({
 }
 
 function AnimatedArtworkDivider() {
-    return <div className="pointer-events-none absolute inset-x-0 bottom-[-1px] z-20 h-7 text-brand-yellow" aria-hidden="true">
-        <svg viewBox="0 0 1440 56" preserveAspectRatio="none" className="h-full w-full" fill="none">
-            <motion.path d="M-20 31C168 2 332 54 530 28C734 1 930 53 1140 25C1256 9 1350 18 1460 6" stroke="currentColor" strokeWidth="6" strokeLinecap="round" initial={{ pathLength: 0, opacity: 0 }} whileInView={{ pathLength: 1, opacity: 1 }} viewport={{ once: true }} transition={{ duration: 1.5, ease: 'easeOut' }} />
-            <motion.path d="M-20 42C168 13 332 65 530 39C734 12 930 64 1140 36C1256 20 1350 29 1460 17" stroke="#FFFDF3" strokeWidth="2" strokeDasharray="5 12" strokeLinecap="round" initial={{ pathLength: 0 }} whileInView={{ pathLength: 1 }} viewport={{ once: true }} transition={{ duration: 2.1, delay: .18, ease: 'easeOut' }} />
-        </svg>
+    return <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 h-2 overflow-hidden bg-white/80" aria-hidden="true">
+        <motion.div className="h-1 w-full origin-left bg-brand-yellow shadow-[0_0_14px_rgba(255,210,0,.85)]" initial={{ scaleX: 0 }} whileInView={{ scaleX: 1 }} viewport={{ once: true }} transition={{ duration: 1.25, ease: 'easeOut' }} />
+        <motion.div className="h-px w-full bg-[#063D47]/35" initial={{ scaleX: 0 }} whileInView={{ scaleX: 1 }} viewport={{ once: true }} transition={{ duration: 1.55, delay: .14, ease: 'easeOut' }} />
     </div>;
 }
 
