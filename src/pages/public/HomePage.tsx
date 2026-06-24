@@ -931,19 +931,21 @@ function OptionalSticker({
     );
 }
 
-function AnimatedArtworkDivider() {
-    return <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 h-2 overflow-hidden bg-white/80" aria-hidden="true">
-        <motion.div className="h-1 w-full origin-left bg-brand-yellow shadow-[0_0_14px_rgba(255,210,0,.85)]" initial={{ scaleX: 0 }} whileInView={{ scaleX: 1 }} viewport={{ once: true }} transition={{ duration: 1.25, ease: 'easeOut' }} />
-        <motion.div className="h-px w-full bg-[#063D47]/35" initial={{ scaleX: 0 }} whileInView={{ scaleX: 1 }} viewport={{ once: true }} transition={{ duration: 1.55, delay: .14, ease: 'easeOut' }} />
+function ContinuousSectionDivider({ absolute = false }: { absolute?: boolean }) {
+    return <div className={`pointer-events-none z-20 h-2 overflow-hidden bg-brand-yellow shadow-[0_0_14px_rgba(255,210,0,.85)] ${absolute ? 'absolute inset-x-0 bottom-0' : 'relative w-full'}`} aria-hidden="true">
+        <motion.span className="absolute inset-y-0 w-[28%] bg-gradient-to-r from-transparent via-white/95 to-transparent blur-[1px]" animate={{ x: ['-130%', '460%'] }} transition={{ duration: 3.8, repeat: Infinity, ease: 'linear', repeatDelay: .8 }} />
+        <span className="absolute inset-x-0 bottom-0 h-px bg-[#063D47]/35" />
     </div>;
 }
 
+function AnimatedArtworkDivider() { return <ContinuousSectionDivider absolute />; }
+
 function AnimatedArtworkSection({ desktopSrc, mobileSrc, alt, tone }: { desktopSrc: string; mobileSrc: string; alt: string; tone: 'cream' | 'green' }) {
     return <section className={`relative isolate overflow-hidden ${tone === 'cream' ? 'bg-[#FFF7E8]' : 'bg-[#50C879]'}`}>
-        <motion.div initial={{ opacity: 0, scale: .985 }} whileInView={{ opacity: 1, scale: 1 }} viewport={{ once: true, amount: .18 }} transition={{ duration: .8, ease: 'easeOut' }} className="relative mx-auto w-full max-w-[1920px] overflow-hidden">
+        <motion.div initial={{ opacity: 0, scale: .985 }} whileInView={{ opacity: 1, scale: 1 }} viewport={{ once: true, amount: .18 }} transition={{ duration: .8, ease: 'easeOut' }} className="relative w-full max-w-none overflow-hidden">
             <div className="pointer-events-none absolute inset-0 z-10 bg-[linear-gradient(115deg,rgba(255,255,255,.08),transparent_24%,transparent_76%,rgba(255,255,255,.06))] shadow-[inset_0_0_50px_rgba(255,255,255,.10)]" />
             <motion.div animate={{ x: ['-35%', '135%'] }} transition={{ duration: 10, repeat: Infinity, repeatDelay: 4, ease: 'easeInOut' }} className="pointer-events-none absolute inset-y-0 z-10 w-[15%] -skew-x-12 bg-gradient-to-r from-transparent via-white/12 to-transparent blur-lg" />
-            <picture><source media="(max-width: 767px)" srcSet={mobileSrc} /><img src={desktopSrc} alt={alt} className="block h-auto w-full" loading="lazy" /></picture>
+            <picture><source media="(max-width: 767px)" srcSet={mobileSrc} /><img src={desktopSrc} alt={alt} className="block h-auto min-w-full w-full" loading="lazy" /></picture>
         </motion.div>
         <AnimatedArtworkDivider />
     </section>;
@@ -1818,13 +1820,19 @@ export default function HomePage() {
         >
             <div className="overflow-hidden bg-[#FFFDF3]">
                 <HeroSection />
+                <ContinuousSectionDivider />
                 <ServiceStrip />
+                <ContinuousSectionDivider />
                 <WhyChooseBrizSection />
                 <BrandSection />
                 <CommunitySection />
+                <ContinuousSectionDivider />
                 <FinalInspirationalSection />
+                <ContinuousSectionDivider />
                 <StatsStrip />
+                <ContinuousSectionDivider />
                 <CTABanner />
+                <ContinuousSectionDivider />
                 <ExperienceSection />
                 {designEditorEnabled ? (
                     <DesignEditorPanel
