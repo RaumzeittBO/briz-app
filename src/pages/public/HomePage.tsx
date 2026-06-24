@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useState, type ComponentType, type CSSProperties, type ReactNode } from 'react';
 import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
-import { useCommunity } from '@/context/CommunityContext';
+import { useCommunity, type CommunityItem } from '@/context/CommunityContext';
 import { useStore } from '@/context/StoreContext';
 import CustomerAuthModal from '@/components/layout/CustomerAuthModal';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -1349,7 +1349,14 @@ function CommunityReviewsCarousel() {
     const [message, setMessage] = useState('');
     const [sending, setSending] = useState(false);
     const reviews = items.filter(item => item.type === 'review' && item.status === 'approved');
-    const loopedReviews = reviews.length > 1 ? [...reviews, ...reviews] : reviews;
+    const demoReviews: Array<Pick<CommunityItem, 'id' | 'content' | 'rating' | 'authorName' | 'authorAvatar'>> = [
+        { id: 'demo-lucia', authorName: 'Lucía M.', rating: 5, content: 'Briz hizo que volver a pedalear por la ciudad se sienta fácil, seguro y muy divertido.' },
+        { id: 'demo-mateo', authorName: 'Mateo R.', rating: 5, content: 'Alquilamos bicis para recorrer la ciudad y fue el mejor plan de fin de semana.' },
+        { id: 'demo-andrea', authorName: 'Andrea V.', rating: 5, content: 'Me encanta que Briz conecte movimiento, comunidad y cuidado por nuestra ciudad.' },
+        { id: 'demo-diego', authorName: 'Diego P.', rating: 5, content: 'La atención fue increíble. Ya estoy organizando mi próxima rodada con amigos.' },
+    ];
+    const visibleReviews = reviews.length ? reviews : demoReviews;
+    const loopedReviews = visibleReviews.length > 1 ? [...visibleReviews, ...visibleReviews] : visibleReviews;
 
     const openReview = () => {
         if (!currentCustomer) { setAuthOpen(true); return; }
@@ -1369,9 +1376,9 @@ function CommunityReviewsCarousel() {
     return <>
         <div className="w-full overflow-hidden rounded-[1.5rem] border-2 border-brand-black/15 bg-[#FFFDF3]/95 py-4 shadow-[5px_5px_0_rgba(6,61,71,.18)]">
             <div className="mb-3 flex items-center justify-between px-5"><span className="flex items-center gap-2 font-cocon text-xs font-black uppercase tracking-wider text-[#063D47]"><MessageCircleHeart className="h-4 w-4 text-brand-pink" />Voces que pedalean</span><button onClick={openReview} className="text-xs font-black text-brand-pink underline-offset-4 hover:underline">Deja tu opinión</button></div>
-            {reviews.length ? <div className="group overflow-hidden"><motion.div className="flex w-max gap-3 px-4" animate={{ x: ['0%', '-50%'] }} transition={{ duration: Math.max(28, reviews.length * 12), repeat: Infinity, ease: 'linear' }} whileHover={{ animationPlayState: 'paused' }}>
-                {loopedReviews.map((review, index) => <article key={`${review.id}-${index}`} className="w-[255px] shrink-0 rounded-2xl bg-white p-4 text-left shadow-sm sm:w-[285px]"><div className="flex items-center gap-1 text-brand-yellow">{Array.from({ length: review.rating || 5 }).map((_, star) => <Star key={star} className="h-3.5 w-3.5 fill-current" />)}</div><p className="mt-2 line-clamp-3 min-h-[3.75rem] font-cocon text-sm leading-relaxed text-[#063D47]">“{review.content}”</p><div className="mt-3 flex items-center gap-2 border-t border-brand-yellow/20 pt-3"><div className="grid h-7 w-7 place-items-center overflow-hidden rounded-full bg-brand-yellow/30 text-[9px] font-black">{review.authorAvatar ? <img src={review.authorAvatar} alt="" className="h-full w-full object-cover" /> : review.authorName.slice(0, 2).toUpperCase()}</div><span className="text-xs font-black text-[#063D47]/70">{review.authorName}</span></div></article>)}
-            </motion.div></div> : <div className="px-5 py-3 text-center"><p className="font-cocon text-sm text-[#063D47]/75">Todavía no hay opiniones publicadas. ¿Quieres ser la primera voz de Briz?</p><button onClick={openReview} className="mt-2 font-black text-brand-pink hover:underline">Comparte tu experiencia</button></div>}
+            <div className="group overflow-hidden"><motion.div className="flex w-max gap-4 px-4" animate={{ x: ['0%', '-50%'] }} transition={{ duration: Math.max(38, visibleReviews.length * 13), repeat: Infinity, ease: 'linear' }}>
+                {loopedReviews.map((review, index) => <article key={`${review.id}-${index}`} className="w-[285px] shrink-0 rounded-2xl bg-white p-4 text-left shadow-sm sm:w-[330px]"><div className="flex items-center gap-1 text-brand-yellow">{Array.from({ length: review.rating || 5 }).map((_, star) => <Star key={star} className="h-3.5 w-3.5 fill-current" />)}</div><p className="mt-2 line-clamp-3 min-h-[3.75rem] font-cocon text-sm leading-relaxed text-[#063D47]">“{review.content}”</p><div className="mt-3 flex items-center gap-2 border-t border-brand-yellow/20 pt-3"><div className="grid h-7 w-7 place-items-center overflow-hidden rounded-full bg-brand-yellow/30 text-[9px] font-black">{review.authorAvatar ? <img src={review.authorAvatar} alt="" className="h-full w-full object-cover" /> : review.authorName.slice(0, 2).toUpperCase()}</div><span className="text-xs font-black text-[#063D47]/70">{review.authorName}</span></div></article>)}
+            </motion.div></div>
         </div>
         <CustomerAuthModal isOpen={authOpen} onClose={() => setAuthOpen(false)} onSuccess={() => { setAuthOpen(false); setReviewOpen(true); }} />
         <Dialog open={reviewOpen} onOpenChange={setReviewOpen}><DialogContent className="max-w-md rounded-[1.75rem] bg-[#FFFDF3] p-0"><DialogHeader className="rounded-t-[1.75rem] bg-brand-yellow px-7 py-6"><DialogTitle className="font-tan text-3xl uppercase text-brand-black">Tu opinión cuenta</DialogTitle><p className="text-sm font-bold text-brand-charcoal/65">La revisaremos antes de publicarla.</p></DialogHeader><form onSubmit={submitReview} className="p-7"><p className="text-xs font-black uppercase tracking-widest text-brand-charcoal/50">¿Cómo fue tu experiencia?</p><div className="mt-2 flex gap-1">{[1, 2, 3, 4, 5].map(star => <button type="button" key={star} onClick={() => setRating(star)} className={star <= rating ? 'text-brand-yellow' : 'text-brand-charcoal/20'} aria-label={`${star} estrellas`}><Star className="h-7 w-7 fill-current" /></button>)}</div><Textarea required value={message} onChange={event => setMessage(event.target.value)} rows={5} maxLength={500} className="mt-5 resize-none bg-white" placeholder="Cuéntanos qué disfrutaste de Briz..." /><button disabled={sending} className="mt-4 h-12 w-full rounded-full bg-brand-charcoal font-black text-white hover:bg-brand-black disabled:opacity-60">{sending ? 'Enviando...' : 'Enviar a revisión'}</button></form></DialogContent></Dialog>
@@ -1428,9 +1435,9 @@ function CommunitySection() {
                 ))}
             </div>
 
-            <div className="mx-auto grid max-w-[1640px] items-center gap-12 lg:grid-cols-[minmax(0,1.32fr)_minmax(360px,.68fr)] lg:gap-10">
+            <div className="mx-auto grid max-w-[1760px] items-center gap-12 lg:grid-cols-[minmax(0,1.7fr)_minmax(320px,.55fr)] lg:gap-8">
                 {/* Left Column: Title, description, opinions carousel and button */}
-                <div className="flex flex-col items-center text-center justify-center space-y-6 lg:space-y-7 w-full max-w-[920px] mx-auto z-10 px-0 sm:px-2">
+                <div className="flex flex-col items-center text-center justify-center space-y-6 lg:space-y-7 w-full max-w-none mx-auto z-10 px-0 sm:px-2 lg:pr-3">
                     <motion.h2
                         initial={{ opacity: 0, y: 24, scale: 0.96 }}
                         whileInView={{ opacity: 1, y: 0, scale: 1 }}
