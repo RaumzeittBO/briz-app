@@ -1,12 +1,18 @@
 import { createContext, useContext, useEffect, useState, type ComponentType, type CSSProperties, type ReactNode } from 'react';
 import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
+import { useCommunity, type CommunityItem } from '@/context/CommunityContext';
+import { useStore } from '@/context/StoreContext';
+import CustomerAuthModal from '@/components/layout/CustomerAuthModal';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Textarea } from '@/components/ui/textarea';
 import {
     ArrowRight,
     Bike,
     ChevronLeft,
     ChevronRight,
     HeartHandshake,
+    MessageCircleHeart,
     Map,
     MapPinned,
     Route,
@@ -1334,6 +1340,51 @@ function RouteLine({ className = '' }: { className?: string }) {
     );
 }
 
+function CommunityReviewsCarousel() {
+    const { items, createItem } = useCommunity();
+    const { currentCustomer } = useStore();
+    const [authOpen, setAuthOpen] = useState(false);
+    const [reviewOpen, setReviewOpen] = useState(false);
+    const [rating, setRating] = useState(5);
+    const [message, setMessage] = useState('');
+    const [sending, setSending] = useState(false);
+    const reviews = items.filter(item => item.type === 'review' && item.status === 'approved');
+    const demoReviews: Array<Pick<CommunityItem, 'id' | 'content' | 'rating' | 'authorName' | 'authorAvatar'>> = [
+        { id: 'demo-lucia', authorName: 'Lucía M.', rating: 5, content: 'Briz hizo que volver a pedalear por la ciudad se sienta fácil, seguro y muy divertido.' },
+        { id: 'demo-mateo', authorName: 'Mateo R.', rating: 5, content: 'Alquilamos bicis para recorrer la ciudad y fue el mejor plan de fin de semana.' },
+        { id: 'demo-andrea', authorName: 'Andrea V.', rating: 5, content: 'Me encanta que Briz conecte movimiento, comunidad y cuidado por nuestra ciudad.' },
+        { id: 'demo-diego', authorName: 'Diego P.', rating: 5, content: 'La atención fue increíble. Ya estoy organizando mi próxima rodada con amigos.' },
+    ];
+    const visibleReviews = reviews.length ? reviews : demoReviews;
+    const loopedReviews = visibleReviews.length > 1 ? [...visibleReviews, ...visibleReviews] : visibleReviews;
+
+    const openReview = () => {
+        if (!currentCustomer) { setAuthOpen(true); return; }
+        setReviewOpen(true);
+    };
+    const submitReview = async (event: React.FormEvent) => {
+        event.preventDefault();
+        if (!currentCustomer || !message.trim()) return;
+        setSending(true);
+        try {
+            await createItem({ type: 'review', title: `Opinión de ${currentCustomer.name}`, content: message.trim(), category: 'Opinión', rating, authorId: currentCustomer.id, authorName: currentCustomer.name, authorAvatar: currentCustomer.autofotoUrl });
+            setMessage(''); setReviewOpen(false);
+            alert('¡Gracias! Tu opinión fue enviada a revisión. La publicaremos cuando sea aprobada.');
+        } catch { alert('No pudimos enviar tu opinión. Intenta nuevamente.'); } finally { setSending(false); }
+    };
+
+    return <>
+        <div className="w-full overflow-hidden rounded-[1.5rem] border-2 border-brand-black/15 bg-[#FFFDF3]/95 py-4 shadow-[5px_5px_0_rgba(6,61,71,.18)]">
+            <div className="mb-3 flex items-center justify-between px-5"><span className="flex items-center gap-2 font-cocon text-xs font-black uppercase tracking-wider text-[#063D47]"><MessageCircleHeart className="h-4 w-4 text-brand-pink" />Voces que pedalean</span><button onClick={openReview} className="text-xs font-black text-brand-pink underline-offset-4 hover:underline">Deja tu opinión</button></div>
+            <div className="group overflow-hidden"><motion.div className="flex w-max gap-4 px-4" animate={{ x: ['0%', '-50%'] }} transition={{ duration: Math.max(38, visibleReviews.length * 13), repeat: Infinity, ease: 'linear' }}>
+                {loopedReviews.map((review, index) => <article key={`${review.id}-${index}`} className="w-[285px] shrink-0 rounded-2xl bg-white p-4 text-left shadow-sm sm:w-[330px]"><div className="flex items-center gap-1 text-brand-yellow">{Array.from({ length: review.rating || 5 }).map((_, star) => <Star key={star} className="h-3.5 w-3.5 fill-current" />)}</div><p className="mt-2 line-clamp-3 min-h-[3.75rem] font-cocon text-sm leading-relaxed text-[#063D47]">“{review.content}”</p><div className="mt-3 flex items-center gap-2 border-t border-brand-yellow/20 pt-3"><div className="grid h-7 w-7 place-items-center overflow-hidden rounded-full bg-brand-yellow/30 text-[9px] font-black">{review.authorAvatar ? <img src={review.authorAvatar} alt="" className="h-full w-full object-cover" /> : review.authorName.slice(0, 2).toUpperCase()}</div><span className="text-xs font-black text-[#063D47]/70">{review.authorName}</span></div></article>)}
+            </motion.div></div>
+        </div>
+        <CustomerAuthModal isOpen={authOpen} onClose={() => setAuthOpen(false)} onSuccess={() => { setAuthOpen(false); setReviewOpen(true); }} />
+        <Dialog open={reviewOpen} onOpenChange={setReviewOpen}><DialogContent className="max-w-md rounded-[1.75rem] bg-[#FFFDF3] p-0"><DialogHeader className="rounded-t-[1.75rem] bg-brand-yellow px-7 py-6"><DialogTitle className="font-tan text-3xl uppercase text-brand-black">Tu opinión cuenta</DialogTitle><p className="text-sm font-bold text-brand-charcoal/65">La revisaremos antes de publicarla.</p></DialogHeader><form onSubmit={submitReview} className="p-7"><p className="text-xs font-black uppercase tracking-widest text-brand-charcoal/50">¿Cómo fue tu experiencia?</p><div className="mt-2 flex gap-1">{[1, 2, 3, 4, 5].map(star => <button type="button" key={star} onClick={() => setRating(star)} className={star <= rating ? 'text-brand-yellow' : 'text-brand-charcoal/20'} aria-label={`${star} estrellas`}><Star className="h-7 w-7 fill-current" /></button>)}</div><Textarea required value={message} onChange={event => setMessage(event.target.value)} rows={5} maxLength={500} className="mt-5 resize-none bg-white" placeholder="Cuéntanos qué disfrutaste de Briz..." /><button disabled={sending} className="mt-4 h-12 w-full rounded-full bg-brand-charcoal font-black text-white hover:bg-brand-black disabled:opacity-60">{sending ? 'Enviando...' : 'Enviar a revisión'}</button></form></DialogContent></Dialog>
+    </>;
+}
+
 function CommunitySection() {
     return (
         <section className="relative isolate overflow-hidden bg-[#62C5B0] py-20 sm:py-28 lg:py-32 px-4 sm:px-6 lg:px-8">
@@ -1384,9 +1435,9 @@ function CommunitySection() {
                 ))}
             </div>
 
-            <div className="mx-auto grid max-w-[1400px] items-center gap-12 lg:grid-cols-2 lg:gap-16">
-                {/* Left Column: Title, Description, Button */}
-                <div className="flex flex-col items-center text-center justify-center space-y-6 lg:space-y-8 w-full max-w-[620px] mx-auto z-10 px-4 sm:px-0">
+            <div className="mx-auto grid max-w-[1760px] items-center gap-12 lg:grid-cols-[minmax(0,1.7fr)_minmax(320px,.55fr)] lg:gap-8">
+                {/* Left Column: Title, description, opinions carousel and button */}
+                <div className="flex flex-col items-center text-center justify-center space-y-6 lg:space-y-7 w-full max-w-none mx-auto z-10 px-0 sm:px-2 lg:pr-3">
                     <motion.h2
                         initial={{ opacity: 0, y: 24, scale: 0.96 }}
                         whileInView={{ opacity: 1, y: 0, scale: 1 }}
@@ -1408,12 +1459,16 @@ function CommunitySection() {
                         Te invitamos a ser parte de una comunidad que celebra la vida en movimiento, que se enamora de cada pedaleada y que inspira cambio.
                     </motion.p>
 
+                    <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.55, delay: 0.18 }} className="w-full">
+                        <CommunityReviewsCarousel />
+                    </motion.div>
+
                     <motion.div
                         initial={{ opacity: 0, scale: 0.9 }}
                         whileInView={{ opacity: 1, scale: 1 }}
                         viewport={{ once: true }}
                         transition={{ duration: 0.5, delay: 0.22 }}
-                        className="pt-4"
+                        className="pt-1"
                     >
                         <Link to="/community">
                             <motion.button
