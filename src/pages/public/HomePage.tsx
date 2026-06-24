@@ -589,7 +589,7 @@ function HeroParticles() {
     );
 }
 
-function HeroCollage({ variant }: { variant: 'mobile' | 'desktop' }) {
+export function HeroCollage({ variant }: { variant: 'mobile' | 'desktop' }) {
     const isMobile = variant === 'mobile';
 
     return (
@@ -663,6 +663,35 @@ function HeroCollage({ variant }: { variant: 'mobile' | 'desktop' }) {
     );
 }
 
+function HeroBikeTrails() {
+    const bikes = [
+        { className: 'left-[4%] top-[18%] hidden sm:block', rotate: '-18deg', color: 'text-brand-yellow/70' },
+        { className: 'right-[8%] top-[19%] hidden lg:block', rotate: '18deg', color: 'text-brand-pink/55' },
+        { className: 'left-[7%] bottom-[12%] hidden lg:block', rotate: '12deg', color: 'text-[#67B852]/65' },
+        { className: 'right-[5%] bottom-[9%] hidden sm:block', rotate: '-20deg', color: 'text-brand-yellow/70' },
+    ];
+    return <div className="pointer-events-none absolute inset-0 -z-[1] overflow-hidden" aria-hidden="true">
+        <svg className="absolute left-[-10%] top-[14%] h-56 w-[48%] text-brand-yellow/45" viewBox="0 0 520 230" fill="none"><path d="M4 190C130 80 170 230 300 126C370 70 445 88 518 26" stroke="currentColor" strokeWidth="2" strokeDasharray="7 10" strokeLinecap="round" /></svg>
+        <svg className="absolute bottom-[4%] right-[-8%] h-64 w-[46%] text-brand-pink/30" viewBox="0 0 520 250" fill="none"><path d="M6 56C142 170 232 22 342 140C405 206 462 170 518 222" stroke="currentColor" strokeWidth="2" strokeDasharray="7 10" strokeLinecap="round" /></svg>
+        {bikes.map((bike, index) => <motion.span key={index} animate={{ y: [0, -6, 0], x: [0, 4, 0] }} transition={{ duration: 4.5 + index, delay: index * .5, repeat: Infinity, ease: 'easeInOut' }} className={`absolute ${bike.className} ${bike.color}`} style={{ rotate: bike.rotate }}><Bike className="h-8 w-8" strokeWidth={1.5} /></motion.span>)}
+    </div>;
+}
+
+function HeroFrame() {
+    return <EditableLayer id="heroCollage" className="relative mx-auto w-full max-w-[790px] lg:max-w-none">
+        <motion.div initial={{ opacity: 0, scale: 0.94, x: 24 }} animate={{ opacity: 1, scale: 1, x: 0 }} transition={{ duration: 0.75, delay: 0.1, ease: 'easeOut' }} className="relative">
+            <div className="absolute -inset-3 rounded-[22%_18%_24%_19%] border-2 border-brand-yellow/75 sm:-inset-4" />
+            <div className="absolute -inset-1 rounded-[20%_16%_22%_17%] border-4 border-white shadow-[0_0_0_3px_rgba(255,210,0,.65),0_26px_50px_rgba(98,71,0,.2)]" />
+            <motion.div animate={{ y: [0, -7, 0], rotate: [-.35, .3, -.35] }} transition={{ duration: 6, repeat: Infinity, ease: 'easeInOut' }} className="relative aspect-[1.05/1] overflow-hidden rounded-[20%_16%_22%_17%] bg-brand-yellow sm:aspect-[1.28/1]">
+                <SmartImage src={`${assetBase}/1.webp`} alt="Experiencias Briz sobre dos ruedas" placeholderLabel="1.webp" loading="eager" fetchPriority="high" className="h-full w-full object-cover" placeholderClassName="h-full w-full bg-brand-yellow" />
+                <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(135deg,rgba(255,255,255,.15),transparent_35%,rgba(255,210,0,.1))]" />
+            </motion.div>
+            <motion.span animate={{ y: [0, -8, 0], rotate: [0, -8, 0] }} transition={{ duration: 4.8, repeat: Infinity, ease: 'easeInOut' }} className="absolute -bottom-5 -left-4 grid h-14 w-14 place-items-center rounded-full bg-brand-pink text-white ring-4 ring-[#FFF8DF] sm:h-16 sm:w-16"><HeartHandshake className="h-7 w-7" /></motion.span>
+            <motion.span animate={{ y: [0, 8, 0], rotate: [0, 7, 0] }} transition={{ duration: 5.2, repeat: Infinity, ease: 'easeInOut' }} className="absolute -bottom-4 -right-2 grid h-14 w-14 place-items-center rounded-full bg-brand-yellow text-brand-black ring-4 ring-[#FFF8DF] sm:h-16 sm:w-16"><Bike className="h-7 w-7" /></motion.span>
+        </motion.div>
+    </EditableLayer>;
+}
+
 function HeroSection() {
     return (
         <section className="relative isolate overflow-hidden bg-[#FFF8DF] pt-[86px] lg:pt-[104px]">
@@ -675,16 +704,17 @@ function HeroSection() {
             />
             <div className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(circle_at_24%_20%,rgba(255,210,0,0.18),transparent_30%),radial-gradient(circle_at_82%_36%,rgba(36,169,197,0.12),transparent_28%),linear-gradient(180deg,#FFF9E8_0%,#FFFDF3_100%)]" />
             <HeroParticles />
+            <HeroBikeTrails />
             <LeafStem className="pointer-events-none absolute left-2 top-[34rem] hidden h-36 w-20 text-brand-yellow/50 lg:block" />
             <LeafStem className="pointer-events-none absolute right-2 top-40 hidden h-44 w-24 scale-x-[-1] text-brand-yellow/50 lg:block" />
 
-            <div className="mx-auto max-w-[1400px] px-4 pb-8 sm:px-6 lg:px-10">
-                <div className="grid min-h-[690px] items-center gap-0 py-7 sm:gap-7 lg:grid-cols-[0.42fr_0.58fr] lg:gap-0 lg:py-8">
+            <div className="mx-auto max-w-[1360px] px-4 pb-12 sm:px-6 lg:px-10">
+                <div className="grid min-h-[680px] items-center gap-8 py-9 lg:grid-cols-[0.38fr_0.62fr] lg:gap-2 lg:py-12">
                     <motion.div
                         initial={{ opacity: 0, x: -26 }}
                         animate={{ opacity: 1, x: 0 }}
                         transition={{ duration: 0.7, ease: 'easeOut' }}
-                        className="relative z-10 mx-auto flex w-full max-w-[560px] flex-col items-center text-center lg:mx-0 lg:max-w-[680px] lg:items-start lg:text-left"
+                        className="relative z-10 mx-auto flex w-full max-w-[540px] flex-col items-center text-center lg:mx-0 lg:max-w-[480px] lg:items-start lg:text-left"
                     >
                         <EditableLayer id="heroLettering" className="relative mt-4 w-full max-w-[34rem] sm:mt-5 lg:ml-[-1.5rem] lg:w-[38rem]">
                             <motion.div
@@ -702,16 +732,8 @@ function HeroSection() {
                                     rotate: { duration: 5.2, repeat: Infinity, ease: 'easeInOut' },
                                 }}
                             >
-                                <SmartImage
-                                    src={`${assetBase}/lettering-una-bicicleta.webp?v=3`}
-                                    fallbackSrcs={[`/menu-principal-celular/lettering-una-bicicleta.webp?v=3`]}
-                                    alt="Una bicicleta. Un ciclo de expresiones infinitas."
-                                    placeholderLabel="lettering-una-bicicleta.webp"
-                                    loading="eager"
-                                    fetchPriority="high"
-                                    className="block h-auto w-full object-contain drop-shadow-[0_18px_24px_rgba(55,35,0,0.18)]"
-                                    placeholderClassName="aspect-[1.35/1] rounded-[1.6rem] border border-dashed border-brand-yellow/60 bg-[#FFF6CC]/70"
-                                />
+                                <p className="font-gochi text-xl text-brand-pink sm:text-2xl">Una bicicleta, infinitas formas de vivir.</p>
+                                <h1 className="mt-2 font-tan text-4xl uppercase leading-[0.92] text-brand-black sm:text-6xl lg:text-6xl">Muévete<br />con Briz</h1>
                                 <motion.span
                                     className="absolute left-[8%] top-[8%] -z-10 h-[64%] w-[72%] rounded-full bg-brand-yellow/24 blur-3xl"
                                     animate={{ scale: [0.92, 1.08, 0.92], opacity: [0.38, 0.68, 0.38] }}
@@ -721,9 +743,7 @@ function HeroSection() {
                             </motion.div>
                         </EditableLayer>
 
-                        <HeroCollage variant="mobile" />
-
-                        <p className="mt-6 max-w-[25rem] font-cocon text-lg leading-relaxed text-brand-black/72 sm:mt-6 sm:text-xl lg:mt-6 lg:max-w-[33rem] lg:text-2xl">
+                        <p className="mt-6 max-w-[25rem] font-cocon text-lg leading-relaxed text-brand-black/72 sm:mt-6 sm:text-xl lg:mt-6 lg:max-w-[30rem] lg:text-2xl">
                             Alquila, recorre y vive experiencias únicas sobre dos ruedas.
                         </p>
 
@@ -759,7 +779,7 @@ function HeroSection() {
                         </div>
                     </motion.div>
 
-                    <HeroCollage variant="desktop" />
+                    <HeroFrame />
                 </div>
             </div>
         </section>
