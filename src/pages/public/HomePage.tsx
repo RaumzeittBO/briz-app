@@ -931,7 +931,29 @@ function OptionalSticker({
     );
 }
 
+function AnimatedArtworkDivider() {
+    return <div className="pointer-events-none absolute inset-x-0 bottom-[-1px] z-20 h-7 text-brand-yellow" aria-hidden="true">
+        <svg viewBox="0 0 1440 56" preserveAspectRatio="none" className="h-full w-full" fill="none">
+            <motion.path d="M-20 31C168 2 332 54 530 28C734 1 930 53 1140 25C1256 9 1350 18 1460 6" stroke="currentColor" strokeWidth="6" strokeLinecap="round" initial={{ pathLength: 0, opacity: 0 }} whileInView={{ pathLength: 1, opacity: 1 }} viewport={{ once: true }} transition={{ duration: 1.5, ease: 'easeOut' }} />
+            <motion.path d="M-20 42C168 13 332 65 530 39C734 12 930 64 1140 36C1256 20 1350 29 1460 17" stroke="#FFFDF3" strokeWidth="2" strokeDasharray="5 12" strokeLinecap="round" initial={{ pathLength: 0 }} whileInView={{ pathLength: 1 }} viewport={{ once: true }} transition={{ duration: 2.1, delay: .18, ease: 'easeOut' }} />
+        </svg>
+    </div>;
+}
+
+function AnimatedArtworkSection({ desktopSrc, mobileSrc, alt, tone }: { desktopSrc: string; mobileSrc: string; alt: string; tone: 'cream' | 'green' }) {
+    return <section className={`relative isolate overflow-hidden ${tone === 'cream' ? 'bg-[#FFF7E8]' : 'bg-[#50C879]'}`}>
+        <motion.div initial={{ opacity: 0, scale: .985 }} whileInView={{ opacity: 1, scale: 1 }} viewport={{ once: true, amount: .18 }} transition={{ duration: .8, ease: 'easeOut' }} className="relative mx-auto w-full max-w-[1920px]">
+            <div className="pointer-events-none absolute inset-[1.5%] z-10 rounded-[2.5rem] border border-white/35 shadow-[inset_0_1px_0_rgba(255,255,255,.7),0_18px_60px_rgba(10,58,65,.12)]" />
+            <div className="pointer-events-none absolute inset-[3%] z-10 rounded-[2rem] border border-white/20 bg-white/[.025] backdrop-blur-[1px]" />
+            <motion.div animate={{ x: ['-25%', '125%'] }} transition={{ duration: 8, repeat: Infinity, repeatDelay: 3, ease: 'easeInOut' }} className="pointer-events-none absolute inset-y-[7%] z-10 w-[18%] rotate-[14deg] bg-gradient-to-r from-transparent via-white/18 to-transparent blur-xl" />
+            <picture><source media="(max-width: 767px)" srcSet={mobileSrc} /><img src={desktopSrc} alt={alt} className="block h-auto w-full" loading="lazy" /></picture>
+        </motion.div>
+        <AnimatedArtworkDivider />
+    </section>;
+}
+
 function WhyChooseBrizSection() {
+    return <AnimatedArtworkSection desktopSrc={`${assetBase}/3.webp`} mobileSrc="/menu-principal-celular/3.webp" alt="Por qué elegir Briz y nuestro propósito" tone="green" />;
     return (
         <section className="relative isolate overflow-hidden scroll-mt-28 bg-[#50C879] pt-24 sm:pt-28 lg:pt-[112px]">
             <div className="absolute inset-y-0 right-0 -z-10 hidden w-[54%] rounded-l-[48%] border-y-2 border-l-2 border-white/80 bg-[#A45D33] lg:block" />
@@ -1120,6 +1142,7 @@ function WhyChooseBrizSection() {
 }
 
 function BrandSection() {
+    return <AnimatedArtworkSection desktopSrc={`${assetBase}/4.webp`} mobileSrc="/menu-principal-celular/4.webp" alt="La marca Briz" tone="cream" />;
     return (
         <section className="relative isolate overflow-hidden bg-[#FFD957] pt-20 lg:pt-24">
             <div className="pointer-events-none absolute inset-x-0 top-0 z-10 h-16 text-[#50C879]" aria-hidden="true">
