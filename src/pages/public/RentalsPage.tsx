@@ -241,7 +241,11 @@ export default function RentalsPage() {
               Desde Bs. {displayMinPrice} / Hora
             </p>
           </div>
-          <button className="font-maiandra text-xs sm:text-sm text-gray-500 hover:text-brand-yellow hover:underline transition-all tracking-wide underline">
+          <button
+            type="button"
+            onClick={() => { setCategory('Todas'); setSearch(''); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+            className="font-maiandra text-xs sm:text-sm text-gray-500 hover:text-brand-yellow hover:underline transition-all tracking-wide underline"
+          >
             Ver todo
           </button>
         </div>
