@@ -595,6 +595,14 @@ function HeroParticles() {
     );
 }
 
+function HeroBikesBackdrop() {
+    return <div className="pointer-events-none absolute inset-0 -z-[1] overflow-hidden" aria-hidden="true">
+        <motion.div className="absolute right-[8%] top-[16%] hidden text-brand-yellow/45 lg:block" animate={{ x: [0, 14, 0], y: [0, -8, 0], rotate: [-12, -7, -12] }} transition={{ duration: 7, repeat: Infinity, ease: 'easeInOut' }}><Bike className="h-12 w-12" strokeWidth={1.5} /></motion.div>
+        <motion.div className="absolute left-[7%] bottom-[20%] hidden text-brand-yellow/40 lg:block" animate={{ x: [0, -12, 0], y: [0, 7, 0], rotate: [15, 21, 15] }} transition={{ duration: 8, repeat: Infinity, ease: 'easeInOut', delay: .4 }}><Bike className="h-10 w-10" strokeWidth={1.5} /></motion.div>
+        <motion.div className="absolute right-[24%] bottom-[10%] hidden text-brand-pink/40 lg:block" animate={{ y: [0, -10, 0] }} transition={{ duration: 5.5, repeat: Infinity, ease: 'easeInOut' }}><Bike className="h-8 w-8" strokeWidth={1.5} /></motion.div>
+    </div>;
+}
+
 function HeroCollage({ variant }: { variant: 'mobile' | 'desktop' }) {
     const isMobile = variant === 'mobile';
 
@@ -631,7 +639,7 @@ function HeroCollage({ variant }: { variant: 'mobile' | 'desktop' }) {
                     rotate: { duration: 6.2, repeat: Infinity, ease: 'easeInOut' },
                     scale: { duration: 0.25 },
                 }}
-                className={isMobile ? 'relative mx-auto w-full' : 'relative ml-auto w-[min(74vw,1040px)] xl:w-[min(72vw,1120px)]'}
+                className={isMobile ? 'relative mx-auto w-full' : 'relative ml-auto w-[min(62vw,880px)] xl:w-[min(60vw,940px)]'}
             >
                 <SmartImage
                     src={`${assetBase}/hero-collage-principal.webp?v=3`}
@@ -679,8 +687,9 @@ function HeroSection() {
                 className="pointer-events-none absolute inset-0 -z-10 h-full w-full object-cover opacity-[0.13] mix-blend-multiply"
                 placeholderClassName="hidden"
             />
-            <div className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(circle_at_24%_20%,rgba(255,210,0,0.18),transparent_30%),radial-gradient(circle_at_82%_36%,rgba(36,169,197,0.12),transparent_28%),linear-gradient(180deg,#FFF9E8_0%,#FFFDF3_100%)]" />
+            <div className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(circle_at_24%_20%,rgba(255,210,0,0.34),transparent_34%),radial-gradient(circle_at_82%_36%,rgba(255,210,0,0.28),transparent_30%),radial-gradient(circle_at_66%_74%,rgba(255,210,0,0.14),transparent_28%),linear-gradient(180deg,#FFF9E8_0%,#FFFDF3_100%)]" />
             <HeroParticles />
+            <HeroBikesBackdrop />
             <LeafStem className="pointer-events-none absolute left-2 top-[34rem] hidden h-36 w-20 text-brand-yellow/50 lg:block" />
             <LeafStem className="pointer-events-none absolute right-2 top-40 hidden h-44 w-24 scale-x-[-1] text-brand-yellow/50 lg:block" />
 
@@ -733,7 +742,7 @@ function HeroSection() {
                             Alquila, recorre y vive experiencias únicas sobre dos ruedas.
                         </p>
 
-                        <EditableLayer id="heroButtons" className="mt-5 flex w-full max-w-[34rem] flex-col sm:flex-row gap-3 sm:mt-7 lg:max-w-[42rem] lg:justify-start lg:gap-4">
+                        <EditableLayer id="heroButtons" className="mt-5 flex w-full max-w-[34rem] flex-col items-center gap-3 px-3 sm:mt-7 sm:flex-row sm:px-0 lg:max-w-[42rem] lg:items-start lg:justify-start lg:gap-4">
                             <HomeButton to="/rentals" icon={Bike} variant="yellow">
                                 Alquilar bicicleta
                             </HomeButton>
@@ -767,7 +776,6 @@ function HeroSection() {
 
                     <HeroCollage variant="desktop" />
                 </div>
-                <ExperienceSection embedded />
             </div>
         </section>
     );
@@ -1278,7 +1286,7 @@ function BrandSection() {
     );
 }
 
-function ExperienceSection({ embedded = false }: { embedded?: boolean }) {
+export function ExperienceSection({ embedded = false }: { embedded?: boolean }) {
     return (
         <section id="experiencias" className={`relative overflow-hidden px-0 py-8 sm:py-12 ${embedded ? 'bg-transparent' : 'bg-[#FFFDF3]'}`}>
             <div className="mx-auto max-w-[1320px]">
@@ -1640,13 +1648,12 @@ function FinalInspirationalSection() {
             <div className="mx-auto grid max-w-[1400px] items-center gap-12 lg:grid-cols-2 lg:gap-16">
                 {/* Left Column: Scrapbook Card with Text */}
                 <div className="flex flex-col items-center justify-center space-y-6 lg:space-y-8 z-10 w-full">
-                    {/* Main Collage Card */}
                     <motion.div
                         initial={{ opacity: 0, x: -38, scale: 0.97 }}
                         whileInView={{ opacity: 1, x: 0, scale: 1 }}
                         viewport={{ once: true, amount: 0.25 }}
                         transition={{ duration: 0.75, ease: 'easeOut' }}
-                        className="bg-[#FFFDF3] border-3 border-brand-black p-8 sm:p-16 rounded-[2.5rem] shadow-[12px_12px_0_rgba(0,0,0,1)] relative w-full max-w-[88vw] sm:max-w-[660px] min-h-[360px] sm:min-h-[480px] flex items-center justify-center overflow-hidden"
+                        className="relative flex min-h-[250px] w-full max-w-[88vw] items-center justify-center overflow-hidden rounded-[2.5rem] p-5 sm:min-h-[330px] sm:max-w-[660px] sm:p-8"
                     >
                         {/* Big stacked text */}
                         <div className="flex flex-col text-center items-center justify-center space-y-2 select-none z-10 w-full">
@@ -1698,7 +1705,7 @@ function FinalInspirationalSection() {
                             src="/vive.webp?v=1"
                             alt="Vive la experiencia Briz"
                             placeholderLabel="vive.webp"
-                            className="w-full h-auto object-contain border-3 border-brand-black shadow-[5px_5px_0_rgba(0,0,0,1)] rounded-md rotate-[-2deg]"
+                            className="h-auto w-full object-contain rotate-[-2deg]"
                         />
                     </motion.div>
 
@@ -1729,6 +1736,7 @@ function FinalInspirationalSection() {
                     </motion.div>
                 </div>
             </div>
+            <CTABanner embedded />
         </section>
     );
 }
@@ -1756,12 +1764,12 @@ export function StatsStrip() {
     );
 }
 
-function CTABanner() {
+function CTABanner({ embedded = false }: { embedded?: boolean }) {
     return (
-        <section className="bg-[#FFFDF3] px-4 pb-16 pt-4 sm:px-6 lg:px-8">
+        <section className={`${embedded ? 'bg-transparent px-4 pb-0 pt-6 sm:px-6 sm:pt-8 lg:px-8' : 'bg-[#FFFDF3] px-4 pb-16 pt-4 sm:px-6 lg:px-8'}`}>
             <motion.div
                 {...fadeUp}
-                className="relative mx-auto grid max-w-[1200px] overflow-hidden rounded-[2rem] bg-brand-yellow p-7 shadow-[0_18px_36px_rgba(120,87,0,0.14)] sm:p-9 lg:grid-cols-[0.52fr_0.48fr] lg:items-center"
+                className="relative mx-auto grid max-w-[1100px] overflow-hidden rounded-[2rem] bg-brand-yellow p-7 shadow-[0_18px_36px_rgba(120,87,0,0.14)] sm:p-9 lg:grid-cols-[0.52fr_0.48fr] lg:items-center"
             >
                 <LeafStem className="absolute -bottom-8 left-0 h-32 w-20 opacity-45" />
                 <div className="relative z-10">
@@ -1829,8 +1837,6 @@ export default function HomePage() {
                 <CommunitySection />
                 <ContinuousSectionDivider />
                 <FinalInspirationalSection />
-                <ContinuousSectionDivider />
-                <CTABanner />
                 {designEditorEnabled ? (
                     <DesignEditorPanel
                         config={config}
