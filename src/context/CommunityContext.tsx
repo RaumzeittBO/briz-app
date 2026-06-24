@@ -2,7 +2,7 @@ import { createContext, useContext, useEffect, useMemo, useState, type ReactNode
 import { collection, deleteDoc, doc, onSnapshot, orderBy, query, setDoc, updateDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 
-export type CommunityItemType = 'post' | 'event';
+export type CommunityItemType = 'post' | 'event' | 'review';
 export type CommunityStatus = 'pending' | 'approved' | 'rejected';
 
 export interface CommunityItem {
@@ -22,6 +22,7 @@ export interface CommunityItem {
     eventTime?: string;
     location?: string;
     registrationUrl?: string;
+    rating?: number;
 }
 
 type CommunityDraft = Omit<CommunityItem, 'id' | 'status' | 'createdAt' | 'updatedAt'>;
