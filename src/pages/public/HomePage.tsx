@@ -862,7 +862,7 @@ function ServiceStrip() {
 
                 <EditableLayer
                     id="servicesImage"
-                    className="relative mx-auto mt-6 mb-0 block w-[108vw] max-w-[108vw] -ml-[4vw] sm:w-full sm:max-w-[32rem] sm:ml-0 px-2 lg:ml-[-5rem] lg:mr-[-5rem] lg:mt-0 lg:w-[min(78vw,1080px)] lg:max-w-none"
+                    className="relative mx-auto mt-6 mb-0 block w-[96vw] max-w-[96vw] sm:w-full sm:max-w-[32rem] sm:ml-0 px-2 lg:ml-[-1rem] lg:mr-0 lg:mt-0 lg:w-[min(54vw,760px)] lg:max-w-none"
                 >
                 <motion.div
                     initial={{ opacity: 0, x: 34, scale: 0.96 }}
@@ -890,6 +890,8 @@ function ServiceStrip() {
                         animate={{ opacity: [0.35, 0.7, 0.35], scale: [0.92, 1.08, 0.92] }}
                         transition={{ duration: 5.5, repeat: Infinity, ease: 'easeInOut' }}
                     />
+                    <div className="pointer-events-none absolute inset-[10%] -z-10 rounded-full bg-brand-yellow/35 blur-3xl" />
+                    {[['12%', '18%', 8], ['78%', '26%', 10], ['65%', '76%', 7], ['26%', '74%', 6]].map(([left, top, size], index) => <motion.span key={index} className="pointer-events-none absolute z-10 rounded-full bg-brand-yellow" style={{ left: left as string, top: top as string, width: size as number, height: size as number, boxShadow: '0 0 18px rgba(255,210,0,.9)' }} animate={{ y: [0, -16, 0], opacity: [.2, .95, .2], scale: [.6, 1.3, .6] }} transition={{ duration: 3.8 + index, repeat: Infinity, ease: 'easeInOut', delay: index * .4 }} />)}
                 </motion.div>
                 </EditableLayer>
             </div>
