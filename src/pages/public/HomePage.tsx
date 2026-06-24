@@ -597,35 +597,68 @@ function HeroCollage({ variant }: { variant: 'mobile' | 'desktop' }) {
             id="heroCollage"
             className={
                 isMobile
-                    ? 'relative mx-auto mt-12 mb-14 block w-full lg:hidden'
-                    : 'relative mx-auto hidden w-full max-w-[920px] lg:ml-auto lg:mr-0 lg:mt-0 lg:block'
+                    ? 'relative mx-auto mt-6 mb-6 block w-[98vw] max-w-[650px] px-2 lg:hidden'
+                    : 'relative mx-auto hidden w-full max-w-none lg:ml-[-4.5rem] lg:mr-[-6rem] lg:mt-[-1rem] lg:block'
             }
         >
+        <motion.div
+            initial={{ opacity: 0, scale: 0.96, x: isMobile ? 0 : 20 }}
+            animate={{ opacity: 1, scale: 1, x: 0 }}
+            transition={{ duration: 0.85, delay: 0.08, ease: 'easeOut' }}
+        >
             <motion.div
-                initial={{ opacity: 0, scale: 0.94, x: isMobile ? 0 : 20 }}
-                animate={{ opacity: 1, scale: 1, x: 0 }}
-                transition={{ duration: 0.85, delay: 0.08, ease: 'easeOut' }}
-                className={`hero-showcase-frame ${isMobile ? 'hero-showcase-mobile' : 'hero-showcase-desktop'}`}
+                className="absolute left-[20%] top-[-6%] h-28 w-28 rounded-full border-2 border-brand-yellow/35 opacity-80 sm:h-48 sm:w-48"
+                animate={{ rotate: 360, scale: [1, 1.06, 1] }}
+                transition={{ rotate: { duration: 22, repeat: Infinity, ease: 'linear' }, scale: { duration: 5, repeat: Infinity, ease: 'easeInOut' } }}
+            />
+            <div className="absolute left-[25%] top-[-2%] h-20 w-20 rounded-full bg-brand-yellow/35 blur-2xl sm:h-32 sm:w-32" />
+            <svg className="absolute left-[4%] top-[2%] hidden h-44 w-36 text-[#C69F08]/45 sm:block" viewBox="0 0 120 160" fill="none" aria-hidden="true">
+                <path d="M58 154C43 104 47 55 84 8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                <path d="M60 88C30 77 18 58 23 35" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                <path d="M66 69C89 61 101 43 102 20" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+            </svg>
+            <motion.div
+                whileHover={{ scale: 1.025, y: -5, rotate: 0.25 }}
+                animate={{ y: [0, -10, 0], rotate: [0.35, -0.25, 0.35] }}
+                transition={{
+                    y: { duration: 6.2, repeat: Infinity, ease: 'easeInOut' },
+                    rotate: { duration: 6.2, repeat: Infinity, ease: 'easeInOut' },
+                    scale: { duration: 0.25 },
+                }}
+                className={isMobile ? 'relative mx-auto w-full' : 'relative ml-auto w-[min(74vw,1040px)] xl:w-[min(72vw,1120px)]'}
             >
-                <div className="hero-showcase-stage">
-                    <span className="hero-showcase-glow" aria-hidden="true" />
-                    <span className="hero-showcase-spark hero-showcase-spark-one" aria-hidden="true" />
-                    <span className="hero-showcase-spark hero-showcase-spark-two" aria-hidden="true" />
-                    <span className="hero-showcase-spark hero-showcase-spark-three" aria-hidden="true" />
-                    <motion.span className="hero-showcase-sticker hero-showcase-sticker-route" animate={{ y: [0, -7, 0], rotate: [-4, 3, -4] }} transition={{ duration: 5.4, repeat: Infinity, ease: 'easeInOut' }} aria-hidden="true"><MapPinned /></motion.span>
-                    <motion.span className="hero-showcase-sticker hero-showcase-sticker-spark" animate={{ y: [0, 6, 0], rotate: [0, 10, 0] }} transition={{ duration: 4.6, repeat: Infinity, ease: 'easeInOut', delay: 0.4 }} aria-hidden="true"><Sparkles /></motion.span>
-                    <div className="hero-showcase-inner">
-                        <img
-                            src="/WEB.png"
-                            alt="Experiencias Briz sobre dos ruedas en Cochabamba"
-                            className="hero-showcase-image"
-                            loading="eager"
-                            fetchPriority="high"
-                        />
-                    </div>
-                    <span className="hero-showcase-bike" aria-hidden="true"><Bike /></span>
-                </div>
+                <SmartImage
+                    src={`${assetBase}/hero-collage-principal.webp?v=3`}
+                    fallbackSrcs={[`/menu-principal-celular/hero-collage-principal.webp?v=3`]}
+                    alt="Collage principal de bicicletas y experiencias Briz"
+                    placeholderLabel="hero-collage-principal.webp"
+                    loading="eager"
+                    fetchPriority="high"
+                    className="block h-auto w-full object-contain drop-shadow-[0_30px_40px_rgba(82,57,0,0.22)]"
+                    placeholderClassName="aspect-[1.25/1] rounded-[2.4rem] bg-[linear-gradient(135deg,#FFF4B8,#FFFDF3_48%,#DFF3EF)] shadow-[0_28px_70px_rgba(106,74,0,0.16)]"
+                />
+                <motion.span
+                    className="absolute bottom-[5%] left-[18%] -z-10 h-[34%] w-[70%] rounded-full bg-brand-yellow/35 blur-3xl"
+                    animate={{ scale: [0.9, 1.08, 0.9], opacity: [0.32, 0.64, 0.32] }}
+                    transition={{ duration: 5.8, repeat: Infinity, ease: 'easeInOut' }}
+                    aria-hidden="true"
+                />
             </motion.div>
+            <motion.div
+                animate={{ y: [0, -9, 0], rotate: [0, -6, 0] }}
+                transition={{ duration: 4.4, repeat: Infinity, ease: 'easeInOut' }}
+                className="absolute bottom-[8%] left-[4%] hidden sm:grid h-12 w-12 place-items-center rounded-full bg-brand-yellow text-white shadow-[0_12px_26px_rgba(135,97,0,0.2)] ring-4 ring-white sm:h-14 sm:w-14"
+            >
+                <Bike className="h-6 w-6 sm:h-7 sm:w-7" />
+            </motion.div>
+            <motion.div
+                animate={{ y: [0, 8, 0], rotate: [0, 8, 0] }}
+                transition={{ duration: 4.9, repeat: Infinity, ease: 'easeInOut', delay: 0.3 }}
+                className="absolute right-[5%] top-[14%] hidden sm:grid h-11 w-11 place-items-center rounded-full bg-[#67B852] text-white shadow-[0_12px_24px_rgba(39,104,28,0.2)] ring-4 ring-white sm:h-12 sm:w-12"
+            >
+                <Sparkles className="h-5 w-5 sm:h-6 sm:w-6" />
+            </motion.div>
+        </motion.div>
         </EditableLayer>
     );
 }
@@ -642,20 +675,18 @@ function HeroSection() {
             />
             <div className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(circle_at_24%_20%,rgba(255,210,0,0.18),transparent_30%),radial-gradient(circle_at_82%_36%,rgba(36,169,197,0.12),transparent_28%),linear-gradient(180deg,#FFF9E8_0%,#FFFDF3_100%)]" />
             <HeroParticles />
-            <motion.span className="hero-scene-object hero-scene-bike" animate={{ y: [0, -12, 0], rotate: [-5, 4, -5] }} transition={{ duration: 7, repeat: Infinity, ease: 'easeInOut' }} aria-hidden="true"><Bike /></motion.span>
-            <motion.span className="hero-scene-object hero-scene-route" animate={{ y: [0, 10, 0], rotate: [4, -3, 4] }} transition={{ duration: 6.3, repeat: Infinity, ease: 'easeInOut', delay: 0.7 }} aria-hidden="true"><MapPinned /></motion.span>
             <LeafStem className="pointer-events-none absolute left-2 top-[34rem] hidden h-36 w-20 text-brand-yellow/50 lg:block" />
             <LeafStem className="pointer-events-none absolute right-2 top-40 hidden h-44 w-24 scale-x-[-1] text-brand-yellow/50 lg:block" />
 
-            <div className="mx-auto max-w-[1400px] px-4 pb-12 sm:px-6 lg:px-10">
-                <div className="grid items-center gap-10 py-10 sm:gap-12 lg:min-h-[740px] lg:grid-cols-[0.44fr_0.56fr] lg:gap-12 lg:py-12">
+            <div className="mx-auto max-w-[1400px] px-4 pb-8 sm:px-6 lg:px-10">
+                <div className="grid min-h-[690px] items-center gap-0 py-7 sm:gap-7 lg:grid-cols-[0.42fr_0.58fr] lg:gap-0 lg:py-8">
                     <motion.div
                         initial={{ opacity: 0, x: -26 }}
                         animate={{ opacity: 1, x: 0 }}
                         transition={{ duration: 0.7, ease: 'easeOut' }}
                         className="relative z-10 mx-auto flex w-full max-w-[560px] flex-col items-center text-center lg:mx-0 lg:max-w-[680px] lg:items-start lg:text-left"
                     >
-                        <EditableLayer id="heroLettering" className="hero-main-lettering relative mt-4 w-full sm:mt-5 lg:ml-[-1.5rem]">
+                        <EditableLayer id="heroLettering" className="relative mt-4 w-full max-w-[34rem] sm:mt-5 lg:ml-[-1.5rem] lg:w-[38rem]">
                             <motion.div
                                 initial={{ opacity: 0, y: 18, rotate: -1.2, scale: 0.92 }}
                                 animate={{
