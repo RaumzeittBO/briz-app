@@ -401,6 +401,7 @@ type SmartImageProps = {
     placeholderLabel: string;
     loading?: 'eager' | 'lazy';
     fetchPriority?: 'high' | 'low' | 'auto';
+    decoding?: 'async' | 'sync' | 'auto';
 };
 
 function SmartImage({
@@ -412,6 +413,7 @@ function SmartImage({
     placeholderLabel,
     loading = 'lazy',
     fetchPriority,
+    decoding = 'async',
 }: SmartImageProps) {
     const sources = [src, ...fallbackSrcs];
     const [sourceIndex, setSourceIndex] = useState(0);
@@ -436,7 +438,7 @@ function SmartImage({
             alt={alt}
             className={className}
             loading={loading}
-            decoding="async"
+            decoding={decoding}
             fetchPriority={fetchPriority}
             onError={() => setSourceIndex((index) => index + 1)}
         />
@@ -862,7 +864,7 @@ function ServiceStrip() {
 
                 <EditableLayer
                     id="servicesImage"
-                    className="relative mx-auto mt-6 mb-0 block w-[96vw] max-w-[96vw] sm:w-full sm:max-w-[32rem] sm:ml-0 px-2 lg:ml-[-1rem] lg:mr-0 lg:mt-0 lg:w-[min(54vw,760px)] lg:max-w-none"
+                    className="relative mx-auto mt-6 mb-0 block w-[96vw] max-w-[96vw] sm:w-full sm:max-w-[32rem] sm:ml-0 px-2 lg:ml-auto lg:mr-[calc((1400px-100vw)/2)] lg:mt-0 lg:w-[min(54vw,760px)] lg:max-w-none"
                 >
                 <motion.div
                     initial={{ opacity: 0, x: 34, scale: 0.96 }}
@@ -879,8 +881,10 @@ function ServiceStrip() {
                             fallbackSrcs={[`${assetBase}/Web2.webp`]}
                             alt="Vive la experiencia Briz en Cochabamba"
                             placeholderLabel="web2.webp"
-                            loading="lazy"
-                            className="block h-auto w-full object-contain drop-shadow-[0_30px_42px_rgba(82,57,0,0.2)]"
+                            loading="eager"
+                            fetchPriority="high"
+                            decoding="sync"
+                            className="block h-auto w-full object-contain mix-blend-multiply drop-shadow-[0_30px_42px_rgba(82,57,0,0.2)]"
                             placeholderClassName="aspect-[1.25/1] rounded-[2.4rem] bg-[linear-gradient(135deg,#FFF4B8,#FFFDF3_48%,#DFF3EF)] shadow-[0_28px_70px_rgba(106,74,0,0.16)]"
                         />
                     </motion.div>
