@@ -597,8 +597,8 @@ function HeroCollage({ variant }: { variant: 'mobile' | 'desktop' }) {
             id="heroCollage"
             className={
                 isMobile
-                    ? 'relative mx-auto mt-10 mb-12 block w-full max-w-[620px] px-1 lg:hidden'
-                    : 'relative mx-auto hidden w-full max-w-[780px] lg:ml-auto lg:mr-0 lg:mt-0 lg:block'
+                    ? 'relative mx-auto mt-12 mb-14 block w-full lg:hidden'
+                    : 'relative mx-auto hidden w-full max-w-[920px] lg:ml-auto lg:mr-0 lg:mt-0 lg:block'
             }
         >
             <motion.div
@@ -607,20 +607,24 @@ function HeroCollage({ variant }: { variant: 'mobile' | 'desktop' }) {
                 transition={{ duration: 0.85, delay: 0.08, ease: 'easeOut' }}
                 className={`hero-showcase-frame ${isMobile ? 'hero-showcase-mobile' : 'hero-showcase-desktop'}`}
             >
-                <span className="hero-showcase-glow" aria-hidden="true" />
-                <span className="hero-showcase-spark hero-showcase-spark-one" aria-hidden="true" />
-                <span className="hero-showcase-spark hero-showcase-spark-two" aria-hidden="true" />
-                <span className="hero-showcase-spark hero-showcase-spark-three" aria-hidden="true" />
-                <div className="hero-showcase-inner">
-                    <img
-                        src="/WEB.png"
-                        alt="Experiencias Briz sobre dos ruedas en Cochabamba"
-                        className="hero-showcase-image"
-                        loading="eager"
-                        fetchPriority="high"
-                    />
+                <div className="hero-showcase-stage">
+                    <span className="hero-showcase-glow" aria-hidden="true" />
+                    <span className="hero-showcase-spark hero-showcase-spark-one" aria-hidden="true" />
+                    <span className="hero-showcase-spark hero-showcase-spark-two" aria-hidden="true" />
+                    <span className="hero-showcase-spark hero-showcase-spark-three" aria-hidden="true" />
+                    <motion.span className="hero-showcase-sticker hero-showcase-sticker-route" animate={{ y: [0, -7, 0], rotate: [-4, 3, -4] }} transition={{ duration: 5.4, repeat: Infinity, ease: 'easeInOut' }} aria-hidden="true"><MapPinned /></motion.span>
+                    <motion.span className="hero-showcase-sticker hero-showcase-sticker-spark" animate={{ y: [0, 6, 0], rotate: [0, 10, 0] }} transition={{ duration: 4.6, repeat: Infinity, ease: 'easeInOut', delay: 0.4 }} aria-hidden="true"><Sparkles /></motion.span>
+                    <div className="hero-showcase-inner">
+                        <img
+                            src="/WEB.png"
+                            alt="Experiencias Briz sobre dos ruedas en Cochabamba"
+                            className="hero-showcase-image"
+                            loading="eager"
+                            fetchPriority="high"
+                        />
+                    </div>
+                    <span className="hero-showcase-bike" aria-hidden="true"><Bike /></span>
                 </div>
-                <span className="hero-showcase-bike" aria-hidden="true"><Bike /></span>
             </motion.div>
         </EditableLayer>
     );
@@ -638,6 +642,8 @@ function HeroSection() {
             />
             <div className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(circle_at_24%_20%,rgba(255,210,0,0.18),transparent_30%),radial-gradient(circle_at_82%_36%,rgba(36,169,197,0.12),transparent_28%),linear-gradient(180deg,#FFF9E8_0%,#FFFDF3_100%)]" />
             <HeroParticles />
+            <motion.span className="hero-scene-object hero-scene-bike" animate={{ y: [0, -12, 0], rotate: [-5, 4, -5] }} transition={{ duration: 7, repeat: Infinity, ease: 'easeInOut' }} aria-hidden="true"><Bike /></motion.span>
+            <motion.span className="hero-scene-object hero-scene-route" animate={{ y: [0, 10, 0], rotate: [4, -3, 4] }} transition={{ duration: 6.3, repeat: Infinity, ease: 'easeInOut', delay: 0.7 }} aria-hidden="true"><MapPinned /></motion.span>
             <LeafStem className="pointer-events-none absolute left-2 top-[34rem] hidden h-36 w-20 text-brand-yellow/50 lg:block" />
             <LeafStem className="pointer-events-none absolute right-2 top-40 hidden h-44 w-24 scale-x-[-1] text-brand-yellow/50 lg:block" />
 
@@ -649,7 +655,7 @@ function HeroSection() {
                         transition={{ duration: 0.7, ease: 'easeOut' }}
                         className="relative z-10 mx-auto flex w-full max-w-[560px] flex-col items-center text-center lg:mx-0 lg:max-w-[680px] lg:items-start lg:text-left"
                     >
-                        <EditableLayer id="heroLettering" className="relative mt-4 w-full max-w-[34rem] sm:mt-5 lg:ml-[-1.5rem] lg:w-[38rem]">
+                        <EditableLayer id="heroLettering" className="hero-main-lettering relative mt-4 w-full sm:mt-5 lg:ml-[-1.5rem]">
                             <motion.div
                                 initial={{ opacity: 0, y: 18, rotate: -1.2, scale: 0.92 }}
                                 animate={{

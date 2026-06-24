@@ -1295,6 +1295,11 @@
   animation: hero-showcase-lift 7.2s ease-in-out infinite;
 }
 
+.hero-showcase-stage {
+  position: relative;
+  width: 100%;
+}
+
 .hero-showcase-frame::before {
   content: '';
   position: absolute;
@@ -1342,13 +1347,12 @@
 }
 
 .hero-showcase-mobile {
-  width: 100%;
-  margin-top: 2.5rem;
-  margin-bottom: 3rem;
+  width: min(100%, calc(100vw - 2.25rem));
+  margin: 3rem auto 3.5rem;
 }
 
 .hero-showcase-desktop {
-  width: min(72vw, 1010px);
+  width: min(100%, 900px);
   margin-left: auto;
 }
 
@@ -1389,6 +1393,45 @@
   height: 58%;
   stroke-width: 2.8;
 }
+
+.hero-showcase-sticker {
+  position: absolute;
+  z-index: 5;
+  display: grid;
+  place-items: center;
+  width: clamp(2.1rem, 6.2vw, 3.8rem);
+  height: clamp(2.1rem, 6.2vw, 3.8rem);
+  border: 2px solid rgba(255,255,255,0.88);
+  border-radius: 1rem;
+  background: rgba(255,255,255,0.68);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  box-shadow: 0 10px 22px rgba(75,58,0,0.16), 0 2px 0 rgba(255,255,255,0.72) inset;
+}
+
+.hero-showcase-sticker svg { width: 55%; height: 55%; stroke-width: 2.5; }
+.hero-showcase-sticker-route { left: 3.8%; bottom: 5%; color: #FD7B2C; }
+.hero-showcase-sticker-spark { right: 4%; top: 5%; color: #FA0E95; }
+
+.hero-scene-object {
+  position: absolute;
+  z-index: 0;
+  display: none;
+  place-items: center;
+  width: 4rem;
+  height: 4rem;
+  border: 1px solid rgba(255,255,255,0.8);
+  border-radius: 1.35rem;
+  background: rgba(255,255,255,0.32);
+  color: #24A9C5;
+  box-shadow: 0 12px 28px rgba(78,61,0,0.1), 0 2px 0 rgba(255,255,255,0.6) inset;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.hero-scene-object svg { width: 2rem; height: 2rem; stroke-width: 2.2; }
+.hero-scene-bike { left: 4%; top: 15rem; transform: rotate(-8deg); }
+.hero-scene-route { right: 4%; bottom: 8rem; color: #FA0E95; transform: rotate(8deg); }
 
 .hero-showcase-spark {
   position: absolute;
@@ -1446,6 +1489,17 @@
   .hero-showcase-inner { border-radius: 1.35rem; }
   .hero-showcase-bike { right: 0.8rem; bottom: 0.8rem; }
   .hero-showcase-frame::after { inset: 0.55rem -0.4rem -0.4rem 0.4rem; }
+  .hero-showcase-sticker-route { left: 0.9rem; bottom: 0.9rem; }
+  .hero-showcase-sticker-spark { right: 0.9rem; top: 0.9rem; }
+}
+
+@media (min-width: 1024px) {
+  .hero-main-lettering { width: min(112%, 46rem); }
+  .hero-scene-object { display: grid; }
+}
+
+@media (max-width: 1023px) {
+  .hero-main-lettering { width: min(112%, 42rem); margin-left: -6%; }
 }
 
 @media (prefers-reduced-motion: reduce) {
