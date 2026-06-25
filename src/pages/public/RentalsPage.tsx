@@ -74,6 +74,7 @@ export default function RentalsPage() {
 
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState('Todas');
+  const [expandedCategory, setExpandedCategory] = useState<string | null>(null);
   const [selected, setSelected] = useState<DisplayProduct | null>(null);
   
   // Dynamic Scroll Container Refs
@@ -218,6 +219,26 @@ export default function RentalsPage() {
     return Object.keys(productsByCategory).sort(sortCategories);
   }, [productsByCategory]);
 
+  const expandedProducts = useMemo(() => {
+    if (!expandedCategory) return [];
+    return products.filter(p => {
+      if (!productCategories(p).includes(expandedCategory)) return false;
+      const q = search.toLowerCase();
+      return p.name.toLowerCase().includes(q) || p.description.toLowerCase().includes(q) || (p.details || '').toLowerCase().includes(q);
+    });
+  }, [products, expandedCategory, search]);
+
+  const openCategoryView = (catName: string) => {
+    setExpandedCategory(catName);
+    setCategory(catName);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const closeCategoryView = () => {
+    setExpandedCategory(null);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
   // Render method for horizontal slider
   const renderCategorySlider = (
     title: string, 
@@ -234,7 +255,7 @@ export default function RentalsPage() {
         {/* Category Header */}
         <div className="flex justify-between items-end mb-6">
           <div className="space-y-1">
-            <h2 className="font-tan text-2xl sm:text-4xl uppercase tracking-wider text-brand-yellow [-webkit-text-stroke:1.5px_#000] drop-shadow-[2px_2px_0_rgba(0,0,0,1)]">
+            <h2 className="font-tan text-[1.35rem] leading-[1.05] sm:text-[2rem] sm:leading-[1.08] uppercase tracking-wide text-brand-yellow [-webkit-text-stroke:1.2px_#000] drop-shadow-[1.5px_1.5px_0_rgba(0,0,0,1)] max-w-[78vw] sm:max-w-none">
               {title}
             </h2>
             <p className="text-[10px] sm:text-xs font-black uppercase text-gray-400 tracking-widest font-maiandra">
@@ -243,7 +264,7 @@ export default function RentalsPage() {
           </div>
           <button
             type="button"
-            onClick={() => { setCategory('Todas'); setSearch(''); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+            onClick={() => openCategoryView(catKey)}
             className="font-maiandra text-xs sm:text-sm text-gray-500 hover:text-brand-yellow hover:underline transition-all tracking-wide underline"
           >
             Ver todo
@@ -419,7 +440,10 @@ export default function RentalsPage() {
                         ? 'bg-brand-yellow text-brand-black border-brand-yellow shadow-md scale-105' 
                         : 'bg-white text-gray-500 border-gray-200 hover:border-brand-yellow hover:text-brand-black'
                     }`}
-                    onClick={() => setCategory(c)}
+                    onClick={() => {
+                      setExpandedCategory(null);
+                      setCategory(c);
+                    }}
                   >
                     {c}
                   </Button>
@@ -447,7 +471,69 @@ export default function RentalsPage() {
       {/* Products Category Sliders */}
       <section className="py-10 min-h-[50vh] bg-background">
         <div className="max-w-7xl mx-auto px-4">
-          {filtered.length === 0 ? (
+          {expandedCategory ? (
+            <div className="py-8">
+              <div className="mb-7 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+                <div>
+                  <button
+                    type="button"
+                    onClick={closeCategoryView}
+                    className="mb-3 inline-flex rounded-full border border-brand-yellow/40 bg-white px-4 py-2 text-xs font-black text-brand-black shadow-sm hover:bg-brand-yellow"
+                  >
+                    ← Volver a categorías
+                  </button>
+                  <h1 className="font-tan text-[1.7rem] leading-[1.05] sm:text-[2.6rem] sm:leading-[1.08] uppercase tracking-wide text-brand-yellow [-webkit-text-stroke:1.3px_#000] drop-shadow-[2px_2px_0_rgba(0,0,0,1)]">
+                    {expandedCategory}
+                  </h1>
+                  <p className="mt-2 text-[10px] sm:text-xs font-black uppercase text-gray-400 tracking-widest font-maiandra">
+                    {expandedProducts.length} {expandedProducts.length === 1 ? 'producto' : 'productos'} disponibles
+                  </p>
+                </div>
+              </div>
+              {expandedProducts.length === 0 ? (
+                <div className="rounded-3xl bg-white p-10 text-center text-gray-400 font-medium font-sans shadow-sm">
+                  No hay productos en esta categoría.
+                </div>
+              ) : (
+                <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                  {expandedProducts.map(p => {
+                    const avail = getAvailableStock(p);
+                    return (
+                      <Card
+                        key={p.id}
+                        className={`bg-white border border-gray-100/80 rounded-[1.8rem] shadow-sm transition-all duration-300 h-full flex flex-col overflow-hidden ${avail > 0 ? 'cursor-pointer hover:shadow-xl hover:-translate-y-1' : 'cursor-not-allowed opacity-75'}`}
+                        onClick={() => {
+                          if (avail > 0) openReservation(p);
+                        }}
+                      >
+                        <div className="relative aspect-[4/3] bg-white overflow-hidden rounded-t-[1.8rem] flex items-center justify-center">
+                          {p.imageUrl ? <img src={p.imageUrl} alt={p.name} className="w-full h-full object-contain p-4" /> : <Bike className="w-12 h-12 text-brand-yellow/30" />}
+                          <Badge className={`absolute top-4 right-4 text-[9px] font-black uppercase px-2 py-1 border-0 ${avail <= 0 ? 'bg-brand-charcoal text-white' : 'bg-brand-yellow text-brand-black'}`}>
+                            {avail <= 0 ? 'Agotado' : p.type === 'combo' ? 'Combo' : p.itemType === 'bike' ? 'Bicicleta' : 'Accesorio'}
+                          </Badge>
+                        </div>
+                        <CardContent className="p-5 flex-1 flex flex-col justify-between bg-white">
+                          <div>
+                            <h3 className="font-tangkiwood text-lg sm:text-xl text-brand-black leading-tight">
+                              {p.name}
+                            </h3>
+                            <p className="text-xs font-sans text-gray-400 mt-1 line-clamp-2 leading-relaxed">
+                              {p.description || 'Disponible para alquiler'}
+                            </p>
+                          </div>
+                          <div className="pt-4 border-t border-gray-50 mt-4">
+                            <span className="block font-maiandra text-[9px] text-gray-400 uppercase tracking-widest leading-none mb-1">Desde</span>
+                            <span className="font-tan text-xl text-brand-black leading-none">Bs. {p.pricePerHour}</span>
+                            <span className="font-maiandra text-[10px] text-gray-500 font-bold ml-1">/ Hora</span>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          ) : filtered.length === 0 ? (
             <div className="text-center py-20 text-gray-400 font-medium font-sans">
               No hay productos disponibles para alquiler.
             </div>

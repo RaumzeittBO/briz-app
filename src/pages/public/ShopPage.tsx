@@ -31,14 +31,21 @@ type ShopItem = {
     image: string;
 };
 
-const productCategories = ['Bicicletas', 'Accesorios', 'Todas'];
+function sortShopCategories(a: string, b: string) {
+    if (a === 'Bicicletas') return -1;
+    if (b === 'Bicicletas') return 1;
+    if (a === 'Accesorios') return 1;
+    if (b === 'Accesorios') return -1;
+    return a.localeCompare(b);
+}
 
 export default function ShopPage() {
     const { inventory, combos, addSale, addOrUpdateCustomer } = useStore();
     const { items: cartItems, addToCart, removeFromCart, updateQuantity, clearCart, totalItems, totalPrice } = useCart();
 
     const [search, setSearch] = useState('');
-    const [category, setCategory] = useState('Bicicletas');
+    const [category, setCategory] = useState('Todas');
+    const [expandedCategory, setExpandedCategory] = useState<string | null>(null);
     const [showCart, setShowCart] = useState(false);
     const [checkoutStep, setCheckoutStep] = useState<'cart' | 'checkout'>('cart');
 
@@ -85,14 +92,20 @@ export default function ShopPage() {
 
     const allItems: ShopItem[] = [...productItems, ...comboItems];
 
+    const productCategories = useMemo(() => {
+        const categorySet = new Set<string>();
+        allItems.forEach(item => {
+            categorySet.add(item.category || (item.itemType === 'bike' ? 'Bicicletas' : 'Accesorios'));
+        });
+        return ['Todas', ...Array.from(categorySet).sort(sortShopCategories)];
+    }, [allItems]);
+
     const filtered = useMemo(() => {
         return allItems.filter(item => {
             const q = search.toLowerCase();
             const matchSearch = item.name.toLowerCase().includes(q) || item.description.toLowerCase().includes(q);
             if (category === 'Todas') return matchSearch;
-            
-            const tabCat = item.itemType === 'bike' ? 'Bicicletas' : 'Accesorios';
-            return tabCat === category && matchSearch;
+            return item.category === category && matchSearch;
         });
     }, [allItems, category, search]);
 
@@ -111,11 +124,29 @@ export default function ShopPage() {
 
     const categoriesToRender = useMemo(() => {
         return Object.keys(productsByCategory).sort((a, b) => {
-            if (a === 'Accesorios') return 1;
-            if (b === 'Accesorios') return -1;
-            return a.localeCompare(b);
+            return sortShopCategories(a, b);
         });
     }, [productsByCategory]);
+
+    const expandedProducts = useMemo(() => {
+        if (!expandedCategory) return [];
+        return allItems.filter(item => {
+            if (item.category !== expandedCategory) return false;
+            const q = search.toLowerCase();
+            return item.name.toLowerCase().includes(q) || item.description.toLowerCase().includes(q);
+        });
+    }, [allItems, expandedCategory, search]);
+
+    const openCategoryView = (catName: string) => {
+        setExpandedCategory(catName);
+        setCategory(catName);
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    };
+
+    const closeCategoryView = () => {
+        setExpandedCategory(null);
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    };
 
     const handleCheckout = (e: React.FormEvent) => {
         e.preventDefault();
@@ -166,7 +197,7 @@ export default function ShopPage() {
                 {/* Category Header */}
                 <div className="flex justify-between items-end mb-6">
                     <div className="space-y-1">
-                        <h2 className="font-tan text-2xl sm:text-4xl uppercase tracking-wider text-brand-yellow [-webkit-text-stroke:1.5px_#000] drop-shadow-[2px_2px_0_rgba(0,0,0,1)]">
+                        <h2 className="font-tan text-[1.35rem] leading-[1.05] sm:text-[2rem] sm:leading-[1.08] uppercase tracking-wide text-brand-yellow [-webkit-text-stroke:1.2px_#000] drop-shadow-[1.5px_1.5px_0_rgba(0,0,0,1)] max-w-[78vw] sm:max-w-none">
                             {title}
                         </h2>
                         <p className="text-[10px] sm:text-xs font-black uppercase text-gray-400 tracking-widest font-maiandra">
@@ -175,7 +206,7 @@ export default function ShopPage() {
                     </div>
                     <button
                         type="button"
-                        onClick={() => { setCategory('Todas'); setSearch(''); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+                        onClick={() => openCategoryView(catKey)}
                         className="font-maiandra text-xs sm:text-sm text-gray-500 hover:text-brand-yellow hover:underline transition-all tracking-wide underline"
                     >
                         Ver todo
@@ -281,6 +312,52 @@ export default function ShopPage() {
         );
     };
 
+    const renderGridCard = (item: ShopItem) => (
+        <Card key={item.id} className="bg-white border border-gray-100/80 rounded-[1.8rem] shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300 h-full flex flex-col overflow-hidden">
+            <div className="relative aspect-[4/3] bg-white overflow-hidden rounded-t-[1.8rem] flex items-center justify-center">
+                {item.image ? (
+                    <img src={item.image} alt={item.name} className="w-full h-full object-contain p-4" />
+                ) : (
+                    <div className="w-full h-full flex items-center justify-center bg-gray-50">
+                        {item.itemType === 'bike' ? <Bike className="w-12 h-12 text-brand-yellow/30" /> : <Wrench className="w-12 h-12 text-brand-yellow/30" />}
+                    </div>
+                )}
+                <Badge className="absolute top-4 right-4 text-[9px] font-black uppercase px-2 py-1 border-0 bg-brand-yellow text-brand-black">
+                    {item.itemType === 'bike' ? 'Bicicleta' : 'Accesorio'}
+                </Badge>
+            </div>
+            <CardContent className="p-5 flex-1 flex flex-col justify-between bg-white">
+                <div>
+                    <h3 className="font-tangkiwood text-lg sm:text-xl text-brand-black leading-tight">
+                        {item.name}
+                    </h3>
+                    <p className="text-xs font-sans text-gray-400 mt-1 line-clamp-2 leading-relaxed">
+                        {item.description || 'Disponible para compra'}
+                    </p>
+                </div>
+                <div className="pt-4 border-t border-gray-50 mt-4">
+                    <div className="flex items-baseline gap-1 mb-4">
+                        <span className="text-xs font-bold text-gray-400">Bs.</span>
+                        <span className="font-tan text-2xl text-brand-black leading-none">{item.price}</span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                        <Button
+                            className="h-10 bg-brand-yellow text-brand-black hover:bg-brand-yellow-light shadow-md hover:-translate-y-0.5 transition-all rounded-full border-0 font-black text-xs flex items-center justify-center gap-1"
+                            onClick={() => addToCart({ id: item.id, name: item.name, price: item.price, itemType: item.itemType, image: item.image })}
+                        >
+                            <ShoppingCart className="w-3.5 h-3.5" strokeWidth={2} /> AÃ±adir
+                        </Button>
+                        <a href="https://wa.me/59177860277" target="_blank" rel="noopener noreferrer" className="block">
+                            <Button variant="outline" className="w-full h-10 text-brand-charcoal border-gray-100 hover:border-brand-yellow hover:bg-brand-yellow/5 transition-all rounded-full font-black text-xs flex items-center justify-center gap-1">
+                                <MessageCircle className="w-3.5 h-3.5" strokeWidth={2} /> Consultar
+                            </Button>
+                        </a>
+                    </div>
+                </div>
+            </CardContent>
+        </Card>
+    );
+
     return (
         <div className="pt-[80px] lg:pt-[120px] bg-[#FFFDF3] min-h-screen flex flex-col">
             <div className="sticky top-[80px] lg:top-[120px] z-40 bg-[#FFFDF3]/95 backdrop-blur-md border-b border-gray-100">
@@ -321,7 +398,10 @@ export default function ShopPage() {
                             {productCategories.map(c => (
                                 <Button key={c} variant={category === c ? 'default' : 'outline'} size="sm"
                                     className={`rounded-full px-6 h-10 font-bold tracking-wide shadow-sm whitespace-nowrap snap-start flex-shrink-0 transition-all ${category === c ? 'bg-brand-yellow text-brand-black border-brand-yellow shadow-[0_4px_14px_rgba(255,210,0,0.4)] scale-105' : 'bg-white text-gray-600 border-gray-200 hover:border-brand-charcoal hover:text-brand-charcoal hover:bg-gray-50'}`}
-                                    onClick={() => setCategory(c)}>{c}</Button>
+                                    onClick={() => {
+                                        setExpandedCategory(null);
+                                        setCategory(c);
+                                    }}>{c}</Button>
                             ))}
                         </motion.div>
                     </div>
@@ -331,7 +411,36 @@ export default function ShopPage() {
             {/* Product Sliders */}
             <section className="py-12 sm:py-16 min-h-[50vh] bg-background flex-1">
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-full">
-                    {filtered.length === 0 ? (
+                    {expandedCategory ? (
+                        <div className="py-6">
+                            <div className="mb-7 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+                                <div>
+                                    <button
+                                        type="button"
+                                        onClick={closeCategoryView}
+                                        className="mb-3 inline-flex rounded-full border border-brand-yellow/40 bg-white px-4 py-2 text-xs font-black text-brand-black shadow-sm hover:bg-brand-yellow"
+                                    >
+                                        ← Volver a categorías
+                                    </button>
+                                    <h1 className="font-tan text-[1.7rem] leading-[1.05] sm:text-[2.6rem] sm:leading-[1.08] uppercase tracking-wide text-brand-yellow [-webkit-text-stroke:1.3px_#000] drop-shadow-[2px_2px_0_rgba(0,0,0,1)]">
+                                        {expandedCategory}
+                                    </h1>
+                                    <p className="mt-2 text-[10px] sm:text-xs font-black uppercase text-gray-400 tracking-widest font-maiandra">
+                                        {expandedProducts.length} {expandedProducts.length === 1 ? 'producto' : 'productos'}
+                                    </p>
+                                </div>
+                            </div>
+                            {expandedProducts.length === 0 ? (
+                                <div className="rounded-3xl bg-white p-10 text-center text-gray-400 font-medium font-sans shadow-sm">
+                                    No encontramos productos en esta categoría.
+                                </div>
+                            ) : (
+                                <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                                    {expandedProducts.map(item => renderGridCard(item))}
+                                </div>
+                            )}
+                        </div>
+                    ) : filtered.length === 0 ? (
                         <div className="text-center flex items-center justify-center h-full py-24">
                             <p className="text-gray-500 font-medium text-lg">No encontramos productos que coincidan con tu búsqueda.</p>
                         </div>
