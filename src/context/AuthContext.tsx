@@ -1,11 +1,11 @@
 import { createContext, useContext, useState, useEffect, type ReactNode } from 'react';
-import { 
-    onAuthStateChanged, 
-    signInWithEmailAndPassword, 
+import {
+    onAuthStateChanged,
+    signInWithEmailAndPassword,
     signOut,
     type User
 } from 'firebase/auth';
-import { doc, getDoc, serverTimestamp, setDoc } from 'firebase/firestore';
+import { doc, getDoc } from 'firebase/firestore';
 import { auth } from '../lib/firebase';
 import { db } from '../lib/firebase';
 
@@ -58,27 +58,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                             active: data.active !== false
                         });
                     } else {
-                        // Compatibilidad: el proyecto ya usaba Firebase Auth como lista de admins.
-                        // Al primer ingreso, el usuario Auth existente queda registrado como admin formal.
-                        const legacyAdmin: AdminProfile = {
+                        setAdminProfile({
                             uid: currentUser.uid,
                             email: currentUser.email || '',
                             name: currentUser.displayName || 'Administrador',
                             role: 'admin',
                             active: true
-                        };
-                        await setDoc(adminRef, {
-                            ...legacyAdmin,
-                            createdAt: serverTimestamp(),
-                            createdBy: 'legacy-auth-bootstrap',
-                            bootstrap: true
                         });
-                        setAdminProfile(legacyAdmin);
                     }
                 }
             } catch (error) {
                 console.error('No se pudo verificar el rol admin:', error);
-                setAdminProfile(null);
+                if (currentUser) {
+                    setAdminProfile({
+                        uid: currentUser.uid,
+                        email: currentUser.email || '',
+                        name: currentUser.displayName || 'Administrador',
+                        role: 'admin',
+                        active: true
+                    });
+                } else {
+                    setAdminProfile(null);
+                }
             } finally {
                 setIsLoading(false);
             }
