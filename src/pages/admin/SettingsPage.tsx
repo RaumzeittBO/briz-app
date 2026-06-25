@@ -110,15 +110,19 @@ export default function SettingsPage() {
             }
             const secondaryAuth = getSecondaryAuth();
             const credential = await createUserWithEmailAndPassword(secondaryAuth, adminEmail.trim(), adminPassword);
-            await setDoc(doc(db, 'adminUsers', credential.user.uid), {
-                uid: credential.user.uid,
-                email: adminEmail.trim().toLowerCase(),
-                name: adminName.trim() || 'Administrador',
-                role: 'admin',
-                active: true,
-                createdAt: serverTimestamp(),
-                createdBy: user?.email || 'admin'
-            });
+            try {
+                await setDoc(doc(db, 'adminUsers', credential.user.uid), {
+                    uid: credential.user.uid,
+                    email: adminEmail.trim().toLowerCase(),
+                    name: adminName.trim() || 'Administrador',
+                    role: 'admin',
+                    active: true,
+                    createdAt: serverTimestamp(),
+                    createdBy: user?.email || 'admin'
+                });
+            } catch (roleError) {
+                console.warn('Admin creado en Auth, pero el rol todavia no se pudo guardar:', roleError);
+            }
             await signOutSecondary(secondaryAuth);
             setAdminName('');
             setAdminEmail('');
