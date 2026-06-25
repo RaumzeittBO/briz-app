@@ -18,13 +18,23 @@ interface AdminUserRecord {
     role: 'admin';
     active: boolean;
     createdAt?: unknown;
+    source?: 'firestore' | 'local';
 }
+
+const LOCAL_ADMIN_DIRECTORY_KEY = 'briz_admin_directory';
 
 export default function SettingsPage() {
     const { rentalSettings, updateRentalSettings } = useStore();
     const { user } = useAuth();
     
     const [admins, setAdmins] = useState<AdminUserRecord[]>([]);
+    const [localAdmins, setLocalAdmins] = useState<AdminUserRecord[]>(() => {
+        try {
+            return JSON.parse(localStorage.getItem(LOCAL_ADMIN_DIRECTORY_KEY) || '[]') as AdminUserRecord[];
+        } catch {
+            return [];
+        }
+    });
     const [adminPin, setAdminPin] = useState('1234');
     const [pinInput, setPinInput] = useState('');
     const [pinUnlocked, setPinUnlocked] = useState(false);
@@ -55,16 +65,40 @@ export default function SettingsPage() {
 
     useEffect(() => {
         const unsubAdmins = onSnapshot(collection(db, 'adminUsers'), (snap) => {
-            setAdmins(snap.docs.map(item => ({ uid: item.id, ...(item.data() as Omit<AdminUserRecord, 'uid'>) })));
+            setAdmins(snap.docs.map(item => ({ uid: item.id, ...(item.data() as Omit<AdminUserRecord, 'uid'>), source: 'firestore' })));
+        }, (error) => {
+            console.warn('No se pudo leer adminUsers:', error);
+            setAdminMessage('No se pudo leer la lista Firestore de admins. La lista local seguirá funcionando.');
         });
         const unsubSecurity = onSnapshot(doc(db, 'settings', 'admin_security'), (snap) => {
             if (snap.exists()) setAdminPin(String(snap.data().pin || '1234'));
+        }, (error) => {
+            console.warn('No se pudo leer admin_security:', error);
         });
         return () => {
             unsubAdmins();
             unsubSecurity();
         };
     }, []);
+
+    const saveLocalAdmins = (nextAdmins: AdminUserRecord[]) => {
+        setLocalAdmins(nextAdmins);
+        localStorage.setItem(LOCAL_ADMIN_DIRECTORY_KEY, JSON.stringify(nextAdmins));
+    };
+
+    const rememberAdminLocally = (admin: AdminUserRecord) => {
+        const normalizedEmail = admin.email.toLowerCase().trim();
+        const nextAdmins = [
+            ...localAdmins.filter(item => item.email.toLowerCase().trim() !== normalizedEmail),
+            { ...admin, email: normalizedEmail, source: 'local' as const }
+        ];
+        saveLocalAdmins(nextAdmins);
+    };
+
+    const displayedAdmins = [
+        ...admins,
+        ...localAdmins.filter(localAdmin => !admins.some(admin => admin.email.toLowerCase().trim() === localAdmin.email.toLowerCase().trim()))
+    ];
 
     const getSecondaryAuth = () => {
         const secondaryApp = getApps().some(app => app.name === 'briz-admin-creator')
@@ -110,26 +144,43 @@ export default function SettingsPage() {
             }
             const secondaryAuth = getSecondaryAuth();
             const credential = await createUserWithEmailAndPassword(secondaryAuth, adminEmail.trim(), adminPassword);
+            const createdAdmin: AdminUserRecord = {
+                uid: credential.user.uid,
+                email: adminEmail.trim().toLowerCase(),
+                name: adminName.trim() || 'Administrador',
+                role: 'admin',
+                active: true
+            };
             try {
-                await setDoc(doc(db, 'adminUsers', credential.user.uid), {
-                    uid: credential.user.uid,
-                    email: adminEmail.trim().toLowerCase(),
-                    name: adminName.trim() || 'Administrador',
-                    role: 'admin',
-                    active: true,
+                await setDoc(doc(db, 'adminUsers', createdAdmin.uid), {
+                    ...createdAdmin,
                     createdAt: serverTimestamp(),
                     createdBy: user?.email || 'admin'
                 });
             } catch (roleError) {
                 console.warn('Admin creado en Auth, pero el rol todavia no se pudo guardar:', roleError);
             }
+            rememberAdminLocally(createdAdmin);
             await signOutSecondary(secondaryAuth);
             setAdminName('');
             setAdminEmail('');
             setAdminPassword('');
             setAdminMessage('Admin creado. Ya puede entrar con ese correo y contraseña temporal.');
         } catch (error) {
-            setAdminMessage(error instanceof Error ? error.message : 'No se pudo crear el usuario admin.');
+            const errorCode = typeof error === 'object' && error && 'code' in error ? String((error as { code?: unknown }).code) : '';
+            if (errorCode === 'auth/email-already-in-use') {
+                const existingAdmin: AdminUserRecord = {
+                    uid: `local-${adminEmail.trim().toLowerCase()}`,
+                    email: adminEmail.trim().toLowerCase(),
+                    name: adminName.trim() || 'Administrador',
+                    role: 'admin',
+                    active: true
+                };
+                rememberAdminLocally(existingAdmin);
+                setAdminMessage('Ese correo ya existÃ­a en Firebase Auth. Lo agreguÃ© a la lista visible; puede entrar si tiene su contraseÃ±a o puedes enviar Reset.');
+            } else {
+                setAdminMessage(error instanceof Error ? error.message : 'No se pudo crear el usuario admin.');
+            }
         } finally {
             setAdminSaving(false);
         }
@@ -145,11 +196,21 @@ export default function SettingsPage() {
             setAdminMessage('No puedes desactivar tu propio usuario mientras estás conectado.');
             return;
         }
-        await updateDoc(doc(db, 'adminUsers', admin.uid), {
-            active: !admin.active,
-            updatedAt: serverTimestamp(),
-            updatedBy: user?.email || 'admin'
-        });
+        if (admin.source === 'local' || admin.uid.startsWith('local-')) {
+            saveLocalAdmins(localAdmins.map(item => item.email.toLowerCase().trim() === admin.email.toLowerCase().trim() ? { ...item, active: !admin.active } : item));
+            setAdminMessage(admin.active ? 'Admin oculto/desactivado en la lista local.' : 'Admin activado en la lista local.');
+            return;
+        }
+        try {
+            await updateDoc(doc(db, 'adminUsers', admin.uid), {
+                active: !admin.active,
+                updatedAt: serverTimestamp(),
+                updatedBy: user?.email || 'admin'
+            });
+        } catch (error) {
+            console.warn('No se pudo actualizar adminUsers, usando lista local:', error);
+            rememberAdminLocally({ ...admin, active: !admin.active });
+        }
         setAdminMessage(admin.active ? 'Admin desactivado.' : 'Admin activado.');
     };
 
@@ -275,7 +336,7 @@ export default function SettingsPage() {
                                     <h3 className="text-lg font-black text-white">Admins registrados</h3>
                                 </div>
                                 <div className="space-y-3">
-                                    {admins.map(admin => (
+                                    {displayedAdmins.map(admin => (
                                         <div key={admin.uid} className="flex flex-col gap-3 rounded-2xl border border-white/5 bg-black/30 p-4 md:flex-row md:items-center md:justify-between">
                                             <div>
                                                 <p className="font-black text-white">{admin.name || 'Administrador'}</p>
@@ -294,7 +355,7 @@ export default function SettingsPage() {
                                             </div>
                                         </div>
                                     ))}
-                                    {admins.length === 0 && <p className="text-sm font-bold text-white/35">Aún no hay admins registrados en la colección de roles.</p>}
+                                    {displayedAdmins.length === 0 && <p className="text-sm font-bold text-white/35">Aún no hay admins registrados. Si ya creaste uno en Firebase Auth, intenta registrarlo aquÃ­ con el mismo correo para agregarlo a la lista visible.</p>}
                                 </div>
                             </div>
                         </div>
