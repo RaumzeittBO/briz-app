@@ -197,7 +197,7 @@ export default function ShopPage() {
                 {/* Category Header */}
                 <div className="flex justify-between items-end mb-6">
                     <div className="space-y-1">
-                        <h2 className="font-tan text-[1.35rem] leading-[1.05] sm:text-[2rem] sm:leading-[1.08] uppercase tracking-wide text-brand-yellow [-webkit-text-stroke:1.2px_#000] drop-shadow-[1.5px_1.5px_0_rgba(0,0,0,1)] max-w-[78vw] sm:max-w-none">
+                        <h2 className="font-tan text-[1.05rem] leading-[1.28] sm:text-[1.45rem] sm:leading-[1.22] lg:text-[1.7rem] uppercase tracking-normal text-brand-yellow [-webkit-text-stroke:1px_#000] drop-shadow-[1.2px_1.2px_0_rgba(0,0,0,1)] max-w-[76vw] sm:max-w-none">
                             {title}
                         </h2>
                         <p className="text-[10px] sm:text-xs font-black uppercase text-gray-400 tracking-widest font-maiandra">
@@ -394,7 +394,7 @@ export default function ShopPage() {
                             </Card>
                         </motion.div>
 
-                        <motion.div {...fadeUp} transition={{ delay: 0.1 }} className="briz-horizontal-slider flex gap-2 overflow-x-auto pb-2 sm:pb-0 w-full justify-center snap-x px-1 py-1">
+                        <motion.div {...fadeUp} transition={{ delay: 0.1 }} className="briz-horizontal-slider flex gap-2 overflow-x-auto pb-2 sm:pb-0 w-full justify-start snap-x px-4 py-1 scroll-ps-4">
                             {productCategories.map(c => (
                                 <Button key={c} variant={category === c ? 'default' : 'outline'} size="sm"
                                     className={`rounded-full px-6 h-10 font-bold tracking-wide shadow-sm whitespace-nowrap snap-start flex-shrink-0 transition-all ${category === c ? 'bg-brand-yellow text-brand-black border-brand-yellow shadow-[0_4px_14px_rgba(255,210,0,0.4)] scale-105' : 'bg-white text-gray-600 border-gray-200 hover:border-brand-charcoal hover:text-brand-charcoal hover:bg-gray-50'}`}
@@ -422,7 +422,7 @@ export default function ShopPage() {
                                     >
                                         ← Volver a categorías
                                     </button>
-                                    <h1 className="font-tan text-[1.7rem] leading-[1.05] sm:text-[2.6rem] sm:leading-[1.08] uppercase tracking-wide text-brand-yellow [-webkit-text-stroke:1.3px_#000] drop-shadow-[2px_2px_0_rgba(0,0,0,1)]">
+                                    <h1 className="font-tan text-[1.35rem] leading-[1.25] sm:text-[1.9rem] sm:leading-[1.18] lg:text-[2.15rem] uppercase tracking-normal text-brand-yellow [-webkit-text-stroke:1.1px_#000] drop-shadow-[1.5px_1.5px_0_rgba(0,0,0,1)]">
                                         {expandedCategory}
                                     </h1>
                                     <p className="mt-2 text-[10px] sm:text-xs font-black uppercase text-gray-400 tracking-widest font-maiandra">

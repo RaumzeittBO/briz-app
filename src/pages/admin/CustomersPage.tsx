@@ -6,7 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { useStore } from '@/context/StoreContext';
 import type { Customer } from '@/context/StoreContext';
-import { Search, Edit, User, UserPlus, Eye, FileText } from 'lucide-react';
+import { Download, ExternalLink, Search, Edit, User, UserPlus, Eye, FileText } from 'lucide-react';
 
 export default function CustomersPage() {
     const { customers, updateCustomer, addOrUpdateCustomer, deleteCustomer, sales, rentals } = useStore();
@@ -18,6 +18,28 @@ export default function CustomersPage() {
     const [current, setCurrent] = useState<Partial<Customer>>({});
     const [detailsCustomer, setDetailsCustomer] = useState<Customer | null>(null);
     const isPdfDocument = (url?: string) => Boolean(url && (url.toLowerCase().includes('.pdf') || url.startsWith('data:application/pdf')));
+    const openDocument = (url?: string) => {
+        if (!url) return;
+        const safeUrl = url.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        const win = window.open('', '_blank', 'noopener,noreferrer');
+        if (win) {
+            win.document.write(`
+                <!doctype html>
+                <html>
+                    <head><title>Documento Briz</title><meta name="viewport" content="width=device-width, initial-scale=1" /></head>
+                    <body style="margin:0;background:#111;display:flex;min-height:100vh;align-items:center;justify-content:center;">
+                        ${isPdfDocument(url)
+                            ? `<iframe src="${safeUrl}" style="width:100vw;height:100vh;border:0;background:white;"></iframe>`
+                            : `<img src="${safeUrl}" style="max-width:100vw;max-height:100vh;object-fit:contain;" />`
+                        }
+                    </body>
+                </html>
+            `);
+            win.document.close();
+        } else {
+            window.location.href = url;
+        }
+    };
 
     const filtered = customers.filter(c =>
         c.name.toLowerCase().includes(search.toLowerCase()) ||
@@ -188,7 +210,7 @@ export default function CustomersPage() {
             )}
 
             <Dialog open={Boolean(detailsCustomer)} onOpenChange={(open) => !open && setDetailsCustomer(null)}>
-                <DialogContent className="max-w-6xl max-h-[92vh] overflow-hidden border border-brand-yellow/25 bg-[#FFF9E8] p-0 text-brand-charcoal shadow-2xl">
+                <DialogContent className="w-[96vw] max-w-[1500px] max-h-[94vh] overflow-hidden border border-brand-yellow/25 bg-[#FFF9E8] p-0 text-brand-charcoal shadow-2xl">
                     {detailsCustomer && (
                         <>
                             <DialogHeader className="border-b border-brand-yellow/20 bg-white/75 p-5 sm:p-7">
@@ -199,8 +221,8 @@ export default function CustomersPage() {
                                     Detalles del cliente
                                 </DialogTitle>
                             </DialogHeader>
-                            <div className="max-h-[78vh] space-y-6 overflow-y-auto p-4 sm:p-7">
-                                <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1.05fr_0.95fr]">
+                            <div className="max-h-[80vh] space-y-6 overflow-y-auto p-4 sm:p-7">
+                                <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(520px,0.9fr)_minmax(560px,1.1fr)]">
                                     <div className="space-y-5">
                                         <div>
                                             <p className="text-[10px] font-bold uppercase tracking-widest text-brand-charcoal/45">Nombre completo</p>
@@ -217,9 +239,9 @@ export default function CustomersPage() {
                                                 ['Rentas', String(rentals.filter(r => r.customerPhone === detailsCustomer.phone || r.customerCI === detailsCustomer.ci).length)],
                                                 ['Compras', String(sales.filter(s => s.customerPhone === detailsCustomer.phone || s.customerCI === detailsCustomer.ci).length)],
                                             ].map(([label, value]) => (
-                                                <div key={label} className="rounded-2xl border border-brand-yellow/15 bg-white p-4 shadow-sm">
+                                                <div key={label} className="min-w-0 rounded-2xl border border-brand-yellow/15 bg-white p-4 shadow-sm">
                                                     <p className="text-[10px] font-bold uppercase tracking-widest text-brand-charcoal/45">{label}</p>
-                                                    <p className="mt-1 break-words text-base font-black text-brand-charcoal sm:text-lg">{value}</p>
+                                                    <p className="mt-1 break-words text-sm font-black leading-relaxed text-brand-charcoal sm:text-base">{value}</p>
                                                 </div>
                                             ))}
                                         </div>
@@ -232,9 +254,10 @@ export default function CustomersPage() {
                                     </div>
 
                                     <div className="space-y-5">
+                                        <div className="grid gap-5 lg:grid-cols-[220px_1fr] xl:grid-cols-[240px_1fr]">
                                         <div className="rounded-3xl border border-brand-yellow/15 bg-white p-4 shadow-sm">
                                             <p className="mb-3 text-[10px] font-bold uppercase tracking-widest text-brand-charcoal/45">Foto del cliente</p>
-                                            <div className="aspect-[4/3] rounded-2xl overflow-hidden bg-brand-yellow/5 border border-brand-yellow/15 flex items-center justify-center">
+                                            <div className="aspect-square rounded-2xl overflow-hidden bg-brand-yellow/5 border border-brand-yellow/15 flex items-center justify-center">
                                                 {detailsCustomer.autofotoUrl ? (
                                                     <a href={detailsCustomer.autofotoUrl} target="_blank" rel="noreferrer" className="w-full h-full">
                                                         <img src={detailsCustomer.autofotoUrl} className="w-full h-full object-cover" alt={`Foto de ${detailsCustomer.name}`} />
@@ -246,24 +269,39 @@ export default function CustomersPage() {
                                         </div>
 
                                         <div className="rounded-3xl border border-brand-yellow/15 bg-white p-4 shadow-sm">
-                                            <p className="mb-3 text-[10px] font-bold uppercase tracking-widest text-brand-charcoal/45">Documento subido</p>
-                                            <div className="min-h-[420px] rounded-2xl overflow-hidden bg-brand-yellow/5 border border-brand-yellow/15 flex items-center justify-center">
+                                            <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                                                <p className="text-[10px] font-bold uppercase tracking-widest text-brand-charcoal/45">Documento subido</p>
+                                                {detailsCustomer.documentoUrl && (
+                                                    <div className="flex flex-wrap gap-2">
+                                                        <Button type="button" onClick={() => openDocument(detailsCustomer.documentoUrl)} className="h-9 rounded-full bg-brand-yellow px-4 text-xs font-black text-brand-black hover:bg-white">
+                                                            <ExternalLink className="mr-1.5 h-3.5 w-3.5" /> Abrir
+                                                        </Button>
+                                                        <a href={detailsCustomer.documentoUrl} download target="_blank" rel="noreferrer" className="inline-flex h-9 items-center rounded-full border border-brand-yellow/40 bg-white px-4 text-xs font-black text-brand-charcoal hover:bg-brand-yellow">
+                                                            <Download className="mr-1.5 h-3.5 w-3.5" /> Descargar
+                                                        </a>
+                                                    </div>
+                                                )}
+                                            </div>
+                                            <div className="min-h-[560px] rounded-2xl overflow-hidden bg-brand-yellow/5 border border-brand-yellow/15 flex items-center justify-center">
                                                 {detailsCustomer.documentoUrl ? (
                                                     isPdfDocument(detailsCustomer.documentoUrl) ? (
-                                                        <iframe
-                                                            src={detailsCustomer.documentoUrl}
-                                                            title={`Documento de ${detailsCustomer.name}`}
-                                                            className="h-[520px] w-full bg-white"
-                                                        />
+                                                        <object data={detailsCustomer.documentoUrl} type="application/pdf" className="h-[650px] w-full bg-white">
+                                                            <iframe
+                                                                src={detailsCustomer.documentoUrl}
+                                                                title={`Documento de ${detailsCustomer.name}`}
+                                                                className="h-[650px] w-full bg-white"
+                                                            />
+                                                        </object>
                                                     ) : (
-                                                        <a href={detailsCustomer.documentoUrl} target="_blank" rel="noreferrer" className="w-full">
-                                                            <img src={detailsCustomer.documentoUrl} className="h-[520px] w-full object-contain" alt={`Documento de ${detailsCustomer.name}`} />
-                                                        </a>
+                                                        <button type="button" onClick={() => openDocument(detailsCustomer.documentoUrl)} className="h-full w-full cursor-zoom-in">
+                                                            <img src={detailsCustomer.documentoUrl} className="h-[650px] w-full object-contain" alt={`Documento de ${detailsCustomer.name}`} />
+                                                        </button>
                                                     )
                                                 ) : (
                                                     <FileText className="w-16 h-16 text-brand-charcoal/20" />
                                                 )}
                                             </div>
+                                        </div>
                                         </div>
                                     </div>
                                 </div>
