@@ -42,40 +42,46 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     useEffect(() => {
         const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
             setIsLoading(true);
-            setUser(currentUser);
-            setAdminProfile(null);
-            if (currentUser) {
-                const adminRef = doc(db, 'adminUsers', currentUser.uid);
-                const snap = await getDoc(adminRef);
-                if (snap.exists()) {
-                    const data = snap.data() as AdminProfile;
-                    setAdminProfile({
-                        uid: currentUser.uid,
-                        email: data.email || currentUser.email || '',
-                        name: data.name,
-                        role: data.role || 'admin',
-                        active: data.active !== false
-                    });
-                } else {
-                    // Compatibilidad: el proyecto ya usaba Firebase Auth como lista de admins.
-                    // Al primer ingreso, el usuario Auth existente queda registrado como admin formal.
-                    const legacyAdmin: AdminProfile = {
-                        uid: currentUser.uid,
-                        email: currentUser.email || '',
-                        name: currentUser.displayName || 'Administrador',
-                        role: 'admin',
-                        active: true
-                    };
-                    await setDoc(adminRef, {
-                        ...legacyAdmin,
-                        createdAt: serverTimestamp(),
-                        createdBy: 'legacy-auth-bootstrap',
-                        bootstrap: true
-                    });
-                    setAdminProfile(legacyAdmin);
+            try {
+                setUser(currentUser);
+                setAdminProfile(null);
+                if (currentUser) {
+                    const adminRef = doc(db, 'adminUsers', currentUser.uid);
+                    const snap = await getDoc(adminRef);
+                    if (snap.exists()) {
+                        const data = snap.data() as AdminProfile;
+                        setAdminProfile({
+                            uid: currentUser.uid,
+                            email: data.email || currentUser.email || '',
+                            name: data.name,
+                            role: data.role || 'admin',
+                            active: data.active !== false
+                        });
+                    } else {
+                        // Compatibilidad: el proyecto ya usaba Firebase Auth como lista de admins.
+                        // Al primer ingreso, el usuario Auth existente queda registrado como admin formal.
+                        const legacyAdmin: AdminProfile = {
+                            uid: currentUser.uid,
+                            email: currentUser.email || '',
+                            name: currentUser.displayName || 'Administrador',
+                            role: 'admin',
+                            active: true
+                        };
+                        await setDoc(adminRef, {
+                            ...legacyAdmin,
+                            createdAt: serverTimestamp(),
+                            createdBy: 'legacy-auth-bootstrap',
+                            bootstrap: true
+                        });
+                        setAdminProfile(legacyAdmin);
+                    }
                 }
+            } catch (error) {
+                console.error('No se pudo verificar el rol admin:', error);
+                setAdminProfile(null);
+            } finally {
+                setIsLoading(false);
             }
-            setIsLoading(false);
         });
         return unsubscribe;
     }, []);
