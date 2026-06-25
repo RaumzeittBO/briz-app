@@ -6,48 +6,68 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    function isAdmin() {
+      return signedIn()
+        && exists(/databases/$(database)/documents/adminUsers/$(request.auth.uid))
+        && get(/databases/$(database)/documents/adminUsers/$(request.auth.uid)).data.role == 'admin'
+        && get(/databases/$(database)/documents/adminUsers/$(request.auth.uid)).data.active == true;
+    }
+
+    match /adminUsers/{adminUserId} {
+      allow read: if isAdmin();
+      allow create: if isAdmin()
+        || (
+          signedIn()
+          && request.auth.uid == adminUserId
+          && request.resource.data.role == 'admin'
+          && request.resource.data.active == true
+        );
+      allow update: if isAdmin();
+      allow delete: if false;
+    }
+
     match /settings/{settingId} {
-      allow read: if true;
-      allow write: if signedIn();
+      allow read: if settingId != 'admin_security' || isAdmin();
+      allow write: if isAdmin();
     }
 
     match /inventory/{itemId} {
       allow read: if true;
-      allow write: if signedIn();
+      allow write: if isAdmin();
     }
 
     match /combos/{comboId} {
       allow read: if true;
-      allow write: if signedIn();
+      allow write: if isAdmin();
     }
 
     match /routes/{routeId} {
       allow read: if true;
-      allow write: if signedIn();
+      allow write: if isAdmin();
     }
 
     match /rentals/{rentalId} {
       allow read: if true;
       allow create: if true;
-      allow update, delete: if signedIn();
+      allow update, delete: if isAdmin();
     }
 
     match /customers/{customerId} {
       allow read: if true;
       allow create: if true;
-      allow update, delete: if signedIn();
+      allow update, delete: if isAdmin();
     }
 
     match /sales/{saleId} {
       allow read: if true;
       allow create: if true;
-      allow update, delete: if signedIn();
+      allow update, delete: if isAdmin();
     }
 
     match /serviceOrders/{serviceOrderId} {
       allow read: if true;
       allow create: if true;
-      allow update, delete: if signedIn();
+      allow update, delete: if isAdmin();
     }
 
     // Cyclists can submit only pending content. Administrators authenticated
@@ -55,7 +75,7 @@ service cloud.firestore {
     match /communityItems/{itemId} {
       allow read: if true;
       allow create: if request.resource.data.status == 'pending';
-      allow update, delete: if signedIn();
+      allow update, delete: if isAdmin();
     }
   }
 }
