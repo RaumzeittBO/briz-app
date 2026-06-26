@@ -135,7 +135,7 @@
 
 @theme inline {
   --font-sans: 'Cocon', 'Maiandra GD', sans-serif;
-  --font-primary: 'TAN Songbird', serif;
+  --font-primary: 'TAN Tangkiwood', serif;
   --font-secondary: 'Cocon', sans-serif;
   --font-handwritten: 'Gochi Hand', cursive;
   --font-tangkiwood: 'TAN Tangkiwood', serif;
@@ -299,7 +299,7 @@
 
 /* Font utility classes */
 .font-tan {
-  font-family: 'TAN Songbird', serif;
+  font-family: 'TAN Tangkiwood', serif;
   line-height: 1.4;
   letter-spacing: 0.04em;
   text-transform: uppercase;
