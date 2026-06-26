@@ -20,25 +20,7 @@ export default function CustomersPage() {
     const isPdfDocument = (url?: string) => Boolean(url && (url.toLowerCase().includes('.pdf') || url.startsWith('data:application/pdf')));
     const openDocument = (url?: string) => {
         if (!url) return;
-        const safeUrl = url.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-        const win = window.open('', '_blank', 'noopener,noreferrer');
-        if (win) {
-            win.document.write(`
-                <!doctype html>
-                <html>
-                    <head><title>Documento Briz</title><meta name="viewport" content="width=device-width, initial-scale=1" /></head>
-                    <body style="margin:0;background:#111;display:flex;min-height:100vh;align-items:center;justify-content:center;">
-                        ${isPdfDocument(url)
-                            ? `<iframe src="${safeUrl}" style="width:100vw;height:100vh;border:0;background:white;"></iframe>`
-                            : `<img src="${safeUrl}" style="max-width:100vw;max-height:100vh;object-fit:contain;" />`
-                        }
-                    </body>
-                </html>
-            `);
-            win.document.close();
-        } else {
-            window.location.href = url;
-        }
+        window.open(url, '_blank', 'noopener,noreferrer');
     };
 
     const filtered = customers.filter(c =>
@@ -210,7 +192,7 @@ export default function CustomersPage() {
             )}
 
             <Dialog open={Boolean(detailsCustomer)} onOpenChange={(open) => !open && setDetailsCustomer(null)}>
-                <DialogContent className="w-[96vw] max-w-[1500px] max-h-[94vh] overflow-hidden border border-brand-yellow/25 bg-[#FFF9E8] p-0 text-brand-charcoal shadow-2xl">
+                <DialogContent className="w-[96vw] sm:max-w-[94vw] xl:max-w-[1500px] max-h-[94vh] overflow-hidden border border-brand-yellow/25 bg-[#FFF9E8] p-0 text-brand-charcoal shadow-2xl">
                     {detailsCustomer && (
                         <>
                             <DialogHeader className="border-b border-brand-yellow/20 bg-white/75 p-5 sm:p-7">

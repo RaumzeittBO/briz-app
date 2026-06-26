@@ -1,12 +1,12 @@
 import { useState, useEffect } from 'react';
 import { initializeApp, getApp, getApps } from 'firebase/app';
 import { createUserWithEmailAndPassword, getAuth, sendPasswordResetEmail, signOut as signOutSecondary } from 'firebase/auth';
-import { collection, doc, onSnapshot, serverTimestamp, setDoc, updateDoc } from 'firebase/firestore';
+import { collection, doc, onSnapshot, serverTimestamp, setDoc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Save, Bell, Shield, Globe, CreditCard, Upload, Check, UserPlus, KeyRound, Mail, Users } from 'lucide-react';
+import { Save, Bell, Shield, Globe, CreditCard, Upload, Check, UserPlus, KeyRound, Mail, Users, Trash2 } from 'lucide-react';
 import { useStore } from '@/context/StoreContext';
 import { useAuth } from '@/context/AuthContext';
 import { auth, db, firebaseConfig } from '@/lib/firebase';
@@ -214,6 +214,28 @@ export default function SettingsPage() {
         setAdminMessage(admin.active ? 'Admin desactivado.' : 'Admin activado.');
     };
 
+    const handleDeleteAdmin = async (admin: AdminUserRecord) => {
+        if (admin.uid === user?.uid) {
+            setAdminMessage('No puedes eliminar tu propio usuario mientras estás conectado.');
+            return;
+        }
+        if (window.confirm(`¿Estás seguro de que deseas eliminar al administrador ${admin.name || admin.email}?`)) {
+            try {
+                if (admin.source !== 'local' && !admin.uid.startsWith('local-')) {
+                    await deleteDoc(doc(db, 'adminUsers', admin.uid));
+                }
+                const cleanLocal = localAdmins.filter(item => item.email.toLowerCase().trim() !== admin.email.toLowerCase().trim());
+                saveLocalAdmins(cleanLocal);
+                setAdminMessage('Usuario administrador eliminado con éxito.');
+            } catch (error) {
+                console.error('Error al eliminar admin:', error);
+                setAdminMessage('Error al eliminar de Firestore. Se removió de la lista local.');
+                const cleanLocal = localAdmins.filter(item => item.email.toLowerCase().trim() !== admin.email.toLowerCase().trim());
+                saveLocalAdmins(cleanLocal);
+            }
+        }
+    };
+
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files && e.target.files[0]) {
             const file = e.target.files[0];
@@ -351,6 +373,9 @@ export default function SettingsPage() {
                                                 </Button>
                                                 <Button type="button" onClick={() => handleToggleAdmin(admin)} className="bg-white/5 text-white hover:bg-brand-yellow hover:text-brand-black rounded-full h-10 px-4 text-xs font-black">
                                                     {admin.active ? 'Desactivar' : 'Activar'}
+                                                </Button>
+                                                <Button type="button" onClick={() => handleDeleteAdmin(admin)} className="bg-red-500/10 text-red-400 hover:bg-red-500 hover:text-white rounded-full h-10 px-4 text-xs font-black transition-all">
+                                                    <Trash2 className="mr-2 h-4 w-4" /> Borrar
                                                 </Button>
                                             </div>
                                         </div>
