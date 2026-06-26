@@ -146,7 +146,7 @@ export default function RoutesPage() {
                 <div className="absolute bottom-[-15%] right-[-6%] w-[360px] h-[360px] bg-brand-pink/15 rounded-full blur-[90px]" />
                 <div className="max-w-4xl mx-auto px-4 text-center space-y-12 relative z-10">
                     <motion.div {...fadeUp} className="space-y-8">
-                        <h2 className="font-tan text-5xl sm:text-6xl lg:text-7xl text-[#203253] tracking-tight leading-[1.1]">
+                        <h2 className="font-tan text-[2rem] xs:text-[2.4rem] sm:text-5xl lg:text-6xl text-[#203253] tracking-tight leading-[1.65]">
                             Listo para <span className="text-white drop-shadow-md">explorar</span>?
                         </h2>
                         <p className="text-xl sm:text-3xl font-bold text-[#203253]/75 max-w-2xl mx-auto leading-relaxed italic">

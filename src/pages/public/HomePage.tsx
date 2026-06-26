@@ -1057,7 +1057,7 @@ function WhyChooseBrizSection() {
                     <EditableLayer id="whyTitle" className="relative mx-auto w-full max-w-[43rem] lg:mx-0">
                         <span className="absolute left-[9%] top-[3%] -z-10 h-[18%] w-[67%] rotate-[-3deg] rounded-sm bg-brand-yellow shadow-[0_7px_0_rgba(0,0,0,0.04)]" />
                         <span className="absolute left-[3%] top-[-5%] -z-10 h-[15%] w-[35%] rotate-[-8deg] rounded-[70%_42%_66%_46%] bg-[#75DFA2]/70" />
-                        <h2 className="font-tan uppercase leading-[0.98] tracking-normal text-center lg:text-left">
+                        <h2 className="font-tan uppercase leading-[1.65] tracking-normal text-center lg:text-left">
                             <span 
                                 className="block lg:whitespace-nowrap text-3xl sm:text-5xl lg:text-[4.75rem] xl:text-[5.15rem] text-white [-webkit-text-stroke:2px_#203253] text-center lg:text-left"
                                 style={{ textShadow: '5px 5px 0px rgba(32,50,83,0.2)' }}
@@ -1480,7 +1480,7 @@ function CommunitySection() {
                         whileInView={{ opacity: 1, y: 0, scale: 1 }}
                         viewport={{ once: true }}
                         transition={{ duration: 0.6, ease: 'easeOut' }}
-                        className="w-full max-w-full font-tan text-[1.75rem] uppercase leading-[.95] tracking-[-0.04em] sm:text-5xl sm:tracking-normal lg:text-[5.2rem] xl:text-[6.2rem]"
+                        className="w-full max-w-full font-tan text-[1.75rem] uppercase leading-[1.65] tracking-[-0.04em] sm:text-5xl sm:tracking-normal lg:text-[5.2rem] xl:text-[6.2rem]"
                         style={{ WebkitTextStroke: '2px #FFD200', color: '#063D47', textShadow: '4px 4px 0px rgba(6,61,71,0.28)' }}
                     >
                         Comunidad
@@ -1664,19 +1664,19 @@ function FinalInspirationalSection() {
                         {/* Big stacked text */}
                         <div className="flex flex-col text-center items-center justify-center space-y-2 select-none z-10 w-full">
                             <h3 
-                                className="font-tan text-3xl sm:text-5xl lg:text-6xl font-black uppercase leading-[0.95] tracking-wide text-brand-orange text-center w-full"
+                                className="font-tan text-3xl sm:text-5xl lg:text-6xl font-black uppercase leading-[1.5] tracking-wide text-brand-orange text-center w-full"
                                 style={{ textShadow: '1px 1px 2px rgba(0,0,0,0.15)' }}
                             >
                                 Pedalea.
                             </h3>
                             <h3 
-                                className="font-tan text-3xl sm:text-5xl lg:text-6xl font-black uppercase leading-[0.95] tracking-wide text-brand-pink text-center w-full"
+                                className="font-tan text-3xl sm:text-5xl lg:text-6xl font-black uppercase leading-[1.5] tracking-wide text-brand-pink text-center w-full"
                                 style={{ textShadow: '1px 1px 2px rgba(0,0,0,0.15)' }}
                             >
                                 Conecta.
                             </h3>
                             <h3 
-                                className="font-tan text-3xl sm:text-5xl lg:text-6xl font-black uppercase leading-[0.95] tracking-wide text-brand-yellow text-center w-full"
+                                className="font-tan text-3xl sm:text-5xl lg:text-6xl font-black uppercase leading-[1.5] tracking-wide text-brand-yellow text-center w-full"
                                 style={{ textShadow: '1px 1px 2px rgba(0,0,0,0.15)' }}
                             >
                                 Inspira.
