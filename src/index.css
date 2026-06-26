@@ -300,8 +300,8 @@
 /* Font utility classes */
 .font-tan {
   font-family: 'TAN Songbird', serif;
-  line-height: 1.5 !important;
-  letter-spacing: 0.04em !important;
+  line-height: 1.4;
+  letter-spacing: 0.04em;
   text-transform: uppercase;
 }
 
