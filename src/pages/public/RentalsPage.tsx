@@ -256,8 +256,7 @@ export default function RentalsPage() {
         <div className="flex justify-between items-end mb-6">
           <div className="space-y-3 sm:space-y-1">
             <h2 
-              style={{ lineHeight: '1.45' }}
-              className="font-tan text-[0.8rem] xs:text-[0.88rem] sm:text-[1.45rem] sm:leading-[1.22] lg:text-[1.7rem] uppercase tracking-normal text-brand-yellow [-webkit-text-stroke:1px_#000] drop-shadow-[1.2px_1.2px_0_rgba(0,0,0,1)] whitespace-nowrap sm:whitespace-normal"
+              className="font-tan text-[0.85rem] xs:text-[0.92rem] leading-[1.8] sm:text-[1.45rem] sm:leading-[1.22] lg:text-[1.7rem] uppercase tracking-normal text-brand-yellow [-webkit-text-stroke:1px_#000] drop-shadow-[1.2px_1.2px_0_rgba(0,0,0,1)] max-w-[70vw] sm:max-w-none whitespace-normal"
             >
               {title}
             </h2>
@@ -486,8 +485,7 @@ export default function RentalsPage() {
                     ← Volver a categorías
                   </button>
                   <h1 
-                    style={{ lineHeight: '1.45' }}
-                    className="font-tan text-[1.05rem] xs:text-[1.2rem] sm:text-[1.9rem] sm:leading-[1.18] lg:text-[2.15rem] uppercase tracking-normal text-brand-yellow [-webkit-text-stroke:1.1px_#000] drop-shadow-[1.5px_1.5px_0_rgba(0,0,0,1)] whitespace-nowrap sm:whitespace-normal"
+                    className="font-tan text-[1.05rem] xs:text-[1.2rem] leading-[1.7] sm:text-[1.9rem] sm:leading-[1.18] lg:text-[2.15rem] uppercase tracking-normal text-brand-yellow [-webkit-text-stroke:1.1px_#000] drop-shadow-[1.5px_1.5px_0_rgba(0,0,0,1)] whitespace-normal"
                   >
                     {expandedCategory}
                   </h1>

@@ -103,7 +103,8 @@ function TiltCard({ webSrc, mobileSrc, alt, idx }: TiltCardProps) {
     const cardRef = useRef<HTMLDivElement>(null);
     const x = useMotionValue(0);
     const y = useMotionValue(0);
-    
+    const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
+
     // Transform coordinates [-0.5, 0.5] into angles of rotation [-6, 6] degrees
     const rotateX = useTransform(y, [-0.5, 0.5], [6, -6]);
     const rotateY = useTransform(x, [-0.5, 0.5], [-6, 6]);
@@ -149,11 +150,11 @@ function TiltCard({ webSrc, mobileSrc, alt, idx }: TiltCardProps) {
                 onMouseMove={handleMouseMove}
                 onMouseLeave={handleMouseLeave}
                 style={{
-                    rotateX: springRotateX,
-                    rotateY: springRotateY,
+                    rotateX: isMobile ? 0 : springRotateX,
+                    rotateY: isMobile ? 0 : springRotateY,
                     rotate: scrollRotate,
                     scale: scrollScale,
-                    transformPerspective: 1000,
+                    transformPerspective: isMobile ? undefined : 1000,
                 }}
                 whileHover={{ scale: 1.018 }}
                 transition={{ duration: 0.2 }}
@@ -218,8 +219,13 @@ function TiltCard({ webSrc, mobileSrc, alt, idx }: TiltCardProps) {
                         <img 
                             src={mobileSrc} 
                             alt={alt}
-                            className="w-full h-auto object-cover block border-b-2 border-brand-black"
-                            loading="lazy"
+                            className="w-full h-auto block border-b-2 border-brand-black"
+                            style={{ 
+                                transform: 'translateZ(0)',
+                                backfaceVisibility: 'hidden',
+                                WebkitFontSmoothing: 'antialiased'
+                            }}
+                            loading="eager"
                         />
                     </picture>
                 </div>
