@@ -337,8 +337,8 @@ export default function AboutPage() {
             <main className="mx-auto max-w-[1600px] w-full flex-1 flex flex-col items-center py-6 relative z-10">
                 {/* SECTION 1 */}
                 <TiltCard 
-                    webSrc={`${assetBaseWeb}/1.webp`}
-                    mobileSrc={`${assetBaseCel}/1.webp`}
+                    webSrc={`${assetBaseWeb}/1.PNG`}
+                    mobileSrc={`${assetBaseCel}/1.PNG`}
                     alt="Conócenos Briz Parte 1"
                     idx={0}
                 />
@@ -348,8 +348,8 @@ export default function AboutPage() {
 
                 {/* SECTION 2 */}
                 <TiltCard 
-                    webSrc={`${assetBaseWeb}/2.webp`}
-                    mobileSrc={`${assetBaseCel}/2.webp`}
+                    webSrc={`${assetBaseWeb}/2.PNG`}
+                    mobileSrc={`${assetBaseCel}/2.PNG`}
                     alt="Conócenos Briz Parte 2"
                     idx={1}
                 />
@@ -359,8 +359,8 @@ export default function AboutPage() {
 
                 {/* SECTION 3 */}
                 <TiltCard 
-                    webSrc={`${assetBaseWeb}/3.webp`}
-                    mobileSrc={`${assetBaseCel}/3.webp`}
+                    webSrc={`${assetBaseWeb}/3.PNG`}
+                    mobileSrc={`${assetBaseCel}/3.PNG`}
                     alt="Conócenos Briz Parte 3"
                     idx={2}
                 />
