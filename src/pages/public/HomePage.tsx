@@ -822,7 +822,7 @@ function ServiceStrip() {
                 >
                     <EditableLayer id="servicesTitle" className="mb-5 flex items-center gap-3 sm:mb-7">
                         <span className="font-tan text-3xl leading-none text-brand-yellow drop-shadow-[2px_2px_0_rgba(255,255,255,0.9)] sm:text-4xl">&gt;&gt;</span>
-                        <h2 className="font-tan text-xl uppercase leading-[1.35] text-[#15243A] drop-shadow-[2px_2px_0_rgba(255,255,255,0.95)] sm:text-2xl lg:text-3xl">
+                        <h2 className="font-tan text-[1.2rem] xs:text-[1.35rem] uppercase leading-[1.45] text-[#15243A] drop-shadow-[2px_2px_0_rgba(255,255,255,0.95)] sm:text-2xl lg:text-3xl">
                             Nuestros servicios:
                         </h2>
                     </EditableLayer>
@@ -1779,7 +1779,7 @@ function CTABanner({ embedded = false }: { embedded?: boolean }) {
             >
                 <LeafStem className="absolute -bottom-8 left-0 h-32 w-20 opacity-45" />
                 <div className="relative z-10">
-                    <h2 className="font-tan text-2xl leading-tight text-brand-black sm:text-3xl">Tu aventura comienza aquí</h2>
+                    <h2 className="font-tan text-[1.38rem] xs:text-[1.5rem] leading-[1.45] text-brand-black sm:text-2xl">Tu aventura comienza aquí</h2>
                     <p className="mt-2 font-cocon text-sm text-brand-black/68 sm:text-base">Reserva en minutos y comienza a pedalear.</p>
                     <Link
                         to="/rentals"

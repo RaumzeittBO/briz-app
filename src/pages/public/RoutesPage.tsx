@@ -103,7 +103,7 @@ export default function RoutesPage() {
                 </div>
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
                     <motion.div {...fadeUp} className="text-center mb-16 space-y-6">
-                        <h2 className="font-tan text-4xl sm:text-6xl mb-6 tracking-tight text-[#203253]">Explora el <span className="text-brand-yellow [-webkit-text-stroke:1px_#203253]">mapa ciclista</span></h2>
+                        <h2 className="font-tan text-[1.8rem] xs:text-[2rem] sm:text-5xl mb-6 tracking-tight leading-[1.38] text-[#203253]">Explora el <span className="text-brand-yellow [-webkit-text-stroke:1px_#203253]">mapa ciclista</span></h2>
                         <p className="text-xl sm:text-2xl text-[#203253]/65 font-medium max-w-2xl mx-auto leading-relaxed">Muy pronto: Un mapa interactivo con todas las rutas recomendadas, puntos de interes, talleres aliados y paradas de descanso en Cochabamba.</p>
                     </motion.div>
                     <div className="max-w-5xl mx-auto">

@@ -95,7 +95,7 @@ export default function ContactPage() {
                 <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full h-[600px] bg-brand-yellow/5 rounded-full blur-[120px] pointer-events-none" />
                 <div className="relative z-10 mx-auto max-w-4xl px-4 sm:px-6 lg:px-8">
                     <motion.div {...fadeUp} className="mb-9 space-y-3 text-center sm:mb-16 sm:space-y-4">
-                        <h2 className="w-full max-w-full font-tan text-[1.7rem] leading-[1.1] tracking-tight text-brand-black sm:text-7xl sm:tracking-tight"><span className="block">Preguntas</span><span className="block text-brand-yellow">frecuentes</span></h2>
+                        <h2 className="w-full max-w-full font-tan text-[1.45rem] leading-[1.3] tracking-normal text-brand-black sm:text-5xl sm:tracking-tight"><span className="block">Preguntas</span><span className="block text-brand-yellow">frecuentes</span></h2>
                         <div className="w-24 h-2 bg-brand-yellow mx-auto rounded-full shadow-sm" />
                         <p className="mx-auto max-w-2xl pt-2 font-cocon text-base font-bold text-gray-500 sm:pt-4 sm:text-lg">Resolvemos tus dudas más comunes de forma rápida.</p>
                     </motion.div>

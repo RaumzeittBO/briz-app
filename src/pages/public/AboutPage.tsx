@@ -388,7 +388,7 @@ export default function AboutPage() {
                     viewport={{ once: true }}
                     className="max-w-[620px] flex flex-col items-center space-y-6"
                 >
-                    <h2 className="font-tan text-2xl sm:text-4xl text-white uppercase leading-tight">
+                    <h2 className="font-tan text-[1.45rem] sm:text-3xl text-white uppercase leading-[1.38] tracking-normal">
                         ¿Listo para vivir la <span className="text-brand-yellow">experiencia</span>?
                     </h2>
                     <p className="font-cocon text-base sm:text-xl text-white/84 leading-relaxed max-w-[500px]">
