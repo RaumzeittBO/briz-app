@@ -1,3 +1,10 @@
+const escapeHTML = (text: string = ''): string => {
+    return text
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+};
+
 export const sendTelegramNotification = async (
     reservationCode: string,
     items: any[],
@@ -20,29 +27,32 @@ export const sendTelegramNotification = async (
     // Format date in spanish
     const formattedDate = new Date(`${date}T12:00:00`).toLocaleDateString('es-BO', { dateStyle: 'long' });
     
-    let message = `🚴‍♂️ *NUEVA RESERVA DE ALQUILER*\n\n`;
-    message += `🆔 *Código:* \`${reservationCode}\`\n`;
-    message += `👤 *Cliente:* ${customer.name}\n`;
-    message += `📞 *Teléfono:* [${customer.phone}](https://wa.me/591${customer.phone.replace(/\D/g, '')})\n`;
-    message += `🪪 *C.I.:* \`${customer.ci}\`\n\n`;
+    let message = `🚴‍♂️ <b>NUEVA RESERVA DE ALQUILER</b>\n\n`;
+    message += `🆔 <b>Código:</b> <code>${escapeHTML(reservationCode)}</code>\n`;
+    message += `👤 <b>Cliente:</b> ${escapeHTML(customer.name)}\n`;
+    message += `📞 <b>Teléfono:</b> <a href="https://wa.me/591${customer.phone.replace(/\D/g, '')}">${escapeHTML(customer.phone)}</a>\n`;
+    message += `🪪 <b>C.I.:</b> <code>${escapeHTML(customer.ci)}</code>\n\n`;
     
-    message += `📋 *Detalle del Pedido:*\n`;
+    message += `📋 <b>Detalle del Pedido:</b>\n`;
     items.forEach((item) => {
         const specs = item.selectedWheelSize ? ` (Aro ${item.selectedWheelSize})` : '';
-        message += `• ${item.quantity}x *${item.productNameSnapshot || item.productName}*${specs} - Bs. ${item.total}\n`;
+        const name = item.productNameSnapshot || item.productName || '';
+        message += `• ${item.quantity}x <b>${escapeHTML(name)}</b>${escapeHTML(specs)} - Bs. ${item.total}\n`;
     });
-    message += `\n📅 *Fecha de Retiro:* ${formattedDate}\n`;
-    message += `⏰ *Hora:* ${pickupTime}\n`;
-    message += `⏱️ *Duración:* ${duration} hora(s)\n`;
-    message += `💳 *Método de Pago:* ${paymentMethod}\n`;
-    message += `💰 *Total a pagar:* *Bs. ${finalTotal}*\n\n`;
+    message += `\n📅 <b>Fecha de Retiro:</b> ${formattedDate}\n`;
+    message += `⏰ <b>Hora:</b> ${pickupTime}\n`;
+    message += `⏱️ <b>Duración:</b> ${duration} hora(s)\n`;
+    message += `💳 <b>Método de Pago:</b> ${paymentMethod}\n`;
+    message += `💰 <b>Total a pagar:</b> <b>Bs. ${finalTotal}</b>\n\n`;
 
     const transportItem = items.find(item => item.deliveryService || item.pickupService);
     if (transportItem) {
-        message += `🚚 *Servicio de Transporte:*\n`;
-        message += `📍 *Dirección:* ${transportItem.notes.replace('Transporte de entrega. ', '').replace('Transporte de recojo. ', '')}\n`;
+        const rawNotes = transportItem.notes || '';
+        const cleanedNotes = rawNotes.replace('Transporte de entrega. ', '').replace('Transporte de recojo. ', '');
+        message += `🚚 <b>Servicio de Transporte:</b>\n`;
+        message += `📍 <b>Dirección:</b> ${escapeHTML(cleanedNotes)}\n`;
         if (mapsLink) {
-            message += `🗺️ [Ver ubicación en Google Maps](${mapsLink})\n`;
+            message += `🗺️ <a href="${escapeHTML(mapsLink)}">Ver ubicación en Google Maps</a>\n`;
         }
     }
 
@@ -55,7 +65,7 @@ export const sendTelegramNotification = async (
             body: JSON.stringify({
                 chat_id: chatId,
                 text: message,
-                parse_mode: 'Markdown',
+                parse_mode: 'HTML',
                 disable_web_page_preview: false
             }),
         });
