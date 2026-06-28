@@ -143,7 +143,7 @@ export interface Rental {
     paymentStatus: 'unpaid' | 'pending_review' | 'paid';
     notes: string;
 
-    status: 'pending' | 'confirmed' | 'cancelled' | 'expired' | 'Pendiente' | 'Confirmado' | 'Cancelado';
+    status: 'pending' | 'confirmed' | 'cancelled' | 'expired' | 'returned' | 'Pendiente' | 'Confirmado' | 'Cancelado' | 'Devuelto';
     createdAt: string;
     updatedAt: string;
     lastUpdatedBy?: string;
@@ -250,6 +250,7 @@ interface StoreContextType {
     addRental: (rental: Omit<Rental, 'id' | 'reservationCode' | 'status' | 'createdAt' | 'updatedAt' | 'paymentStatus'>) => Promise<Rental>;
     confirmRental: (id: string, actor?: string) => Promise<boolean>;
     cancelRental: (id: string, actor?: string) => Promise<void>;
+    returnRental: (id: string, actor?: string) => Promise<void>;
     deleteRental: (id: string) => Promise<void>;
     updateRental: (id: string, updates: Partial<Rental>, actor?: string) => Promise<void>;
     updateRentalPaymentStatus: (id: string, paymentStatus: Rental['paymentStatus'], actor?: string) => Promise<void>;
@@ -897,6 +898,43 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
         }
     };
 
+    const returnRental = async (id: string, actor?: string) => {
+        const rental = rentals.find(r => r.id === id);
+        if (!rental) return;
+
+        if (rental.status === 'confirmed' || rental.status === 'Confirmado') {
+            const batch = writeBatch(db);
+            const restoreStock = (itemId: string, qty: number, wsSize?: string) => {
+                if (itemId.startsWith('srv_')) return;
+                const item = inventory.find(i => i.id === itemId);
+                if (!item) return;
+                const updated = { ...item };
+                if (updated.hasWheelSizes && updated.wheelSizes) {
+                    updated.wheelSizes = updated.wheelSizes.map(w => w.size === wsSize ? { ...w, stock: w.stock + qty } : w);
+                } else {
+                    updated.stock = (updated.stock ?? 0) + qty;
+                }
+                batch.update(doc(db, 'inventory', itemId), updated as any);
+            };
+
+            if (rental.productType === 'single') {
+                restoreStock(rental.productId, rental.quantity, rental.selectedWheelSize);
+            } else {
+                const combo = combos.find(c => c.id === rental.productId);
+                combo?.components.forEach(comp => {
+                    const sel = rental.componentSelections?.find(cs => cs.inventoryItemId === comp.inventoryItemId);
+                    restoreStock(comp.inventoryItemId, comp.quantity * rental.quantity, sel?.wheelSize);
+                });
+            }
+            batch.update(doc(db, 'rentals', id), { 
+                status: 'returned',
+                updatedAt: new Date().toISOString(),
+                lastUpdatedBy: actor || 'admin'
+            });
+            await batch.commit();
+        }
+    };
+
     const updateRentalPaymentStatus = async (id: string, paymentStatus: Rental['paymentStatus'], actor?: string) => {
         await updateDoc(doc(db, 'rentals', id), {
             paymentStatus,
@@ -1065,7 +1103,7 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
         rentalSettings, updateRentalSettings,
         addInventoryItem, updateInventoryItem, deleteInventoryItem,
         addCombo, updateCombo, deleteCombo,
-        addRental, confirmRental, cancelRental, deleteRental,
+        addRental, confirmRental, cancelRental, returnRental, deleteRental,
         updateRental, updateRentalPaymentStatus, markRentalExpired,
         addSale, updateSaleStatus, deleteSale,
         addOrUpdateCustomer, updateCustomer, deleteCustomer,

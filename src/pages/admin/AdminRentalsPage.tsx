@@ -40,6 +40,8 @@ const statusLabels: Record<string, string> = {
   'cancelled': 'Cancelado',
   'Cancelado': 'Cancelado',
   'expired': 'Expirado',
+  'returned': 'Devuelto',
+  'Devuelto': 'Devuelto',
 };
 
 const statusColors: Record<string, string> = {
@@ -50,6 +52,8 @@ const statusColors: Record<string, string> = {
   'cancelled': 'bg-red-500/10 text-red-400 border-red-500/20',
   'Cancelado': 'bg-red-500/10 text-red-400 border-red-500/20',
   'expired': 'bg-zinc-500/10 text-zinc-400 border-white/5',
+  'returned': 'bg-blue-500/10 text-blue-400 border-blue-500/20',
+  'Devuelto': 'bg-blue-500/10 text-blue-400 border-blue-500/20',
 };
 
 const paymentStatusLabels: Record<string, string> = {
@@ -165,6 +169,34 @@ const getGroupedRentals = (rentalsList: Rental[]): GroupedRental[] => {
   return Object.values(groups);
 };
 
+const getReturnDateTime = (dateStr: string, pickupTimeStr: string, durationStr: string): Date => {
+  const [year, month, day] = dateStr.split('-').map(Number);
+  const [hours, minutes] = pickupTimeStr.split(':').map(Number);
+  const startDate = new Date(year, month - 1, day, hours, minutes, 0, 0);
+  
+  let durationHours = 24;
+  const norm = durationStr.toLowerCase();
+  if (norm.includes('semana')) durationHours = 24 * 7;
+  else if (norm.includes('mes')) durationHours = 24 * 30;
+  else {
+    const match = norm.match(/\d+/);
+    if (match) durationHours = Number(match[0]);
+  }
+  
+  startDate.setHours(startDate.getHours() + durationHours);
+  return startDate;
+};
+
+const isPastDue = (group: GroupedRental): boolean => {
+  const firstItem = group.items[0];
+  if (!firstItem) return false;
+  const isConfirmed = group.status === 'confirmed' || group.status === 'Confirmado';
+  if (!isConfirmed) return false;
+  
+  const returnDate = getReturnDateTime(firstItem.date, firstItem.pickupTime, firstItem.duration);
+  return returnDate.getTime() < Date.now();
+};
+
 const comparePhones = (p1?: string, p2?: string): boolean => {
   if (!p1 || !p2) return false;
   const c1 = p1.replace(/\D/g, '').slice(-8);
@@ -216,6 +248,7 @@ export default function AdminRentalsPage() {
     rentals, 
     confirmRental, 
     cancelRental, 
+    returnRental,
     deleteRental, 
     updateRental,
     updateRentalPaymentStatus, 
@@ -352,6 +385,15 @@ export default function AdminRentalsPage() {
     for (const item of group.items) {
       await cancelRental(item.id, 'admin');
     }
+    if (selected?.id === group.id) setSelected(null);
+  };
+
+  const handleReturnGroup = async (group: GroupedRental) => {
+    if (!confirm('¿Seguro que deseas marcar este alquiler como devuelto? El stock de las bicicletas se restaurará.')) return;
+    for (const item of group.items) {
+      await returnRental(item.id, 'admin');
+    }
+    alert('¡El alquiler ha sido marcado como devuelto y el stock se ha actualizado!');
     if (selected?.id === group.id) setSelected(null);
   };
 
@@ -735,6 +777,11 @@ export default function AdminRentalsPage() {
                     <Badge className={`${paymentStatusColors[g.paymentStatus || 'unpaid']} rounded-full px-1.5 py-0.2 text-[8px] font-bold uppercase`}>
                       {paymentStatusLabels[g.paymentStatus || 'unpaid']}
                     </Badge>
+                    {isPastDue(g) && (
+                      <Badge className="bg-red-500/20 text-red-400 border-red-500/30 rounded-full px-2 py-0.5 text-[9px] font-black uppercase border animate-pulse">
+                        ⚠️ Devolución Pendiente
+                      </Badge>
+                    )}
                   </div>
                   <div className="text-white/50 text-xs font-bold mt-1 font-sans flex flex-wrap gap-1.5">
                     {g.items.map((item, idx) => (
@@ -1085,6 +1132,17 @@ export default function AdminRentalsPage() {
                   </div>
                 </div>
 
+                {isPastDue(selected) && (
+                  <div className="bg-red-500/10 p-4 rounded-2xl border border-red-500/20 text-xs text-red-400 space-y-1">
+                    <p className="font-extrabold uppercase flex items-center gap-1.5 animate-pulse">
+                      🚨 Plazo de Alquiler Vencido
+                    </p>
+                    <p className="font-medium text-[11px] text-red-300/80 leading-normal">
+                      El tiempo programado de este alquiler ha terminado. Recibe las bicicletas e ítems, y haz clic en el botón **"Marcar como Devuelto"** abajo para reintegrar los productos al stock del inventario.
+                    </p>
+                  </div>
+                )}
+
                 {/* Transportation Details (Delivery / Pickup Maps Link) */}
                 {(selected.deliveryService || selected.pickupService || selected.mapsLink) && (
                   <div className="bg-brand-yellow/10 p-4 rounded-2xl border border-brand-yellow/20 space-y-2 text-xs">
@@ -1092,16 +1150,24 @@ export default function AdminRentalsPage() {
                       Servicio de Transporte a Domicilio
                     </p>
                     <div className="space-y-1 text-white/90 font-medium font-sans">
-                      {selected.deliveryService && (
-                        <p className="flex items-center gap-1.5 font-bold">
-                          🚚 Requiere Servicio de Entrega (+Bs. 30)
-                        </p>
-                      )}
-                      {selected.pickupService && (
-                        <p className="flex items-center gap-1.5 font-bold">
-                          🔄 Requiere Servicio de Recojo (+Bs. 30)
-                        </p>
-                      )}
+                      {selected.deliveryService && (() => {
+                        const deliveryItem = selected.items.find(item => item.productId === 'srv_delivery');
+                        const price = deliveryItem ? deliveryItem.total : 0;
+                        return (
+                          <p className="flex items-center gap-1.5 font-bold">
+                            🚚 Requiere Servicio de Entrega ({price > 0 ? `+Bs. ${price}` : 'A coordinar / Bs. 0'})
+                          </p>
+                        );
+                      })()}
+                      {selected.pickupService && (() => {
+                        const pickupItem = selected.items.find(item => item.productId === 'srv_pickup');
+                        const price = pickupItem ? pickupItem.total : 0;
+                        return (
+                          <p className="flex items-center gap-1.5 font-bold">
+                            🔄 Requiere Servicio de Recojo ({price > 0 ? `+Bs. ${price}` : 'A coordinar / Bs. 0'})
+                          </p>
+                        );
+                      })()}
                       {selected.mapsLink ? (
                         <div className="pt-1.5">
                           <a 
@@ -1188,6 +1254,15 @@ export default function AdminRentalsPage() {
                       onClick={() => { handleCancelGroup(selected); setSelected(null); }}
                     >
                       Cancelar Alquiler
+                    </Button>
+                  )}
+
+                  {(selected.status === 'confirmed' || selected.status === 'Confirmado') && (
+                    <Button 
+                      className="flex-1 h-11 bg-blue-500 hover:bg-blue-600 text-white font-black rounded-xl text-xs uppercase cursor-pointer" 
+                      onClick={() => { handleReturnGroup(selected); setSelected(null); }}
+                    >
+                      Marcar como Devuelto
                     </Button>
                   )}
 
