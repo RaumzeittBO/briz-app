@@ -83,8 +83,14 @@ export function CommunityProvider({ children }: { children: ReactNode }) {
     const createItem = async (draft: CommunityDraft) => {
         const now = new Date().toISOString();
         const item: CommunityItem = { ...draft, id: `community-${Date.now()}`, status: 'pending', createdAt: now, updatedAt: now };
+        
+        // Remove undefined fields so Firestore doesn't reject the write
+        const cleanItem = Object.fromEntries(
+            Object.entries(item).filter(([_, v]) => v !== undefined)
+        ) as any;
+
         try {
-            await setDoc(doc(db, 'communityItems', item.id), item);
+            await setDoc(doc(db, 'communityItems', cleanItem.id), cleanItem);
         } catch (error) {
             console.warn('No se pudo enviar la publicación a Firestore; se guardó en este dispositivo.', error);
             const next = [item, ...readLocal().filter(existing => existing.id !== item.id)];
