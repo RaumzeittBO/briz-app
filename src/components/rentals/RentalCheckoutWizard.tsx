@@ -13,6 +13,7 @@ import { useStore } from '@/context/StoreContext';
 import { db } from '@/lib/firebase';
 import { doc, setDoc } from 'firebase/firestore';
 import DeliveryMapPicker from './DeliveryMapPicker';
+import { sendTelegramNotification } from '@/lib/telegram';
 
 // Types for wizard cart
 export interface RentalCartItem {
@@ -630,6 +631,27 @@ export default function RentalCheckoutWizard({
                 };
                 
                 await setDoc(doc(db, 'rentals', newId), fullItem);
+            }
+
+            // Send Telegram Notification
+            try {
+                const pMethodText = paymentMethod === 'qr' ? 'QR' : paymentMethod === 'transfer' ? 'Transferencia' : 'Efectivo';
+                const firstItem = rentalPayloads[0];
+                const mapsLinkValue = firstItem?.mapsLink || rentalPayloads.find(p => p.mapsLink)?.mapsLink;
+                
+                await sendTelegramNotification(
+                    sharedCode,
+                    rentalPayloads,
+                    finalTotal,
+                    currentCustomer,
+                    pMethodText,
+                    date,
+                    pickupTime,
+                    duration,
+                    mapsLinkValue
+                );
+            } catch (telegramErr) {
+                console.error("Failed to send Telegram notification:", telegramErr);
             }
 
             // Success state transitions
