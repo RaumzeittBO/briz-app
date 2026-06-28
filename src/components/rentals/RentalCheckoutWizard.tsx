@@ -979,7 +979,7 @@ export default function RentalCheckoutWizard({
 
                         {/* Accessory selections */}
                         <div className="space-y-3 bg-white border border-gray-150 p-5 rounded-3xl shadow-sm">
-                            <Label className="text-[10px] text-brand-charcoal font-black uppercase tracking-widest font-tangkiwood block border-b border-gray-100 pb-2 mb-2">
+                            <Label className="text-[13.5px] sm:text-sm text-brand-charcoal font-black uppercase tracking-widest font-tangkiwood block border-b border-gray-100 pb-2 mb-2">
                                 ¿Quieres agregar algún accesorio adicional?
                             </Label>
                             
@@ -1021,7 +1021,7 @@ export default function RentalCheckoutWizard({
 
                         {/* Delivery / Pickup Transportation Checks */}
                         <div className="space-y-3 bg-white border border-gray-150 p-5 rounded-3xl shadow-sm">
-                            <Label className="text-[10px] text-brand-charcoal font-black uppercase tracking-widest font-tangkiwood block border-b border-gray-100 pb-2 mb-2">
+                            <Label className="text-[13.5px] sm:text-sm text-brand-charcoal font-black uppercase tracking-widest font-tangkiwood block border-b border-gray-100 pb-2 mb-2">
                                 ¿Entrega y recojo a domicilio?
                             </Label>
                             <p className="text-[9px] text-brand-black/40 font-bold uppercase font-maiandra leading-relaxed">

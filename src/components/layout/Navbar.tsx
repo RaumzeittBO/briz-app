@@ -14,6 +14,7 @@ import {
     User,
     LogOut,
     Globe,
+    ChevronDown,
     type LucideIcon,
 } from 'lucide-react';
 import { useLanguage } from '@/context/LanguageContext';
@@ -76,6 +77,7 @@ export default function Navbar() {
     const { currentCustomer, logoutCustomer } = useStore();
     const { language, setLanguage } = useLanguage();
     const [authModalOpen, setAuthModalOpen] = useState(false);
+    const [langDropdownOpen, setLangDropdownOpen] = useState(false);
 
 
 
@@ -274,14 +276,44 @@ export default function Navbar() {
                                 </button>
                             )}
 
-                            {/* Language Selector Toggle */}
-                            <button
-                                onClick={() => setLanguage(language === 'es' ? 'en' : 'es')}
-                                className="h-10 w-10 flex items-center justify-center rounded-full bg-white/10 hover:bg-white/20 border border-white/10 text-white font-cocon text-xs font-black uppercase transition-all duration-300 hover:scale-105 active:scale-95 cursor-pointer ml-3 shrink-0"
-                                title={language === 'es' ? 'Switch to English' : 'Cambiar a Español'}
-                            >
-                                {language === 'es' ? 'EN' : 'ES'}
-                            </button>
+                            {/* Language Selector Dropdown */}
+                            <div className="relative ml-3 shrink-0">
+                                <button
+                                    onClick={() => setLangDropdownOpen(!langDropdownOpen)}
+                                    className="h-10 px-4 flex items-center gap-2 rounded-full bg-white/10 hover:bg-white/20 border border-white/10 text-white font-cocon text-xs font-black uppercase transition-all duration-200 cursor-pointer shadow-sm"
+                                    title={language === 'es' ? 'Cambiar idioma' : 'Change language'}
+                                >
+                                    <Globe className="w-3.5 h-3.5" />
+                                    <span>{language === 'es' ? 'ES' : 'EN'}</span>
+                                    <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-250 ${langDropdownOpen ? 'rotate-180' : ''}`} />
+                                </button>
+                                
+                                {langDropdownOpen && (
+                                    <>
+                                        <div className="fixed inset-0 z-40" onClick={() => setLangDropdownOpen(false)} />
+                                        <div className="absolute right-0 top-full mt-2 bg-[#0d0d0d] border border-white/10 rounded-2xl p-1.5 w-36 shadow-2xl z-50">
+                                            <button
+                                                onClick={() => {
+                                                    setLanguage('es');
+                                                    setLangDropdownOpen(false);
+                                                }}
+                                                className={`w-full flex items-center justify-between text-left px-3.5 py-2.5 text-xs font-bold rounded-xl transition-colors font-cocon cursor-pointer ${language === 'es' ? 'bg-brand-yellow text-brand-black font-black' : 'text-white/80 hover:bg-white/5 hover:text-white'}`}
+                                            >
+                                                Español (ES)
+                                            </button>
+                                            <button
+                                                onClick={() => {
+                                                    setLanguage('en');
+                                                    setLangDropdownOpen(false);
+                                                }}
+                                                className={`w-full flex items-center justify-between text-left px-3.5 py-2.5 text-xs font-bold rounded-xl transition-colors font-cocon mt-1 cursor-pointer ${language === 'en' ? 'bg-brand-yellow text-brand-black font-black' : 'text-white/80 hover:bg-white/5 hover:text-white'}`}
+                                            >
+                                                English (EN)
+                                            </button>
+                                        </div>
+                                    </>
+                                )}
+                            </div>
                         </div>
                     </div>
 

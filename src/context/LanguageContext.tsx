@@ -18,20 +18,40 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
         setLanguageState(lang);
         localStorage.setItem('briz_language', lang);
         
-        // Drive Google Translate programmatically
-        const selectEl = document.querySelector('.goog-te-combo') as HTMLSelectElement;
-        if (selectEl) {
-            selectEl.value = lang;
-            selectEl.dispatchEvent(new Event('change'));
+        // Drive Google Translate programmatically with a robust retry mechanism
+        const triggerGoogleTranslate = () => {
+            const selectEl = document.querySelector('.goog-te-combo') as HTMLSelectElement;
+            if (selectEl) {
+                selectEl.value = lang;
+                selectEl.dispatchEvent(new Event('change'));
+                return true;
+            }
+            return false;
+        };
+
+        // Try immediately
+        if (!triggerGoogleTranslate()) {
+            // If the element is not ready yet (e.g., script still loading), retry every 200ms
+            let retries = 0;
+            const interval = setInterval(() => {
+                retries++;
+                if (triggerGoogleTranslate() || retries >= 15) {
+                    clearInterval(interval);
+                }
+            }, 200);
         }
     };
 
     useEffect(() => {
-        // 1. Inject hidden google translate element container
+        // 1. Inject visually hidden google translate element container (must be layout-active)
         if (!document.getElementById('google_translate_element')) {
             const div = document.createElement('div');
             div.id = 'google_translate_element';
-            div.style.display = 'none';
+            div.style.position = 'absolute';
+            div.style.top = '-9999px';
+            div.style.left = '-9999px';
+            div.style.opacity = '0';
+            div.style.pointerEvents = 'none';
             document.body.appendChild(div);
         }
 
@@ -45,13 +65,20 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
             }, 'google_translate_element');
             
             // Apply language on load after translate element finishes loading
-            setTimeout(() => {
+            let retries = 0;
+            const checkAndApply = () => {
                 const selectEl = document.querySelector('.goog-te-combo') as HTMLSelectElement;
-                if (selectEl && language !== 'es') {
-                    selectEl.value = language;
-                    selectEl.dispatchEvent(new Event('change'));
+                if (selectEl) {
+                    if (language !== 'es') {
+                        selectEl.value = language;
+                        selectEl.dispatchEvent(new Event('change'));
+                    }
+                } else if (retries < 15) {
+                    retries++;
+                    setTimeout(checkAndApply, 200);
                 }
-            }, 1200);
+            };
+            setTimeout(checkAndApply, 500);
         };
 
         // 3. Inject Google Translate script if not present

@@ -27,7 +27,7 @@ import {
 
 import { useLanguage } from '@/context/LanguageContext';
 
-let assetBase = '/menu-principal-web';
+const assetBase = '/menu-principal-web';
 const designStorageKey = 'briz-home-design-editor-v4';
 const designEditorEnabled = import.meta.env.DEV;
 
@@ -1819,8 +1819,7 @@ function CTABanner({ embedded = false }: { embedded?: boolean }) {
 }
 
 export default function HomePage() {
-    const { language } = useLanguage();
-    assetBase = language === 'es' ? '/menu-principal-web' : '/menu-principal-web/Ingles';
+    useLanguage();
     const activeViewport = useCurrentViewport();
     const { config, updateTransform, reset } = useDesignConfig();
     const [editorOpen, setEditorOpen] = useState(false);
