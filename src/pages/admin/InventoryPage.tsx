@@ -37,13 +37,13 @@ function sortCategories(a: string, b: string) {
 }
 
 function defaultBike(): InventoryItem {
-  return { id: `inv_${Date.now()}_${Math.random().toString(36).slice(2,7)}`, itemType:'bike', name:'', description:'', imageUrl:'', active:true, availableForRental:true, availableForSale:false, hasWheelSizes:true, wheelSizes:[{size:'26',stock:0}], pricePerHour:0, priceFrom5thHour:0, pricePerDay:0, pricePerWeek:0, pricePerMonth:0, price1Hour:0, price2Hours:0, price3Hours:0, price4Hours:0, price8Hours:0, price24Hours:0, price1Week:0, price1Month:0 };
+  return { id: `inv_${Date.now()}_${Math.random().toString(36).slice(2,7)}`, itemType:'bike', name:'', description:'', imageUrl:'', additionalImageUrls:[], active:true, availableForRental:true, availableForSale:false, hasWheelSizes:true, wheelSizes:[{size:'26',stock:0}], pricePerHour:0, priceFrom5thHour:0, pricePerDay:0, pricePerWeek:0, pricePerMonth:0, price1Hour:0, price2Hours:0, price3Hours:0, price4Hours:0, price8Hours:0, price24Hours:0, price1Week:0, price1Month:0 };
 }
 function defaultAccessory(): InventoryItem {
-  return { id: `inv_${Date.now()}_${Math.random().toString(36).slice(2,7)}`, itemType:'accessory', name:'', description:'', imageUrl:'', active:true, availableForRental:true, availableForSale:false, hasWheelSizes:false, stock:0, pricePerHour:0, priceFrom5thHour:0, pricePerDay:0, pricePerWeek:0, pricePerMonth:0, price1Hour:0, price2Hours:0, price3Hours:0, price4Hours:0, price8Hours:0, price24Hours:0, price1Week:0, price1Month:0 };
+  return { id: `inv_${Date.now()}_${Math.random().toString(36).slice(2,7)}`, itemType:'accessory', name:'', description:'', imageUrl:'', additionalImageUrls:[], active:true, availableForRental:true, availableForSale:false, hasWheelSizes:false, stock:0, pricePerHour:0, priceFrom5thHour:0, pricePerDay:0, pricePerWeek:0, pricePerMonth:0, price1Hour:0, price2Hours:0, price3Hours:0, price4Hours:0, price8Hours:0, price24Hours:0, price1Week:0, price1Month:0 };
 }
 function defaultCombo(): ComboProduct {
-  return { id: `combo_${Date.now()}_${Math.random().toString(36).slice(2,7)}`, name:'', description:'', imageUrl:'', active:true, availableForRental:true, availableForSale:false, components:[], pricePerHour:0, priceFrom5thHour:0, pricePerDay:0, pricePerWeek:0, pricePerMonth:0, price1Hour:0, price2Hours:0, price3Hours:0, price4Hours:0, price8Hours:0, price24Hours:0, price1Week:0, price1Month:0 };
+  return { id: `combo_${Date.now()}_${Math.random().toString(36).slice(2,7)}`, name:'', description:'', imageUrl:'', additionalImageUrls:[], active:true, availableForRental:true, availableForSale:false, components:[], pricePerHour:0, priceFrom5thHour:0, pricePerDay:0, pricePerWeek:0, pricePerMonth:0, price1Hour:0, price2Hours:0, price3Hours:0, price4Hours:0, price8Hours:0, price24Hours:0, price1Week:0, price1Month:0 };
 }
 
 const toEditableNumber = (value: unknown) => value === '' || value === undefined || value === null ? '' : Number(value);
@@ -386,6 +386,56 @@ export default function InventoryPage() {
                       {editItem.imageUrl ? <img src={editItem.imageUrl} className="w-full h-full object-cover" alt="preview"/> : <ImageIcon className="w-10 h-10 text-white/10"/>}
                     </div>
                     <Input placeholder="URL de imagen..." value={editItem.imageUrl||''} onChange={e=>setEditItem({...editItem,imageUrl:e.target.value})} className="mt-2 bg-black/40 border-white/10 h-10 text-sm rounded-xl text-white"/>
+                  </div>
+
+                  {/* Additional images */}
+                  <div className="space-y-2">
+                    <Label className="text-[10px] text-white/40 font-bold uppercase tracking-wider block">
+                      Imágenes adicionales de la galería (URLs)
+                    </Label>
+                    {(() => {
+                      const urls = editItem.additionalImageUrls || [];
+                      return (
+                        <div className="space-y-2">
+                          {urls.map((url: string, index: number) => (
+                            <div key={index} className="flex gap-2 items-center">
+                              <Input
+                                placeholder={`URL de imagen adicional #${index + 1}...`}
+                                value={url}
+                                onChange={e => {
+                                  const updatedUrls = [...urls];
+                                  updatedUrls[index] = e.target.value;
+                                  setEditItem({ ...editItem, additionalImageUrls: updatedUrls });
+                                }}
+                                className="bg-black/40 border-white/10 h-10 text-xs rounded-xl text-white flex-1"
+                              />
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => {
+                                  const updatedUrls = urls.filter((_: any, idx: number) => idx !== index);
+                                  setEditItem({ ...editItem, additionalImageUrls: updatedUrls });
+                                }}
+                                className="h-9 w-9 rounded-xl text-red-400 hover:text-red-300 hover:bg-red-500/10 shrink-0 cursor-pointer"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </Button>
+                            </div>
+                          ))}
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className="w-full h-9 rounded-xl border border-white/10 hover:border-brand-yellow hover:bg-brand-yellow/5 text-xs font-black uppercase text-white transition-colors cursor-pointer"
+                            onClick={() => {
+                              setEditItem({ ...editItem, additionalImageUrls: [...urls, ''] });
+                            }}
+                          >
+                            + Agregar otra URL de imagen
+                          </Button>
+                        </div>
+                      );
+                    })()}
                   </div>
 
                   {/* Name */}

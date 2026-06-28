@@ -954,19 +954,47 @@ export default function AdminRentalsPage() {
                 {/* COLUMNA IZQUIERDA: Detalles del Alquiler */}
                 <div className="md:col-span-7 space-y-4">
                   {/* Customer Information Card */}
-                  <div className="bg-black/40 p-4 rounded-2xl border border-white/5 space-y-2">
-                    <h4 className="text-[10px] text-brand-yellow font-black uppercase tracking-widest flex items-center gap-1">
+                  <div className="bg-black/40 p-4 rounded-2xl border border-white/5 space-y-3">
+                    <h4 className="text-[10px] text-brand-yellow font-black uppercase tracking-widest flex items-center gap-1 mb-1">
                       <ShieldCheck className="w-3.5 h-3.5" /> Datos del Cliente
                     </h4>
-                    <p className="text-white font-black text-sm">{selected.customerName}</p>
-                    <div className="grid grid-cols-2 gap-2 text-xs text-white/50 font-bold">
-                      <p className="flex items-center gap-1.5">
-                         <Phone className="w-3.5 h-3.5 text-white/30" /> {selected.customerPhone}
-                      </p>
-                      <p className="flex items-center gap-1.5">
-                         <CreditCard className="w-3.5 h-3.5 text-white/30" /> CI: {selected.customerCI}
-                      </p>
-                    </div>
+                    
+                    {(() => {
+                      const matchingCustomer = customers.find(
+                        c => comparePhones(c.phone, selected.customerPhone) || 
+                             compareCIs(c.ci, selected.customerCI)
+                      );
+                      
+                      return (
+                        <div className="flex items-center gap-4">
+                          {matchingCustomer?.autofotoUrl ? (
+                            <a href={matchingCustomer.autofotoUrl} target="_blank" rel="noreferrer" className="shrink-0 group/avatar">
+                              <div className="w-14 h-14 rounded-full overflow-hidden border-2 border-brand-yellow/30 bg-black/40 shadow-lg relative">
+                                <img src={matchingCustomer.autofotoUrl} className="w-full h-full object-cover group-hover/avatar:scale-110 transition-transform duration-300" alt="Selfie" />
+                                <div className="absolute inset-0 bg-black/20 opacity-0 group-hover/avatar:opacity-100 transition-opacity flex items-center justify-center">
+                                  <ExternalLink className="w-3 h-3 text-white" />
+                                </div>
+                              </div>
+                            </a>
+                          ) : (
+                            <div className="w-14 h-14 rounded-full bg-white/5 border border-white/10 flex items-center justify-center shrink-0">
+                              <ShieldCheck className="w-6 h-6 text-white/30" />
+                            </div>
+                          )}
+                          <div className="flex-1 min-w-0">
+                            <p className="text-white font-extrabold text-base truncate leading-tight">{selected.customerName}</p>
+                            <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-white/50 font-bold mt-1">
+                              <span className="flex items-center gap-1.5 shrink-0">
+                                <Phone className="w-3.5 h-3.5 text-white/30" /> {selected.customerPhone}
+                              </span>
+                              <span className="flex items-center gap-1.5 shrink-0">
+                                <CreditCard className="w-3.5 h-3.5 text-white/30" /> CI: {selected.customerCI}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })()}
 
                     {/* Expandable client profile search */}
                     {(() => {
@@ -1048,29 +1076,49 @@ export default function AdminRentalsPage() {
                   </div>
 
                   {/* Rental Products Snapshot Card */}
-                  <div className="bg-black/40 p-4 rounded-2xl border border-white/5 space-y-2">
-                    <h4 className="text-[10px] text-brand-yellow font-black uppercase tracking-widest flex items-center gap-1">
-                      <Calendar className="w-3.5 h-3.5" /> Detalle del Alquiler
+                  <div className="bg-black/40 p-4 rounded-2xl border border-white/5 space-y-3">
+                    <h4 className="text-[10px] text-brand-yellow font-black uppercase tracking-widest flex items-center gap-1 mb-1">
+                      <Calendar className="w-3.5 h-3.5" /> Equipamiento Alquilado
                     </h4>
                     <div className="space-y-3 font-sans">
                       {selected.items.map((item, index) => (
-                        <div key={index} className="border-b border-white/5 last:border-b-0 pb-2.5 last:pb-0">
-                          <p className="text-white font-black text-sm">
-                            {item.quantity}x {item.productNameSnapshot || item.productName}
-                          </p>
+                        <div 
+                          key={index} 
+                          className="bg-[#141414] p-4 rounded-xl border border-white/5 hover:border-white/10 transition-all flex flex-col gap-2"
+                        >
+                          <div className="flex justify-between items-start gap-3">
+                            <div className="flex items-center gap-2.5 min-w-0">
+                              <span className="flex items-center justify-center w-8 h-8 rounded-lg bg-brand-yellow/10 text-brand-yellow font-black text-base border border-brand-yellow/20 shrink-0">
+                                {item.quantity}x
+                              </span>
+                              <p className="text-white font-black text-base truncate leading-tight">
+                                {item.productNameSnapshot || item.productName}
+                              </p>
+                            </div>
+                            <span className="text-brand-yellow font-black text-base shrink-0">
+                              Bs. {item.total}
+                            </span>
+                          </div>
+
                           {item.selectedWheelSize && (
-                            <p className="text-xs text-white/50 font-bold mt-0.5">
-                              Aro / Medida: <span className="text-brand-yellow font-black">Aro {item.selectedWheelSize}</span>
-                            </p>
+                            <div className="mt-0.5">
+                              <span className="inline-flex items-center gap-1 bg-brand-yellow/10 text-brand-yellow border border-brand-yellow/20 px-2 py-0.5 rounded-md text-[10px] font-black uppercase">
+                                Aro {item.selectedWheelSize}
+                              </span>
+                            </div>
                           )}
+
                           {item.componentSelections && item.componentSelections.length > 0 && (
-                            <div className="space-y-1 mt-1.5 pl-3 border-l border-white/10">
-                              <p className="text-[8px] text-white/30 font-bold uppercase">Componentes del Combo:</p>
+                            <div className="mt-2 pl-3 border-l-2 border-white/10 space-y-1.5">
+                              <p className="text-[9px] text-white/30 font-black uppercase tracking-wider">
+                                Componentes del Combo:
+                              </p>
                               {item.componentSelections.map((cs, i) => {
                                 const invItem = inventory.find(inv => inv.id === cs.inventoryItemId);
                                 return (
-                                  <p key={i} className="text-white/60 text-xs font-bold">
-                                    • {invItem?.name || 'Item'} {cs.wheelSize ? `(Aro ${cs.wheelSize})` : ''}
+                                  <p key={i} className="text-white/60 text-xs font-bold flex items-center gap-1.5">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-brand-yellow/50"></span>
+                                    {invItem?.name || 'Item'} {cs.wheelSize ? `(Aro ${cs.wheelSize})` : ''}
                                   </p>
                                 );
                               })}
@@ -1082,22 +1130,22 @@ export default function AdminRentalsPage() {
                   </div>
 
                   {/* Calendar Schedule Grid */}
-                  <div className="bg-black/40 p-4 rounded-2xl border border-white/5 grid grid-cols-2 gap-3 text-xs">
-                    <div>
-                      <p className="text-[9px] text-white/30 font-bold uppercase">Fecha de Entrega</p>
-                      <p className="text-white font-bold text-sm mt-0.5">{selected.items[0]?.date}</p>
+                  <div className="grid grid-cols-2 gap-3 text-xs">
+                    <div className="bg-[#141414] p-4 rounded-xl border border-white/5 flex flex-col justify-between">
+                      <span className="text-[9.5px] text-white/30 font-black uppercase tracking-wider">📅 Fecha de Entrega</span>
+                      <p className="text-white font-extrabold text-sm mt-1.5">{selected.items[0]?.date}</p>
                     </div>
-                    <div>
-                      <p className="text-[9px] text-white/30 font-bold uppercase">Hora Recogida</p>
-                      <p className="text-white font-bold text-sm mt-0.5">{selected.items[0]?.pickupTime}</p>
+                    <div className="bg-[#141414] p-4 rounded-xl border border-white/5 flex flex-col justify-between">
+                      <span className="text-[9.5px] text-white/30 font-black uppercase tracking-wider">⏰ Hora Recogida</span>
+                      <p className="text-white font-extrabold text-sm mt-1.5">{selected.items[0]?.pickupTime}</p>
                     </div>
-                    <div>
-                      <p className="text-[9px] text-white/30 font-bold uppercase">Duración Contratada</p>
-                      <p className="text-white font-bold text-sm mt-0.5">{selected.items[0]?.duration}</p>
+                    <div className="bg-[#141414] p-4 rounded-xl border border-white/5 flex flex-col justify-between">
+                      <span className="text-[9.5px] text-white/30 font-black uppercase tracking-wider">⌛ Duración</span>
+                      <p className="text-white font-extrabold text-sm mt-1.5">{selected.items[0]?.duration}</p>
                     </div>
-                    <div>
-                      <p className="text-[9px] text-white/30 font-bold uppercase">Método Pago</p>
-                      <p className="text-white font-bold text-sm mt-0.5 uppercase">{selected.paymentMethod}</p>
+                    <div className="bg-[#141414] p-4 rounded-xl border border-white/5 flex flex-col justify-between">
+                      <span className="text-[9.5px] text-white/30 font-black uppercase tracking-wider">💳 Método Pago</span>
+                      <p className="text-white font-extrabold text-sm mt-1.5 uppercase">{selected.paymentMethod}</p>
                     </div>
                   </div>
 

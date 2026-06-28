@@ -66,6 +66,7 @@ export interface InventoryItem {
     price24Hours?: number;
     price1Week?: number;
     price1Month?: number;
+    additionalImageUrls?: string[];
 }
 
 export interface ComboComponent {
@@ -104,6 +105,7 @@ export interface ComboProduct {
     price24Hours?: number;
     price1Week?: number;
     price1Month?: number;
+    additionalImageUrls?: string[];
 }
 
 export interface RentalSettings {
