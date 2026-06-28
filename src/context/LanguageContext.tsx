@@ -11,35 +11,41 @@ const LanguageContext = createContext<LanguageContextProps | null>(null);
 
 export function LanguageProvider({ children }: { children: React.ReactNode }) {
     const [language, setLanguageState] = useState<Language>(() => {
-        return (localStorage.getItem('briz_language') as Language) || 'es';
+        // Default to 'es' on fresh session/tab entry (persists across page reloads in the same tab)
+        const sessionLang = sessionStorage.getItem('briz_language') as Language;
+        if (!sessionLang) {
+            // First time in this session, clear any stale translation cookies to force Spanish default
+            document.cookie = "googtrans=/es/es; path=/";
+            document.cookie = "googtrans=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/";
+            
+            // Clear for hostname scope as well
+            const host = window.location.hostname;
+            document.cookie = `googtrans=/es/es; path=/; domain=${host}`;
+            document.cookie = `googtrans=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/; domain=${host}`;
+            
+            return 'es';
+        }
+        return sessionLang;
     });
 
     const setLanguage = (lang: Language) => {
         setLanguageState(lang);
-        localStorage.setItem('briz_language', lang);
+        sessionStorage.setItem('briz_language', lang);
         
-        // Drive Google Translate programmatically with a robust retry mechanism
-        const triggerGoogleTranslate = () => {
-            const selectEl = document.querySelector('.goog-te-combo') as HTMLSelectElement;
-            if (selectEl) {
-                selectEl.value = lang;
-                selectEl.dispatchEvent(new Event('change'));
-                return true;
-            }
-            return false;
-        };
-
-        // Try immediately
-        if (!triggerGoogleTranslate()) {
-            // If the element is not ready yet (e.g., script still loading), retry every 200ms
-            let retries = 0;
-            const interval = setInterval(() => {
-                retries++;
-                if (triggerGoogleTranslate() || retries >= 15) {
-                    clearInterval(interval);
-                }
-            }, 200);
+        // 1. Set the googtrans cookie
+        const cookieValue = lang === 'es' ? '/es/es' : '/es/en';
+        document.cookie = `googtrans=${cookieValue}; path=/`;
+        
+        const host = window.location.hostname;
+        document.cookie = `googtrans=${cookieValue}; path=/; domain=${host}`;
+        if (host.includes('.')) {
+            const rootDomain = host.substring(host.indexOf('.'));
+            document.cookie = `googtrans=${cookieValue}; path=/; domain=${rootDomain}`;
         }
+
+        // 2. Reload the page once to let Google Translate initialize its MutationObserver 
+        // cleanly on the fresh document, preventing React Virtual DOM conflicts.
+        window.location.reload();
     };
 
     useEffect(() => {
@@ -55,7 +61,7 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
             document.body.appendChild(div);
         }
 
-        // 2. Define global init callback
+        // 2. Define global init callback for Google Translate widget
         (window as any).googleTranslateElementInit = () => {
             new (window as any).google.translate.TranslateElement({
                 pageLanguage: 'es',
@@ -63,22 +69,6 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
                 layout: (window as any).google.translate.TranslateElement.InlineLayout.SIMPLE,
                 autoDisplay: false
             }, 'google_translate_element');
-            
-            // Apply language on load after translate element finishes loading
-            let retries = 0;
-            const checkAndApply = () => {
-                const selectEl = document.querySelector('.goog-te-combo') as HTMLSelectElement;
-                if (selectEl) {
-                    if (language !== 'es') {
-                        selectEl.value = language;
-                        selectEl.dispatchEvent(new Event('change'));
-                    }
-                } else if (retries < 15) {
-                    retries++;
-                    setTimeout(checkAndApply, 200);
-                }
-            };
-            setTimeout(checkAndApply, 500);
         };
 
         // 3. Inject Google Translate script if not present
@@ -89,7 +79,7 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
             script.src = '//translate.google.com/translate_a/element.js?cb=googleTranslateElementInit';
             document.body.appendChild(script);
         }
-    }, [language]);
+    }, []);
 
     return (
         <LanguageContext.Provider value={{ language, setLanguage }}>
