@@ -80,7 +80,7 @@ export default function ProfilePage() {
             <section className="mx-auto max-w-6xl space-y-8">
                 <div className="rounded-[2rem] border border-brand-yellow/30 bg-white p-6 shadow-sm sm:p-8">
                     <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
-                        <div className="flex items-center gap-4">
+                        <div className="flex items-center gap-4 min-w-0 overflow-hidden flex-1">
                             <div className="h-20 w-20 overflow-hidden rounded-full border-4 border-brand-yellow bg-brand-yellow/10">
                                 {currentCustomer.autofotoUrl ? (
                                     <img src={currentCustomer.autofotoUrl} alt={currentCustomer.name} className="h-full w-full object-cover" />
@@ -90,10 +90,10 @@ export default function ProfilePage() {
                                     </div>
                                 )}
                             </div>
-                            <div>
+                            <div className="min-w-0 flex-1">
                                 <p className="text-[10px] font-black uppercase tracking-widest text-brand-charcoal/40">Cliente Briz</p>
-                                <h1 className="font-tan text-3xl uppercase text-brand-black">{currentCustomer.name}</h1>
-                                <p className="text-sm font-bold text-brand-charcoal/60">{currentCustomer.phone} · CI {currentCustomer.ci}</p>
+                                <h1 className="font-tan text-xl sm:text-2xl uppercase text-brand-black leading-tight break-words word-break-all">{currentCustomer.name}</h1>
+                                <p className="text-sm font-bold text-brand-charcoal/60 break-all">{currentCustomer.phone} · CI {currentCustomer.ci}</p>
                             </div>
                         </div>
                         <Button asChild className="rounded-full bg-brand-yellow px-6 font-black text-brand-black hover:bg-brand-yellow-light">

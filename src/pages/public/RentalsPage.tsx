@@ -93,7 +93,7 @@ const translateProductName = (name: string, lang: string) => {
 
 export default function RentalsPage() {
   const { language } = useLanguage();
-  const { inventory, combos, getComboAvailability } = useStore();
+  const { inventory, combos, getComboAvailability, currentCustomer } = useStore();
   const { totalItems } = useCart();
 
   const [search, setSearch] = useState('');
@@ -433,6 +433,16 @@ export default function RentalsPage() {
         </div>
       ) : (
         <>
+      {/* Welcome Banner for logged-in customers */}
+      {currentCustomer && (
+        <div className="w-full bg-brand-yellow/10 border-b border-brand-yellow/20 py-3 px-4">
+          <p className="text-center text-sm font-black text-brand-black font-maiandra tracking-wide">
+            ¡Gracias <span className="uppercase">{currentCustomer.name.split(' ')[0]}</span>!
+            {' '}Bienvenid@ nuevamente 💛🚲
+          </p>
+        </div>
+      )}
+
       {/* Filters & Search Row */}
       <div className="sticky top-[64px] lg:top-[86px] z-40 bg-background/90 backdrop-blur-md border-b border-gray-100/50 py-5 overflow-hidden">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 w-full">

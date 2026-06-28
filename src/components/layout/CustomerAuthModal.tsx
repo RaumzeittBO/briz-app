@@ -564,7 +564,7 @@ export default function CustomerAuthModal({ isOpen, onClose, onSuccess }: Custom
                             
                             {/* CAMERA SELFIE STEP */}
                             <div className="space-y-3 bg-brand-yellow/5 p-5 rounded-2xl border border-brand-yellow/10 flex flex-col items-center">
-                                <Label className="text-[10px] text-brand-charcoal/60 font-bold uppercase tracking-widest font-tangkiwood">1. Autofoto o Sube tu Foto</Label>
+                                <Label className="text-sm font-black uppercase tracking-wide text-brand-charcoal font-tangkiwood">1. Autofoto o Sube tu Foto</Label>
                                 
                                 <div className="relative w-48 h-48 bg-white border border-brand-charcoal/10 rounded-full overflow-hidden flex items-center justify-center shadow-inner">
                                     {capturedSelfie ? (
@@ -634,7 +634,7 @@ export default function CustomerAuthModal({ isOpen, onClose, onSuccess }: Custom
 
                             {/* ID DOCUMENT STEP */}
                             <div className="space-y-3 bg-brand-yellow/5 p-5 rounded-2xl border border-brand-yellow/10">
-                                <Label className="text-[10px] text-brand-charcoal/60 font-bold uppercase tracking-widest font-tangkiwood">2. Documento de Identificación (C.I., D.N.I. o Pasaporte)</Label>
+                                <Label className="text-sm font-black uppercase tracking-wide text-brand-charcoal font-tangkiwood">2. Documento de Identificación (C.I., D.N.I. o Pasaporte)</Label>
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                     {/* ANVERSO */}
                                     <div className="space-y-1.5">
@@ -696,7 +696,7 @@ export default function CustomerAuthModal({ isOpen, onClose, onSuccess }: Custom
 
                             {/* ACCOUNT DATA FORM */}
                             <div className="space-y-4">
-                                <Label className="text-[10px] text-brand-charcoal font-black uppercase tracking-widest font-tangkiwood">3. Datos Personales y de Cuenta</Label>
+                                <Label className="text-sm font-black uppercase tracking-wide text-brand-charcoal font-tangkiwood">3. Datos Personales y de Cuenta</Label>
                                 
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                     <div className="space-y-2">
