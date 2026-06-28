@@ -682,6 +682,7 @@ function HeroCollage({ variant }: { variant: 'mobile' | 'desktop' }) {
 }
 
 function HeroSection() {
+    const { language } = useLanguage();
     return (
         <section className="relative isolate overflow-hidden bg-[#FFF8DF] pt-[86px] lg:pt-[104px]">
             <SmartImage
@@ -722,9 +723,9 @@ function HeroSection() {
                                 }}
                             >
                                 <SmartImage
-                                    src={`${assetBase}/lettering-una-bicicleta.webp?v=3`}
-                                    fallbackSrcs={[`/menu-principal-celular/lettering-una-bicicleta.webp?v=3`]}
-                                    alt="Una bicicleta. Un ciclo de expresiones infinitas."
+                                    src={language === 'es' ? `${assetBase}/lettering-una-bicicleta.webp?v=3` : '/menu-principal-web/lettering-ingles.png'}
+                                    fallbackSrcs={language === 'es' ? [`/menu-principal-celular/lettering-una-bicicleta.webp?v=3`] : ['/menu-principal-web/lettering-ingles.png']}
+                                    alt={language === 'es' ? "Una bicicleta. Un ciclo de expresiones infinitas." : "A bicycle. A cycle of infinite expressions."}
                                     placeholderLabel="lettering-una-bicicleta.webp"
                                     loading="eager"
                                     fetchPriority="high"
