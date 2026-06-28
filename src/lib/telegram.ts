@@ -1,3 +1,4 @@
+// Build: 2026-06-28T23:28 — forced fresh build to pick up new VITE_TELEGRAM_CHAT_ID
 const escapeHTML = (text: string = ''): string => {
     return text
         .replace(/&/g, '&amp;')
@@ -22,6 +23,9 @@ export const sendTelegramNotification = async (
 ) => {
     const token = import.meta.env.VITE_TELEGRAM_BOT_TOKEN;
     const chatId = import.meta.env.VITE_TELEGRAM_CHAT_ID;
+
+    // DIAGNOSTIC: Log the actual values embedded in this build to detect stale cache
+    console.log(`[Telegram] Valores en build: token=${token ? token.slice(0,8)+'...' : 'VACIO'}, chatId=${chatId || 'VACIO'}`);
 
     if (!token || !chatId) {
         console.error(
