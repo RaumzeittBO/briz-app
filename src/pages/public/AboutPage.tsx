@@ -327,9 +327,10 @@ export default function AboutPage() {
                     initial={{ opacity: 0, y: 15 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.1 }}
-                    className="font-tan text-[clamp(2.2rem,6vw,4.5rem)] uppercase leading-tight text-brand-black drop-shadow-sm"
+                    className="font-tan text-[clamp(2.2rem,6vw,4.5rem)] uppercase leading-tight text-brand-black drop-shadow-sm notranslate"
                 >
-                    Conoce <span className="text-brand-yellow drop-shadow-[2px_2px_0_rgba(0,0,0,0.15)]">Briz</span>
+                    {language === 'es' ? 'Conoce' : 'Get to know'}{' '}
+                    <span className="text-brand-yellow drop-shadow-[2px_2px_0_rgba(0,0,0,0.15)]">Briz</span>
                 </motion.h1>
                 <motion.p 
                     initial={{ opacity: 0, y: 12 }}

@@ -25,20 +25,18 @@ type NavLinkItem = {
     icon: LucideIcon;
 };
 
-const group1Links: NavLinkItem[] = [
-    { label: 'Alquiler', href: '/rentals', icon: Bike },
-    { label: 'Tienda', href: '/shop', icon: Store },
-    { label: 'Ciclotours', href: '/routes', icon: Route },
-    { label: 'Mecánica', href: '/service', icon: Wrench },
-    { label: 'Comunidad', href: '/community', icon: HandHeart },
+const getGroup1Links = (lang: string): NavLinkItem[] => [
+    { label: lang === 'es' ? 'Alquiler' : 'Rentals', href: '/rentals', icon: Bike },
+    { label: lang === 'es' ? 'Tienda' : 'Shop', href: '/shop', icon: Store },
+    { label: lang === 'es' ? 'Ciclotours' : 'Ciclotours', href: '/routes', icon: Route },
+    { label: lang === 'es' ? 'Mecánica' : 'Mechanics', href: '/service', icon: Wrench },
+    { label: lang === 'es' ? 'Comunidad' : 'Community', href: '/community', icon: HandHeart },
 ];
 
-const group2Links: NavLinkItem[] = [
-    { label: 'Conócenos', href: '/about', icon: Info },
-    { label: 'Preguntas frecuentes', href: '/contact', icon: HelpCircle },
+const getGroup2Links = (lang: string): NavLinkItem[] => [
+    { label: lang === 'es' ? 'Conócenos' : 'About Us', href: '/about', icon: Info },
+    { label: lang === 'es' ? 'Preguntas frecuentes' : 'FAQ', href: '/contact', icon: HelpCircle },
 ];
-
-const allNavLinks = [...group1Links, ...group2Links];
 
 const TireTrackSeparator = ({ className = '', style }: { className?: string; style?: React.CSSProperties }) => (
     <svg 
@@ -78,6 +76,10 @@ export default function Navbar() {
     const { language, setLanguage } = useLanguage();
     const [authModalOpen, setAuthModalOpen] = useState(false);
     const [langDropdownOpen, setLangDropdownOpen] = useState(false);
+
+    const group1 = getGroup1Links(language);
+    const group2 = getGroup2Links(language);
+    const allLinks = [...group1, ...group2];
 
 
 
@@ -173,7 +175,7 @@ export default function Navbar() {
 
                         {/* Group 1 buttons */}
                         <div className="flex items-center" style={{ gap: 6 }}>
-                            {group1Links.map((link) => {
+                            {group1.map((link) => {
                                 const Icon = link.icon;
                                 const active = isActive(link.href);
                                 return (
@@ -187,7 +189,7 @@ export default function Navbar() {
                                         style={{ paddingLeft: 7, paddingRight: 7, paddingTop: 4, paddingBottom: 4 }}
                                     >
                                         <Icon className="shrink-0 transition-transform duration-200" style={{ width: 24, height: 24 }} strokeWidth={2.0} />
-                                        <span className="font-cocon font-bold tracking-wide leading-none" style={{ fontSize: 11 }}>{link.label}</span>
+                                        <span className="font-cocon font-bold tracking-wide leading-none notranslate" style={{ fontSize: 11 }}>{link.label}</span>
                                         {active && (
                                             <motion.span
                                                 layoutId="activeNavUnderline"
@@ -204,7 +206,7 @@ export default function Navbar() {
 
                         {/* Group 2 buttons */}
                         <div className="flex items-center" style={{ gap: 6 }}>
-                            {group2Links.map((link) => {
+                            {group2.map((link) => {
                                 const Icon = link.icon;
                                 const active = isActive(link.href);
                                 return (
@@ -218,7 +220,7 @@ export default function Navbar() {
                                         style={{ paddingLeft: 7, paddingRight: 7, paddingTop: 4, paddingBottom: 4 }}
                                     >
                                         <Icon className="shrink-0 transition-transform duration-200" style={{ width: 24, height: 24 }} strokeWidth={2.0} />
-                                        <span className="font-cocon font-bold tracking-wide leading-none" style={{ fontSize: 11 }}>{link.label}</span>
+                                        <span className="font-cocon font-bold tracking-wide leading-none notranslate" style={{ fontSize: 11 }}>{link.label}</span>
                                         {active && (
                                             <motion.span
                                                 layoutId="activeNavUnderline2"
@@ -375,7 +377,7 @@ export default function Navbar() {
                         className="bg-brand-yellow px-4 pb-5 pt-3 shadow-[0_16px_30px_rgba(102,76,0,0.16)] lg:hidden"
                     >
                         <div className="flex flex-col gap-1">
-                            {allNavLinks.map((link) => {
+                            {allLinks.map((link) => {
                                 const Icon = link.icon;
                                 const active = isActive(link.href);
                                 return (
@@ -386,7 +388,7 @@ export default function Navbar() {
                                         className={`flex min-w-0 items-center gap-3 rounded-2xl px-4 py-3.5 font-cocon text-base font-bold text-brand-black transition-colors ${active ? 'bg-white/34' : 'bg-white/12 hover:bg-white/22'}`}
                                     >
                                         <Icon className="h-5 w-5 shrink-0" strokeWidth={2.2} />
-                                        <span className={`min-w-0 flex-1 whitespace-normal break-words leading-tight ${link.label === 'Preguntas frecuentes' ? 'text-[15px]' : ''}`}>{link.label}</span>
+                                        <span className={`min-w-0 flex-1 whitespace-normal break-words leading-tight notranslate ${link.label === 'Preguntas frecuentes' || link.label === 'FAQ' ? 'text-[15px]' : ''}`}>{link.label}</span>
                                     </Link>
                                 );
                             })}

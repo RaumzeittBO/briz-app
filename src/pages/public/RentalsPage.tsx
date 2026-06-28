@@ -11,6 +11,7 @@ import { useCart } from '@/context/CartContext';
 import CustomerAuthModal from '@/components/layout/CustomerAuthModal';
 import RentalCheckoutWizard from '@/components/rentals/RentalCheckoutWizard';
 import type { RentalCartItem } from '@/components/rentals/RentalCheckoutWizard';
+import { useLanguage } from '@/context/LanguageContext';
 import { RENTAL_SEED_CATEGORIES } from '@/data/rentalSeedData';
 
 
@@ -68,7 +69,30 @@ function getRentalPriceTiers(product: DisplayProduct) {
 
 
 
+const translateCategory = (cat: string, lang: string) => {
+  if (lang === 'es') return cat;
+  switch (cat) {
+    case 'Todas': return 'All';
+    case 'Urbanas': return 'Urban';
+    case 'Montañeras': return 'Mountain';
+    case 'Antiguas': return 'Vintage';
+    case 'Accesorios': return 'Accessories';
+    case 'Bicicletas': return 'Bikes';
+    case 'Otros': return 'Others';
+    default: return cat;
+  }
+};
+
+const translateProductName = (name: string, lang: string) => {
+  if (lang === 'es') return name;
+  return name.replace(/\bAntigua\b/g, 'Vintage')
+             .replace(/\bAntiguas\b/g, 'Vintage')
+             .replace(/\bMontañera\b/g, 'Mountain')
+             .replace(/\bUrbana\b/g, 'Urban');
+};
+
 export default function RentalsPage() {
+  const { language } = useLanguage();
   const { inventory, combos, getComboAvailability } = useStore();
   const { totalItems } = useCart();
 
@@ -258,7 +282,7 @@ export default function RentalsPage() {
             <h2 
               className="font-tan text-[0.77rem] xs:text-[0.875rem] sm:text-[1.85rem] sm:leading-[1.22] lg:text-[2.2rem] uppercase tracking-normal text-brand-yellow [-webkit-text-stroke:1px_#000] drop-shadow-[1.2px_1.2px_0_rgba(0,0,0,1)] whitespace-nowrap sm:whitespace-normal"
             >
-              {title}
+              <span translate="no">{translateCategory(title, language)}</span>
             </h2>
             <p className="text-[10px] sm:text-xs font-black uppercase text-gray-400 tracking-widest font-maiandra">
               Desde Bs. {displayMinPrice} / Hora
@@ -325,7 +349,7 @@ export default function RentalsPage() {
                       <div>
                         {/* Title of bike in TAN Tangkiwood */}
                         <h3 className="font-tangkiwood text-lg sm:text-xl text-brand-black leading-tight truncate">
-                          {p.name}
+                          <span translate="no">{translateProductName(p.name, language)}</span>
                         </h3>
                         <p className="text-xs font-sans text-gray-400 mt-1 line-clamp-2 leading-relaxed">
                           {p.description || 'Disponible para alquiler'}
@@ -447,7 +471,7 @@ export default function RentalsPage() {
                       setCategory(c);
                     }}
                   >
-                    {c}
+                    <span translate="no">{translateCategory(c, language)}</span>
                   </Button>
                 ))}
               </div>
@@ -519,7 +543,7 @@ export default function RentalsPage() {
                         <CardContent className="p-5 flex-1 flex flex-col justify-between bg-white">
                           <div>
                             <h3 className="font-tangkiwood text-lg sm:text-xl text-brand-black leading-tight">
-                              {p.name}
+                              <span translate="no">{translateProductName(p.name, language)}</span>
                             </h3>
                             <p className="text-xs font-sans text-gray-400 mt-1 line-clamp-2 leading-relaxed">
                               {p.description || 'Disponible para alquiler'}
