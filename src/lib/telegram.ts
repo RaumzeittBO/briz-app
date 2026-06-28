@@ -5,6 +5,10 @@ const escapeHTML = (text: string = ''): string => {
         .replace(/>/g, '&gt;');
 };
 
+/**
+ * Sends a Telegram notification for a new rental reservation.
+ * Automatically handles supergroup migrations (migrate_to_chat_id).
+ */
 export const sendTelegramNotification = async (
     reservationCode: string,
     items: any[],
@@ -21,15 +25,14 @@ export const sendTelegramNotification = async (
 
     if (!token || !chatId) {
         console.error(
-            `[Telegram] VARIABLES DE ENTORNO FALTANTES. Token presente: ${!!token}, ChatId presente: ${!!chatId}. ` +
-            `Asegurate de configurar VITE_TELEGRAM_BOT_TOKEN y VITE_TELEGRAM_CHAT_ID en Vercel > Settings > Environment Variables.`
+            `[Telegram] VARIABLES DE ENTORNO FALTANTES. Token: ${!!token}, ChatId: ${!!chatId}. ` +
+            `Configura VITE_TELEGRAM_BOT_TOKEN y VITE_TELEGRAM_CHAT_ID en Vercel > Settings > Environment Variables.`
         );
         return;
     }
 
-    // Format date in spanish
     const formattedDate = new Date(`${date}T12:00:00`).toLocaleDateString('es-BO', { dateStyle: 'long' });
-    
+
     const customerName = customer?.name || 'Cliente sin nombre';
     const customerPhone = customer?.phone || '';
     const customerCi = customer?.ci || 'No provisto';
@@ -44,7 +47,7 @@ export const sendTelegramNotification = async (
         message += `\u{1F4DE} <b>Tel\u00e9fono:</b> Sin registrar\n`;
     }
     message += `\u{1FAB9} <b>C.I.:</b> <code>${escapeHTML(customerCi)}</code>\n\n`;
-    
+
     message += `\u{1F4CB} <b>Detalle del Pedido:</b>\n`;
     items.forEach((item) => {
         const specs = item.selectedWheelSize ? ` (Aro ${item.selectedWheelSize})` : '';
@@ -68,43 +71,53 @@ export const sendTelegramNotification = async (
         }
     }
 
-    console.log(`[Telegram] Enviando notificacion para reserva ${reservationCode} al chat ${chatId}...`);
-
-    try {
+    const sendToChat = async (targetChatId: string): Promise<any> => {
         const response = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                chat_id: chatId,
+                chat_id: targetChatId,
                 text: message,
                 parse_mode: 'HTML',
                 disable_web_page_preview: true
             }),
         });
+        return response.json();
+    };
 
-        const result = await response.json();
+    console.log(`[Telegram] Enviando notificacion para ${reservationCode} al chat ${chatId}...`);
 
-        if (!response.ok) {
-            // Diagnose common errors clearly
-            if (result?.error_code === 403) {
+    try {
+        let result = await sendToChat(chatId);
+
+        // Handle Telegram supergroup migration automatically
+        if (!result.ok && result.parameters?.migrate_to_chat_id) {
+            const newChatId = String(result.parameters.migrate_to_chat_id);
+            console.warn(
+                `[Telegram] El grupo fue migrado a supergrupo. Nuevo chat_id: ${newChatId}. ` +
+                `IMPORTANTE: Actualiza VITE_TELEGRAM_CHAT_ID en Vercel a: ${newChatId}`
+            );
+            result = await sendToChat(newChatId);
+        }
+
+        if (!result.ok) {
+            if (result.error_code === 403) {
                 console.error(
-                    `[Telegram] ERROR 403 - El bot NO tiene permiso para enviar mensajes al grupo. ` +
-                    `Solucion: En Telegram, ve al grupo "Alquileres BRIZ", abre Configuracion > Administradores, ` +
-                    `y añade @briz_alquileres_bot como administrador con permiso de Publicar mensajes.`
+                    `[Telegram] ERROR 403 - El bot no tiene permiso para enviar mensajes. ` +
+                    `Asegurate de que @briz_alquileres_bot sea administrador del grupo con permiso de Publicar mensajes.`
                 );
-            } else if (result?.error_code === 400 && result?.description?.includes('chat not found')) {
+            } else if (result.error_code === 400 && result.description?.includes('chat not found')) {
                 console.error(
-                    `[Telegram] ERROR 400 - Chat ID incorrecto. El chat_id configurado (${chatId}) no existe o cambio. ` +
-                    `El grupo pudo haber sido migrado a supergrupo con un nuevo ID. ` +
-                    `Verifica el ID actual en Vercel > Settings > Environment Variables.`
+                    `[Telegram] ERROR 400 - Chat ID incorrecto (${chatId}). El grupo pudo haber sido migrado. ` +
+                    `Verifica y actualiza VITE_TELEGRAM_CHAT_ID en Vercel > Settings > Environment Variables.`
                 );
             } else {
-                console.error(`[Telegram] Error ${response.status}:`, JSON.stringify(result));
+                console.error(`[Telegram] Error ${result.error_code}:`, result.description);
             }
         } else {
-            console.log(`[Telegram] Notificacion enviada exitosamente. Message ID: ${result?.result?.message_id}`);
+            console.log(`[Telegram] Notificacion enviada. Message ID: ${result?.result?.message_id}`);
         }
     } catch (error) {
-        console.error("[Telegram] Error de red al enviar notificacion:", error);
+        console.error("[Telegram] Error de red:", error);
     }
 };
