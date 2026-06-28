@@ -27,11 +27,20 @@ export const sendTelegramNotification = async (
     // Format date in spanish
     const formattedDate = new Date(`${date}T12:00:00`).toLocaleDateString('es-BO', { dateStyle: 'long' });
     
+    const customerName = customer?.name || 'Cliente sin nombre';
+    const customerPhone = customer?.phone || '';
+    const customerCi = customer?.ci || 'No provisto';
+    const cleanPhone = customerPhone.replace(/\D/g, '');
+
     let message = `🚴‍♂️ <b>NUEVA RESERVA DE ALQUILER</b>\n\n`;
     message += `🆔 <b>Código:</b> <code>${escapeHTML(reservationCode)}</code>\n`;
-    message += `👤 <b>Cliente:</b> ${escapeHTML(customer.name)}\n`;
-    message += `📞 <b>Teléfono:</b> <a href="https://wa.me/591${customer.phone.replace(/\D/g, '')}">${escapeHTML(customer.phone)}</a>\n`;
-    message += `🪪 <b>C.I.:</b> <code>${escapeHTML(customer.ci)}</code>\n\n`;
+    message += `👤 <b>Cliente:</b> ${escapeHTML(customerName)}\n`;
+    if (customerPhone) {
+        message += `📞 <b>Teléfono:</b> <a href="https://wa.me/591${cleanPhone}">${escapeHTML(customerPhone)}</a>\n`;
+    } else {
+        message += `📞 <b>Teléfono:</b> Sin registrar\n`;
+    }
+    message += `🪪 <b>C.I.:</b> <code>${escapeHTML(customerCi)}</code>\n\n`;
     
     message += `📋 <b>Detalle del Pedido:</b>\n`;
     items.forEach((item) => {

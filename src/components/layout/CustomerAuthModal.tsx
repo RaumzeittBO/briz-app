@@ -142,7 +142,8 @@ export default function CustomerAuthModal({ isOpen, onClose, onSuccess }: Custom
     const videoElementRef = useRef<HTMLVideoElement | null>(null);
     const canvasRef = useRef<HTMLCanvasElement | null>(null);
     const selfieInputRef = useRef<HTMLInputElement | null>(null);
-    const docInputRef = useRef<HTMLInputElement | null>(null);
+    const docAnversoInputRef = useRef<HTMLInputElement | null>(null);
+    const docReversoInputRef = useRef<HTMLInputElement | null>(null);
 
     // Callback ref to bind stream and play video when the element mounts
     const videoRef = useCallback((node: HTMLVideoElement | null) => {
@@ -156,7 +157,8 @@ export default function CustomerAuthModal({ isOpen, onClose, onSuccess }: Custom
     }, [stream]);
 
     // ID Document upload states
-    const [docFile, setDocFile] = useState<File | null>(null);
+    const [docFileAnverso, setDocFileAnverso] = useState<File | null>(null);
+    const [docFileReverso, setDocFileReverso] = useState<File | null>(null);
 
     // Reset fields on modal toggle or close
     useEffect(() => {
@@ -170,7 +172,8 @@ export default function CustomerAuthModal({ isOpen, onClose, onSuccess }: Custom
             setSuccessMessage(null);
             setCapturedSelfie(null);
             setSelfieBlob(null);
-            setDocFile(null);
+            setDocFileAnverso(null);
+            setDocFileReverso(null);
             setLoading(false);
             setMode('login');
             setRecoveryEmail('');
@@ -266,9 +269,15 @@ export default function CustomerAuthModal({ isOpen, onClose, onSuccess }: Custom
         }
     };
 
-    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const handleFileAnversoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files && e.target.files.length > 0) {
-            setDocFile(e.target.files[0]);
+            setDocFileAnverso(e.target.files[0]);
+        }
+    };
+
+    const handleFileReversoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (e.target.files && e.target.files.length > 0) {
+            setDocFileReverso(e.target.files[0]);
         }
     };
 
@@ -315,8 +324,13 @@ export default function CustomerAuthModal({ isOpen, onClose, onSuccess }: Custom
             return;
         }
 
-        if (!docFile) {
-            setError("Por favor sube una foto o PDF de tu documento de identidad (C.I., D.N.I. o Pasaporte).");
+        if (!docFileAnverso) {
+            setError("Por favor sube una foto de la parte frontal (anverso) de tu documento de identidad.");
+            return;
+        }
+
+        if (!docFileReverso) {
+            setError("Por favor sube una foto de la parte posterior (reverso) de tu documento de identidad.");
             return;
         }
 
@@ -334,7 +348,7 @@ export default function CustomerAuthModal({ isOpen, onClose, onSuccess }: Custom
                 comoNosConociste: referral
             };
 
-            await registerCustomer(customerData, selfieBlob, docFile, remember);
+            await registerCustomer(customerData, selfieBlob, docFileAnverso, docFileReverso, remember);
             setSuccessMessage("¡Tu cuenta ha sido creada con éxito! Iniciando sesión...");
             
             setTimeout(() => {
@@ -620,29 +634,63 @@ export default function CustomerAuthModal({ isOpen, onClose, onSuccess }: Custom
 
                             {/* ID DOCUMENT STEP */}
                             <div className="space-y-3 bg-brand-yellow/5 p-5 rounded-2xl border border-brand-yellow/10">
-                                <Label className="text-[10px] text-brand-charcoal/60 font-bold uppercase tracking-widest font-tangkiwood">2. Documento de Identificación</Label>
-                                <div 
-                                    onClick={() => docInputRef.current?.click()}
-                                    className="border-2 border-dashed border-brand-charcoal/10 hover:border-brand-yellow bg-white rounded-xl p-4 text-center cursor-pointer transition-all flex flex-col items-center justify-center group"
-                                >
-                                    <Upload className="w-8 h-8 text-brand-charcoal/20 group-hover:text-brand-yellow transition-colors mb-2" />
-                                    {docFile ? (
-                                        <div className="text-xs font-bold text-brand-charcoal truncate max-w-full">
-                                            📄 {docFile.name} ({(docFile.size / 1024 / 1024).toFixed(2)} MB)
+                                <Label className="text-[10px] text-brand-charcoal/60 font-bold uppercase tracking-widest font-tangkiwood">2. Documento de Identificación (C.I., D.N.I. o Pasaporte)</Label>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                    {/* ANVERSO */}
+                                    <div className="space-y-1.5">
+                                        <span className="text-[9px] text-brand-charcoal/50 uppercase font-maiandra block">Lado Anverso (Frontal):</span>
+                                        <div 
+                                            onClick={() => docAnversoInputRef.current?.click()}
+                                            className="border-2 border-dashed border-brand-charcoal/10 hover:border-brand-yellow bg-white rounded-xl p-4 text-center cursor-pointer transition-all flex flex-col items-center justify-center group h-28"
+                                        >
+                                            <Upload className="w-6 h-6 text-brand-charcoal/20 group-hover:text-brand-yellow transition-colors mb-1.5" />
+                                            {docFileAnverso ? (
+                                                <div className="text-[10px] font-bold text-brand-charcoal truncate max-w-full">
+                                                    📄 {docFileAnverso.name}
+                                                </div>
+                                            ) : (
+                                                <>
+                                                    <div className="text-[10px] font-bold text-brand-charcoal/60 font-maiandra">Subir Anverso</div>
+                                                    <div className="text-[8px] text-brand-charcoal/40 uppercase mt-0.5 font-maiandra">Imagen o PDF</div>
+                                                </>
+                                            )}
+                                            <input 
+                                                type="file" 
+                                                ref={docAnversoInputRef} 
+                                                onChange={handleFileAnversoChange} 
+                                                accept="image/*,application/pdf" 
+                                                className="hidden" 
+                                            />
                                         </div>
-                                    ) : (
-                                        <>
-                                            <div className="text-xs font-bold text-brand-charcoal/60 font-maiandra">Sube una foto o documento PDF</div>
-                                            <div className="text-[9px] text-brand-charcoal/40 uppercase mt-1 font-maiandra">C.I. / Pasaporte / Licencia (Max. 5MB)</div>
-                                        </>
-                                    )}
-                                    <input 
-                                        type="file" 
-                                        ref={docInputRef} 
-                                        onChange={handleFileChange} 
-                                        accept="image/*,application/pdf" 
-                                        className="hidden" 
-                                    />
+                                    </div>
+
+                                    {/* REVERSO */}
+                                    <div className="space-y-1.5">
+                                        <span className="text-[9px] text-brand-charcoal/50 uppercase font-maiandra block">Lado Reverso (Atrás):</span>
+                                        <div 
+                                            onClick={() => docReversoInputRef.current?.click()}
+                                            className="border-2 border-dashed border-brand-charcoal/10 hover:border-brand-yellow bg-white rounded-xl p-4 text-center cursor-pointer transition-all flex flex-col items-center justify-center group h-28"
+                                        >
+                                            <Upload className="w-6 h-6 text-brand-charcoal/20 group-hover:text-brand-yellow transition-colors mb-1.5" />
+                                            {docFileReverso ? (
+                                                <div className="text-[10px] font-bold text-brand-charcoal truncate max-w-full">
+                                                    📄 {docFileReverso.name}
+                                                </div>
+                                            ) : (
+                                                <>
+                                                    <div className="text-[10px] font-bold text-brand-charcoal/60 font-maiandra">Subir Reverso</div>
+                                                    <div className="text-[8px] text-brand-charcoal/40 uppercase mt-0.5 font-maiandra">Imagen o PDF</div>
+                                                </>
+                                            )}
+                                            <input 
+                                                type="file" 
+                                                ref={docReversoInputRef} 
+                                                onChange={handleFileReversoChange} 
+                                                accept="image/*,application/pdf" 
+                                                className="hidden" 
+                                            />
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
 
