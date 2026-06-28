@@ -76,6 +76,7 @@ export default function Navbar() {
     const { language, setLanguage } = useLanguage();
     const [authModalOpen, setAuthModalOpen] = useState(false);
     const [langDropdownOpen, setLangDropdownOpen] = useState(false);
+    const [mobileLangOpen, setMobileLangOpen] = useState(false);
 
     const group1 = getGroup1Links(language);
     const group2 = getGroup2Links(language);
@@ -460,6 +461,44 @@ export default function Navbar() {
                 isOpen={authModalOpen} 
                 onClose={() => setAuthModalOpen(false)} 
             />
+
+            {/* Mobile Floating Language Selector (FAB) */}
+            <div className="fixed bottom-6 right-6 z-50 lg:hidden flex flex-col items-end gap-2">
+                {mobileLangOpen && (
+                    <>
+                        <div className="fixed inset-0 bg-transparent z-40" onClick={() => setMobileLangOpen(false)} />
+                        <div className="bg-[#0d0d0d]/95 border border-white/10 rounded-2xl p-1.5 w-32 shadow-2xl z-50 flex flex-col gap-1 mb-1">
+                            <button
+                                onClick={() => {
+                                    setLanguage('es');
+                                    setMobileLangOpen(false);
+                                }}
+                                className={`w-full flex items-center justify-between text-left px-3.5 py-2.5 text-xs font-bold rounded-xl transition-colors font-cocon cursor-pointer ${language === 'es' ? 'bg-brand-yellow text-brand-black font-black' : 'text-white/80 hover:bg-white/5 hover:text-white'}`}
+                            >
+                                Español (ES)
+                            </button>
+                            <button
+                                onClick={() => {
+                                    setLanguage('en');
+                                    setMobileLangOpen(false);
+                                }}
+                                className={`w-full flex items-center justify-between text-left px-3.5 py-2.5 text-xs font-bold rounded-xl transition-colors font-cocon cursor-pointer ${language === 'en' ? 'bg-brand-yellow text-brand-black font-black' : 'text-white/80 hover:bg-white/5 hover:text-white'}`}
+                            >
+                                English (EN)
+                            </button>
+                        </div>
+                    </>
+                )}
+                <button
+                    onClick={() => setMobileLangOpen(!mobileLangOpen)}
+                    className="h-12 px-4 flex items-center gap-1.5 rounded-full bg-[#0d0d0d] text-white border-2 border-brand-yellow shadow-2xl hover:scale-105 active:scale-95 transition-all cursor-pointer font-cocon font-bold text-xs"
+                    title={language === 'es' ? 'Cambiar idioma' : 'Change language'}
+                >
+                    <Globe className="w-4 h-4 text-brand-yellow animate-pulse" />
+                    <span>{language === 'es' ? 'ES' : 'EN'}</span>
+                    <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${mobileLangOpen ? 'rotate-180' : ''}`} />
+                </button>
+            </div>
         </motion.header>
     );
 }

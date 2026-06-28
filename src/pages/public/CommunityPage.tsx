@@ -33,7 +33,10 @@ export default function CommunityPage() {
         try {
             await createItem({ type: composer, title: form.title.trim(), content: form.content.trim(), imageUrl: form.imageUrl.trim() || undefined, category: form.category.trim() || undefined, eventDate: composer === 'event' ? form.eventDate : undefined, eventTime: composer === 'event' ? form.eventTime : undefined, location: composer === 'event' ? form.location.trim() : undefined, registrationUrl: composer === 'event' ? form.registrationUrl.trim() : undefined, authorId: currentCustomer.id, authorName: currentCustomer.name, authorAvatar: currentCustomer.autofotoUrl });
             setComposer(null); alert('¡Listo! Tu publicación fue enviada a revisión. Aparecerá en Comunidad cuando Briz la apruebe.');
-        } catch { alert('No pudimos enviar tu publicación. Intenta nuevamente.'); } finally { setSending(false); }
+        } catch (error: any) {
+            console.error('Error al enviar publicación:', error);
+            alert(`No pudimos enviar tu publicación. Detalle del error de la base de datos: ${error.message || error}`);
+        } finally { setSending(false); }
     };
 
     return <main className="min-h-screen bg-[#FFFDF3] pt-20">

@@ -1414,7 +1414,10 @@ function CommunityReviewsCarousel() {
             await createItem({ type: 'review', title: `Opinión de ${currentCustomer.name}`, content: message.trim(), category: 'Opinión', rating, authorId: currentCustomer.id, authorName: currentCustomer.name, authorAvatar: currentCustomer.autofotoUrl });
             setMessage(''); setReviewOpen(false);
             alert('¡Gracias! Tu opinión fue enviada a revisión. La publicaremos cuando sea aprobada.');
-        } catch { alert('No pudimos enviar tu opinión. Intenta nuevamente.'); } finally { setSending(false); }
+        } catch (error: any) {
+            console.error('Error al enviar opinión:', error);
+            alert(`No pudimos enviar tu opinión. Detalle del error de la base de datos: ${error.message || error}`);
+        } finally { setSending(false); }
     };
 
     return <>

@@ -90,6 +90,7 @@ export function CommunityProvider({ children }: { children: ReactNode }) {
             const next = [item, ...readLocal().filter(existing => existing.id !== item.id)];
             saveLocal(next);
             setLocalItems(next);
+            throw error;
         }
     };
 
