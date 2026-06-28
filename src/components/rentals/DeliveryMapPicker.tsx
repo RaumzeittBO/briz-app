@@ -318,8 +318,8 @@ export default function DeliveryMapPicker({
                         <p>✓ Ubicación dentro de la zona de cobertura estándar. El costo de transporte se calculará automáticamente en base a tu pedido.</p>
                     ) : (
                         <div>
-                            <p className="font-extrabold uppercase">⚠️ Ubicación fuera de la zona de cobertura estándar</p>
-                            <p className="mt-1 font-semibold normal-case text-amber-700">El pedido se registrará, pero el costo del transporte se coordinará manualmente contigo por WhatsApp (Tarifa Bs. 0 cotizada en web).</p>
+                            <p className="font-extrabold uppercase">⚠️ Ubicación fuera de la zona de tarifa estándar</p>
+                            <p className="mt-1 font-semibold normal-case text-amber-700">El pedido se registrará, pero el costo de transporte se coordinará manualmente contigo por WhatsApp. Mientras el costo de transporte será 0</p>
                         </div>
                     )}
                 </div>
