@@ -30,6 +30,8 @@ import {
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { generateAdminReplyWhatsAppLink } from '@/lib/whatsapp';
+import { db } from '@/lib/firebase';
+import { doc, setDoc } from 'firebase/firestore';
 
 // Mappers for Spanish Translation
 const statusLabels: Record<string, string> = {
@@ -92,6 +94,11 @@ export interface GroupedRental {
 
 type RentalEditItem = {
   id: string;
+  isNew?: boolean;
+  productId: string;
+  productName: string;
+  productType: 'single' | 'combo';
+  selectedWheelSize?: string;
   quantity: number;
   total: number;
 };
@@ -117,6 +124,10 @@ const buildEditForm = (group: GroupedRental): RentalEditForm => ({
   notes: group.notes || '',
   items: group.items.map(item => ({
     id: item.id,
+    productId: item.productId,
+    productName: item.productNameSnapshot || item.productName,
+    productType: item.productType || 'single',
+    selectedWheelSize: item.selectedWheelSize || '',
     quantity: item.quantity,
     total: item.total || 0,
   })),
@@ -248,13 +259,15 @@ export default function AdminRentalsPage() {
     rentals, 
     confirmRental, 
     cancelRental, 
-    returnRental,
+    returnRental, 
     deleteRental, 
     updateRental,
     updateRentalPaymentStatus, 
     markRentalExpired, 
     inventory,
-    customers
+    combos,
+    customers,
+    calculatePrice
   } = useStore();
 
   const [search, setSearch] = useState('');
@@ -263,11 +276,13 @@ export default function AdminRentalsPage() {
   const [showClientProfile, setShowClientProfile] = useState(false);
   const [editingOrder, setEditingOrder] = useState(false);
   const [editForm, setEditForm] = useState<RentalEditForm | null>(null);
+  const [searchProductQuery, setSearchProductQuery] = useState('');
 
   useEffect(() => {
     setShowClientProfile(false);
     setEditingOrder(false);
     setEditForm(selected ? buildEditForm(selected) : null);
+    setSearchProductQuery('');
   }, [selected]);
   
   // Real-time Sound Notification state
@@ -375,8 +390,14 @@ export default function AdminRentalsPage() {
       }
     }
     if (allOk && selected?.id === group.id) {
-      const fresh = getGroupedRentals(rentals).find(g => g.id === group.id);
-      if (fresh) setSelected(fresh);
+      setSelected(prev => {
+        if (!prev || prev.id !== group.id) return prev;
+        return {
+          ...prev,
+          status: 'confirmed',
+          items: prev.items.map(item => ({ ...item, status: 'confirmed' }))
+        };
+      });
     }
   };
 
@@ -409,8 +430,16 @@ export default function AdminRentalsPage() {
     for (const item of group.items) {
       await updateRentalPaymentStatus(item.id, 'paid', `admin (${methodText})`);
     }
-    const fresh = getGroupedRentals(rentals).find(g => g.id === group.id);
-    if (fresh) setSelected(fresh);
+    if (selected?.id === group.id) {
+      setSelected(prev => {
+        if (!prev || prev.id !== group.id) return prev;
+        return {
+          ...prev,
+          paymentStatus: 'paid',
+          items: prev.items.map(item => ({ ...item, paymentStatus: 'paid' }))
+        };
+      });
+    }
   };
 
   const handleDeleteGroup = (group: GroupedRental) => {
@@ -429,39 +458,96 @@ export default function AdminRentalsPage() {
     });
   };
 
+  const removeEditItem = (id: string) => {
+    setEditForm(prev => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        items: prev.items.filter(item => item.id !== id)
+      };
+    });
+  };
+
   const handleSaveEditedGroup = async () => {
     if (!selected || !editForm) return;
-    const editedById = new Map(editForm.items.map(item => [item.id, item]));
 
+    // 1. Identify deleted items: items in selected.items that are no longer in editForm.items
+    const editedIds = new Set(editForm.items.map(item => item.id));
     for (const item of selected.items) {
-      const editedItem = editedById.get(item.id);
-      await updateRental(item.id, {
-        date: editForm.date,
-        pickupTime: editForm.pickupTime,
-        duration: editForm.duration,
-        deliveryService: editForm.deliveryService,
-        pickupService: editForm.pickupService,
-        mapsLink: editForm.mapsLink,
-        notes: editForm.notes,
-        quantity: Math.max(1, editedItem?.quantity ?? item.quantity),
-        total: Math.max(0, editedItem?.total ?? item.total),
-      }, 'admin (edicion pedido)');
+      if (!editedIds.has(item.id)) {
+        await deleteRental(item.id);
+      }
     }
 
-    setEditingOrder(false);
-    const updatedSelected: GroupedRental = {
-      ...selected,
-      deliveryService: editForm.deliveryService,
-      pickupService: editForm.pickupService,
-      mapsLink: editForm.mapsLink,
-      notes: editForm.notes,
-      updatedAt: new Date().toISOString(),
-      lastUpdatedBy: 'admin (edicion pedido)',
-      total: editForm.items.reduce((sum, item) => sum + Math.max(0, item.total), 0),
-      items: selected.items.map(item => {
-        const editedItem = editedById.get(item.id);
-        return {
-          ...item,
+    // 2. Process updates and new additions
+    for (const item of editForm.items) {
+      if (item.isNew) {
+        // Add new item to Firestore
+        const newId = 'rental_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7);
+        const newDocRef = doc(db, 'rentals', newId);
+        const cleanData = {
+          id: newId,
+          reservationCode: selected.reservationCode || selected.id,
+          customerName: selected.customerName,
+          customerPhone: selected.customerPhone,
+          customerCI: selected.customerCI,
+          productId: item.productId,
+          productName: item.productName,
+          productNameSnapshot: item.productName,
+          productType: item.productType,
+          selectedWheelSize: item.selectedWheelSize || '',
+          quantity: item.quantity,
+          total: item.total,
+          date: editForm.date,
+          pickupTime: editForm.pickupTime,
+          duration: editForm.duration,
+          paymentMethod: selected.paymentMethod,
+          paymentStatus: selected.paymentStatus,
+          status: selected.status,
+          deliveryService: editForm.deliveryService,
+          pickupService: editForm.pickupService,
+          mapsLink: editForm.mapsLink,
+          notes: editForm.notes,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          createdDate: new Date().toISOString()
+        };
+        await setDoc(newDocRef, cleanData);
+
+        // If order is confirmed, subtract stock
+        if (selected.status === 'confirmed' || selected.status === 'Confirmado') {
+          if (item.productType === 'single') {
+            const invItem = inventory.find(inv => inv.id === item.productId);
+            if (invItem) {
+              const updated = { ...invItem };
+              if (updated.hasWheelSizes && updated.wheelSizes) {
+                updated.wheelSizes = updated.wheelSizes.map(w => 
+                  w.size === item.selectedWheelSize ? { ...w, stock: Math.max(0, w.stock - item.quantity) } : w
+                );
+              } else {
+                updated.stock = Math.max(0, (updated.stock ?? 0) - item.quantity);
+              }
+              await setDoc(doc(db, 'inventory', item.productId), updated);
+            }
+          } else {
+            const combo = combos.find(c => c.id === item.productId);
+            if (combo) {
+              for (const comp of combo.components) {
+                const invItem = inventory.find(inv => inv.id === comp.inventoryItemId);
+                if (invItem) {
+                  const updated = { ...invItem };
+                  if (updated.stock !== undefined) {
+                    updated.stock = Math.max(0, updated.stock - comp.quantity * item.quantity);
+                    await setDoc(doc(db, 'inventory', comp.inventoryItemId), updated);
+                  }
+                }
+              }
+            }
+          }
+        }
+      } else {
+        // Update existing item
+        await updateRental(item.id, {
           date: editForm.date,
           pickupTime: editForm.pickupTime,
           duration: editForm.duration,
@@ -469,13 +555,14 @@ export default function AdminRentalsPage() {
           pickupService: editForm.pickupService,
           mapsLink: editForm.mapsLink,
           notes: editForm.notes,
-          quantity: Math.max(1, editedItem?.quantity ?? item.quantity),
-          total: Math.max(0, editedItem?.total ?? item.total),
-        };
-      })
-    };
-    setSelected(updatedSelected);
-    setEditForm(buildEditForm(updatedSelected));
+          quantity: Math.max(1, item.quantity),
+          total: Math.max(0, item.total),
+        }, 'admin (edicion pedido)');
+      }
+    }
+
+    setEditingOrder(false);
+    setSelected(null); // Close the dialog to let the list reload from Firestore snapshot
   };
 
   const formatDateTime = (isoString?: string) => {
@@ -829,7 +916,7 @@ export default function AdminRentalsPage() {
 
       {/* RESERVATION DETAIL MODAL */}
       <Dialog open={!!selected} onOpenChange={v => { if (!v) setSelected(null); }}>
-        <DialogContent className="max-w-lg w-[95vw] max-h-[90vh] overflow-y-auto bg-brand-charcoal border border-white/10 text-white p-0 rounded-3xl">
+        <DialogContent className="max-w-4xl w-[95vw] max-h-[90vh] overflow-y-auto bg-brand-charcoal border border-white/10 text-white p-0 rounded-3xl">
           {selected && (
             <>
               <DialogHeader className="p-6 border-b border-white/5 flex flex-row items-center justify-between">
@@ -863,416 +950,590 @@ export default function AdminRentalsPage() {
                 </div>
               </DialogHeader>
 
-              <div className="p-6 space-y-4">
-                {/* Customer Information Card */}
-                <div className="bg-black/40 p-4 rounded-2xl border border-white/5 space-y-2">
-                  <h4 className="text-[10px] text-brand-yellow font-black uppercase tracking-widest flex items-center gap-1">
-                    <ShieldCheck className="w-3.5 h-3.5" /> Datos del Cliente
-                  </h4>
-                  <p className="text-white font-black text-sm">{selected.customerName}</p>
-                  <div className="grid grid-cols-2 gap-2 text-xs text-white/50 font-bold">
-                    <p className="flex items-center gap-1.5">
-                       <Phone className="w-3.5 h-3.5 text-white/30" /> {selected.customerPhone}
-                    </p>
-                    <p className="flex items-center gap-1.5">
-                       <CreditCard className="w-3.5 h-3.5 text-white/30" /> CI: {selected.customerCI}
-                    </p>
-                  </div>
-
-                  {/* Expandable client profile search */}
-                  {(() => {
-                    const matchingCustomer = customers.find(
-                      c => comparePhones(c.phone, selected.customerPhone) || 
-                           compareCIs(c.ci, selected.customerCI)
-                    );
-
-                    if (!matchingCustomer) {
-                      return (
-                        <p className="text-[9px] text-white/20 italic mt-2 border-t border-white/5 pt-2">
-                          Cliente no registrado en el sistema.
-                        </p>
-                      );
-                    }
-
-                    return (
-                      <div className="border-t border-white/5 pt-2 mt-2 space-y-2">
-                        <button
-                          type="button"
-                          onClick={() => setShowClientProfile(!showClientProfile)}
-                          className="w-full flex items-center justify-between text-[10px] font-black uppercase tracking-wider text-brand-yellow bg-brand-yellow/10 hover:bg-brand-yellow/20 px-3 py-1.5 rounded-lg transition-colors cursor-pointer"
-                        >
-                          <span>{showClientProfile ? '▲ Ocultar Ficha Cliente' : '▼ Ver Ficha de Registro del Cliente'}</span>
-                          <Badge className="bg-brand-yellow text-brand-black text-[8px] font-black border-0">REGISTRADO</Badge>
-                        </button>
-
-                        {showClientProfile && (
-                          <div className="bg-black/30 p-3 rounded-xl space-y-3 mt-2 border border-white/5 animate-in slide-in-from-top duration-200">
-                            {/* Profile Pic preview */}
-                            {matchingCustomer.autofotoUrl && (
-                              <div className="flex flex-col items-center">
-                                <p className="text-[8px] text-white/30 font-bold uppercase mb-1">Foto de Rostro</p>
-                                <div className="w-24 h-24 rounded-full overflow-hidden border border-brand-yellow/30 bg-black/40 shadow-md">
-                                  <a href={matchingCustomer.autofotoUrl} target="_blank" rel="noreferrer">
-                                    <img src={matchingCustomer.autofotoUrl} className="w-full h-full object-cover hover:scale-105 transition-transform" alt="selfie" />
-                                  </a>
-                                </div>
-                              </div>
-                            )}
-                            
-                            <div className="grid grid-cols-1 gap-1 text-[11px] font-medium text-white/60">
-                              {matchingCustomer.email && (
-                                <p>📧 <span className="font-bold text-white">Email:</span> {matchingCustomer.email}</p>
-                              )}
-                              {matchingCustomer.nacionalidad && (
-                                <p>🌍 <span className="font-bold text-white">Nac:</span> {matchingCustomer.nacionalidad} {matchingCustomer.departamento ? `(${matchingCustomer.departamento})` : ''}</p>
-                              )}
-                              {matchingCustomer.comoNosConociste && (
-                                <p>📢 <span className="font-bold text-white">Referencia:</span> {matchingCustomer.comoNosConociste}</p>
-                              )}
-                            </div>
-
-                            {/* Documento preview */}
-                            {matchingCustomer.documentoUrl && (
-                              <div className="flex flex-col items-center pt-2 border-t border-white/5 mt-1">
-                                <p className="text-[8px] text-white/30 font-bold uppercase mb-1">Documento de Identidad</p>
-                                {matchingCustomer.documentoUrl.toLowerCase().includes('.pdf') ? (
-                                  <a 
-                                    href={matchingCustomer.documentoUrl} 
-                                    target="_blank" 
-                                    rel="noreferrer" 
-                                    className="inline-flex items-center gap-1.5 text-[9px] font-black uppercase tracking-widest text-brand-yellow bg-brand-yellow/10 hover:bg-brand-yellow/20 px-4 py-2 rounded-xl transition-all cursor-pointer"
-                                  >
-                                    📄 Ver Documento PDF
-                                  </a>
-                                ) : (
-                                  <div className="max-w-xs h-36 rounded-xl overflow-hidden border border-white/10 bg-black/40 shadow-inner">
-                                    <a href={matchingCustomer.documentoUrl} target="_blank" rel="noreferrer">
-                                      <img src={matchingCustomer.documentoUrl} className="w-full h-full object-contain hover:scale-105 transition-transform" alt="documento" />
-                                    </a>
-                                  </div>
-                                )}
-                              </div>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })()}
-                </div>
-
-                {editingOrder && editForm && (
-                  <div className="bg-brand-yellow/10 p-4 rounded-2xl border border-brand-yellow/25 space-y-4">
+              <div className="p-6 grid grid-cols-1 md:grid-cols-12 gap-6 items-start">
+                {/* COLUMNA IZQUIERDA: Detalles del Alquiler */}
+                <div className="md:col-span-7 space-y-4">
+                  {/* Customer Information Card */}
+                  <div className="bg-black/40 p-4 rounded-2xl border border-white/5 space-y-2">
                     <h4 className="text-[10px] text-brand-yellow font-black uppercase tracking-widest flex items-center gap-1">
-                      <Edit3 className="w-3.5 h-3.5" /> Editar pedido del cliente
+                      <ShieldCheck className="w-3.5 h-3.5" /> Datos del Cliente
                     </h4>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                      <div>
-                        <p className="text-[9px] text-white/35 font-bold uppercase mb-1">Nueva fecha</p>
-                        <Input
-                          type="date"
-                          value={editForm.date}
-                          onChange={e => setEditForm(prev => prev ? { ...prev, date: e.target.value } : prev)}
-                          className="h-10 rounded-xl bg-black/35 border-white/10 text-white text-xs font-bold"
-                        />
-                      </div>
-                      <div>
-                        <p className="text-[9px] text-white/35 font-bold uppercase mb-1">Hora</p>
-                        <Input
-                          type="time"
-                          value={editForm.pickupTime}
-                          onChange={e => setEditForm(prev => prev ? { ...prev, pickupTime: e.target.value } : prev)}
-                          className="h-10 rounded-xl bg-black/35 border-white/10 text-white text-xs font-bold"
-                        />
-                      </div>
-                      <div>
-                        <p className="text-[9px] text-white/35 font-bold uppercase mb-1">Duracion</p>
-                        <select
-                          value={editForm.duration}
-                          onChange={e => setEditForm(prev => prev ? { ...prev, duration: e.target.value } : prev)}
-                          className="h-10 w-full rounded-xl border border-white/10 bg-black/35 px-3 text-xs font-bold text-white outline-none"
-                        >
-                          {['1 hora', '2 horas', '3 horas', '4 horas', '8 horas', '24 horas', '1 semana', '1 mes'].map(value => (
-                            <option key={value} value={value}>{value}</option>
-                          ))}
-                        </select>
-                      </div>
+                    <p className="text-white font-black text-sm">{selected.customerName}</p>
+                    <div className="grid grid-cols-2 gap-2 text-xs text-white/50 font-bold">
+                      <p className="flex items-center gap-1.5">
+                         <Phone className="w-3.5 h-3.5 text-white/30" /> {selected.customerPhone}
+                      </p>
+                      <p className="flex items-center gap-1.5">
+                         <CreditCard className="w-3.5 h-3.5 text-white/30" /> CI: {selected.customerCI}
+                      </p>
                     </div>
 
-                    <div className="space-y-2">
-                      <p className="text-[9px] text-white/35 font-bold uppercase">Bicicletas / productos</p>
-                      {selected.items.map(item => {
-                        const editable = editForm.items.find(editItem => editItem.id === item.id);
-                        if (!editable) return null;
+                    {/* Expandable client profile search */}
+                    {(() => {
+                      const matchingCustomer = customers.find(
+                        c => comparePhones(c.phone, selected.customerPhone) || 
+                             compareCIs(c.ci, selected.customerCI)
+                      );
 
+                      if (!matchingCustomer) {
                         return (
-                          <div key={item.id} className="grid grid-cols-1 gap-2 rounded-xl border border-white/5 bg-black/25 p-3 sm:grid-cols-[1fr_auto_auto] sm:items-center">
-                            <div className="min-w-0">
-                              <p className="truncate text-xs font-black text-white">{item.productNameSnapshot || item.productName}</p>
-                              <p className="text-[9px] font-bold uppercase text-white/30">{item.selectedWheelSize ? `Aro ${item.selectedWheelSize}` : 'Sin aro seleccionado'}</p>
+                          <p className="text-[9px] text-white/20 italic mt-2 border-t border-white/5 pt-2">
+                            Cliente no registrado en el sistema.
+                          </p>
+                        );
+                      }
+
+                      return (
+                        <div className="border-t border-white/5 pt-2 mt-2 space-y-2">
+                          <button
+                            type="button"
+                            onClick={() => setShowClientProfile(!showClientProfile)}
+                            className="w-full flex items-center justify-between text-[10px] font-black uppercase tracking-wider text-brand-yellow bg-brand-yellow/10 hover:bg-brand-yellow/20 px-3 py-1.5 rounded-lg transition-colors cursor-pointer"
+                          >
+                            <span>{showClientProfile ? '▲ Ocultar Ficha Cliente' : '▼ Ver Ficha de Registro del Cliente'}</span>
+                            <Badge className="bg-brand-yellow text-brand-black text-[8px] font-black border-0">REGISTRADO</Badge>
+                          </button>
+
+                          {showClientProfile && (
+                            <div className="bg-black/30 p-3 rounded-xl space-y-3 mt-2 border border-white/5 animate-in slide-in-from-top duration-200">
+                              {matchingCustomer.autofotoUrl && (
+                                <div className="flex flex-col items-center">
+                                  <p className="text-[8px] text-white/30 font-bold uppercase mb-1">Foto de Rostro</p>
+                                  <div className="w-24 h-24 rounded-full overflow-hidden border border-brand-yellow/30 bg-black/40 shadow-md">
+                                    <a href={matchingCustomer.autofotoUrl} target="_blank" rel="noreferrer">
+                                      <img src={matchingCustomer.autofotoUrl} className="w-full h-full object-cover hover:scale-105 transition-transform" alt="selfie" />
+                                    </a>
+                                  </div>
+                                </div>
+                              )}
+                              
+                              <div className="grid grid-cols-1 gap-1 text-[11px] font-medium text-white/60">
+                                {matchingCustomer.email && (
+                                  <p>📧 <span className="font-bold text-white">Email:</span> {matchingCustomer.email}</p>
+                                )}
+                                {matchingCustomer.nacionalidad && (
+                                  <p>🌍 <span className="font-bold text-white">Nac:</span> {matchingCustomer.nacionalidad} {matchingCustomer.departamento ? `(${matchingCustomer.departamento})` : ''}</p>
+                                )}
+                                {matchingCustomer.comoNosConociste && (
+                                  <p>📢 <span className="font-bold text-white">Referencia:</span> {matchingCustomer.comoNosConociste}</p>
+                                )}
+                              </div>
+
+                              {matchingCustomer.documentoUrl && (
+                                <div className="flex flex-col items-center pt-2 border-t border-white/5 mt-1">
+                                  <p className="text-[8px] text-white/30 font-bold uppercase mb-1">Documento de Identidad</p>
+                                  {matchingCustomer.documentoUrl.toLowerCase().includes('.pdf') ? (
+                                    <a 
+                                      href={matchingCustomer.documentoUrl} 
+                                      target="_blank" 
+                                      rel="noreferrer" 
+                                      className="inline-flex items-center gap-1.5 text-[9px] font-black uppercase tracking-widest text-brand-yellow bg-brand-yellow/10 hover:bg-brand-yellow/20 px-4 py-2 rounded-xl transition-all cursor-pointer"
+                                    >
+                                      📄 Ver Documento PDF
+                                    </a>
+                                  ) : (
+                                    <div className="max-w-xs h-36 rounded-xl overflow-hidden border border-white/10 bg-black/40 shadow-inner">
+                                      <a href={matchingCustomer.documentoUrl} target="_blank" rel="noreferrer">
+                                        <img src={matchingCustomer.documentoUrl} className="w-full h-full object-contain hover:scale-105 transition-transform" alt="documento" />
+                                      </a>
+                                    </div>
+                                  )}
+                                </div>
+                              )}
                             </div>
+                          )}
+                        </div>
+                      );
+                    })()}
+                  </div>
+
+                  {/* Rental Products Snapshot Card */}
+                  <div className="bg-black/40 p-4 rounded-2xl border border-white/5 space-y-2">
+                    <h4 className="text-[10px] text-brand-yellow font-black uppercase tracking-widest flex items-center gap-1">
+                      <Calendar className="w-3.5 h-3.5" /> Detalle del Alquiler
+                    </h4>
+                    <div className="space-y-3 font-sans">
+                      {selected.items.map((item, index) => (
+                        <div key={index} className="border-b border-white/5 last:border-b-0 pb-2.5 last:pb-0">
+                          <p className="text-white font-black text-sm">
+                            {item.quantity}x {item.productNameSnapshot || item.productName}
+                          </p>
+                          {item.selectedWheelSize && (
+                            <p className="text-xs text-white/50 font-bold mt-0.5">
+                              Aro / Medida: <span className="text-brand-yellow font-black">Aro {item.selectedWheelSize}</span>
+                            </p>
+                          )}
+                          {item.componentSelections && item.componentSelections.length > 0 && (
+                            <div className="space-y-1 mt-1.5 pl-3 border-l border-white/10">
+                              <p className="text-[8px] text-white/30 font-bold uppercase">Componentes del Combo:</p>
+                              {item.componentSelections.map((cs, i) => {
+                                const invItem = inventory.find(inv => inv.id === cs.inventoryItemId);
+                                return (
+                                  <p key={i} className="text-white/60 text-xs font-bold">
+                                    • {invItem?.name || 'Item'} {cs.wheelSize ? `(Aro ${cs.wheelSize})` : ''}
+                                  </p>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Calendar Schedule Grid */}
+                  <div className="bg-black/40 p-4 rounded-2xl border border-white/5 grid grid-cols-2 gap-3 text-xs">
+                    <div>
+                      <p className="text-[9px] text-white/30 font-bold uppercase">Fecha de Entrega</p>
+                      <p className="text-white font-bold text-sm mt-0.5">{selected.items[0]?.date}</p>
+                    </div>
+                    <div>
+                      <p className="text-[9px] text-white/30 font-bold uppercase">Hora Recogida</p>
+                      <p className="text-white font-bold text-sm mt-0.5">{selected.items[0]?.pickupTime}</p>
+                    </div>
+                    <div>
+                      <p className="text-[9px] text-white/30 font-bold uppercase">Duración Contratada</p>
+                      <p className="text-white font-bold text-sm mt-0.5">{selected.items[0]?.duration}</p>
+                    </div>
+                    <div>
+                      <p className="text-[9px] text-white/30 font-bold uppercase">Método Pago</p>
+                      <p className="text-white font-bold text-sm mt-0.5 uppercase">{selected.paymentMethod}</p>
+                    </div>
+                  </div>
+
+                  {/* Transportation Details (Delivery / Pickup Maps Link) */}
+                  {(selected.deliveryService || selected.pickupService || selected.mapsLink) && (
+                    <div className="bg-brand-yellow/10 p-4 rounded-2xl border border-brand-yellow/20 space-y-2 text-xs">
+                      <p className="text-[9px] text-brand-yellow font-black uppercase tracking-wider font-maiandra">
+                        Servicio de Transporte a Domicilio
+                      </p>
+                      <div className="space-y-1 text-white/90 font-medium font-sans">
+                        {selected.deliveryService && (() => {
+                          const deliveryItem = selected.items.find(item => item.productId === 'srv_delivery');
+                          const price = deliveryItem ? deliveryItem.total : 0;
+                          return (
+                            <p className="flex items-center gap-1.5 font-bold">
+                              🚚 Requiere Servicio de Entrega ({price > 0 ? `+Bs. ${price}` : 'A coordinar / Bs. 0'})
+                            </p>
+                          );
+                        })()}
+                        {selected.pickupService && (() => {
+                          const pickupItem = selected.items.find(item => item.productId === 'srv_pickup');
+                          const price = pickupItem ? pickupItem.total : 0;
+                          return (
+                            <p className="flex items-center gap-1.5 font-bold">
+                              🔄 Requiere Servicio de Recojo ({price > 0 ? `+Bs. ${price}` : 'A coordinar / Bs. 0'})
+                            </p>
+                          );
+                        })()}
+                        {selected.mapsLink ? (
+                          <div className="pt-1.5">
+                            <a 
+                              href={selected.mapsLink} 
+                              target="_blank" 
+                              rel="noreferrer" 
+                              className="text-brand-yellow hover:underline font-black flex items-center gap-1.5 bg-brand-yellow/20 px-3.5 py-2 rounded-xl w-fit transition-transform active:scale-95"
+                            >
+                              📍 Ver Dirección en Google Maps <ExternalLink className="w-3.5 h-3.5" />
+                            </a>
+                          </div>
+                        ) : (
+                          <p className="text-white/30 italic text-[11px] mt-1">Sin enlace de ubicación registrado.</p>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Payment proof */}
+                  <div className="bg-black/40 p-4 rounded-2xl border border-white/5 space-y-1">
+                    <p className="text-[9px] text-white/30 font-bold uppercase">Comprobante de Pago QR</p>
+                    {selected.paymentProofUrl ? (
+                      <a 
+                        href={selected.paymentProofUrl} 
+                        target="_blank" 
+                        rel="noreferrer" 
+                        className="text-brand-yellow font-bold text-xs flex items-center gap-1 hover:underline mt-1"
+                      >
+                        Ver Comprobante Guardado <ExternalLink className="w-3.5 h-3.5" />
+                      </a>
+                    ) : (
+                      <p className="text-white/30 text-xs font-bold italic mt-0.5">
+                        Sin comprobante digital cargado.
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Notes if any */}
+                  {selected.notes && (
+                    <div className="bg-black/40 p-4 rounded-2xl border border-white/5">
+                      <p className="text-[9px] text-white/30 font-bold uppercase mb-1">Notas / Instrucciones Especiales</p>
+                      <p className="text-white/60 text-xs italic">{selected.notes}</p>
+                    </div>
+                  )}
+
+                  {/* Timestamps & Audit logs */}
+                  <div className="bg-black/20 p-3 rounded-xl border border-white/5 text-[9px] text-white/30 space-y-1 font-mono">
+                    <p>Creado: {formatDateTime(selected.createdAt)}</p>
+                    <p>Actualizado: {formatDateTime(selected.updatedAt)}</p>
+                    {selected.lastUpdatedBy && (
+                      <p className="text-brand-yellow/60">Modificado por última vez por: {selected.lastUpdatedBy}</p>
+                    )}
+                  </div>
+                </div>
+
+                {/* COLUMNA DERECHA: Edición y Acciones */}
+                <div className="md:col-span-5 space-y-4">
+                  {isPastDue(selected) && (
+                    <div className="bg-red-500/10 p-4 rounded-2xl border border-red-500/20 text-xs text-red-400 space-y-1">
+                      <p className="font-extrabold uppercase flex items-center gap-1.5 animate-pulse">
+                        🚨 Plazo de Alquiler Vencido
+                      </p>
+                      <p className="font-medium text-[11px] text-red-300/80 leading-normal">
+                        El tiempo programado de este alquiler ha terminado. Recibe las bicicletas e ítems, y haz clic en el botón **"Marcar como Devuelto"** abajo para reintegrar los productos al stock del inventario.
+                      </p>
+                    </div>
+                  )}
+
+                  {editingOrder && editForm && (
+                    <div className="bg-brand-yellow/10 p-4 rounded-2xl border border-brand-yellow/25 space-y-4">
+                      <h4 className="text-[10px] text-brand-yellow font-black uppercase tracking-widest flex items-center gap-1">
+                        <Edit3 className="w-3.5 h-3.5" /> Editar pedido del cliente
+                      </h4>
+
+                      <div className="grid grid-cols-3 gap-2">
+                        <div>
+                          <p className="text-[9px] text-white/35 font-bold uppercase mb-1">Nueva fecha</p>
+                          <Input
+                            type="date"
+                            value={editForm.date}
+                            onChange={e => setEditForm(prev => prev ? { ...prev, date: e.target.value } : prev)}
+                            className="h-10 rounded-xl bg-black/35 border-white/10 text-white text-xs font-bold"
+                          />
+                        </div>
+                        <div>
+                          <p className="text-[9px] text-white/35 font-bold uppercase mb-1">Hora</p>
+                          <Input
+                            type="time"
+                            value={editForm.pickupTime}
+                            onChange={e => setEditForm(prev => prev ? { ...prev, pickupTime: e.target.value } : prev)}
+                            className="h-10 rounded-xl bg-black/35 border-white/10 text-white text-xs font-bold"
+                          />
+                        </div>
+                        <div>
+                          <p className="text-[9px] text-white/35 font-bold uppercase mb-1">Duración</p>
+                          <select
+                            value={editForm.duration}
+                            onChange={e => setEditForm(prev => prev ? { ...prev, duration: e.target.value } : prev)}
+                            className="h-10 w-full rounded-xl border border-white/10 bg-black/35 px-2 text-xs font-bold text-white outline-none"
+                          >
+                            {['1 hora', '2 horas', '3 horas', '4 horas', '8 horas', '24 horas', '1 semana', '1 mes'].map(value => (
+                              <option key={value} value={value}>{value}</option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+
+                      <div className="space-y-2">
+                        <p className="text-[9px] text-white/35 font-bold uppercase">Bicicletas / productos</p>
+                        
+                        {editForm.items.map(editable => (
+                          <div key={editable.id} className="grid grid-cols-1 gap-2 rounded-xl border border-white/5 bg-black/25 p-3 sm:grid-cols-[1fr_auto_auto] sm:items-center">
+                            <div className="min-w-0">
+                              <p className="truncate text-xs font-black text-white">{editable.productName}</p>
+                              
+                              <div className="flex items-center gap-1.5 mt-0.5">
+                                {(() => {
+                                  const invItem = inventory.find(inv => inv.id === editable.productId);
+                                  if (invItem && invItem.hasWheelSizes && invItem.wheelSizes && invItem.wheelSizes.length > 0) {
+                                    return (
+                                      <select
+                                        value={editable.selectedWheelSize}
+                                        onChange={e => updateEditItem(editable.id, { selectedWheelSize: e.target.value })}
+                                        className="h-6 rounded bg-black/40 border border-white/10 px-1 text-[9px] font-bold text-white outline-none"
+                                      >
+                                        {invItem.wheelSizes.map(w => (
+                                          <option key={w.size} value={w.size}>Aro {w.size}</option>
+                                        ))}
+                                      </select>
+                                    );
+                                  }
+                                  return (
+                                    <p className="text-[9px] font-bold uppercase text-white/30">
+                                      {editable.selectedWheelSize ? `Aro ${editable.selectedWheelSize}` : 'Sin aro'}
+                                    </p>
+                                  );
+                                })()}
+                                
+                                {editable.isNew && (
+                                  <Badge className="bg-brand-yellow/20 text-brand-yellow text-[8px] font-black uppercase rounded py-0 border-0">Nuevo</Badge>
+                                )}
+                              </div>
+                            </div>
+                            
                             <div className="flex items-center gap-2">
-                              <Button type="button" size="icon" className="h-8 w-8 rounded-lg bg-white/10 text-white hover:bg-white/20" onClick={() => updateEditItem(item.id, { quantity: Math.max(1, editable.quantity - 1) })}>
+                              <Button type="button" size="icon" className="h-8 w-8 rounded-lg bg-white/10 text-white hover:bg-white/20" onClick={() => updateEditItem(editable.id, { quantity: Math.max(1, editable.quantity - 1) })}>
                                 <Minus className="h-3.5 w-3.5" />
                               </Button>
                               <span className="w-8 text-center text-sm font-black text-white">{editable.quantity}</span>
-                              <Button type="button" size="icon" className="h-8 w-8 rounded-lg bg-brand-yellow text-brand-black hover:bg-brand-yellow-light" onClick={() => updateEditItem(item.id, { quantity: editable.quantity + 1 })}>
+                              <Button type="button" size="icon" className="h-8 w-8 rounded-lg bg-brand-yellow text-brand-black hover:bg-brand-yellow-light" onClick={() => updateEditItem(editable.id, { quantity: editable.quantity + 1 })}>
                                 <Plus className="h-3.5 w-3.5" />
                               </Button>
                             </div>
-                            <div className="flex items-center gap-2">
-                              <span className="text-[10px] font-black uppercase text-white/35">Bs.</span>
-                              <Input
-                                type="number"
-                                min="0"
-                                value={editable.total}
-                                onChange={e => updateEditItem(item.id, { total: Number(e.target.value) || 0 })}
-                                className="h-9 w-24 rounded-lg bg-black/35 border-white/10 text-white text-xs font-bold"
-                              />
+                            
+                            <div className="flex items-center gap-2 justify-between sm:justify-start w-full sm:w-auto">
+                              <div className="flex items-center gap-1">
+                                <span className="text-[10px] font-black uppercase text-white/35">Bs.</span>
+                                <Input
+                                  type="number"
+                                  min="0"
+                                  value={editable.total}
+                                  onChange={e => updateEditItem(editable.id, { total: Number(e.target.value) || 0 })}
+                                  className="h-9 w-16 rounded-lg bg-black/35 border-white/10 text-white text-xs font-bold"
+                                />
+                              </div>
+                              
+                              <Button
+                                type="button"
+                                size="icon"
+                                variant="ghost"
+                                className="h-8 w-8 rounded-lg text-red-400 hover:text-red-300 hover:bg-red-500/10 cursor-pointer"
+                                onClick={() => removeEditItem(editable.id)}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
                             </div>
                           </div>
-                        );
-                      })}
-                    </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                      <label className="flex items-center gap-2 rounded-xl bg-black/25 p-3 text-xs font-bold text-white/70">
-                        <input
-                          type="checkbox"
-                          checked={editForm.deliveryService}
-                          onChange={e => setEditForm(prev => prev ? { ...prev, deliveryService: e.target.checked } : prev)}
-                        />
-                        Entrega a domicilio
-                      </label>
-                      <label className="flex items-center gap-2 rounded-xl bg-black/25 p-3 text-xs font-bold text-white/70">
-                        <input
-                          type="checkbox"
-                          checked={editForm.pickupService}
-                          onChange={e => setEditForm(prev => prev ? { ...prev, pickupService: e.target.checked } : prev)}
-                        />
-                        Recojo a domicilio
-                      </label>
-                    </div>
-
-                    <Input
-                      placeholder="Nuevo enlace de Google Maps"
-                      value={editForm.mapsLink}
-                      onChange={e => setEditForm(prev => prev ? { ...prev, mapsLink: e.target.value } : prev)}
-                      className="h-10 rounded-xl bg-black/35 border-white/10 text-white text-xs font-bold"
-                    />
-
-                    <textarea
-                      placeholder="Notas del pedido, cambios o instrucciones"
-                      value={editForm.notes}
-                      onChange={e => setEditForm(prev => prev ? { ...prev, notes: e.target.value } : prev)}
-                      className="min-h-20 w-full rounded-xl border border-white/10 bg-black/35 px-3 py-2 text-xs font-bold text-white outline-none focus:border-brand-yellow"
-                    />
-
-                    <Button
-                      type="button"
-                      onClick={handleSaveEditedGroup}
-                      className="h-11 w-full rounded-xl bg-brand-yellow text-xs font-black uppercase text-brand-black hover:bg-brand-yellow-light"
-                    >
-                      <Save className="mr-2 h-4 w-4" /> Guardar cambios del pedido
-                    </Button>
-                  </div>
-                )}
-
-                {/* Rental Products Snapshot Card */}
-                <div className="bg-black/40 p-4 rounded-2xl border border-white/5 space-y-2">
-                  <h4 className="text-[10px] text-brand-yellow font-black uppercase tracking-widest flex items-center gap-1">
-                    <Calendar className="w-3.5 h-3.5" /> Detalle del Alquiler
-                  </h4>
-                  <div className="space-y-3 font-sans">
-                    {selected.items.map((item, index) => (
-                      <div key={index} className="border-b border-white/5 last:border-b-0 pb-2.5 last:pb-0">
-                        <p className="text-white font-black text-sm">
-                          {item.quantity}x {item.productNameSnapshot || item.productName}
-                        </p>
-                        {item.selectedWheelSize && (
-                          <p className="text-brand-yellow text-xs font-black uppercase mt-0.5">
-                            Tamaño Aro: Aro {item.selectedWheelSize}
-                          </p>
-                        )}
-                        {item.componentSelections && item.componentSelections.length > 0 && (
-                          <div className="space-y-1 mt-1.5 pl-3 border-l border-white/10">
-                            <p className="text-[8px] text-white/30 font-bold uppercase">Componentes del Combo:</p>
-                            {item.componentSelections.map((cs, i) => {
-                              const invItem = inventory.find(inv => inv.id === cs.inventoryItemId);
-                              return (
-                                <p key={i} className="text-white/60 text-xs font-bold">
-                                  • {invItem?.name || 'Item'} {cs.wheelSize ? `(Aro ${cs.wheelSize})` : ''}
-                                </p>
-                              );
-                            })}
-                          </div>
-                        )}
+                        ))}
                       </div>
-                    ))}
-                  </div>
-                </div>
 
-                {/* Calendar Schedule Grid */}
-                <div className="bg-black/40 p-4 rounded-2xl border border-white/5 grid grid-cols-2 gap-3 text-xs">
-                  <div>
-                    <p className="text-[9px] text-white/30 font-bold uppercase">Fecha de Entrega</p>
-                    <p className="text-white font-bold text-sm mt-0.5">{selected.items[0]?.date}</p>
-                  </div>
-                  <div>
-                    <p className="text-[9px] text-white/30 font-bold uppercase">Hora Recogida</p>
-                    <p className="text-white font-bold text-sm mt-0.5">{selected.items[0]?.pickupTime}</p>
-                  </div>
-                  <div>
-                    <p className="text-[9px] text-white/30 font-bold uppercase">Duración Contratada</p>
-                    <p className="text-white font-bold text-sm mt-0.5">{selected.items[0]?.duration}</p>
-                  </div>
-                  <div>
-                    <p className="text-[9px] text-white/30 font-bold uppercase">Método Pago</p>
-                    <p className="text-white font-bold text-sm mt-0.5 uppercase">{selected.paymentMethod}</p>
-                  </div>
-                </div>
-
-                {isPastDue(selected) && (
-                  <div className="bg-red-500/10 p-4 rounded-2xl border border-red-500/20 text-xs text-red-400 space-y-1">
-                    <p className="font-extrabold uppercase flex items-center gap-1.5 animate-pulse">
-                      🚨 Plazo de Alquiler Vencido
-                    </p>
-                    <p className="font-medium text-[11px] text-red-300/80 leading-normal">
-                      El tiempo programado de este alquiler ha terminado. Recibe las bicicletas e ítems, y haz clic en el botón **"Marcar como Devuelto"** abajo para reintegrar los productos al stock del inventario.
-                    </p>
-                  </div>
-                )}
-
-                {/* Transportation Details (Delivery / Pickup Maps Link) */}
-                {(selected.deliveryService || selected.pickupService || selected.mapsLink) && (
-                  <div className="bg-brand-yellow/10 p-4 rounded-2xl border border-brand-yellow/20 space-y-2 text-xs">
-                    <p className="text-[9px] text-brand-yellow font-black uppercase tracking-wider font-maiandra">
-                      Servicio de Transporte a Domicilio
-                    </p>
-                    <div className="space-y-1 text-white/90 font-medium font-sans">
-                      {selected.deliveryService && (() => {
-                        const deliveryItem = selected.items.find(item => item.productId === 'srv_delivery');
-                        const price = deliveryItem ? deliveryItem.total : 0;
-                        return (
-                          <p className="flex items-center gap-1.5 font-bold">
-                            🚚 Requiere Servicio de Entrega ({price > 0 ? `+Bs. ${price}` : 'A coordinar / Bs. 0'})
-                          </p>
-                        );
-                      })()}
-                      {selected.pickupService && (() => {
-                        const pickupItem = selected.items.find(item => item.productId === 'srv_pickup');
-                        const price = pickupItem ? pickupItem.total : 0;
-                        return (
-                          <p className="flex items-center gap-1.5 font-bold">
-                            🔄 Requiere Servicio de Recojo ({price > 0 ? `+Bs. ${price}` : 'A coordinar / Bs. 0'})
-                          </p>
-                        );
-                      })()}
-                      {selected.mapsLink ? (
-                        <div className="pt-1.5">
-                          <a 
-                            href={selected.mapsLink} 
-                            target="_blank" 
-                            rel="noreferrer" 
-                            className="text-brand-yellow hover:underline font-black flex items-center gap-1.5 bg-brand-yellow/20 px-3.5 py-2 rounded-xl w-fit transition-transform active:scale-95"
-                          >
-                            📍 Ver Dirección en Google Maps <ExternalLink className="w-3.5 h-3.5" />
-                          </a>
+                      {/* Search and add new item to edit form */}
+                      <div className="space-y-2 border-t border-white/5 pt-3 mt-2">
+                        <p className="text-[9px] text-brand-yellow font-black uppercase tracking-wider">
+                          Agregar producto al alquiler
+                        </p>
+                        <div className="relative">
+                          <Input
+                            placeholder="Buscar por nombre (ej. Mountain Bike, Casco...)"
+                            value={searchProductQuery}
+                            onChange={e => setSearchProductQuery(e.target.value)}
+                            className="h-9 rounded-xl bg-black/40 border-white/10 text-white text-xs font-bold pl-8"
+                          />
+                          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-white/30" />
                         </div>
-                      ) : (
-                        <p className="text-white/30 italic text-[11px] mt-1">Sin enlace de ubicación registrado.</p>
-                      )}
+
+                        {searchProductQuery.trim().length > 0 && (() => {
+                          const query = searchProductQuery.toLowerCase();
+                          const matchingInventory = inventory.filter(item => 
+                            item.active && 
+                            item.availableForRental && 
+                            item.name.toLowerCase().includes(query) &&
+                            !editForm.items.some(editItem => editItem.productId === item.id)
+                          );
+
+                          const matchingCombos = combos.filter(combo => 
+                            combo.name.toLowerCase().includes(query) &&
+                            !editForm.items.some(editItem => editItem.productId === combo.id)
+                          );
+
+                          if (matchingInventory.length === 0 && matchingCombos.length === 0) {
+                            return (
+                              <p className="text-[10px] text-white/30 italic py-1 pl-1">
+                                No se encontraron productos disponibles.
+                              </p>
+                            );
+                          }
+
+                          return (
+                            <div className="max-h-40 overflow-y-auto border border-white/5 bg-black/40 rounded-xl divide-y divide-white/5 p-1">
+                              {matchingCombos.map(combo => (
+                                <div key={combo.id} className="flex items-center justify-between p-2 text-xs">
+                                  <div>
+                                    <p className="font-bold text-white">{combo.name}</p>
+                                    <p className="text-[9px] text-brand-yellow font-bold uppercase">Combo</p>
+                                  </div>
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    className="h-7 rounded-lg bg-brand-yellow text-brand-black font-black uppercase text-[10px] px-2.5 cursor-pointer"
+                                    onClick={() => {
+                                      const price = calculatePrice('combo', combo.id, editForm.duration, 1);
+                                      setEditForm(prev => {
+                                        if (!prev) return prev;
+                                        return {
+                                          ...prev,
+                                          items: [
+                                            ...prev.items,
+                                            {
+                                              id: 'new_' + Math.random().toString(36).substring(2, 9),
+                                              isNew: true,
+                                              productId: combo.id,
+                                              productName: combo.name,
+                                              productType: 'combo',
+                                              quantity: 1,
+                                              total: price
+                                            }
+                                          ]
+                                        };
+                                      });
+                                      setSearchProductQuery('');
+                                    }}
+                                  >
+                                    + Agregar
+                                  </Button>
+                                </div>
+                              ))}
+
+                              {matchingInventory.map(item => (
+                                <div key={item.id} className="flex flex-col p-2 gap-1 text-xs">
+                                  <div className="flex items-center justify-between">
+                                    <div>
+                                      <p className="font-bold text-white">{item.name}</p>
+                                      <p className="text-[9px] text-white/40 font-bold uppercase">
+                                        {item.itemType === 'bike' ? 'Bicicleta' : 'Accesorio'} {item.category ? `• ${item.category}` : ''}
+                                      </p>
+                                    </div>
+                                    <Button
+                                      type="button"
+                                      size="sm"
+                                      className="h-7 rounded-lg bg-brand-yellow text-brand-black font-black uppercase text-[10px] px-2.5 cursor-pointer"
+                                      onClick={() => {
+                                        const price = calculatePrice('single', item.id, editForm.duration, 1);
+                                        setEditForm(prev => {
+                                          if (!prev) return prev;
+                                          return {
+                                            ...prev,
+                                            items: [
+                                              ...prev.items,
+                                              {
+                                                id: 'new_' + Math.random().toString(36).substring(2, 9),
+                                                isNew: true,
+                                                productId: item.id,
+                                                productName: item.name,
+                                                productType: 'single',
+                                                selectedWheelSize: item.hasWheelSizes && item.wheelSizes && item.wheelSizes.length > 0 ? item.wheelSizes[0].size : '',
+                                                quantity: 1,
+                                                total: price
+                                              }
+                                            ]
+                                          };
+                                        });
+                                        setSearchProductQuery('');
+                                      }}
+                                    >
+                                      + Agregar
+                                    </Button>
+                                  </div>
+
+                                  {item.hasWheelSizes && item.wheelSizes && item.wheelSizes.length > 0 && (
+                                    <div className="flex items-center gap-1.5 pl-1.5 border-l border-white/10 mt-0.5">
+                                      <span className="text-[9px] text-white/30 font-bold uppercase">Medidas:</span>
+                                      <span className="text-[10px] text-white/70 font-semibold bg-white/5 px-2 py-0.5 rounded border border-white/5">
+                                        Aros disp: {item.wheelSizes.map(w => w.size).join(', ')}
+                                      </span>
+                                    </div>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          );
+                        })()}
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2">
+                        <label className="flex items-center gap-2 rounded-xl bg-black/25 p-3 text-xs font-bold text-white/70 cursor-pointer select-none">
+                          <input
+                            type="checkbox"
+                            checked={editForm.deliveryService}
+                            onChange={e => setEditForm(prev => prev ? { ...prev, deliveryService: e.target.checked } : prev)}
+                          />
+                          Entrega a domicilio
+                        </label>
+                        <label className="flex items-center gap-2 rounded-xl bg-black/25 p-3 text-xs font-bold text-white/70 cursor-pointer select-none">
+                          <input
+                            type="checkbox"
+                            checked={editForm.pickupService}
+                            onChange={e => setEditForm(prev => prev ? { ...prev, pickupService: e.target.checked } : prev)}
+                          />
+                          Recojo a domicilio
+                        </label>
+                      </div>
+
+                      <Input
+                        placeholder="Nuevo enlace de Google Maps"
+                        value={editForm.mapsLink}
+                        onChange={e => setEditForm(prev => prev ? { ...prev, mapsLink: e.target.value } : prev)}
+                        className="h-10 rounded-xl bg-black/35 border-white/10 text-white text-xs font-bold"
+                      />
+
+                      <textarea
+                        placeholder="Notas del pedido, cambios o instrucciones"
+                        value={editForm.notes}
+                        onChange={e => setEditForm(prev => prev ? { ...prev, notes: e.target.value } : prev)}
+                        className="min-h-20 w-full rounded-xl border border-white/10 bg-black/35 px-3 py-2 text-xs font-bold text-white outline-none focus:border-brand-yellow"
+                      />
+
+                      <Button
+                        type="button"
+                        onClick={handleSaveEditedGroup}
+                        className="h-11 w-full rounded-xl bg-brand-yellow text-xs font-black uppercase text-brand-black hover:bg-brand-yellow-light cursor-pointer"
+                      >
+                        <Save className="mr-2 h-4 w-4" /> Guardar cambios del pedido
+                      </Button>
                     </div>
+                  )}
+
+                  {/* Total amount header */}
+                  <div className="bg-brand-yellow text-brand-black p-5 rounded-2xl text-center shadow-lg">
+                    <p className="text-[10px] font-black uppercase tracking-wider mb-1">Monto Total Estimado</p>
+                    <p className="text-4xl font-black">Bs. {selected.total}</p>
                   </div>
-                )}
 
-                {/* Payment proof */}
-                <div className="bg-black/40 p-4 rounded-2xl border border-white/5 space-y-1">
-                  <p className="text-[9px] text-white/30 font-bold uppercase">Comprobante de Pago QR</p>
-                  {selected.paymentProofUrl ? (
-                    <a 
-                      href={selected.paymentProofUrl} 
-                      target="_blank" 
-                      rel="noreferrer" 
-                      className="text-brand-yellow font-bold text-xs flex items-center gap-1 hover:underline mt-1"
+                  {/* Action buttons inside Modal */}
+                  <div className="flex gap-2 pt-2 flex-wrap font-sans">
+                    {(selected.status === 'pending' || selected.status === 'Pendiente') && (
+                      <Button 
+                        className="flex-1 h-11 bg-green-600 hover:bg-green-700 text-white font-black rounded-xl text-xs uppercase cursor-pointer" 
+                        onClick={() => { handleConfirmGroup(selected); setSelected(null); }}
+                      >
+                        Confirmar Reserva
+                      </Button>
+                    )}
+
+                    {selected.paymentStatus !== 'paid' && (
+                      <Button 
+                        className="flex-1 h-11 bg-blue-600 hover:bg-blue-700 text-white font-black rounded-xl text-xs uppercase cursor-pointer" 
+                        onClick={() => { handleMarkPaidGroup(selected, selected.paymentMethod); }}
+                      >
+                        Registrar Pago
+                      </Button>
+                    )}
+
+                    {(selected.status === 'pending' || selected.status === 'Pendiente' || selected.status === 'confirmed' || selected.status === 'Confirmado') && (
+                      <Button 
+                        className="flex-1 h-11 bg-red-600 hover:bg-red-700 text-white font-black rounded-xl text-xs uppercase cursor-pointer" 
+                        onClick={() => { handleCancelGroup(selected); setSelected(null); }}
+                      >
+                        Cancelar Alquiler
+                      </Button>
+                    )}
+
+                    {(selected.status === 'confirmed' || selected.status === 'Confirmado') && (
+                      <Button 
+                        className="flex-1 h-11 bg-blue-500 hover:bg-blue-600 text-white font-black rounded-xl text-xs uppercase cursor-pointer" 
+                        onClick={() => { handleReturnGroup(selected); setSelected(null); }}
+                      >
+                        Marcar como Devuelto
+                      </Button>
+                    )}
+
+                    <Button 
+                      variant="ghost" 
+                      className="w-full h-10 text-white/40 font-bold hover:bg-white/5 hover:text-white rounded-xl text-xs uppercase mt-2 cursor-pointer" 
+                      onClick={() => setSelected(null)}
                     >
-                      Ver Comprobante Guardado <ExternalLink className="w-3.5 h-3.5" />
-                    </a>
-                  ) : (
-                    <p className="text-white/30 text-xs font-bold italic mt-0.5">
-                      Sin comprobante digital cargado.
-                    </p>
-                  )}
-                </div>
-
-                {/* Notes if any */}
-                {selected.notes && (
-                  <div className="bg-black/40 p-4 rounded-2xl border border-white/5">
-                    <p className="text-[9px] text-white/30 font-bold uppercase mb-1">Notas / Instrucciones Especiales</p>
-                    <p className="text-white/60 text-xs italic">{selected.notes}</p>
+                      Cerrar Detalle
+                    </Button>
                   </div>
-                )}
-
-                {/* Timestamps & Audit logs */}
-                <div className="bg-black/20 p-3 rounded-xl border border-white/5 text-[9px] text-white/30 space-y-1 font-mono">
-                  <p>Creado: {formatDateTime(selected.createdAt)}</p>
-                  <p>Actualizado: {formatDateTime(selected.updatedAt)}</p>
-                  {selected.lastUpdatedBy && (
-                    <p className="text-brand-yellow/60">Modificado por última vez por: {selected.lastUpdatedBy}</p>
-                  )}
-                </div>
-
-                {/* Total amount header */}
-                <div className="bg-brand-yellow text-brand-black p-5 rounded-2xl text-center shadow-lg">
-                  <p className="text-[10px] font-black uppercase tracking-wider mb-1">Monto Total Estimado</p>
-                  <p className="text-4xl font-black">Bs. {selected.total}</p>
-                </div>
-
-                {/* Action buttons inside Modal */}
-                <div className="flex gap-2 pt-2 flex-wrap font-sans">
-                  {(selected.status === 'pending' || selected.status === 'Pendiente') && (
-                    <Button 
-                      className="flex-1 h-11 bg-green-600 hover:bg-green-700 text-white font-black rounded-xl text-xs uppercase cursor-pointer" 
-                      onClick={() => { handleConfirmGroup(selected); setSelected(null); }}
-                    >
-                      Confirmar Reserva
-                    </Button>
-                  )}
-
-                  {selected.paymentStatus !== 'paid' && (
-                    <Button 
-                      className="flex-1 h-11 bg-blue-600 hover:bg-blue-700 text-white font-black rounded-xl text-xs uppercase cursor-pointer" 
-                      onClick={() => { handleMarkPaidGroup(selected, selected.paymentMethod); }}
-                    >
-                      Registrar Pago
-                    </Button>
-                  )}
-
-                  {(selected.status === 'pending' || selected.status === 'Pendiente' || selected.status === 'confirmed' || selected.status === 'Confirmado') && (
-                    <Button 
-                      className="flex-1 h-11 bg-red-600 hover:bg-red-700 text-white font-black rounded-xl text-xs uppercase cursor-pointer" 
-                      onClick={() => { handleCancelGroup(selected); setSelected(null); }}
-                    >
-                      Cancelar Alquiler
-                    </Button>
-                  )}
-
-                  {(selected.status === 'confirmed' || selected.status === 'Confirmado') && (
-                    <Button 
-                      className="flex-1 h-11 bg-blue-500 hover:bg-blue-600 text-white font-black rounded-xl text-xs uppercase cursor-pointer" 
-                      onClick={() => { handleReturnGroup(selected); setSelected(null); }}
-                    >
-                      Marcar como Devuelto
-                    </Button>
-                  )}
-
-                  <Button 
-                    variant="ghost" 
-                    className="w-full h-10 text-white/40 font-bold hover:bg-white/5 hover:text-white rounded-xl text-xs uppercase mt-2 cursor-pointer" 
-                    onClick={() => setSelected(null)}
-                  >
-                    Cerrar Detalle
-                  </Button>
                 </div>
               </div>
             </>
