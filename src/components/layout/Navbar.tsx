@@ -13,8 +13,10 @@ import {
     X,
     User,
     LogOut,
+    Globe,
     type LucideIcon,
 } from 'lucide-react';
+import { useLanguage } from '@/context/LanguageContext';
 
 type NavLinkItem = {
     label: string;
@@ -72,6 +74,7 @@ export default function Navbar() {
     const navigate = useNavigate();
     
     const { currentCustomer, logoutCustomer } = useStore();
+    const { language, setLanguage } = useLanguage();
     const [authModalOpen, setAuthModalOpen] = useState(false);
 
 
@@ -270,6 +273,15 @@ export default function Navbar() {
                                     <User className="w-4 h-4" /> Iniciar Sesión
                                 </button>
                             )}
+
+                            {/* Language Selector Toggle */}
+                            <button
+                                onClick={() => setLanguage(language === 'es' ? 'en' : 'es')}
+                                className="h-10 w-10 flex items-center justify-center rounded-full bg-white/10 hover:bg-white/20 border border-white/10 text-white font-cocon text-xs font-black uppercase transition-all duration-300 hover:scale-105 active:scale-95 cursor-pointer ml-3 shrink-0"
+                                title={language === 'es' ? 'Switch to English' : 'Cambiar a Español'}
+                            >
+                                {language === 'es' ? 'EN' : 'ES'}
+                            </button>
                         </div>
                     </div>
 
@@ -390,6 +402,20 @@ export default function Navbar() {
                                         <span>Iniciar Sesión</span>
                                     </button>
                                 )}
+                            </div>
+
+                            {/* Mobile Language Toggle */}
+                            <div className="mt-3 pt-3 border-t border-brand-black/10">
+                                <button
+                                    onClick={() => {
+                                        setLanguage(language === 'es' ? 'en' : 'es');
+                                        setMobileOpen(false);
+                                    }}
+                                    className="w-full flex items-center gap-3 rounded-2xl px-4 py-3.5 bg-white/12 text-brand-black font-cocon text-sm font-bold hover:bg-white/22 transition-all text-left"
+                                >
+                                    <Globe className="h-5 w-5 shrink-0" strokeWidth={2.2} />
+                                    <span>{language === 'es' ? 'Cambiar a Inglés (EN)' : 'Switch to Spanish (ES)'}</span>
+                                </button>
                             </div>
                         </div>
                     </motion.div>

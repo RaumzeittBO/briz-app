@@ -16,7 +16,12 @@ export default function AdminCommunityPage() {
     const pendingReviews = items.filter(item => item.type === 'review' && item.status === 'pending').length;
 
     const handleModeration = async (id: string, status: CommunityItem['status']) => {
-        try { await moderateItem(id, status); } catch { alert('No se pudo actualizar la publicación. Verifica tu sesión de administrador.'); }
+        try {
+            await moderateItem(id, status);
+        } catch (error: any) {
+            console.error('Error al moderar publicación:', error);
+            alert(`No se pudo actualizar la publicación. Detalle del error de la base de datos: ${error.message || error}`);
+        }
     };
 
     return <div className="space-y-7 pb-16">

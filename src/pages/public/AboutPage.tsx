@@ -2,9 +2,7 @@ import { useRef } from 'react';
 import { motion, useScroll, useTransform, useSpring, useMotionValue } from 'framer-motion';
 import { Bike, Sparkles, Heart, ArrowRight } from 'lucide-react';
 import { Link } from 'react-router-dom';
-
-const assetBaseWeb = '/Conocenos-web';
-const assetBaseCel = '/Conocenos-celular';
+import { useLanguage } from '@/context/LanguageContext';
 
 // Crinkled Translucent Washi Tape Sticker Component
 function WashiTape({ className }: { className: string }) {
@@ -309,6 +307,10 @@ function BikeTreadConnector() {
 }
 
 export default function AboutPage() {
+    const { language } = useLanguage();
+    const assetBaseWeb = language === 'es' ? '/Conocenos-web' : '/Conocenos-web/Ingles';
+    const assetBaseCel = language === 'es' ? '/Conocenos-celular' : '/Conocenos-celular/Ingles';
+
     return (
         <div className="pt-20 min-h-screen bg-[#FFFDF3] relative overflow-hidden flex flex-col">
             {/* Subtle paper texture overlay */}

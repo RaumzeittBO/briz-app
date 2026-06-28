@@ -25,7 +25,9 @@ import {
     type LucideIcon,
 } from 'lucide-react';
 
-const assetBase = '/menu-principal-web';
+import { useLanguage } from '@/context/LanguageContext';
+
+let assetBase = '/menu-principal-web';
 const designStorageKey = 'briz-home-design-editor-v4';
 const designEditorEnabled = import.meta.env.DEV;
 
@@ -965,9 +967,11 @@ function AnimatedArtworkSection({ desktopSrc, mobileSrc, alt, tone }: { desktopS
         <AnimatedArtworkDivider />
     </section>;
 }
-
 function WhyChooseBrizSection() {
-    return <AnimatedArtworkSection desktopSrc={`${assetBase}/3.webp`} mobileSrc="/menu-principal-celular/3.webp" alt="Por qué elegir Briz y nuestro propósito" tone="green" />;
+    const { language } = useLanguage();
+    const desktopSrc = language === 'es' ? '/menu-principal-web/3.webp' : '/menu-principal-web/Ingles/3.png';
+    const mobileSrc = language === 'es' ? '/menu-principal-celular/3.webp' : '/menu-principal-celular/Ingles/3.png';
+    return <AnimatedArtworkSection desktopSrc={desktopSrc} mobileSrc={mobileSrc} alt="Por qué elegir Briz y nuestro propósito" tone="green" />;
     return (
         <section className="relative isolate overflow-hidden scroll-mt-28 bg-[#50C879] pt-24 sm:pt-28 lg:pt-[112px]">
             <div className="absolute inset-y-0 right-0 -z-10 hidden w-[54%] rounded-l-[48%] border-y-2 border-l-2 border-white/80 bg-[#A45D33] lg:block" />
@@ -1156,7 +1160,10 @@ function WhyChooseBrizSection() {
 }
 
 function BrandSection() {
-    return <AnimatedArtworkSection desktopSrc={`${assetBase}/4.webp`} mobileSrc="/menu-principal-celular/4.webp" alt="La marca Briz" tone="cream" />;
+    const { language } = useLanguage();
+    const desktopSrc = language === 'es' ? '/menu-principal-web/4.webp' : '/menu-principal-web/Ingles/4.png';
+    const mobileSrc = language === 'es' ? '/menu-principal-celular/4.webp' : '/menu-principal-celular/Ingles/4.png';
+    return <AnimatedArtworkSection desktopSrc={desktopSrc} mobileSrc={mobileSrc} alt="La marca Briz" tone="cream" />;
     return (
         <section className="relative isolate overflow-hidden bg-[#FFD957] pt-20 lg:pt-24">
             <div className="pointer-events-none absolute inset-x-0 top-0 z-10 h-16 text-[#50C879]" aria-hidden="true">
@@ -1812,6 +1819,8 @@ function CTABanner({ embedded = false }: { embedded?: boolean }) {
 }
 
 export default function HomePage() {
+    const { language } = useLanguage();
+    assetBase = language === 'es' ? '/menu-principal-web' : '/menu-principal-web/Ingles';
     const activeViewport = useCurrentViewport();
     const { config, updateTransform, reset } = useDesignConfig();
     const [editorOpen, setEditorOpen] = useState(false);

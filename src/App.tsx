@@ -78,24 +78,27 @@ function AppRoutes() {
 
 import { StoreProvider } from '@/context/StoreContext';
 import { CartProvider } from '@/context/CartContext';
+import { LanguageProvider } from '@/context/LanguageContext';
 
 import ScrollToTop from '@/components/layout/ScrollToTop';
 
 function App() {
   return (
     <TooltipProvider>
-      <StoreProvider>
-        <CartProvider>
-          <CommunityProvider>
-            <BrowserRouter>
-              <ScrollToTop />
-              <AuthProvider>
-                <AppRoutes />
-              </AuthProvider>
-            </BrowserRouter>
-          </CommunityProvider>
-        </CartProvider>
-      </StoreProvider>
+      <LanguageProvider>
+        <StoreProvider>
+          <CartProvider>
+            <CommunityProvider>
+              <BrowserRouter>
+                <ScrollToTop />
+                <AuthProvider>
+                  <AppRoutes />
+                </AuthProvider>
+              </BrowserRouter>
+            </CommunityProvider>
+          </CartProvider>
+        </StoreProvider>
+      </LanguageProvider>
     </TooltipProvider>
   );
 }
