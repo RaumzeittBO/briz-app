@@ -11,6 +11,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { useStore } from '@/context/StoreContext';
 import { db } from '@/lib/firebase';
 import { doc, setDoc } from 'firebase/firestore';
+import DeliveryMapPicker from './DeliveryMapPicker';
 
 // Types for wizard cart
 export interface RentalCartItem {
@@ -147,7 +148,25 @@ export default function RentalCheckoutWizard({
     });
     const [deliveryChecked, setDeliveryChecked] = useState(false);
     const [pickupChecked, setPickupChecked] = useState(false);
-    const [mapsLink, setMapsLink] = useState('');
+    const [deliveryLatLng, setDeliveryLatLng] = useState<{ lat: number; lng: number } | null>(null);
+    const [isAddressInZone, setIsAddressInZone] = useState(true);
+    const [formattedAddress, setFormattedAddress] = useState('');
+
+    const totalBikes = useMemo(() => {
+        return cart.reduce((sum, item) => {
+            const isBike = item.product.itemType === 'bike' || item.product.type === 'combo';
+            return sum + (isBike ? item.quantity : 0);
+        }, 0);
+    }, [cart]);
+
+    const calculateShippingFee = (numBikes: number) => {
+        if (numBikes <= 0) return 0;
+        if (numBikes === 1) return 30;
+        if (numBikes === 2) return 45;
+        if (numBikes === 3) return 55;
+        if (numBikes === 4) return 65;
+        return 65 + (numBikes - 4) * 10;
+    };
 
     // Step 4 states (Payment)
     const [discountCode, setDiscountCode] = useState('');
@@ -182,8 +201,12 @@ export default function RentalCheckoutWizard({
     }, [accessories]);
 
     const transportSubtotal = useMemo(() => {
-        return (deliveryChecked ? 30 : 0) + (pickupChecked ? 30 : 0);
-    }, [deliveryChecked, pickupChecked]);
+        if ((deliveryChecked || pickupChecked) && !isAddressInZone) {
+            return 0;
+        }
+        const costPerTrip = calculateShippingFee(totalBikes);
+        return (deliveryChecked ? costPerTrip : 0) + (pickupChecked ? costPerTrip : 0);
+    }, [deliveryChecked, pickupChecked, totalBikes, isAddressInZone]);
 
     const rawTotal = useMemo(() => {
         return itemsSubtotal + accessoriesSubtotal + transportSubtotal;
@@ -334,8 +357,8 @@ export default function RentalCheckoutWizard({
         }
 
         if (deliveryChecked || pickupChecked) {
-            if (!mapsLink.trim()) {
-                alert("Por favor ingresa el enlace de Google Maps para tu dirección exacta.");
+            if (!formattedAddress.trim() || !deliveryLatLng) {
+                alert("Por favor busca tu dirección y marca tu ubicación exacta en el mapa.");
                 return;
             }
         }
@@ -371,6 +394,11 @@ export default function RentalCheckoutWizard({
 
         setLoading(true);
         try {
+            // Generate link from lat/lng
+            const generatedMapsLink = deliveryLatLng 
+                ? `https://www.google.com/maps/?q=${deliveryLatLng.lat},${deliveryLatLng.lng}`
+                : '';
+
             // Build the database payloads
             const rentalPayloads: any[] = [];
 
@@ -392,8 +420,8 @@ export default function RentalCheckoutWizard({
                     pickupTime: pickupTime,
                     total: unitPrice * item.quantity,
                     paymentMethod: paymentMethod === 'qr' ? 'QR' : paymentMethod === 'transfer' ? 'Transferencia' : 'Efectivo',
-                    notes: `Bicicleta alquilada. ${deliveryChecked ? 'Servicio de entrega.' : ''} ${pickupChecked ? 'Servicio de recojo.' : ''}`,
-                    mapsLink: mapsLink || '',
+                    notes: `Bicicleta alquilada. ${deliveryChecked ? 'Servicio de entrega.' : ''} ${pickupChecked ? 'Servicio de recojo.' : ''}${formattedAddress ? ` Dirección: ${formattedAddress}` : ''}`,
+                    mapsLink: generatedMapsLink,
                     deliveryService: deliveryChecked,
                     pickupService: pickupChecked
                 });
@@ -417,7 +445,7 @@ export default function RentalCheckoutWizard({
                     total: 10 * accessories.casco,
                     paymentMethod: paymentMethod === 'qr' ? 'QR' : paymentMethod === 'transfer' ? 'Transferencia' : 'Efectivo',
                     notes: 'Accesorio de alquiler',
-                    mapsLink: mapsLink || '',
+                    mapsLink: generatedMapsLink,
                     deliveryService: deliveryChecked,
                     pickupService: pickupChecked
                 });
@@ -440,7 +468,7 @@ export default function RentalCheckoutWizard({
                     total: 10 * accessories.portacelular,
                     paymentMethod: paymentMethod === 'qr' ? 'QR' : paymentMethod === 'transfer' ? 'Transferencia' : 'Efectivo',
                     notes: 'Accesorio de alquiler',
-                    mapsLink: mapsLink || '',
+                    mapsLink: generatedMapsLink,
                     deliveryService: deliveryChecked,
                     pickupService: pickupChecked
                 });
@@ -463,7 +491,7 @@ export default function RentalCheckoutWizard({
                     total: 10 * accessories.luz,
                     paymentMethod: paymentMethod === 'qr' ? 'QR' : paymentMethod === 'transfer' ? 'Transferencia' : 'Efectivo',
                     notes: 'Accesorio de alquiler',
-                    mapsLink: mapsLink || '',
+                    mapsLink: generatedMapsLink,
                     deliveryService: deliveryChecked,
                     pickupService: pickupChecked
                 });
@@ -486,7 +514,7 @@ export default function RentalCheckoutWizard({
                     total: 10 * accessories.candado,
                     paymentMethod: paymentMethod === 'qr' ? 'QR' : paymentMethod === 'transfer' ? 'Transferencia' : 'Efectivo',
                     notes: 'Accesorio de alquiler',
-                    mapsLink: mapsLink || '',
+                    mapsLink: generatedMapsLink,
                     deliveryService: deliveryChecked,
                     pickupService: pickupChecked
                 });
@@ -509,7 +537,7 @@ export default function RentalCheckoutWizard({
                     total: 30 * accessories.combo,
                     paymentMethod: paymentMethod === 'qr' ? 'QR' : paymentMethod === 'transfer' ? 'Transferencia' : 'Efectivo',
                     notes: 'Combo accesorios de alquiler',
-                    mapsLink: mapsLink || '',
+                    mapsLink: generatedMapsLink,
                     deliveryService: deliveryChecked,
                     pickupService: pickupChecked
                 });
@@ -517,6 +545,7 @@ export default function RentalCheckoutWizard({
 
             // 3. Transportation as separate documents
             if (deliveryChecked) {
+                const costPerTrip = isAddressInZone ? calculateShippingFee(totalBikes) : 0;
                 rentalPayloads.push({
                     customerName: currentCustomer.name,
                     customerPhone: currentCustomer.phone,
@@ -530,16 +559,17 @@ export default function RentalCheckoutWizard({
                     duration: duration,
                     date: date,
                     pickupTime: pickupTime,
-                    total: 30,
+                    total: costPerTrip,
                     paymentMethod: paymentMethod === 'qr' ? 'QR' : paymentMethod === 'transfer' ? 'Transferencia' : 'Efectivo',
-                    notes: `Transporte de entrega. Dirección: ${mapsLink}`,
-                    mapsLink: mapsLink || '',
+                    notes: `Transporte de entrega. Dirección: ${formattedAddress} ${!isAddressInZone ? '[Fuera de Cobertura]' : ''}`,
+                    mapsLink: generatedMapsLink,
                     deliveryService: true,
                     pickupService: false
                 });
             }
 
             if (pickupChecked) {
+                const costPerTrip = isAddressInZone ? calculateShippingFee(totalBikes) : 0;
                 rentalPayloads.push({
                     customerName: currentCustomer.name,
                     customerPhone: currentCustomer.phone,
@@ -553,10 +583,10 @@ export default function RentalCheckoutWizard({
                     duration: duration,
                     date: date,
                     pickupTime: pickupTime,
-                    total: 30,
+                    total: costPerTrip,
                     paymentMethod: paymentMethod === 'qr' ? 'QR' : paymentMethod === 'transfer' ? 'Transferencia' : 'Efectivo',
-                    notes: `Transporte de recojo. Dirección: ${mapsLink}`,
-                    mapsLink: mapsLink || '',
+                    notes: `Transporte de recojo. Dirección: ${formattedAddress} ${!isAddressInZone ? '[Fuera de Cobertura]' : ''}`,
+                    mapsLink: generatedMapsLink,
                     deliveryService: false,
                     pickupService: true
                 });
@@ -1010,7 +1040,7 @@ export default function RentalCheckoutWizard({
                                         className="border-brand-charcoal/20 data-[state=checked]:bg-brand-yellow data-[state=checked]:border-brand-yellow data-[state=checked]:text-brand-black"
                                     />
                                     <Label htmlFor="delivery" className="text-xs text-brand-charcoal/80 font-bold cursor-pointer font-sans leading-none">
-                                        🚚 Servicio de entrega (+30 Bs)
+                                        🚚 Servicio de entrega ({isAddressInZone ? `+${calculateShippingFee(totalBikes)}` : '+0'} Bs)
                                     </Label>
                                 </div>
 
@@ -1022,28 +1052,49 @@ export default function RentalCheckoutWizard({
                                         className="border-brand-charcoal/20 data-[state=checked]:bg-brand-yellow data-[state=checked]:border-brand-yellow data-[state=checked]:text-brand-black"
                                     />
                                     <Label htmlFor="pickup" className="text-xs text-brand-charcoal/80 font-bold cursor-pointer font-sans leading-none">
-                                        🔄 Servicio de recojo (+30 Bs)
+                                        🔄 Servicio de recojo ({isAddressInZone ? `+${calculateShippingFee(totalBikes)}` : '+0'} Bs)
                                     </Label>
                                 </div>
                             </div>
 
-                            {/* Google Maps text input conditionally shown */}
+                            {/* Google Maps interactive picker conditionally shown */}
                             {(deliveryChecked || pickupChecked) && (
                                 <motion.div 
                                     initial={{ opacity: 0, height: 0 }} 
                                     animate={{ opacity: 1, height: 'auto' }} 
-                                    className="space-y-2 pt-2"
+                                    className="space-y-3 pt-2"
                                 >
-                                    <Label className="text-[10px] text-brand-black/60 font-bold uppercase tracking-widest font-maiandra">Ingresa el link de maps de tu dirección exacta:</Label>
-                                    <Input 
-                                        value={mapsLink}
-                                        onChange={e => setMapsLink(e.target.value)}
-                                        placeholder="https://maps.app.goo.gl/..."
-                                        className="bg-white border-brand-yellow/30 text-brand-black font-bold h-11 rounded-xl focus-visible:ring-brand-yellow" 
+                                    <Label className="text-[10px] text-brand-black/60 font-bold uppercase tracking-widest font-maiandra block">
+                                        Ingresa tu dirección y marca tu ubicación exacta en el mapa:
+                                    </Label>
+                                    <DeliveryMapPicker 
+                                        onLocationSelected={(addr, latLng, inZone) => {
+                                            setFormattedAddress(addr);
+                                            setDeliveryLatLng(latLng);
+                                            setIsAddressInZone(inZone);
+                                        }}
+                                        initialAddress={formattedAddress}
+                                        initialLatLng={deliveryLatLng}
                                     />
-                                    <p className="text-[10px] text-brand-yellow-vibrant font-black uppercase font-maiandra pt-1">
-                                        ⚠️ Personal de Briz se contactará contigo para cotizarte el transporte.
-                                    </p>
+                                    <div className="text-[10px] text-brand-black/50 font-bold uppercase font-maiandra pt-1 leading-relaxed bg-gray-50 p-3 rounded-xl border border-gray-100">
+                                        <p className="font-extrabold text-brand-black mb-1">Resumen del transporte ({totalBikes} bici{totalBikes > 1 ? 's' : ''}):</p>
+                                        {deliveryChecked && (
+                                            <p className="flex justify-between border-b border-gray-100/50 py-1">
+                                                <span>• Servicio de Entrega:</span>
+                                                <span className="font-extrabold text-brand-black">
+                                                    {isAddressInZone ? `Bs. ${calculateShippingFee(totalBikes)}` : 'A convenir (Bs. 0)'}
+                                                </span>
+                                            </p>
+                                        )}
+                                        {pickupChecked && (
+                                            <p className="flex justify-between py-1">
+                                                <span>• Servicio de Recojo:</span>
+                                                <span className="font-extrabold text-brand-black">
+                                                    {isAddressInZone ? `Bs. ${calculateShippingFee(totalBikes)}` : 'A convenir (Bs. 0)'}
+                                                </span>
+                                            </p>
+                                        )}
+                                    </div>
                                 </motion.div>
                             )}
                         </div>
@@ -1103,8 +1154,26 @@ export default function RentalCheckoutWizard({
                                 {accessories.combo > 0 && <div className="flex justify-between text-brand-charcoal/60"><span>{accessories.combo}x Combo Kit de Seguridad</span><span>Bs. {(30 * accessories.combo).toFixed(2)}</span></div>}
 
                                 {/* Delivery services summary */}
-                                {deliveryChecked && <div className="flex justify-between text-brand-charcoal/60"><span>🚚 Servicio de entrega</span><span>Bs. 30.00</span></div>}
-                                {pickupChecked && <div className="flex justify-between text-brand-charcoal/60"><span>🔄 Servicio de recojo</span><span>Bs. 30.00</span></div>}
+                                {deliveryChecked && (
+                                    <div className="flex justify-between text-brand-charcoal/60">
+                                        <span>🚚 Servicio de entrega</span>
+                                        <span>
+                                            {isAddressInZone 
+                                                ? `Bs. ${calculateShippingFee(totalBikes).toFixed(2)}` 
+                                                : 'A convenir (Bs. 0.00)'}
+                                        </span>
+                                    </div>
+                                )}
+                                {pickupChecked && (
+                                    <div className="flex justify-between text-brand-charcoal/60">
+                                        <span>🔄 Servicio de recojo</span>
+                                        <span>
+                                            {isAddressInZone 
+                                                ? `Bs. ${calculateShippingFee(totalBikes).toFixed(2)}` 
+                                                : 'A convenir (Bs. 0.00)'}
+                                        </span>
+                                    </div>
+                                )}
 
                                 {/* Schedule info */}
                                 <div className="pt-2 border-t border-gray-50 flex flex-wrap gap-x-4 text-[10px] text-brand-black/40 font-bold uppercase font-maiandra">
@@ -1300,6 +1369,14 @@ export default function RentalCheckoutWizard({
                                         <p className="text-[10px] text-brand-black/40 font-bold uppercase font-maiandra">Dirección de facturación</p>
                                         <p className="font-bold text-brand-charcoal/50 text-[11px] italic mt-0.5">No requerida (Consumidor Final)</p>
                                     </div>
+
+                                    {/* Shipping Address */}
+                                    {(deliveryChecked || pickupChecked) && (
+                                        <div>
+                                            <p className="text-[10px] text-brand-black/40 font-bold uppercase font-maiandra">Dirección de envío / recojo</p>
+                                            <p className="font-bold text-brand-charcoal text-[11px] mt-0.5 leading-normal">{formattedAddress}</p>
+                                        </div>
+                                    )}
                                 </div>
                             </div>
 
