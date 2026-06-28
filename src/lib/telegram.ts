@@ -22,7 +22,7 @@ export const sendTelegramNotification = async (
     if (!token || !chatId) {
         console.error(
             `[Telegram] VARIABLES DE ENTORNO FALTANTES. Token presente: ${!!token}, ChatId presente: ${!!chatId}. ` +
-            `Asegurate de configurar VITE_TELEGRAM_BOT_TOKEN y VITE_TELEGRAM_CHAT_ID en el panel de Vercel > Settings > Environment Variables.`
+            `Asegurate de configurar VITE_TELEGRAM_BOT_TOKEN y VITE_TELEGRAM_CHAT_ID en Vercel > Settings > Environment Variables.`
         );
         return;
     }
@@ -64,19 +64,16 @@ export const sendTelegramNotification = async (
         message += `\u{1F69A} <b>Servicio de Transporte:</b>\n`;
         message += `\u{1F4CD} <b>Direcci\u00f3n:</b> ${escapeHTML(cleanedNotes)}\n`;
         if (mapsLink) {
-            // Raw URL in href - do NOT escape the URL itself, only text content
             message += `\u{1F5FA} <a href="${mapsLink}">Ver ubicaci\u00f3n en Google Maps</a>\n`;
         }
     }
 
-    console.log(`[Telegram] Enviando notificacion para reserva ${reservationCode}...`);
+    console.log(`[Telegram] Enviando notificacion para reserva ${reservationCode} al chat ${chatId}...`);
 
     try {
         const response = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 chat_id: chatId,
                 text: message,
@@ -85,11 +82,26 @@ export const sendTelegramNotification = async (
             }),
         });
 
+        const result = await response.json();
+
         if (!response.ok) {
-            const errText = await response.text();
-            console.error(`[Telegram] Error ${response.status} al enviar mensaje:`, errText);
+            // Diagnose common errors clearly
+            if (result?.error_code === 403) {
+                console.error(
+                    `[Telegram] ERROR 403 - El bot NO tiene permiso para enviar mensajes al grupo. ` +
+                    `Solucion: En Telegram, ve al grupo "Alquileres BRIZ", abre Configuracion > Administradores, ` +
+                    `y añade @briz_alquileres_bot como administrador con permiso de Publicar mensajes.`
+                );
+            } else if (result?.error_code === 400 && result?.description?.includes('chat not found')) {
+                console.error(
+                    `[Telegram] ERROR 400 - Chat ID incorrecto. El chat_id configurado (${chatId}) no existe o cambio. ` +
+                    `El grupo pudo haber sido migrado a supergrupo con un nuevo ID. ` +
+                    `Verifica el ID actual en Vercel > Settings > Environment Variables.`
+                );
+            } else {
+                console.error(`[Telegram] Error ${response.status}:`, JSON.stringify(result));
+            }
         } else {
-            const result = await response.json();
             console.log(`[Telegram] Notificacion enviada exitosamente. Message ID: ${result?.result?.message_id}`);
         }
     } catch (error) {
