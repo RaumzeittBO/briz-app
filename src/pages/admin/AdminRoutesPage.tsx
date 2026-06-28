@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useStore } from '@/context/StoreContext';
 import type { CyclingRoute } from '@/data/mockData';
 import { Search, Edit, MapPinned, Plus, Trash2, ExternalLink } from 'lucide-react';
+import { FileUploader } from '@/components/ui/file-uploader';
 
 export default function AdminRoutesPage() {
     const { routes, addRoute, updateRoute, deleteRoute } = useStore();
@@ -277,7 +278,10 @@ export default function AdminRoutesPage() {
 
                         <div className="space-y-2">
                             <Label className="text-white/40 font-bold uppercase tracking-widest text-[10px]">Enlace de Imagen (URL)</Label>
-                            <Input value={image} onChange={e => setImage(e.target.value)} className="h-12 bg-black/40 border-white/10 rounded-xl focus:ring-brand-yellow/50 text-white" placeholder="Ej. https://images.unsplash.com/... o /vive.webp" />
+                            <div className="flex gap-2">
+                                <Input value={image} onChange={e => setImage(e.target.value)} className="h-12 bg-black/40 border-white/10 rounded-xl focus:ring-brand-yellow/50 text-white flex-1" placeholder="Ej. https://images.unsplash.com/... o /vive.webp" />
+                                <FileUploader onUpload={(url) => setImage(url)} folder="routes" className="h-12 px-4 flex items-center justify-center gap-1.5 rounded-xl border border-white/10 hover:border-brand-yellow/50 bg-white/5 hover:bg-white/10 text-xs font-bold text-white transition-all cursor-pointer shrink-0" />
+                            </div>
                         </div>
 
                         <div className="space-y-2">

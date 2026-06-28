@@ -5,10 +5,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Search, Plus, Edit, Trash2, Image as ImageIcon, Bike, Wrench, Layers, X } from 'lucide-react';
+import { Search, Plus, Edit, Trash2, Image as ImageIcon, Bike, Wrench, Layers, X, Settings } from 'lucide-react';
 import { useStore } from '@/context/StoreContext';
 import type { InventoryItem, ComboProduct, WheelSizeEntry, ComboComponent } from '@/context/StoreContext';
 import { RENTAL_SEED_CATEGORIES } from '@/data/rentalSeedData';
+import { FileUploader } from '@/components/ui/file-uploader';
 
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
@@ -152,7 +153,11 @@ function normalizeInventoryDraft(draft: any) {
 }
 
 export default function InventoryPage() {
-  const { inventory, combos, addInventoryItem, updateInventoryItem, deleteInventoryItem, addCombo, updateCombo, deleteCombo, getComboAvailability, bikeCategories, addBikeCategory } = useStore();
+  const { 
+    inventory, combos, addInventoryItem, updateInventoryItem, deleteInventoryItem, 
+    addCombo, updateCombo, deleteCombo, getComboAvailability, 
+    bikeCategories, addBikeCategory, deleteBikeCategory, updateBikeCategory 
+  } = useStore();
 
   const [tab, setTab] = useState('bikes');
   const [search, setSearch] = useState('');
@@ -160,6 +165,10 @@ export default function InventoryPage() {
   const [editItem, setEditItem] = useState<any>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<{id:string; type:string; name:string} | null>(null);
   const [localCategories, setLocalCategories] = useState<string[]>([]);
+  const [categoryManagerOpen, setCategoryManagerOpen] = useState(false);
+  const [editingCat, setEditingCat] = useState<string | null>(null);
+  const [editingVal, setEditingVal] = useState("");
+  const [newCategoryName, setNewCategoryName] = useState("");
 
   const bikes = inventory.filter(i => i.itemType === 'bike');
   const accessories = inventory.filter(i => i.itemType === 'accessory');
@@ -169,8 +178,8 @@ export default function InventoryPage() {
   const filteredCombos = combos.filter(c => c.name.toLowerCase().includes(q));
   const availableBikeCategories = useMemo(() => {
     const categories = new Set<string>();
-    RENTAL_SEED_CATEGORIES.forEach(cat => categories.add(cat));
-    bikeCategories.forEach(cat => categories.add(cat));
+    const activeList = bikeCategories.length > 0 ? bikeCategories : RENTAL_SEED_CATEGORIES;
+    activeList.forEach(cat => categories.add(cat));
     localCategories.forEach(cat => categories.add(cat));
     inventory.forEach(item => {
       if (item.itemType === 'bike' && item.category) categories.add(item.category);
@@ -299,9 +308,14 @@ export default function InventoryPage() {
 
         {/* BIKES */}
         <TabsContent value="bikes" className="space-y-3">
-          <Button onClick={()=>openAdd('bike')} className="bg-brand-yellow text-brand-black font-black rounded-xl h-10 px-5 hover:bg-brand-yellow/90">
-            <Plus className="w-4 h-4 mr-2"/> Nueva Bicicleta
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button onClick={()=>openAdd('bike')} className="bg-brand-yellow text-brand-black font-black rounded-xl h-10 px-5 hover:bg-brand-yellow/90">
+              <Plus className="w-4 h-4 mr-2"/> Nueva Bicicleta
+            </Button>
+            <Button onClick={()=>setCategoryManagerOpen(true)} variant="outline" className="border-brand-yellow text-brand-yellow hover:bg-brand-yellow/10 font-black rounded-xl h-10 px-5 cursor-pointer">
+              <Settings className="w-4 h-4 mr-2"/> Administrar Categorías
+            </Button>
+          </div>
           {filteredBikes.length===0 ? <p className="text-center py-16 text-white/20 font-bold text-sm">No hay bicicletas registradas</p> : filteredBikes.map(b=><ItemRow key={b.id} item={b} type="bike" openEdit={openEdit} setDeleteConfirm={setDeleteConfirm}/>)}
         </TabsContent>
 
@@ -385,7 +399,10 @@ export default function InventoryPage() {
                     <div className="w-full h-40 bg-black/40 rounded-xl border border-dashed border-white/10 flex items-center justify-center overflow-hidden mt-2">
                       {editItem.imageUrl ? <img src={editItem.imageUrl} className="w-full h-full object-cover" alt="preview"/> : <ImageIcon className="w-10 h-10 text-white/10"/>}
                     </div>
-                    <Input placeholder="URL de imagen..." value={editItem.imageUrl||''} onChange={e=>setEditItem({...editItem,imageUrl:e.target.value})} className="mt-2 bg-black/40 border-white/10 h-10 text-sm rounded-xl text-white"/>
+                    <div className="flex gap-2 mt-2">
+                      <Input placeholder="URL de imagen..." value={editItem.imageUrl||''} onChange={e=>setEditItem({...editItem,imageUrl:e.target.value})} className="bg-black/40 border-white/10 h-10 text-sm rounded-xl text-white flex-1"/>
+                      <FileUploader onUpload={(url)=>setEditItem({...editItem,imageUrl:url})} folder="inventory" />
+                    </div>
                   </div>
 
                   {/* Additional images */}
@@ -409,6 +426,11 @@ export default function InventoryPage() {
                                 }}
                                 className="bg-black/40 border-white/10 h-10 text-xs rounded-xl text-white flex-1"
                               />
+                              <FileUploader onUpload={(newUrl)=>{
+                                const updatedUrls = [...urls];
+                                updatedUrls[index] = newUrl;
+                                setEditItem({ ...editItem, additionalImageUrls: updatedUrls });
+                              }} folder="inventory" />
                               <Button
                                 type="button"
                                 variant="ghost"
@@ -621,6 +643,139 @@ export default function InventoryPage() {
               </Button>
               <Button onClick={handleDelete} className="flex-1 h-12 rounded-xl font-bold bg-red-600 text-white hover:bg-red-500 shadow-lg shadow-red-600/20">
                 Eliminar
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* CATEGORY MANAGER DIALOG */}
+      {categoryManagerOpen && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 backdrop-blur-md bg-black/60">
+          <div className="bg-brand-charcoal border border-white/10 rounded-3xl p-6 max-w-md w-full shadow-2xl space-y-6">
+            <div className="flex justify-between items-center border-b border-white/10 pb-3">
+              <h3 className="text-xl font-black text-white">Administrar Categorías</h3>
+              <Button variant="ghost" size="icon" onClick={() => setCategoryManagerOpen(false)} className="w-8 h-8 rounded-lg text-white/40 hover:text-white hover:bg-white/10">
+                <X className="w-4 h-4" />
+              </Button>
+            </div>
+
+            {/* Add Category Form */}
+            <div className="flex gap-2">
+              <Input
+                placeholder="Nueva categoría (ej. Ruta)..."
+                value={newCategoryName}
+                onChange={e => setNewCategoryName(e.target.value)}
+                className="bg-black/40 border-white/10 h-10 text-sm rounded-xl text-white flex-1 focus:ring-brand-yellow/50"
+              />
+              <Button
+                onClick={async () => {
+                  const trimmed = newCategoryName.trim();
+                  if (!trimmed) return;
+                  try {
+                    await addBikeCategory(trimmed);
+                    setNewCategoryName("");
+                  } catch (err: any) {
+                    alert('Error al agregar categoría: ' + (err.message || err));
+                  }
+                }}
+                className="bg-brand-yellow text-brand-black hover:bg-brand-yellow/90 font-black rounded-xl h-10 px-4 text-xs"
+              >
+                + Agregar
+              </Button>
+            </div>
+
+            {/* List of categories */}
+            <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+              {availableBikeCategories.map(cat => {
+                const isEditing = editingCat === cat;
+                return (
+                  <div key={cat} className="flex items-center justify-between bg-white/5 border border-white/5 rounded-xl p-3">
+                    {isEditing ? (
+                      <div className="flex gap-2 items-center w-full">
+                        <Input
+                          value={editingVal}
+                          onChange={e => setEditingVal(e.target.value)}
+                          className="bg-black/60 border-white/10 h-8 text-xs rounded-lg text-white flex-1 focus:ring-brand-yellow/50"
+                          autoFocus
+                          onKeyDown={async e => {
+                            if (e.key === 'Enter') {
+                              try {
+                                await updateBikeCategory(cat, editingVal);
+                                setEditingCat(null);
+                              } catch (err: any) {
+                                alert('Error al actualizar categoría: ' + (err.message || err));
+                              }
+                            }
+                          }}
+                        />
+                        <Button
+                          size="sm"
+                          onClick={async () => {
+                            try {
+                              await updateBikeCategory(cat, editingVal);
+                              setEditingCat(null);
+                            } catch (err: any) {
+                              alert('Error al actualizar categoría: ' + (err.message || err));
+                            }
+                          }}
+                          className="bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg h-8 px-2.5 text-xs font-bold"
+                        >
+                          Guardar
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => setEditingCat(null)}
+                          className="text-white/40 hover:text-white hover:bg-white/5 rounded-lg h-8 px-2.5 text-xs"
+                        >
+                          X
+                        </Button>
+                      </div>
+                    ) : (
+                      <>
+                        <span className="text-white text-sm font-bold">{cat}</span>
+                        <div className="flex gap-1">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => {
+                              setEditingCat(cat);
+                              setEditingVal(cat);
+                            }}
+                            className="w-7 h-7 rounded-lg text-brand-yellow hover:bg-brand-yellow/10"
+                            title="Editar nombre"
+                          >
+                            <Edit className="w-3.5 h-3.5" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={async () => {
+                              if (confirm(`¿Estás seguro de eliminar la categoría "${cat}"?\nEsto no afectará los productos existentes, pero ya no aparecerá en los filtros.`)) {
+                                try {
+                                  await deleteBikeCategory(cat);
+                                } catch (err: any) {
+                                  alert('Error al eliminar categoría: ' + (err.message || err));
+                                }
+                              }
+                            }}
+                            className="w-7 h-7 rounded-lg text-red-400 hover:text-red-300 hover:bg-red-500/10"
+                            title="Eliminar"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </Button>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="flex justify-end pt-2 border-t border-white/5">
+              <Button onClick={() => setCategoryManagerOpen(false)} className="bg-white/5 border border-white/5 text-white/80 hover:bg-white/10 rounded-xl h-11 px-5 font-bold text-xs">
+                Cerrar
               </Button>
             </div>
           </div>

@@ -237,6 +237,7 @@ interface StoreContextType {
     // Bike Categories CRUD
     addBikeCategory: (category: string) => Promise<void>;
     deleteBikeCategory: (category: string) => Promise<void>;
+    updateBikeCategory: (oldCategory: string, newCategory: string) => Promise<void>;
 
     // Inventory CRUD
     addInventoryItem: (item: InventoryItem) => Promise<void>;
@@ -736,6 +737,26 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
         const updated = bikeCategories.filter(c => c !== cat);
         await setDoc(doc(db, 'settings', 'bike_categories'), { categories: updated });
     };
+    const updateBikeCategory = async (oldCat: string, newCat: string) => {
+        const trimmedOld = oldCat.trim();
+        const trimmedNew = newCat.trim();
+        if (!trimmedNew || trimmedOld === trimmedNew) return;
+
+        const updated = bikeCategories.map(c => c === trimmedOld ? trimmedNew : c);
+        await setDoc(doc(db, 'settings', 'bike_categories'), { categories: updated });
+
+        // Update items in inventory
+        const itemsToUpdate = inventory.filter(i => i.category === trimmedOld);
+        for (const item of itemsToUpdate) {
+            await updateInventoryItem(item.id, { category: trimmedNew });
+        }
+
+        // Update combos
+        const combosToUpdate = combos.filter(c => c.category === trimmedOld);
+        for (const combo of combosToUpdate) {
+            await updateCombo(combo.id, { category: trimmedNew });
+        }
+    };
 
     const addCombo = async (combo: ComboProduct) => {
         await setDoc(doc(db, 'combos', combo.id), combo);
@@ -1113,7 +1134,7 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
         getItemStock, getComboAvailability, calculatePrice, resetAllData,
         currentCustomer, loginCustomer, registerCustomer, logoutCustomer,
         routes: mergedRoutes, addRoute, updateRoute, deleteRoute,
-        bikeCategories, addBikeCategory, deleteBikeCategory
+        bikeCategories, addBikeCategory, deleteBikeCategory, updateBikeCategory
     };
 
     return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;

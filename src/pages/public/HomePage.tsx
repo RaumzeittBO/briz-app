@@ -706,15 +706,16 @@ function HeroSection() {
                         transition={{ duration: 0.7, ease: 'easeOut' }}
                         className="relative z-10 mx-auto flex w-full max-w-[560px] flex-col items-center text-center lg:mx-0 lg:max-w-[680px] lg:items-start lg:text-left"
                     >
-                        <EditableLayer id="heroLettering" className={`relative mt-4 w-full sm:mt-5 lg:ml-[-1.5rem] transition-all duration-300 ${language === 'en' ? 'max-w-[48rem] lg:w-[53rem]' : 'max-w-[34rem] lg:w-[38rem]'}`}>
+                        <EditableLayer id="heroLettering" className="relative mt-4 w-full max-w-[34rem] sm:mt-5 lg:ml-[-1.5rem] lg:w-[38rem]">
                             <motion.div
                                 initial={{ opacity: 0, y: 18, rotate: -1.2, scale: 0.92 }}
                                 animate={{
                                     opacity: 1,
                                     y: [0, -7, 0],
                                     rotate: [-0.7, 0.45, -0.7],
-                                    scale: 1,
+                                    scale: language === 'en' ? 1.4 : 1,
                                 }}
+                                className={language === 'en' ? 'origin-center lg:origin-left' : 'origin-center'}
                                 transition={{
                                     opacity: { duration: 0.5, delay: 0.15 },
                                     scale: { duration: 0.7, delay: 0.15, ease: 'easeOut' },

@@ -2,7 +2,8 @@ import { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
     ArrowLeft, Minus, Plus, X, Calendar, Clock, Heart, 
-    Share2, CreditCard, CheckCircle2, ShoppingBag, MessageSquare, MapPin
+    Share2, CreditCard, CheckCircle2, ShoppingBag, MessageSquare, MapPin,
+    ChevronLeft, ChevronRight
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -80,6 +81,11 @@ export default function RentalCheckoutWizard({
     const [detailWheelSize, setDetailWheelSize] = useState<string>('');
     const [detailQty, setDetailQty] = useState<number>(1);
     const [favoriteIds, setFavoriteIds] = useState<string[]>([]);
+    const [activeImageIndex, setActiveImageIndex] = useState<number>(0);
+
+    useEffect(() => {
+        setActiveImageIndex(0);
+    }, [selectedProduct]);
 
     const selectedAvailability = useMemo(() => {
         if (!selectedProduct) return 0;
@@ -679,28 +685,81 @@ export default function RentalCheckoutWizard({
                             </span>
                         </div>
 
-                        {/* Product Image */}
-                        <div className="relative aspect-[4/3] bg-white border border-gray-100 rounded-[2.2rem] overflow-hidden shadow-md flex items-center justify-center">
-                            <img src={selectedProduct.imageUrl || '/placeholder_bike.png'} alt={selectedProduct.name} className="w-full h-full object-contain p-4" />
-                            <div className="absolute bottom-5 right-5 flex gap-2">
-                                <button
-                                    type="button"
-                                    onClick={handleToggleFavorite}
-                                    aria-pressed={isFavorite}
-                                    title={currentCustomer ? 'Guardar en favoritos' : 'Inicia sesion para guardar favoritos'}
-                                    className="w-10 h-10 rounded-full bg-white/90 hover:bg-white text-brand-black shadow-lg flex items-center justify-center border border-gray-100 cursor-pointer"
-                                >
-                                    <Heart className={`w-5 h-5 ${isFavorite ? 'text-red-500 fill-red-500' : 'text-gray-600'}`} />
-                                </button>
-                                <button 
-                                    type="button"
-                                    className="w-10 h-10 rounded-full bg-white/90 hover:bg-white text-brand-black shadow-lg flex items-center justify-center border border-gray-100 cursor-pointer"
-                                    onClick={handleShareSelectedProduct}
-                                >
-                                    <Share2 className="w-5 h-5 text-gray-700" />
-                                </button>
-                            </div>
-                        </div>
+                        {/* Product Image Gallery Carousel */}
+                        {(() => {
+                            const productImages = [
+                                selectedProduct.imageUrl,
+                                ...(selectedProduct.additionalImageUrls || [])
+                            ].filter(Boolean);
+                            const hasMultipleImages = productImages.length > 1;
+
+                            return (
+                                <div className="relative aspect-[4/3] bg-white border border-gray-100 rounded-[2.2rem] overflow-hidden shadow-md flex flex-col items-center justify-center group/carousel">
+                                    {/* Main Active Image */}
+                                    <img 
+                                        src={productImages[activeImageIndex] || '/placeholder_bike.png'} 
+                                        alt={selectedProduct.name} 
+                                        className="w-full h-full object-contain p-4 transition-all duration-300" 
+                                    />
+
+                                    {/* Left/Right Controls */}
+                                    {hasMultipleImages && (
+                                        <>
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    setActiveImageIndex(prev => (prev === 0 ? productImages.length - 1 : prev - 1));
+                                                }}
+                                                className="absolute left-3 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-white/80 hover:bg-white text-brand-black shadow-md flex items-center justify-center border border-gray-100 cursor-pointer opacity-0 group-hover/carousel:opacity-100 transition-opacity duration-200 z-10"
+                                            >
+                                                <ChevronLeft className="w-5 h-5" />
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    setActiveImageIndex(prev => (prev === productImages.length - 1 ? 0 : prev + 1));
+                                                }}
+                                                className="absolute right-3 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-white/80 hover:bg-white text-brand-black shadow-md flex items-center justify-center border border-gray-100 cursor-pointer opacity-0 group-hover/carousel:opacity-100 transition-opacity duration-200 z-10"
+                                            >
+                                                <ChevronRight className="w-5 h-5" />
+                                            </button>
+
+                                            {/* Dot Indicators */}
+                                            <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex gap-1.5 z-10">
+                                                {productImages.map((_, idx) => (
+                                                    <button
+                                                        key={idx}
+                                                        type="button"
+                                                        onClick={() => setActiveImageIndex(idx)}
+                                                        className={`w-2 h-2 rounded-full transition-all ${idx === activeImageIndex ? 'bg-brand-yellow w-4' : 'bg-gray-300'}`}
+                                                    />
+                                                ))}
+                                            </div>
+                                        </>
+                                    )}
+
+                                    {/* Actions Overlays */}
+                                    <div className="absolute bottom-5 right-5 flex gap-2 z-10">
+                                        <button
+                                            type="button"
+                                            onClick={handleToggleFavorite}
+                                            aria-pressed={isFavorite}
+                                            title={currentCustomer ? 'Guardar en favoritos' : 'Inicia sesion para guardar favoritos'}
+                                            className="w-10 h-10 rounded-full bg-white/90 hover:bg-white text-brand-black shadow-lg flex items-center justify-center border border-gray-100 cursor-pointer"
+                                        >
+                                            <Heart className={`w-5 h-5 ${isFavorite ? 'text-red-500 fill-red-500' : 'text-gray-600'}`} />
+                                        </button>
+                                        <button 
+                                            type="button"
+                                            className="w-10 h-10 rounded-full bg-white/90 hover:bg-white text-brand-black shadow-lg flex items-center justify-center border border-gray-100 cursor-pointer"
+                                            onClick={handleShareSelectedProduct}
+                                        >
+                                            <Share2 className="w-5 h-5 text-gray-700" />
+                                        </button>
+                                    </div>
+                                </div>
+                            );
+                        })()}
 
                         {/* Description */}
                         <p className="text-xs sm:text-sm font-medium text-brand-black leading-relaxed text-justify font-sans bg-white/50 p-5 rounded-2xl border border-black/5">
