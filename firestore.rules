@@ -46,7 +46,8 @@ service cloud.firestore {
     match /customers/{customerId} {
       allow read: if true;
       allow create: if true;
-      allow update, delete: if isAdmin();
+      allow update: if true;
+      allow delete: if isAdmin();
     }
 
     match /sales/{saleId} {

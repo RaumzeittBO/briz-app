@@ -426,7 +426,11 @@ export default function CustomerAuthModal({ isOpen, onClose, onSuccess }: Custom
 
     return (
         <Dialog open={isOpen} onOpenChange={(v) => { if (!v) onClose(); }}>
-            <DialogContent className="max-w-xl sm:max-w-3xl lg:max-w-4xl w-[95vw] max-h-[92vh] overflow-y-auto bg-brand-beige border border-brand-yellow/30 text-brand-black rounded-3xl p-0 shadow-2xl">
+            <DialogContent className={`${
+                mode === 'register' 
+                    ? 'max-w-xl sm:max-w-3xl lg:max-w-4xl' 
+                    : 'max-w-md'
+            } w-[95vw] max-h-[92vh] overflow-y-auto bg-brand-beige border border-brand-yellow/30 text-brand-black rounded-3xl p-0 shadow-2xl transition-all duration-300`}>
                 
                 {/* Custom Close Button */}
                 <button 
@@ -439,7 +443,7 @@ export default function CustomerAuthModal({ isOpen, onClose, onSuccess }: Custom
                 {/* Form header */}
                 <div className="p-8 pb-5 border-b border-brand-charcoal/5 flex flex-col items-center justify-center bg-brand-yellow/10">
                     <img src="/logo_bicicleta_principal.png" alt="Briz logo" className="h-14 w-auto object-contain mb-3" />
-                    <DialogTitle className="text-2xl font-tan uppercase tracking-wide text-brand-charcoal">
+                    <DialogTitle className="text-lg sm:text-xl md:text-2xl font-tangkiwood uppercase tracking-wide text-brand-charcoal text-center px-4 w-full break-words">
                         {mode === 'login' 
                             ? 'INICIAR SESIÓN' 
                             : mode === 'register' 

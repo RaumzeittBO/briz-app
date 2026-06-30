@@ -62,7 +62,7 @@ export default function ProfilePage() {
             <main className="min-h-screen bg-[#FFFDF3] px-4 pb-20 pt-36">
                 <section className="mx-auto max-w-3xl rounded-[2rem] border border-brand-yellow/30 bg-white p-8 text-center shadow-sm">
                     <User className="mx-auto h-14 w-14 text-brand-yellow-vibrant" />
-                    <h1 className="mt-4 font-tan text-3xl uppercase text-brand-black">Mi perfil</h1>
+                    <h1 className="mt-4 font-tangkiwood text-2xl sm:text-3xl uppercase tracking-wide text-brand-black">Mi perfil</h1>
                     <p className="mt-3 text-sm font-bold leading-relaxed text-brand-charcoal/70">
                         Inicia sesión para ver tus alquileres, estados y detalles de reserva.
                     </p>
@@ -92,7 +92,7 @@ export default function ProfilePage() {
                             </div>
                             <div className="min-w-0 flex-1">
                                 <p className="text-[10px] font-black uppercase tracking-widest text-brand-charcoal/40">Cliente Briz</p>
-                                <h1 className="font-tan text-xl sm:text-2xl uppercase text-brand-black leading-tight break-words word-break-all">{currentCustomer.name}</h1>
+                                <h1 className="font-tangkiwood text-lg sm:text-xl md:text-2xl uppercase tracking-wide text-brand-black leading-tight break-words word-break-all">{currentCustomer.name}</h1>
                                 <p className="text-sm font-bold text-brand-charcoal/60 break-all">{currentCustomer.phone} · CI {currentCustomer.ci}</p>
                             </div>
                         </div>
@@ -106,7 +106,7 @@ export default function ProfilePage() {
                     <div className="flex items-end justify-between gap-4">
                         <div>
                             <p className="text-[10px] font-black uppercase tracking-widest text-brand-charcoal/40">Historial</p>
-                            <h2 className="font-tan text-2xl uppercase text-brand-black">Mis alquileres</h2>
+                            <h2 className="font-tangkiwood text-xl sm:text-2xl uppercase tracking-wide text-brand-black">Mis alquileres</h2>
                         </div>
                         <Badge className="rounded-full bg-brand-yellow px-3 py-1 text-brand-black">{rentalGroups.length} reservas</Badge>
                     </div>

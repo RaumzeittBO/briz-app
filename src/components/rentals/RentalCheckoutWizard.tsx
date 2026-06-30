@@ -670,23 +670,33 @@ export default function RentalCheckoutWizard({
         <div className="space-y-6">
             {/* Header / Back navigation (except Step 5) */}
             {step < 5 && (
-                <div className="flex justify-between items-center pb-2 border-b border-brand-charcoal/5">
-                    <button 
-                        onClick={() => {
-                            if (step === 1) {
-                                setSelectedProduct(null);
-                            } else {
-                                setStep(step - 1);
-                            }
-                        }} 
-                        className="flex items-center gap-2 text-brand-charcoal/60 hover:text-brand-charcoal text-xs font-black uppercase tracking-wider font-maiandra cursor-pointer"
-                    >
-                        <ArrowLeft className="w-4 h-4" /> {step === 1 ? 'Volver a Alquileres' : `Volver al Paso ${step - 1}`}
-                    </button>
-                    <span className="text-[10px] font-black text-brand-charcoal/40 font-maiandra uppercase">
-                        Paso {step} de 4
-                    </span>
-                </div>
+                <>
+                    <div className="flex justify-between items-center pb-2 border-b border-brand-charcoal/5">
+                        <button 
+                            onClick={() => {
+                                if (step === 1) {
+                                    setSelectedProduct(null);
+                                } else {
+                                    setStep(step - 1);
+                                }
+                            }} 
+                            className="flex items-center gap-2 text-brand-charcoal/60 hover:text-brand-charcoal text-xs font-black uppercase tracking-wider font-maiandra cursor-pointer"
+                        >
+                            <ArrowLeft className="w-4 h-4" /> {step === 1 ? 'Volver a Alquileres' : `Volver al Paso ${step - 1}`}
+                        </button>
+                        <span className="text-[10px] font-black text-brand-charcoal/40 font-maiandra uppercase">
+                            Paso {step} de 4
+                        </span>
+                    </div>
+
+                    {/* Notice about modifying order via WhatsApp */}
+                    <div className="bg-brand-yellow/10 border border-brand-yellow/20 rounded-2xl p-4 text-[11px] font-semibold text-brand-charcoal/80 leading-relaxed font-sans flex items-start gap-2.5 shadow-sm">
+                        <span className="text-sm">💡</span>
+                        <p>
+                            <strong>¿Tienes dudas o no estás seguro?</strong> Completa tu pedido con tranquilidad. Al finalizar, podrás comunicarte con nosotros por WhatsApp para corregir o modificar cualquier detalle de tu reserva (fechas, horas, bicicletas o accesorios).
+                        </p>
+                    </div>
+                </>
             )}
 
             <AnimatePresence mode="wait">
@@ -1424,6 +1434,24 @@ export default function RentalCheckoutWizard({
                                 <p className="text-xs font-semibold text-brand-charcoal/70 leading-relaxed font-sans">
                                     Recibirás un correo electrónico cuando tu pedido esté listo para ser entregado.
                                 </p>
+                            </div>
+
+                            {/* WhatsApp Modification Alert Box */}
+                            <div className="bg-brand-charcoal text-white rounded-2xl p-5 text-xs font-sans space-y-2 flex flex-col items-center text-center shadow-md">
+                                <p className="font-black text-brand-yellow uppercase tracking-wider text-xs flex items-center gap-1.5">
+                                    <span>⚠️</span> ¿DESEAS MODIFICAR O CAMBIAR TU PEDIDO?
+                                </p>
+                                <p className="font-semibold text-white/95 leading-relaxed">
+                                    Si quieres cambiar la fecha, hora, tipo de bicicleta, accesorios o dirección de tu reserva, ¡no te preocupes! Escríbenos directamente por WhatsApp y lo modificaremos de inmediato por ti.
+                                </p>
+                                <a 
+                                    href={`https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(`Hola Briz, acabo de realizar mi pedido con código ${reservationCode} y me gustaría realizar una modificación.`)}`}
+                                    target="_blank" 
+                                    rel="noreferrer" 
+                                    className="mt-1.5 inline-flex items-center gap-1.5 bg-brand-yellow text-brand-black px-5 py-2.5 rounded-xl font-black uppercase text-[10px] tracking-widest hover:bg-brand-yellow-light transition-all shadow-md cursor-pointer hover:scale-102"
+                                >
+                                    <MessageSquare className="w-3.5 h-3.5" /> Modificar pedido por WhatsApp
+                                </a>
                             </div>
 
                             {/* Order details Card */}
