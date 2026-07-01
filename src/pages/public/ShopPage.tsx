@@ -1,4 +1,5 @@
-import { useState, useMemo, useRef } from 'react';
+import { useState, useMemo, useRef, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Search, ShoppingCart, MessageCircle, X, Plus, Minus, ChevronRight, Bike, Wrench } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -48,6 +49,21 @@ export default function ShopPage() {
     const [expandedCategory, setExpandedCategory] = useState<string | null>(null);
     const [showCart, setShowCart] = useState(false);
     const [checkoutStep, setCheckoutStep] = useState<'cart' | 'checkout'>('cart');
+
+    const [searchParams] = useSearchParams();
+
+    // Initialize and update selected category from URL search params
+    useEffect(() => {
+        const cat = searchParams.get('category');
+        if (cat) {
+            const decodedCat = decodeURIComponent(cat);
+            setCategory(decodedCat);
+            setExpandedCategory(decodedCat);
+        } else {
+            setCategory('Todas');
+            setExpandedCategory(null);
+        }
+    }, [searchParams]);
 
     // Dynamic Scroll Container Refs
     const scrollRefs = useRef<Record<string, HTMLDivElement | null>>({});

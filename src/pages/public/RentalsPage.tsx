@@ -1,7 +1,7 @@
-import { useState, useMemo, useRef } from 'react';
+import { useState, useMemo, useRef, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Search, Bike, ChevronRight, ShoppingCart, ShoppingBag } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -100,6 +100,21 @@ export default function RentalsPage() {
   const [category, setCategory] = useState('Todas');
   const [expandedCategory, setExpandedCategory] = useState<string | null>(null);
   const [selected, setSelected] = useState<DisplayProduct | null>(null);
+
+  const [searchParams] = useSearchParams();
+
+  // Initialize and update selected category from URL search params
+  useEffect(() => {
+    const cat = searchParams.get('category');
+    if (cat) {
+      const decodedCat = decodeURIComponent(cat);
+      setCategory(decodedCat);
+      setExpandedCategory(decodedCat);
+    } else {
+      setCategory('Todas');
+      setExpandedCategory(null);
+    }
+  }, [searchParams]);
   
   // Dynamic Scroll Container Refs
   const scrollRefs = useRef<Record<string, HTMLDivElement | null>>({});

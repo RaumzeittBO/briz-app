@@ -66,21 +66,105 @@ const TireTrackSeparator = ({ className = '', style }: { className?: string; sty
 import { useStore } from '@/context/StoreContext';
 import CustomerAuthModal from './CustomerAuthModal';
 
+const ALQUILER_CATEGORIES = [
+    { label: 'Urbanas', href: '/rentals?category=Urbanas' },
+    { label: 'Niñ@s', href: '/rentals?category=Niñ@s' },
+    { label: 'Montañeras', href: '/rentals?category=Montañeras' },
+    { label: 'De ruta / pista', href: '/rentals?category=De ruta / pista' },
+    { label: 'Antiguas', href: '/rentals?category=Antiguas' },
+    { label: 'Tándems', href: '/rentals?category=Tándems' },
+    { label: 'Triciclos', href: '/rentals?category=Triciclos' },
+    { label: 'Cuatriciclos', href: '/rentals?category=Cuatriciclos' },
+    { label: 'Accesorios', href: '/rentals?category=Accesorios' },
+    { label: 'Eventos', href: '/rentals?category=Eventos' },
+];
+
+const TIENDA_CATEGORIES = [
+    { label: 'Bicicletas a medio uso', href: '/shop?category=Bicicletas a medio uso' },
+    { label: 'Bicicletas nuevas', href: '/shop?category=Bicicletas nuevas' },
+    { label: 'Personalización', href: '/shop?category=Personalización' },
+    { label: 'Accesorios', href: '/shop?category=Accesorios' },
+    { label: 'Indumentaria', href: '/shop?category=Indumentaria' },
+    { label: 'Repuestos', href: '/shop?category=Repuestos' },
+    { label: 'Insumos y herramientas', href: '/shop?category=Insumos y herramientas' },
+    { label: 'Alimentos', href: '/shop?category=Alimentos' },
+];
+
+const MECANICA_CATEGORIES = [
+    { label: 'Planes de mantenimiento', href: '/service#planes' },
+    { label: 'Servicios adicionales', href: '/service#adicionales' },
+    { label: 'Cotizador en línea', href: '/service#cotizador' },
+    { label: 'Agendar turno', href: '/service#agenda-turno' },
+];
+
+const COMUNIDAD_CATEGORIES = [
+    { label: 'Eventos', href: '/community?tab=event' },
+    { label: 'Noticias', href: '/community?tab=post' },
+];
+
+const translateLabel = (label: string, lang: string) => {
+    if (lang === 'es') return label;
+    switch (label) {
+        // Alquiler
+        case 'Urbanas': return 'Urban';
+        case 'Niñ@s': return 'Kids';
+        case 'Montañeras': return 'Mountain';
+        case 'De ruta / pista': return 'Road / Track';
+        case 'Antiguas': return 'Vintage';
+        case 'Tándems': return 'Tandems';
+        case 'Triciclos': return 'Tricycles';
+        case 'Cuatriciclos': return 'Quadricycles';
+        case 'Accesorios': return 'Accessories';
+        case 'Eventos': return 'Events';
+        // Tienda
+        case 'Bicicletas a medio uso': return 'Pre-owned Bikes';
+        case 'Bicicletas nuevas': return 'New Bikes';
+        case 'Personalización': return 'Customization';
+        case 'Indumentaria': return 'Apparel';
+        case 'Repuestos': return 'Spare Parts';
+        case 'Insumos y herramientas': return 'Tools & Supplies';
+        case 'Alimentos': return 'Nutrition';
+        // Mecánica
+        case 'Planes de mantenimiento': return 'Maintenance Plans';
+        case 'Servicios adicionales': return 'Additional Services';
+        case 'Cotizador en línea': return 'Online Quoter';
+        case 'Agendar turno': return 'Book Turn';
+        // Comunidad
+        case 'Noticias': return 'News';
+        default: return label;
+    }
+};
+
 export default function Navbar() {
     const [scrolled, setScrolled] = useState(false);
     const [mobileOpen, setMobileOpen] = useState(false);
     const location = useLocation();
     const navigate = useNavigate();
     
-    const { currentCustomer, logoutCustomer } = useStore();
+    const { currentCustomer, logoutCustomer, routes } = useStore();
     const { language, setLanguage } = useLanguage();
     const [authModalOpen, setAuthModalOpen] = useState(false);
     const [langDropdownOpen, setLangDropdownOpen] = useState(false);
     const [mobileLangOpen, setMobileLangOpen] = useState(false);
 
+    const [mobileExpanded, setMobileExpanded] = useState<Record<string, boolean>>({
+        services: true, // Keep "Nuestros Servicios" open by default
+        Alquiler: false,
+        Tienda: false,
+        Ciclotours: false,
+        Mecánica: false,
+        Comunidad: false,
+    });
+
+    const toggleMobileSection = (section: string) => {
+        setMobileExpanded(prev => ({
+            ...prev,
+            [section]: !prev[section]
+        }));
+    };
+
     const group1 = getGroup1Links(language);
     const group2 = getGroup2Links(language);
-    const allLinks = [...group1, ...group2];
 
 
 
@@ -120,6 +204,82 @@ export default function Navbar() {
 
     const isActive = (href: string) => {
         return location.pathname === href;
+    };
+
+    const renderCollapsibleMenuItem = (
+        title: string, 
+        mainHref: string, 
+        Icon: LucideIcon, 
+        sectionKey: string, 
+        categoriesList: { label: string; href: string }[]
+    ) => {
+        const isExpanded = mobileExpanded[sectionKey];
+        const active = isActive(mainHref);
+        
+        return (
+            <div className="flex flex-col">
+                {/* Header row: text goes to main page, chevron toggles subcategories */}
+                <div className={`flex items-center justify-between rounded-2xl transition-colors ${active ? 'bg-white/34' : 'bg-white/12 hover:bg-white/22'}`}>
+                    <Link
+                        to={mainHref}
+                        onClick={(event) => handleNavClick(event, mainHref)}
+                        className="flex-1 flex min-w-0 items-center gap-3 px-4 py-3.5 font-cocon text-base font-bold text-brand-black"
+                    >
+                        <Icon className="h-5 w-5 shrink-0" strokeWidth={2.2} />
+                        <span className="min-w-0 flex-1 whitespace-normal break-words leading-tight notranslate">{title}</span>
+                    </Link>
+                    
+                    {categoriesList.length > 0 && (
+                        <button
+                            type="button"
+                            onClick={() => toggleMobileSection(sectionKey)}
+                            className="p-3.5 pr-4 border-l border-brand-black/5 hover:bg-white/10 rounded-r-2xl transition-colors cursor-pointer"
+                            aria-label={`Toggle ${title} subcategories`}
+                        >
+                            <motion.div
+                                animate={{ rotate: isExpanded ? 180 : 0 }}
+                                transition={{ duration: 0.2 }}
+                                className="flex items-center justify-center"
+                            >
+                                <ChevronDown className="w-4 h-4 text-brand-black/60" strokeWidth={2.5} />
+                            </motion.div>
+                        </button>
+                    )}
+                </div>
+
+                {/* Subcategory items container */}
+                <AnimatePresence initial={false}>
+                    {isExpanded && categoriesList.length > 0 && (
+                        <motion.div
+                            initial={{ height: 0, opacity: 0 }}
+                            animate={{ height: 'auto', opacity: 1 }}
+                            exit={{ height: 0, opacity: 0 }}
+                            transition={{ duration: 0.2, ease: 'easeInOut' }}
+                            className="overflow-hidden flex flex-col pl-8 pr-2 py-1 gap-1"
+                        >
+                            {categoriesList.map((cat) => (
+                                <Link
+                                    key={cat.label}
+                                    to={cat.href}
+                                    onClick={(event) => {
+                                        // If it is a hash anchor scroll on the same page, handle it smoothly
+                                        if (cat.href.includes('#') && location.pathname === cat.href.split('#')[0]) {
+                                            event.preventDefault();
+                                            const id = cat.href.split('#')[1];
+                                            document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                                        }
+                                        setMobileOpen(false);
+                                    }}
+                                    className="py-2.5 px-3 text-sm font-semibold text-brand-charcoal hover:text-brand-black hover:bg-white/10 rounded-xl transition-all block leading-tight notranslate"
+                                >
+                                    {translateLabel(cat.label, language)}
+                                </Link>
+                            ))}
+                        </motion.div>
+                    )}
+                </AnimatePresence>
+            </div>
+        );
     };
 
     return (
@@ -377,8 +537,84 @@ export default function Navbar() {
                         transition={{ duration: 0.2 }}
                         className="bg-brand-yellow px-4 pb-5 pt-3 shadow-[0_16px_30px_rgba(102,76,0,0.16)] lg:hidden"
                     >
-                        <div className="flex flex-col gap-1">
-                            {allLinks.map((link) => {
+                        <div className="flex flex-col gap-1.5 font-cocon text-base font-bold text-brand-black">
+                            {/* NUESTROS SERVICIOS Dropdown Header */}
+                            <div className="flex flex-col">
+                                <button
+                                    onClick={() => toggleMobileSection('services')}
+                                    className="flex w-full items-center justify-between px-4 py-3 bg-white/12 hover:bg-white/18 rounded-2xl text-left font-black uppercase text-xs tracking-wider border border-transparent cursor-pointer transition-colors"
+                                >
+                                    <span>{language === 'es' ? 'NUESTROS SERVICIOS' : 'OUR SERVICES'}</span>
+                                    <motion.span
+                                        animate={{ rotate: mobileExpanded.services ? 180 : 0 }}
+                                        transition={{ duration: 0.2 }}
+                                        className="flex items-center justify-center"
+                                    >
+                                        <ChevronDown className="w-4 h-4 text-brand-black/60" strokeWidth={2.5} />
+                                    </motion.span>
+                                </button>
+
+                                {/* Services Sub-menu Collapsible Container */}
+                                <AnimatePresence initial={false}>
+                                    {mobileExpanded.services && (
+                                        <motion.div
+                                            initial={{ height: 0, opacity: 0 }}
+                                            animate={{ height: 'auto', opacity: 1 }}
+                                            exit={{ height: 0, opacity: 0 }}
+                                            transition={{ duration: 0.2, ease: 'easeInOut' }}
+                                            className="overflow-hidden flex flex-col gap-1.5 pl-3 mt-1.5"
+                                        >
+                                            {/* ── ALQUILER ── */}
+                                            {renderCollapsibleMenuItem(
+                                                language === 'es' ? 'Alquiler' : 'Rentals', 
+                                                '/rentals', 
+                                                Bike, 
+                                                'Alquiler', 
+                                                ALQUILER_CATEGORIES
+                                            )}
+
+                                            {/* ── TIENDA ── */}
+                                            {renderCollapsibleMenuItem(
+                                                language === 'es' ? 'Tienda' : 'Shop', 
+                                                '/shop', 
+                                                Store, 
+                                                'Tienda', 
+                                                TIENDA_CATEGORIES
+                                            )}
+
+                                            {/* ── CICLOTOURS ── */}
+                                            {renderCollapsibleMenuItem(
+                                                language === 'es' ? 'Ciclotours' : 'Ciclotours', 
+                                                '/routes', 
+                                                Route, 
+                                                'Ciclotours', 
+                                                (routes || []).map(r => ({ label: r.name, href: `/routes#route_${r.id}` }))
+                                            )}
+
+                                            {/* ── MECÁNICA ── */}
+                                            {renderCollapsibleMenuItem(
+                                                language === 'es' ? 'Mecánica' : 'Mechanics', 
+                                                '/service', 
+                                                Wrench, 
+                                                'Mecánica', 
+                                                MECANICA_CATEGORIES
+                                            )}
+
+                                            {/* ── COMUNIDAD ── */}
+                                            {renderCollapsibleMenuItem(
+                                                language === 'es' ? 'Comunidad' : 'Community', 
+                                                '/community', 
+                                                HandHeart, 
+                                                'Comunidad', 
+                                                COMUNIDAD_CATEGORIES
+                                            )}
+                                        </motion.div>
+                                    )}
+                                </AnimatePresence>
+                            </div>
+
+                            {/* ── OTHER DIRECT LINKS (Conócenos / Preguntas Frecuentes) ── */}
+                            {group2.map((link) => {
                                 const Icon = link.icon;
                                 const active = isActive(link.href);
                                 return (
@@ -386,10 +622,12 @@ export default function Navbar() {
                                         key={link.label}
                                         to={link.href}
                                         onClick={(event) => handleNavClick(event, link.href)}
-                                        className={`flex min-w-0 items-center gap-3 rounded-2xl px-4 py-3.5 font-cocon text-base font-bold text-brand-black transition-colors ${active ? 'bg-white/34' : 'bg-white/12 hover:bg-white/22'}`}
+                                        className={`flex min-w-0 items-center gap-3 rounded-2xl px-4 py-3.5 font-cocon text-xs font-black uppercase tracking-wider text-brand-black transition-colors ${active ? 'bg-white/34' : 'bg-white/12 hover:bg-white/22'}`}
                                     >
-                                        <Icon className="h-5 w-5 shrink-0" strokeWidth={2.2} />
-                                        <span className={`min-w-0 flex-1 whitespace-normal break-words leading-tight notranslate ${link.label === 'Preguntas frecuentes' || link.label === 'FAQ' ? 'text-[15px]' : ''}`}>{link.label}</span>
+                                        <Icon className="h-4 w-4 shrink-0" strokeWidth={2.5} />
+                                        <span className="min-w-0 flex-1 whitespace-normal break-words leading-tight notranslate">
+                                            {link.label}
+                                        </span>
                                     </Link>
                                 );
                             })}

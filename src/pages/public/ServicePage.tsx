@@ -184,7 +184,7 @@ export default function ServicePage() {
         <div className="pt-[64px] lg:pt-[86px]">
 
             {/* Mechanics hero */}
-            <section className="py-12 sm:py-16 bg-gray-50/50">
+            <section id="planes" className="py-12 sm:py-16 bg-gray-50/50">
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                     <motion.div
                         initial={{ opacity: 0, y: 26, scale: 0.98 }}
@@ -289,8 +289,7 @@ export default function ServicePage() {
                 </div>
             </section>
 
-            {/* Extra services */}
-            <section className="py-12 sm:py-20 bg-[#FFFDF3]">
+            <section id="adicionales" className="py-12 sm:py-20 bg-[#FFFDF3]">
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                     <motion.div {...fadeUp} className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between mb-6 sm:mb-9">
                         <div>

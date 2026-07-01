@@ -1,4 +1,5 @@
-import { useMemo, useState, type FormEvent } from 'react';
+import { useMemo, useState, useEffect, type FormEvent } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { CalendarDays, FileText, MapPin, PenLine, Plus, Search, UserRound } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -19,6 +20,18 @@ export default function CommunityPage() {
     const [search, setSearch] = useState('');
     const [composer, setComposer] = useState<CommunityItemType | null>(null);
     const [authOpen, setAuthOpen] = useState(false);
+
+    const [searchParams] = useSearchParams();
+
+    // Initialize and update selected tab from URL search params
+    useEffect(() => {
+        const type = searchParams.get('tab');
+        if (type === 'post' || type === 'event') {
+            setTab(type);
+        } else {
+            setTab('all');
+        }
+    }, [searchParams]);
     const [form, setForm] = useState(emptyForm);
     const [sending, setSending] = useState(false);
 
