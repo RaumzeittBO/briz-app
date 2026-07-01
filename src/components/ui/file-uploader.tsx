@@ -6,43 +6,47 @@ import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage
 export const compressImage = (file: File, maxW = 1200, maxH = 1200, quality = 0.75): Promise<Blob> => {
     return new Promise((resolve, reject) => {
         const reader = new FileReader();
-        reader.readAsDataURL(file);
         reader.onload = (event) => {
             const img = new Image();
-            img.src = event.target?.result as string;
             img.onload = () => {
-                const canvas = document.createElement('canvas');
-                let width = img.width;
-                let height = img.height;
+                try {
+                    const canvas = document.createElement('canvas');
+                    let width = img.width;
+                    let height = img.height;
 
-                if (width > height) {
-                    if (width > maxW) {
-                        height = Math.round((height * maxW) / width);
-                        width = maxW;
-                    }
-                } else {
-                    if (height > maxH) {
-                        width = Math.round((width * maxH) / height);
-                        height = maxH;
-                    }
-                }
-
-                canvas.width = width;
-                canvas.height = height;
-                const ctx = canvas.getContext('2d');
-                ctx?.drawImage(img, 0, 0, width, height);
-
-                canvas.toBlob((blob) => {
-                    if (blob) {
-                        resolve(blob);
+                    if (width > height) {
+                        if (width > maxW) {
+                            height = Math.round((height * maxW) / width);
+                            width = maxW;
+                        }
                     } else {
-                        reject(new Error('Canvas compression returned null blob'));
+                        if (height > maxH) {
+                            width = Math.round((width * maxH) / height);
+                            height = maxH;
+                        }
                     }
-                }, 'image/jpeg', quality);
+
+                    canvas.width = width;
+                    canvas.height = height;
+                    const ctx = canvas.getContext('2d');
+                    ctx?.drawImage(img, 0, 0, width, height);
+
+                    canvas.toBlob((blob) => {
+                        if (blob) {
+                            resolve(blob);
+                        } else {
+                            reject(new Error('Canvas compression returned null blob'));
+                        }
+                    }, 'image/jpeg', quality);
+                } catch (err) {
+                    reject(err);
+                }
             };
-            img.onerror = (err) => reject(err);
+            img.onerror = () => reject(new Error('Error al cargar la imagen en memoria'));
+            img.src = event.target?.result as string;
         };
-        reader.onerror = (err) => reject(err);
+        reader.onerror = () => reject(new Error('Error al leer el archivo de imagen'));
+        reader.readAsDataURL(file);
     });
 };
 
@@ -62,21 +66,29 @@ export const uploadCompressedImage = async (file: File, folder: string): Promise
 };
 
 interface FileUploaderProps {
-    onUpload: (url: string) => void;
+    onUpload?: (url: string) => void;
+    onUploadMultiple?: (urls: string[]) => void;
     folder: string;
     className?: string;
+    multiple?: boolean;
 }
 
-export function FileUploader({ onUpload, folder, className = '' }: FileUploaderProps) {
+export function FileUploader({ onUpload, onUploadMultiple, folder, className = '', multiple = false }: FileUploaderProps) {
     const [uploading, setUploading] = useState(false);
 
     const handleChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        if (!file) return;
+        const files = Array.from(e.target.files || []);
+        if (files.length === 0) return;
         setUploading(true);
         try {
-            const url = await uploadCompressedImage(file, folder);
-            onUpload(url);
+            const urls = await Promise.all(
+                files.map(file => uploadCompressedImage(file, folder))
+            );
+            if (multiple && onUploadMultiple) {
+                onUploadMultiple(urls);
+            } else if (onUpload) {
+                urls.forEach(url => onUpload(url));
+            }
         } catch (err: any) {
             alert('Error al subir imagen: ' + (err.message || err));
         } finally {
@@ -100,7 +112,7 @@ export function FileUploader({ onUpload, folder, className = '' }: FileUploaderP
                     <span>Subir</span>
                 </>
             )}
-            <input type="file" accept="image/*" onChange={handleChange} className="hidden" />
+            <input type="file" accept="image/*" multiple={multiple} onChange={handleChange} className="hidden" />
         </label>
     );
 }

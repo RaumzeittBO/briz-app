@@ -207,12 +207,18 @@ export interface ServiceOrder {
     date: string;
 }
 
+export interface EventSubcategory {
+    name: string;
+    images: string[];
+}
+
 export interface EventItem {
     id: string;
     name: string;
     description: string;
-    images: string[];
+    subcategories: EventSubcategory[];
     price?: number;
+    images?: string[];
 }
 
 const LOCAL_ROUTES_KEY = 'briz_local_routes';

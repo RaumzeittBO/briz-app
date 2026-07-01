@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
-import { useStore, type EventItem } from '@/context/StoreContext';
+import { useStore, type EventItem, type EventSubcategory } from '@/context/StoreContext';
 import { Search, Edit, Calendar, Plus, Trash2, Image as ImageIcon, X } from 'lucide-react';
 import { FileUploader } from '@/components/ui/file-uploader';
 
@@ -22,7 +22,9 @@ export default function AdminEventsPage() {
     const [name, setName] = useState('');
     const [description, setDescription] = useState('');
     const [priceStr, setPriceStr] = useState('');
-    const [images, setImages] = useState<string[]>([]);
+    const [subcategories, setSubcategories] = useState<EventSubcategory[]>([]);
+    const [activeSubIndex, setActiveSubIndex] = useState<number | null>(null);
+    const [newSubName, setNewSubName] = useState('');
 
     const filtered = (events || []).filter(e =>
         e.name.toLowerCase().includes(search.toLowerCase()) ||
@@ -42,29 +44,94 @@ export default function AdminEventsPage() {
             setName(eventItem.name);
             setDescription(eventItem.description);
             setPriceStr(eventItem.price !== undefined ? String(eventItem.price) : '');
-            setImages(eventItem.images || []);
+            
+            // Backwards compatibility migration
+            const loadedSubs = eventItem.subcategories ? [...eventItem.subcategories] : [];
+            if (loadedSubs.length === 0 && eventItem.images && eventItem.images.length > 0) {
+                loadedSubs.push({ name: 'General', images: eventItem.images });
+            }
+            
+            setSubcategories(loadedSubs);
+            setActiveSubIndex(loadedSubs.length > 0 ? 0 : null);
+            setNewSubName('');
         } else {
             setCurrentId(null);
             setName('');
             setDescription('');
             setPriceStr('');
-            setImages([]);
+            setSubcategories([]);
+            setActiveSubIndex(null);
+            setNewSubName('');
         }
         setIsModalOpen(true);
+    };
+
+    const addSubcategory = () => {
+        const trimmed = newSubName.trim();
+        if (!trimmed) return alert('El nombre de la subcategoría es requerido');
+        if (subcategories.some(s => s.name.toLowerCase() === trimmed.toLowerCase())) {
+            return alert('Ya existe una subcategoría con este nombre');
+        }
+        const updated = [...subcategories, { name: trimmed, images: [] }];
+        setSubcategories(updated);
+        setNewSubName('');
+        setActiveSubIndex(updated.length - 1);
+    };
+
+    const removeSubcategory = (e: React.MouseEvent, index: number) => {
+        e.stopPropagation();
+        if (confirm(`¿Estás seguro de eliminar la subcategoría "${subcategories[index].name}" y todas sus fotos?`)) {
+            const updated = subcategories.filter((_, i) => i !== index);
+            setSubcategories(updated);
+            if (activeSubIndex === index) {
+                setActiveSubIndex(updated.length > 0 ? 0 : null);
+            } else if (activeSubIndex !== null && activeSubIndex > index) {
+                setActiveSubIndex(activeSubIndex - 1);
+            }
+        }
+    };
+
+    const handleUploadMultiple = (urls: string[]) => {
+        if (activeSubIndex === null) return;
+        setSubcategories(prev => prev.map((sub, i) => {
+            if (i === activeSubIndex) {
+                return {
+                    ...sub,
+                    images: [...(sub.images || []), ...urls]
+                };
+            }
+            return sub;
+        }));
+    };
+
+    const removeImageFromSub = (imgIndex: number) => {
+        if (activeSubIndex === null) return;
+        setSubcategories(prev => prev.map((sub, i) => {
+            if (i === activeSubIndex) {
+                return {
+                    ...sub,
+                    images: (sub.images || []).filter((_, idx) => idx !== imgIndex)
+                };
+            }
+            return sub;
+        }));
     };
 
     const handleSave = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!name.trim()) return alert('El nombre es requerido');
         if (!description.trim()) return alert('La descripción es requerida');
-        if (images.length === 0) return alert('Debes subir al menos una foto para este evento');
+        if (subcategories.length === 0) return alert('Debes crear al menos una subcategoría');
+        
+        const totalPhotos = subcategories.reduce((sum, sub) => sum + (sub.images || []).length, 0);
+        if (totalPhotos === 0) return alert('Debes subir al menos una foto en alguna de las subcategorías');
 
         try {
             const eventData: EventItem = {
                 id: currentId || `event-${Date.now()}`,
                 name,
                 description,
-                images,
+                subcategories,
                 price: priceStr.trim() ? Number(priceStr) : undefined
             };
 
@@ -78,10 +145,6 @@ export default function AdminEventsPage() {
             console.error('Error saving event:', error);
             alert(`Error al guardar el evento: ${error.message || error}`);
         }
-    };
-
-    const removeImage = (index: number) => {
-        setImages(current => current.filter((_, i) => i !== index));
     };
 
     return (
@@ -121,56 +184,61 @@ export default function AdminEventsPage() {
                 </div>
             ) : (
                 <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {filtered.map(e => (
-                        <Card key={e.id} className="bg-[#1A1A1A] border-white/5 rounded-[1.5rem] hover:border-white/10 transition-all duration-300 shadow-xl flex flex-col group overflow-hidden">
-                            <CardContent className="p-0 flex-1 flex flex-col">
-                                {/* Images Grid Preview */}
-                                <div className="relative aspect-[16/10] bg-black/40 overflow-hidden flex items-center justify-center">
-                                    {e.images && e.images.length > 0 ? (
-                                        <img src={e.images[0]} alt={e.name} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" />
-                                    ) : (
-                                        <ImageIcon className="w-12 h-12 text-white/10" />
-                                    )}
-                                    {e.images && e.images.length > 1 && (
-                                        <div className="absolute bottom-3 right-3 bg-black/75 px-2.5 py-1 rounded-md text-[10px] font-black uppercase text-brand-yellow border border-brand-yellow/20">
-                                            +{e.images.length - 1} Fotos
-                                        </div>
-                                    )}
-                                </div>
+                    {filtered.map(e => {
+                        const totalSubs = e.subcategories ? e.subcategories.length : 0;
+                        const totalImages = (e.subcategories || []).reduce((sum, sub) => sum + (sub.images?.length || 0), 0) + (e.images?.length || 0);
+                        const firstImage = (e.subcategories?.[0]?.images?.[0]) || (e.images?.[0]) || '';
 
-                                <div className="p-6 flex-1 flex flex-col justify-between">
-                                    <div className="space-y-3">
-                                        <div className="flex items-start justify-between gap-4">
-                                            <h3 className="text-xl font-black text-white truncate leading-none">{e.name}</h3>
-                                            {e.price !== undefined ? (
-                                                <span className="text-sm font-black text-brand-yellow whitespace-nowrap bg-brand-yellow/10 px-2.5 py-1 rounded-md">Bs. {e.price}</span>
-                                            ) : (
-                                                <span className="text-[10px] font-black text-white/40 uppercase whitespace-nowrap bg-white/5 px-2 py-0.5 rounded-md">Exhibición</span>
-                                            )}
+                        return (
+                            <Card key={e.id} className="bg-[#1A1A1A] border-white/5 rounded-[1.5rem] hover:border-white/10 transition-all duration-300 shadow-xl flex flex-col group overflow-hidden">
+                                <CardContent className="p-0 flex-1 flex flex-col">
+                                    {/* Images Grid Preview */}
+                                    <div className="relative aspect-[16/10] bg-black/40 overflow-hidden flex items-center justify-center">
+                                        {firstImage ? (
+                                            <img src={firstImage} alt={e.name} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" />
+                                        ) : (
+                                            <ImageIcon className="w-12 h-12 text-white/10" />
+                                        )}
+                                        <div className="absolute bottom-3 right-3 bg-black/75 px-2.5 py-1 rounded-md text-[10px] font-black uppercase text-brand-yellow border border-brand-yellow/20 flex flex-col gap-0.5 items-end">
+                                            <span>{totalSubs} Subcategorías</span>
+                                            <span>{totalImages} Fotos</span>
                                         </div>
-                                        <p className="text-white/60 text-xs font-bold leading-relaxed line-clamp-3">{e.description}</p>
                                     </div>
 
-                                    <div className="flex gap-2.5 pt-6 border-t border-white/5 mt-6">
-                                        <Button 
-                                            variant="ghost" 
-                                            onClick={() => openModal('edit', e)}
-                                            className="flex-1 rounded-xl bg-white/5 text-white/70 hover:bg-brand-yellow hover:text-brand-black font-black text-xs h-11"
-                                        >
-                                            <Edit className="w-4 h-4 mr-2" /> Editar
-                                        </Button>
-                                        <Button 
-                                            variant="ghost" 
-                                            onClick={() => handleDelete(e.id, e.name)}
-                                            className="rounded-xl bg-white/5 text-red-400/60 hover:bg-red-500 hover:text-white w-11 h-11 p-0 shrink-0"
-                                        >
-                                            <Trash2 className="w-4 h-4" />
-                                        </Button>
+                                    <div className="p-6 flex-1 flex flex-col justify-between">
+                                        <div className="space-y-3">
+                                            <div className="flex items-start justify-between gap-4">
+                                                <h3 className="text-xl font-black text-white truncate leading-none">{e.name}</h3>
+                                                {e.price !== undefined ? (
+                                                    <span className="text-sm font-black text-brand-yellow whitespace-nowrap bg-brand-yellow/10 px-2.5 py-1 rounded-md">Bs. {e.price}</span>
+                                                ) : (
+                                                    <span className="text-[10px] font-black text-white/40 uppercase whitespace-nowrap bg-white/5 px-2 py-0.5 rounded-md">Exhibición</span>
+                                                )}
+                                            </div>
+                                            <p className="text-white/60 text-xs font-bold leading-relaxed line-clamp-3">{e.description}</p>
+                                        </div>
+
+                                        <div className="flex gap-2.5 pt-6 border-t border-white/5 mt-6">
+                                            <Button 
+                                                variant="ghost" 
+                                                onClick={() => openModal('edit', e)}
+                                                className="flex-1 rounded-xl bg-white/5 text-white/70 hover:bg-brand-yellow hover:text-brand-black font-black text-xs h-11 cursor-pointer"
+                                            >
+                                                <Edit className="w-4 h-4 mr-2" /> Editar
+                                            </Button>
+                                            <Button 
+                                                variant="ghost" 
+                                                onClick={() => handleDelete(e.id, e.name)}
+                                                className="rounded-xl bg-white/5 text-red-400/60 hover:bg-red-500 hover:text-white w-11 h-11 p-0 shrink-0 cursor-pointer"
+                                            >
+                                                <Trash2 className="w-4 h-4" />
+                                            </Button>
+                                        </div>
                                     </div>
-                                </div>
-                            </CardContent>
-                        </Card>
-                    ))}
+                                </CardContent>
+                            </Card>
+                        );
+                    })}
                 </div>
             )}
 
@@ -215,41 +283,112 @@ export default function AdminEventsPage() {
                                 value={description} 
                                 onChange={e => setDescription(e.target.value)} 
                                 placeholder="Describe detalladamente qué incluye este paquete de evento..." 
-                                rows={4}
+                                rows={3}
                                 required 
                                 className="bg-white/5 border-white/10 text-white rounded-xl placeholder:text-white/20 focus-visible:ring-brand-yellow/30 resize-none p-4"
                             />
                         </div>
 
-                        <div className="space-y-4">
-                            <div className="flex items-center justify-between">
-                                <Label className="text-white/60 font-black text-xs uppercase tracking-widest">Galería de Fotos (Subir Varias)</Label>
-                                <FileUploader 
-                                    folder="events" 
-                                    onUpload={(url) => setImages(current => [...current, url])} 
-                                    className="h-9 px-4 flex items-center justify-center gap-1.5 rounded-xl border border-brand-yellow bg-brand-yellow/5 hover:bg-brand-yellow/10 text-[10px] font-black uppercase text-brand-yellow transition-all cursor-pointer"
+                        {/* SUB-CATEGORIES SECTION */}
+                        <div className="space-y-4 border-t border-white/5 pt-4">
+                            <Label className="text-brand-yellow font-black text-sm uppercase tracking-widest block">Subcategorías de Fotos</Label>
+                            
+                            {/* Input to add subcategory */}
+                            <div className="flex gap-2">
+                                <Input 
+                                    value={newSubName} 
+                                    onChange={e => setNewSubName(e.target.value)} 
+                                    placeholder="Ej: Decoración, Mesa Dulce, Iluminación..." 
+                                    className="h-11 bg-white/5 border-white/10 text-white rounded-xl placeholder:text-white/20 focus-visible:ring-brand-yellow/30"
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Enter') {
+                                            e.preventDefault();
+                                            addSubcategory();
+                                        }
+                                    }}
                                 />
+                                <Button 
+                                    type="button" 
+                                    onClick={addSubcategory}
+                                    className="bg-white text-brand-black hover:bg-brand-yellow font-black h-11 px-5 rounded-xl cursor-pointer"
+                                >
+                                    Agregar
+                                </Button>
                             </div>
 
-                            {images.length === 0 ? (
-                                <div className="border border-dashed border-white/10 rounded-2xl p-8 text-center flex flex-col items-center justify-center gap-2">
-                                    <ImageIcon className="w-10 h-10 text-white/10" />
-                                    <p className="text-white/30 text-xs font-bold">No hay fotos en la galería de este evento</p>
+                            {/* List of subcategories as tabs/pills */}
+                            {subcategories.length === 0 ? (
+                                <div className="border border-dashed border-white/5 rounded-2xl p-6 text-center text-white/30 text-xs font-bold">
+                                    No has creado ninguna subcategoría. Crea una arriba para subir fotos.
                                 </div>
                             ) : (
-                                <div className="grid grid-cols-3 sm:grid-cols-4 gap-3 bg-white/[0.02] border border-white/5 rounded-2xl p-4">
-                                    {images.map((url, index) => (
-                                        <div key={index} className="relative aspect-square rounded-xl overflow-hidden group border border-white/10 bg-black/40">
-                                            <img src={url} className="w-full h-full object-cover" alt="" />
-                                            <button 
-                                                type="button" 
-                                                onClick={() => removeImage(index)}
-                                                className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex items-center justify-center text-red-400 hover:text-red-300 transition-opacity"
+                                <div className="flex flex-wrap gap-2">
+                                    {subcategories.map((sub, idx) => {
+                                        const isActive = activeSubIndex === idx;
+                                        return (
+                                            <div 
+                                                key={idx}
+                                                onClick={() => setActiveSubIndex(idx)}
+                                                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl border text-xs font-black uppercase cursor-pointer transition-all ${
+                                                    isActive 
+                                                        ? 'bg-brand-yellow text-brand-black border-brand-yellow shadow-md scale-102' 
+                                                        : 'bg-white/5 text-white/60 border-white/10 hover:border-white/30'
+                                                }`}
                                             >
-                                                <X className="w-5 h-5" />
-                                            </button>
+                                                <span>{sub.name} ({sub.images?.length || 0})</span>
+                                                <button
+                                                    type="button"
+                                                    onClick={(e) => removeSubcategory(e, idx)}
+                                                    className={`hover:text-red-500 transition-colors p-0.5 rounded ${isActive ? 'text-brand-black/60 hover:text-red-700' : 'text-white/40'}`}
+                                                    title="Eliminar subcategoría"
+                                                >
+                                                    <X className="w-3.5 h-3.5" />
+                                                </button>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            )}
+
+                            {/* Active subcategory photo uploader */}
+                            {activeSubIndex !== null && subcategories[activeSubIndex] && (
+                                <div className="bg-white/[0.02] border border-white/5 rounded-2xl p-4 space-y-4">
+                                    <div className="flex items-center justify-between">
+                                        <div className="space-y-0.5">
+                                            <h4 className="text-white font-black text-xs uppercase tracking-wide">
+                                                Fotos en: <span className="text-brand-yellow font-black">{subcategories[activeSubIndex].name}</span>
+                                            </h4>
+                                            <p className="text-[10px] text-white/40 font-bold">Puedes seleccionar múltiples archivos a la vez</p>
                                         </div>
-                                    ))}
+                                        <FileUploader 
+                                            folder="events" 
+                                            multiple={true}
+                                            onUploadMultiple={handleUploadMultiple} 
+                                            className="h-9 px-4 flex items-center justify-center gap-1.5 rounded-xl border border-brand-yellow bg-brand-yellow/5 hover:bg-brand-yellow/10 text-[10px] font-black uppercase text-brand-yellow transition-all cursor-pointer"
+                                        />
+                                    </div>
+
+                                    {(!subcategories[activeSubIndex].images || subcategories[activeSubIndex].images.length === 0) ? (
+                                        <div className="border border-dashed border-white/10 rounded-xl p-8 text-center flex flex-col items-center justify-center gap-2">
+                                            <ImageIcon className="w-8 h-8 text-white/10" />
+                                            <p className="text-white/30 text-xs font-bold">No hay fotos en esta subcategoría</p>
+                                        </div>
+                                    ) : (
+                                        <div className="grid grid-cols-3 sm:grid-cols-4 gap-3">
+                                            {subcategories[activeSubIndex].images.map((url, index) => (
+                                                <div key={index} className="relative aspect-square rounded-xl overflow-hidden group border border-white/10 bg-black/40">
+                                                    <img src={url} className="w-full h-full object-cover" alt="" />
+                                                    <button 
+                                                        type="button" 
+                                                        onClick={() => removeImageFromSub(index)}
+                                                        className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex items-center justify-center text-red-400 hover:text-red-300 transition-opacity"
+                                                    >
+                                                        <X className="w-5 h-5" />
+                                                    </button>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
                                 </div>
                             )}
                         </div>

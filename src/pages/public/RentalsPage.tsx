@@ -1,6 +1,6 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Search, Bike, ChevronRight, ChevronLeft, ShoppingCart, ShoppingBag } from 'lucide-react';
+import { Search, Bike, ChevronRight, ChevronLeft, ShoppingCart, ShoppingBag, Image as ImageIcon } from 'lucide-react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -639,20 +639,35 @@ export default function RentalsPage() {
 }
 
 function EventSpecialView({ event, onClose, language }: { event: any; onClose: () => void; language: string }) {
+    const [activeSubIndex, setActiveSubIndex] = useState(0);
     const [activeIndex, setActiveIndex] = useState(0);
 
+    const subcategories = event.subcategories || [];
+    const hasSubcategories = subcategories.length > 0;
+
+    const currentImages = hasSubcategories
+        ? (subcategories[activeSubIndex]?.images || [])
+        : (event.images || []);
+
+    // Reset carousel image index when subcategory changes
+    useEffect(() => {
+        setActiveIndex(0);
+    }, [activeSubIndex]);
+
     const handlePrev = () => {
-        setActiveIndex((prev) => (prev === 0 ? event.images.length - 1 : prev - 1));
+        if (currentImages.length === 0) return;
+        setActiveIndex((prev) => (prev === 0 ? currentImages.length - 1 : prev - 1));
     };
 
     const handleNext = () => {
-        setActiveIndex((prev) => (prev === event.images.length - 1 ? 0 : prev + 1));
+        if (currentImages.length === 0) return;
+        setActiveIndex((prev) => (prev === currentImages.length - 1 ? 0 : prev + 1));
     };
 
     const waLink = `https://wa.me/59177860277?text=${encodeURIComponent(
         language === 'es' 
-            ? `Hola Briz, deseo consultar sobre el evento especial de alquiler: ${event.name}`
-            : `Hello Briz, I want to inquire about the special rental event: ${event.name}`
+            ? `Hola Briz, deseo consultar sobre el evento especial de alquiler: ${event.name} (Subcategoría: ${hasSubcategories ? subcategories[activeSubIndex]?.name : 'General'})`
+            : `Hello Briz, I want to inquire about the special rental event: ${event.name} (Subcategory: ${hasSubcategories ? subcategories[activeSubIndex]?.name : 'General'})`
     )}`;
 
     return (
@@ -665,46 +680,77 @@ function EventSpecialView({ event, onClose, language }: { event: any; onClose: (
                 {language === 'es' ? '← Volver a categorías' : '← Back to categories'}
             </button>
 
+            {/* Subcategory selection tabs */}
+            {hasSubcategories && (
+                <div className="flex flex-wrap gap-2.5 mb-8 bg-white border border-gray-100/85 rounded-[1.8rem] p-3 shadow-sm">
+                    {subcategories.map((sub: any, idx: number) => {
+                        const isSelected = activeSubIndex === idx;
+                        return (
+                            <button
+                                key={idx}
+                                onClick={() => setActiveSubIndex(idx)}
+                                className={`px-5 py-3 rounded-xl text-[10px] sm:text-xs font-black uppercase tracking-wider transition-all cursor-pointer ${
+                                    isSelected 
+                                        ? 'bg-brand-yellow text-brand-black shadow-sm scale-102' 
+                                        : 'bg-gray-50 text-gray-500 hover:bg-gray-100 hover:text-brand-black'
+                                }`}
+                            >
+                                {sub.name}
+                            </button>
+                        );
+                    })}
+                </div>
+            )}
+
             <div className="grid gap-10 lg:grid-cols-12 bg-white rounded-[2.5rem] border border-gray-100 p-6 sm:p-10 shadow-lg overflow-hidden">
                 {/* Left Side: Photo Carousel */}
                 <div className="lg:col-span-7 flex flex-col gap-4">
                     {/* Main Active Image Display */}
                     <div className="relative aspect-[16/10] bg-gray-50 rounded-2xl overflow-hidden group border border-gray-100 flex items-center justify-center">
-                        <AnimatePresence mode="wait">
-                            <motion.img
-                                key={activeIndex}
-                                src={event.images[activeIndex]}
-                                initial={{ opacity: 0 }}
-                                animate={{ opacity: 1 }}
-                                exit={{ opacity: 0 }}
-                                transition={{ duration: 0.3 }}
-                                className="w-full h-full object-cover"
-                            />
-                        </AnimatePresence>
-
-                        {/* Navigation Arrows */}
-                        {event.images.length > 1 && (
+                        {currentImages.length > 0 ? (
                             <>
-                                <button
-                                    onClick={handlePrev}
-                                    className="absolute left-3 top-1/2 -translate-y-1/2 bg-black/60 hover:bg-black text-white p-2.5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
-                                >
-                                    <ChevronLeft className="w-4 h-4" />
-                                </button>
-                                <button
-                                    onClick={handleNext}
-                                    className="absolute right-3 top-1/2 -translate-y-1/2 bg-black/60 hover:bg-black text-white p-2.5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
-                                >
-                                    <ChevronRight className="w-4 h-4" />
-                                </button>
+                                <AnimatePresence mode="wait">
+                                    <motion.img
+                                        key={`${activeSubIndex}-${activeIndex}`}
+                                        src={currentImages[activeIndex]}
+                                        initial={{ opacity: 0 }}
+                                        animate={{ opacity: 1 }}
+                                        exit={{ opacity: 0 }}
+                                        transition={{ duration: 0.3 }}
+                                        className="w-full h-full object-cover"
+                                    />
+                                </AnimatePresence>
+
+                                {/* Navigation Arrows */}
+                                {currentImages.length > 1 && (
+                                    <>
+                                        <button
+                                            onClick={handlePrev}
+                                            className="absolute left-3 top-1/2 -translate-y-1/2 bg-black/60 hover:bg-black text-white p-2.5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
+                                        >
+                                            <ChevronLeft className="w-4 h-4" />
+                                        </button>
+                                        <button
+                                            onClick={handleNext}
+                                            className="absolute right-3 top-1/2 -translate-y-1/2 bg-black/60 hover:bg-black text-white p-2.5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
+                                        >
+                                            <ChevronRight className="w-4 h-4" />
+                                        </button>
+                                    </>
+                                )}
                             </>
+                        ) : (
+                            <div className="flex flex-col items-center justify-center gap-2 text-gray-300">
+                                <ImageIcon className="w-12 h-12" />
+                                <span className="text-xs font-bold">No hay fotos disponibles</span>
+                            </div>
                         )}
                     </div>
 
                     {/* Thumbnails Row */}
-                    {event.images.length > 1 && (
+                    {currentImages.length > 1 && (
                         <div className="flex gap-2 overflow-x-auto py-1 scroll-smooth no-scrollbar">
-                            {event.images.map((img: string, idx: number) => (
+                            {currentImages.map((img: string, idx: number) => (
                                 <button
                                     key={idx}
                                     onClick={() => setActiveIndex(idx)}
@@ -712,7 +758,7 @@ function EventSpecialView({ event, onClose, language }: { event: any; onClose: (
                                         activeIndex === idx ? 'border-brand-yellow scale-102 shadow-md' : 'border-transparent hover:border-gray-200'
                                     }`}
                                 >
-                                    <img src={img} className="w-full h-full object-cover animate-fade-in" />
+                                    <img src={img} className="w-full h-full object-cover" />
                                 </button>
                             ))}
                         </div>
