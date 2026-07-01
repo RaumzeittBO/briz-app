@@ -435,7 +435,7 @@ export default function Navbar() {
 
                                         {/* Desktop Dropdown on Hover - Horizontal strip style */}
                                         {categoriesList.length > 0 && (
-                                            <div className="absolute left-0 right-0 top-[82px] pt-1 opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto transition-all duration-200 z-40">
+                                            <div className="absolute left-0 right-0 top-[55px] pt-[27px] opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto transition-all duration-200 z-40">
                                                 <div className="bg-brand-yellow border-t border-white/20 py-3.5 shadow-lg flex items-center justify-center gap-x-8 gap-y-3 flex-wrap px-6 rounded-b-[1.5rem]">
                                                     {categoriesList.map((cat: any) => (
                                                         <Link

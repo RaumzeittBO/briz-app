@@ -758,7 +758,7 @@ function EventSpecialView({ event, onClose, language }: { event: any; onClose: (
                 {/* Left Side: Photo Carousel */}
                 <div className="lg:col-span-7 flex flex-col gap-4">
                     {/* Main Active Image Display */}
-                    <div className="relative aspect-[16/10] bg-gray-50 rounded-2xl overflow-hidden group border border-gray-100 flex items-center justify-center">
+                    <div className="relative w-full h-[280px] xs:h-[350px] sm:h-[450px] md:h-[500px] bg-gray-50 rounded-2xl overflow-hidden group border border-gray-100 flex items-center justify-center">
                         {currentImages.length > 0 ? (
                             <>
                                 <AnimatePresence mode="wait">
@@ -769,7 +769,7 @@ function EventSpecialView({ event, onClose, language }: { event: any; onClose: (
                                         animate={{ opacity: 1 }}
                                         exit={{ opacity: 0 }}
                                         transition={{ duration: 0.3 }}
-                                        className="w-full h-full object-contain"
+                                        className="max-w-full max-h-full object-contain block"
                                     />
                                 </AnimatePresence>
 
