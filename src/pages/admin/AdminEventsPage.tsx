@@ -132,7 +132,7 @@ export default function AdminEventsPage() {
                 name,
                 description,
                 subcategories,
-                price: priceStr.trim() ? Number(priceStr) : undefined
+                ...(priceStr.trim() ? { price: Number(priceStr) } : {}),
             };
 
             if (modalMode === 'add') {
