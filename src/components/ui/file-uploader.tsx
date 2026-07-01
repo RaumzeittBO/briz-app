@@ -1,7 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { Upload, Loader2, CheckCircle2, XCircle, ImageIcon } from 'lucide-react';
-import { storage, auth } from '@/lib/firebase';
-import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { auth } from '@/lib/firebase';
 
 // ── Image Compression ────────────────────────────────────────────────────────
 export const compressImage = (file: File, maxW = 1200, maxH = 1200, quality = 0.78): Promise<Blob> => {
@@ -48,33 +47,54 @@ export const compressImage = (file: File, maxW = 1200, maxH = 1200, quality = 0.
     });
 };
 
-// ── Upload (simple multipart, not resumable) with 30s timeout ────────────────
+// ── Upload via REST API with auth token (bypasses CORS SDK issue) ─────────────
+const BUCKET = 'briz-4ef3a.firebasestorage.app';
+
 export const uploadCompressedImage = async (file: File, folder: string): Promise<string> => {
     const currentUser = auth.currentUser;
-    console.log('[Upload] currentUser:', currentUser?.uid ?? 'NULL - no autenticado');
+    console.log('[Upload] currentUser:', currentUser?.uid ?? 'NULL');
     if (!currentUser) {
-        throw new Error('No autenticado. Por favor recarga la página.');
+        throw new Error('No autenticado. Recarga la página.');
     }
 
-    console.log('[Upload] Comprimiendo:', file.name, `(${(file.size / 1024).toFixed(0)} KB)`);
+    // Get a fresh auth token to include in the request header
+    const idToken = await currentUser.getIdToken(true);
+    console.log('[Upload] Token obtenido. Comprimiendo:', file.name);
+
     const compressedBlob = await compressImage(file);
-    console.log('[Upload] Comprimido:', `${(compressedBlob.size / 1024).toFixed(0)} KB`, '— enviando a Storage...');
+    console.log('[Upload] Comprimido:', `${(compressedBlob.size / 1024).toFixed(0)} KB`);
 
     const fileName = `${Date.now()}_${Math.random().toString(36).substring(2, 7)}.jpg`;
-    const path = storageRef(storage, `${folder}/${fileName}`);
+    const objectPath = encodeURIComponent(`${folder}/${fileName}`);
+    const uploadUrl = `https://firebasestorage.googleapis.com/v0/b/${BUCKET}/o?name=${objectPath}&uploadType=media`;
 
-    // Race uploadBytes against a 30-second timeout so it never hangs forever
-    const uploadPromise = uploadBytes(path, compressedBlob, { contentType: 'image/jpeg' });
-    const timeoutPromise = new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error('Timeout (30s): verifica tu conexión o las reglas de Storage')), 30000)
-    );
+    console.log('[Upload] Enviando a:', uploadUrl);
 
-    const result = await Promise.race([uploadPromise, timeoutPromise]);
-    console.log('[Upload] Subido exitosamente:', result.ref.fullPath);
+    const response = await fetch(uploadUrl, {
+        method: 'POST',
+        headers: {
+            'Authorization': `Bearer ${idToken}`,
+            'Content-Type': 'image/jpeg',
+        },
+        body: compressedBlob,
+    });
 
-    const url = await getDownloadURL(result.ref);
-    console.log('[Upload] URL obtenida:', url);
-    return url;
+    if (!response.ok) {
+        const errorText = await response.text();
+        console.error('[Upload] Error HTTP:', response.status, errorText);
+        throw new Error(`Error ${response.status}: ${errorText}`);
+    }
+
+    const data = await response.json();
+    console.log('[Upload] Respuesta:', data);
+
+    // Build the download URL from the response
+    const downloadToken = data.downloadTokens;
+    const encodedPath = encodeURIComponent(`${folder}/${fileName}`);
+    const downloadUrl = `https://firebasestorage.googleapis.com/v0/b/${BUCKET}/o/${encodedPath}?alt=media&token=${downloadToken}`;
+
+    console.log('[Upload] URL lista:', downloadUrl);
+    return downloadUrl;
 };
 
 // ── Per-file status ──────────────────────────────────────────────────────────
