@@ -353,18 +353,18 @@ export default function AdminEventsPage() {
                             {/* Active subcategory photo uploader */}
                             {activeSubIndex !== null && subcategories[activeSubIndex] && (
                                 <div className="bg-white/[0.02] border border-white/5 rounded-2xl p-4 space-y-4">
-                                    <div className="flex items-center justify-between">
+                                    <div className="flex items-start justify-between gap-4">
                                         <div className="space-y-0.5">
                                             <h4 className="text-white font-black text-xs uppercase tracking-wide">
                                                 Fotos en: <span className="text-brand-yellow font-black">{subcategories[activeSubIndex].name}</span>
                                             </h4>
-                                            <p className="text-[10px] text-white/40 font-bold">Puedes seleccionar múltiples archivos a la vez</p>
+                                            <p className="text-[10px] text-white/40 font-bold">Selecciona varias fotos a la vez. Se subirán de a una.</p>
                                         </div>
                                         <FileUploader 
                                             folder="events" 
                                             multiple={true}
                                             onUploadMultiple={handleUploadMultiple} 
-                                            className="h-9 px-4 flex items-center justify-center gap-1.5 rounded-xl border border-brand-yellow bg-brand-yellow/5 hover:bg-brand-yellow/10 text-[10px] font-black uppercase text-brand-yellow transition-all cursor-pointer"
+                                            className="h-9 px-4 flex items-center justify-center gap-1.5 rounded-xl border border-brand-yellow bg-brand-yellow/5 hover:bg-brand-yellow/10 text-[10px] font-black uppercase text-brand-yellow transition-all cursor-pointer whitespace-nowrap"
                                         />
                                     </div>
 

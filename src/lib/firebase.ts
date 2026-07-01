@@ -7,7 +7,8 @@ export const firebaseConfig = {
   apiKey: "AIzaSyB7qnGS7dlZzJXJ-15WdxUaZu68pABC8go",
   authDomain: "briz-4ef3a.firebaseapp.com",
   projectId: "briz-4ef3a",
-  storageBucket: "briz-4ef3a.firebasestorage.app",
+  // Use the gs:// URI so Firebase SDK connects to the correct bucket regardless of domain format
+  storageBucket: "briz-4ef3a.appspot.com",
   messagingSenderId: "412008664703",
   appId: "1:412008664703:web:57ac271f9feebc77ff794a",
   measurementId: "G-0X0HTM4XK8"
