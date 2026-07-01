@@ -224,12 +224,9 @@ export default function RentalsPage() {
     products.forEach(product => {
       productCategories(product).forEach(cat => productCategorySet.add(cat));
     });
-    // Add dynamic event names
-    (events || []).forEach(e => {
-      productCategorySet.add(e.name);
-    });
+    // Events are shown in their own section, NOT in the category filter bar
     return ['Todas', ...Array.from(productCategorySet).sort(sortCategories)];
-  }, [products, events]);
+  }, [products]);
 
   const filtered = useMemo(() => {
     return products.filter(p => {
@@ -284,6 +281,7 @@ export default function RentalsPage() {
 
   const closeCategoryView = () => {
     setExpandedCategory(null);
+    setCategory('Todas');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -531,6 +529,60 @@ export default function RentalsPage() {
       {/* Products Category Sliders or Event View */}
       <section className="py-10 min-h-[50vh] bg-background">
         <div className="max-w-7xl mx-auto px-4">
+
+          {/* ── SPECIAL EVENTS SECTION (always visible at top when not in event view) ── */}
+          {!selectedEvent && !expandedCategory && (events || []).length > 0 && (
+            <div className="mb-12 pb-10 border-b border-gray-100">
+              <div className="flex items-end justify-between mb-6">
+                <div className="space-y-1">
+                  <h2 className="font-tan text-[0.77rem] xs:text-[0.875rem] sm:text-[1.85rem] sm:leading-[1.22] lg:text-[2.2rem] uppercase tracking-normal text-brand-yellow [-webkit-text-stroke:1px_#000] drop-shadow-[1.2px_1.2px_0_rgba(0,0,0,1)]">
+                    Eventos Especiales
+                  </h2>
+                  <p className="text-[10px] sm:text-xs font-black uppercase text-gray-400 tracking-widest font-maiandra">
+                    Paquetes para cumpleaños, bodas y eventos corporativos
+                  </p>
+                </div>
+              </div>
+              <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+                {(events || []).map(ev => {
+                  const firstImg = ev.subcategories?.[0]?.images?.[0] || ev.images?.[0] || '';
+                  return (
+                    <motion.div
+                      key={ev.id}
+                      whileHover={{ y: -5 }}
+                      transition={{ duration: 0.25 }}
+                      onClick={() => openCategoryView(ev.name)}
+                      className="cursor-pointer group rounded-[1.8rem] overflow-hidden bg-white border border-gray-100 shadow-sm hover:shadow-xl transition-all duration-300"
+                    >
+                      <div className="relative aspect-[16/9] bg-gray-50 overflow-hidden">
+                        {firstImg ? (
+                          <img src={firstImg} alt={ev.name} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center">
+                            <ImageIcon className="w-10 h-10 text-gray-200" />
+                          </div>
+                        )}
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
+                        <div className="absolute bottom-4 left-4 right-4">
+                          <h3 className="font-tan text-white text-xl uppercase drop-shadow-md leading-tight">{ev.name}</h3>
+                          {ev.price !== undefined && (
+                            <span className="inline-block mt-1 bg-brand-yellow text-brand-black text-[10px] font-black px-2 py-0.5 rounded-md uppercase">Desde Bs. {ev.price}</span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="p-5 flex items-center justify-between">
+                        <p className="text-xs text-gray-500 font-medium line-clamp-2 flex-1 pr-4">{ev.description}</p>
+                        <span className="shrink-0 bg-brand-yellow text-brand-black text-[10px] font-black px-3 py-2 rounded-full uppercase tracking-wide group-hover:bg-brand-black group-hover:text-brand-yellow transition-colors">
+                          Ver fotos →
+                        </span>
+                      </div>
+                    </motion.div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           {selectedEvent ? (
             <EventSpecialView event={selectedEvent} onClose={closeCategoryView} language={language} />
           ) : expandedCategory ? (
@@ -717,7 +769,7 @@ function EventSpecialView({ event, onClose, language }: { event: any; onClose: (
                                         animate={{ opacity: 1 }}
                                         exit={{ opacity: 0 }}
                                         transition={{ duration: 0.3 }}
-                                        className="w-full h-full object-cover"
+                                        className="w-full h-full object-contain"
                                     />
                                 </AnimatePresence>
 
