@@ -1,4 +1,4 @@
-import React, { useEffect, useState, type MouseEvent } from 'react';
+import React, { useEffect, useState, useMemo, type MouseEvent } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
@@ -63,32 +63,8 @@ const TireTrackSeparator = ({ className = '', style }: { className?: string; sty
     </svg>
 );
 
-import { useStore } from '@/context/StoreContext';
+import { useStore, type InventoryItem, type ComboProduct } from '@/context/StoreContext';
 import CustomerAuthModal from './CustomerAuthModal';
-
-const ALQUILER_CATEGORIES = [
-    { label: 'Urbanas', href: '/rentals?category=Urbanas' },
-    { label: 'Niñ@s', href: '/rentals?category=Niñ@s' },
-    { label: 'Montañeras', href: '/rentals?category=Montañeras' },
-    { label: 'De ruta / pista', href: '/rentals?category=De ruta / pista' },
-    { label: 'Antiguas', href: '/rentals?category=Antiguas' },
-    { label: 'Tándems', href: '/rentals?category=Tándems' },
-    { label: 'Triciclos', href: '/rentals?category=Triciclos' },
-    { label: 'Cuatriciclos', href: '/rentals?category=Cuatriciclos' },
-    { label: 'Accesorios', href: '/rentals?category=Accesorios' },
-    { label: 'Eventos', href: '/rentals?category=Eventos' },
-];
-
-const TIENDA_CATEGORIES = [
-    { label: 'Bicicletas a medio uso', href: '/shop?category=Bicicletas a medio uso' },
-    { label: 'Bicicletas nuevas', href: '/shop?category=Bicicletas nuevas' },
-    { label: 'Personalización', href: '/shop?category=Personalización' },
-    { label: 'Accesorios', href: '/shop?category=Accesorios' },
-    { label: 'Indumentaria', href: '/shop?category=Indumentaria' },
-    { label: 'Repuestos', href: '/shop?category=Repuestos' },
-    { label: 'Insumos y herramientas', href: '/shop?category=Insumos y herramientas' },
-    { label: 'Alimentos', href: '/shop?category=Alimentos' },
-];
 
 const MECANICA_CATEGORIES = [
     { label: 'Planes de mantenimiento', href: '/service#planes' },
@@ -141,7 +117,7 @@ export default function Navbar() {
     const location = useLocation();
     const navigate = useNavigate();
     
-    const { currentCustomer, logoutCustomer, routes } = useStore();
+    const { currentCustomer, logoutCustomer, routes, inventory, combos } = useStore();
     const { language, setLanguage } = useLanguage();
     const [authModalOpen, setAuthModalOpen] = useState(false);
     const [langDropdownOpen, setLangDropdownOpen] = useState(false);
@@ -161,6 +137,97 @@ export default function Navbar() {
             ...prev,
             [section]: !prev[section]
         }));
+    };
+
+    const rentalCategories = useMemo(() => {
+        const productCategorySet = new Set<string>();
+        
+        // Single inventory items available for rental
+        (inventory || []).filter((i: InventoryItem) => i.active && i.availableForRental).forEach((i: InventoryItem) => {
+            const mainCategory = i.category || (i.itemType === 'accessory' ? 'Accesorios' : 'Otros');
+            productCategorySet.add(mainCategory);
+        });
+
+        // Combos available for rental
+        (combos || []).filter((c: ComboProduct) => c.active && c.availableForRental).forEach((c: ComboProduct) => {
+            const mainCategory = c.category || 'Bicicletas';
+            productCategorySet.add(mainCategory);
+            if (c.secondaryCategories) {
+                c.secondaryCategories.forEach((cat: string) => productCategorySet.add(cat));
+            }
+        });
+
+        const RENTAL_SEED_CATEGORIES = [
+            'Urbanas', 'Niñ@s', 'Montañeras', 'De ruta / pista', 'Antiguas', 
+            'Tándems', 'Triciclos', 'Cuatriciclos', 'Accesorios', 'Eventos'
+        ];
+
+        const sortCategories = (a: string, b: string) => {
+            const aPriority = a === 'Bicicletas' ? -1 : 0;
+            const bPriority = b === 'Bicicletas' ? -1 : 0;
+            if (aPriority !== bPriority) {
+                if (aPriority === -1) return -1;
+                return aPriority - bPriority;
+            }
+            if (a === 'Accesorios') return 1;
+            if (b === 'Accesorios') return -1;
+            const seedA = RENTAL_SEED_CATEGORIES.indexOf(a);
+            const seedB = RENTAL_SEED_CATEGORIES.indexOf(b);
+            if (seedA !== -1 || seedB !== -1) {
+                if (seedA === -1) return 1;
+                if (seedB === -1) return -1;
+                return seedA - seedB;
+            }
+            return a.localeCompare(b);
+        };
+
+        return Array.from(productCategorySet).sort(sortCategories).map((cat: string) => ({
+            label: cat,
+            href: `/rentals?category=${encodeURIComponent(cat)}`
+        }));
+    }, [inventory, combos]);
+
+    const shopCategories = useMemo(() => {
+        const categorySet = new Set<string>();
+
+        // Single inventory items available for sale
+        (inventory || []).filter((i: InventoryItem) => i.availableForSale && i.active).forEach((i: InventoryItem) => {
+            categorySet.add(i.category || (i.itemType === 'bike' ? 'Bicicletas' : 'Accesorios'));
+        });
+
+        // Combos available for sale
+        (combos || []).filter((c: ComboProduct) => c.availableForSale && c.active).forEach((c: ComboProduct) => {
+            categorySet.add(c.category || 'Bicicletas');
+        });
+
+        const sortShopCategories = (a: string, b: string) => {
+            if (a === 'Bicicletas') return -1;
+            if (b === 'Bicicletas') return 1;
+            if (a === 'Accesorios') return 1;
+            if (b === 'Accesorios') return -1;
+            return a.localeCompare(b);
+        };
+
+        return Array.from(categorySet).sort(sortShopCategories).map((cat: string) => ({
+            label: cat,
+            href: `/shop?category=${encodeURIComponent(cat)}`
+        }));
+    }, [inventory, combos]);
+
+    const ciclotoursCategories = useMemo(() => {
+        return (routes || []).map((r: any) => ({
+            label: r.name,
+            href: `/routes`
+        }));
+    }, [routes]);
+
+    const getLinkCategories = (label: string) => {
+        if (label === 'Alquiler' || label === 'Rentals') return rentalCategories;
+        if (label === 'Tienda' || label === 'Shop') return shopCategories;
+        if (label === 'Ciclotours') return ciclotoursCategories;
+        if (label === 'Mecánica' || label === 'Mechanics') return MECANICA_CATEGORIES;
+        if (label === 'Comunidad' || label === 'Community') return COMUNIDAD_CATEGORIES;
+        return [];
     };
 
     const group1 = getGroup1Links(language);
@@ -334,30 +401,58 @@ export default function Navbar() {
                         {/* Tire Track 2 */}
                         <TireTrackSeparator className="mx-2.5" style={{ height: 56, width: 16 }} />
 
-                        {/* Group 1 buttons */}
+                        {/* Group 1 buttons with hover dropdowns */}
                         <div className="flex items-center" style={{ gap: 6 }}>
                             {group1.map((link) => {
                                 const Icon = link.icon;
                                 const active = isActive(link.href);
+                                const categoriesList = getLinkCategories(link.label);
+
                                 return (
-                                    <Link
-                                        key={link.label}
-                                        to={link.href}
-                                        onClick={(event) => handleNavClick(event, link.href)}
-                                        className={`relative flex flex-col items-center justify-center gap-1 rounded-xl text-center transition-all duration-300 hover:bg-white/20 hover:scale-[1.03] ${
-                                            active ? 'text-white' : 'text-brand-black'
-                                        }`}
-                                        style={{ paddingLeft: 7, paddingRight: 7, paddingTop: 4, paddingBottom: 4 }}
-                                    >
-                                        <Icon className="shrink-0 transition-transform duration-200" style={{ width: 24, height: 24 }} strokeWidth={2.0} />
-                                        <span className="font-cocon font-bold tracking-wide leading-none notranslate" style={{ fontSize: 11 }}>{link.label}</span>
-                                        {active && (
-                                            <motion.span
-                                                layoutId="activeNavUnderline"
-                                                className="absolute inset-x-2 -bottom-1 h-[3px] rounded-full bg-white"
-                                            />
+                                    <div key={link.label} className="relative group">
+                                        <Link
+                                            to={link.href}
+                                            onClick={(event) => handleNavClick(event, link.href)}
+                                            className={`relative flex flex-col items-center justify-center gap-1 rounded-xl text-center transition-all duration-300 hover:bg-white/20 hover:scale-[1.03] ${
+                                                active ? 'text-white' : 'text-brand-black'
+                                            }`}
+                                            style={{ paddingLeft: 7, paddingRight: 7, paddingTop: 4, paddingBottom: 4 }}
+                                        >
+                                            <Icon className="shrink-0 transition-transform duration-200" style={{ width: 24, height: 24 }} strokeWidth={2.0} />
+                                            <span className="font-cocon font-bold tracking-wide leading-none notranslate" style={{ fontSize: 11 }}>{link.label}</span>
+                                            {active && (
+                                                <motion.span
+                                                    layoutId="activeNavUnderline"
+                                                    className="absolute inset-x-2 -bottom-1 h-[3px] rounded-full bg-white"
+                                                />
+                                            )}
+                                        </Link>
+
+                                        {/* Desktop Dropdown on Hover */}
+                                        {categoriesList.length > 0 && (
+                                            <div className="absolute left-1/2 -translate-x-1/2 top-full pt-2 opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto transition-all duration-200 z-50 transform translate-y-1 group-hover:translate-y-0">
+                                                <div className="bg-brand-charcoal border border-brand-yellow/20 rounded-2xl p-2 w-52 shadow-2xl flex flex-col gap-0.5">
+                                                    {categoriesList.map((cat: any) => (
+                                                        <Link
+                                                            key={cat.label}
+                                                            to={cat.href}
+                                                            onClick={(event) => {
+                                                                // Handle smooth scroll for hashes if on same page
+                                                                if (cat.href.includes('#') && location.pathname === cat.href.split('#')[0]) {
+                                                                    event.preventDefault();
+                                                                    const id = cat.href.split('#')[1];
+                                                                    document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                                                                }
+                                                            }}
+                                                            className="w-full text-left px-3.5 py-2 text-xs font-bold text-white/85 hover:text-brand-black hover:bg-brand-yellow rounded-xl transition-all duration-150 font-cocon capitalize leading-normal notranslate"
+                                                        >
+                                                            {translateLabel(cat.label, language)}
+                                                        </Link>
+                                                    ))}
+                                                </div>
+                                            </div>
                                         )}
-                                    </Link>
+                                    </div>
                                 );
                             })}
                         </div>
@@ -570,7 +665,7 @@ export default function Navbar() {
                                                 '/rentals', 
                                                 Bike, 
                                                 'Alquiler', 
-                                                ALQUILER_CATEGORIES
+                                                rentalCategories
                                             )}
 
                                             {/* ── TIENDA ── */}
@@ -579,7 +674,7 @@ export default function Navbar() {
                                                 '/shop', 
                                                 Store, 
                                                 'Tienda', 
-                                                TIENDA_CATEGORIES
+                                                shopCategories
                                             )}
 
                                             {/* ── CICLOTOURS ── */}
@@ -588,7 +683,7 @@ export default function Navbar() {
                                                 '/routes', 
                                                 Route, 
                                                 'Ciclotours', 
-                                                (routes || []).map(r => ({ label: r.name, href: `/routes#route_${r.id}` }))
+                                                ciclotoursCategories
                                             )}
 
                                             {/* ── MECÁNICA ── */}
