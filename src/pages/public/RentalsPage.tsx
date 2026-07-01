@@ -734,7 +734,7 @@ function EventSpecialView({ event, onClose, language }: { event: any; onClose: (
 
             {/* Subcategory selection tabs - Horizontal scrollable container for mobile */}
             {hasSubcategories && (
-                <div className="flex overflow-x-auto gap-2 mb-8 bg-white border border-gray-100/85 rounded-2xl sm:rounded-[1.8rem] p-2.5 shadow-sm no-scrollbar">
+                <div className="w-full flex overflow-x-auto gap-2 mb-8 bg-white border border-gray-100/85 rounded-2xl sm:rounded-[1.8rem] p-2.5 shadow-sm no-scrollbar">
                     {subcategories.map((sub: any, idx: number) => {
                         const isSelected = activeSubIndex === idx;
                         return (
@@ -754,9 +754,9 @@ function EventSpecialView({ event, onClose, language }: { event: any; onClose: (
                 </div>
             )}
 
-            <div className="grid gap-6 lg:gap-10 lg:grid-cols-12 bg-white rounded-3xl lg:rounded-[2.5rem] border border-gray-100 p-4 sm:p-10 shadow-lg overflow-hidden">
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-10 bg-white rounded-3xl lg:rounded-[2.5rem] border border-gray-100 p-4 sm:p-10 shadow-lg overflow-hidden w-full max-w-full">
                 {/* Left Side: Photo Carousel */}
-                <div className="lg:col-span-7 flex flex-col gap-4">
+                <div className="lg:col-span-7 flex flex-col gap-4 w-full min-w-0">
                     {/* Main Active Image Display */}
                     <div className="relative w-full h-[280px] xs:h-[350px] sm:h-[450px] md:h-[500px] bg-gray-50 rounded-2xl overflow-hidden group border border-gray-100">
                         {currentImages.length > 0 ? (
@@ -803,7 +803,7 @@ function EventSpecialView({ event, onClose, language }: { event: any; onClose: (
 
                     {/* Thumbnails Row */}
                     {currentImages.length > 1 && (
-                        <div className="flex gap-2 overflow-x-auto py-1 scroll-smooth no-scrollbar">
+                        <div className="w-full flex gap-2 overflow-x-auto py-1 scroll-smooth no-scrollbar">
                             {currentImages.map((img: string, idx: number) => (
                                 <button
                                     key={idx}
@@ -820,7 +820,7 @@ function EventSpecialView({ event, onClose, language }: { event: any; onClose: (
                 </div>
 
                 {/* Right Side: Details & CTA */}
-                <div className="lg:col-span-5 flex flex-col justify-between gap-6 py-2">
+                <div className="lg:col-span-5 flex flex-col justify-between gap-6 py-2 w-full min-w-0">
                     <div className="space-y-4">
                         <span className="inline-block px-3 py-1 rounded-md bg-brand-yellow/10 text-brand-yellow-vibrant text-[10px] font-black uppercase tracking-wider">
                             {language === 'es' ? 'Paquete Especial Alquiler' : 'Special Rental Package'}
