@@ -597,7 +597,7 @@ export default function RentalsPage() {
                     ← Volver a categorías
                   </button>
                   <h1 
-                    className="font-tan text-[0.875rem] xs:text-[1rem] sm:text-[2.2rem] sm:leading-[1.18] lg:text-[2.6rem] uppercase tracking-normal text-brand-yellow [-webkit-text-stroke:1.1px_#000] drop-shadow-[1.5px_1.5px_0_rgba(0,0,0,1)] whitespace-nowrap sm:whitespace-normal"
+                    className="font-tan text-[1.5rem] xs:text-[1.8rem] sm:text-[2.2rem] sm:leading-[1.18] lg:text-[2.6rem] uppercase tracking-normal text-brand-yellow [-webkit-text-stroke:1.1px_#000] drop-shadow-[1.5px_1.5px_0_rgba(0,0,0,1)] whitespace-normal break-words"
                   >
                     {expandedCategory}
                   </h1>
@@ -732,16 +732,16 @@ function EventSpecialView({ event, onClose, language }: { event: any; onClose: (
                 {language === 'es' ? '← Volver a categorías' : '← Back to categories'}
             </button>
 
-            {/* Subcategory selection tabs */}
+            {/* Subcategory selection tabs - Horizontal scrollable container for mobile */}
             {hasSubcategories && (
-                <div className="flex flex-wrap gap-2.5 mb-8 bg-white border border-gray-100/85 rounded-[1.8rem] p-3 shadow-sm">
+                <div className="flex overflow-x-auto gap-2 mb-8 bg-white border border-gray-100/85 rounded-2xl sm:rounded-[1.8rem] p-2.5 shadow-sm no-scrollbar">
                     {subcategories.map((sub: any, idx: number) => {
                         const isSelected = activeSubIndex === idx;
                         return (
                             <button
                                 key={idx}
                                 onClick={() => setActiveSubIndex(idx)}
-                                className={`px-5 py-3 rounded-xl text-[10px] sm:text-xs font-black uppercase tracking-wider transition-all cursor-pointer ${
+                                className={`px-4 py-2.5 sm:px-5 sm:py-3 rounded-xl text-[10px] sm:text-xs font-black uppercase tracking-wider transition-all cursor-pointer shrink-0 whitespace-nowrap ${
                                     isSelected 
                                         ? 'bg-brand-yellow text-brand-black shadow-sm scale-102' 
                                         : 'bg-gray-50 text-gray-500 hover:bg-gray-100 hover:text-brand-black'
@@ -754,7 +754,7 @@ function EventSpecialView({ event, onClose, language }: { event: any; onClose: (
                 </div>
             )}
 
-            <div className="grid gap-10 lg:grid-cols-12 bg-white rounded-[2.5rem] border border-gray-100 p-6 sm:p-10 shadow-lg overflow-hidden">
+            <div className="grid gap-6 lg:gap-10 lg:grid-cols-12 bg-white rounded-3xl lg:rounded-[2.5rem] border border-gray-100 p-4 sm:p-10 shadow-lg overflow-hidden">
                 {/* Left Side: Photo Carousel */}
                 <div className="lg:col-span-7 flex flex-col gap-4">
                     {/* Main Active Image Display */}
@@ -778,13 +778,13 @@ function EventSpecialView({ event, onClose, language }: { event: any; onClose: (
                                     <>
                                         <button
                                             onClick={handlePrev}
-                                            className="absolute left-3 top-1/2 -translate-y-1/2 bg-black/60 hover:bg-black text-white p-2.5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
+                                            className="absolute left-3 top-1/2 -translate-y-1/2 bg-black/60 hover:bg-black text-white p-2 sm:p-2.5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer z-10"
                                         >
                                             <ChevronLeft className="w-4 h-4" />
                                         </button>
                                         <button
                                             onClick={handleNext}
-                                            className="absolute right-3 top-1/2 -translate-y-1/2 bg-black/60 hover:bg-black text-white p-2.5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
+                                            className="absolute right-3 top-1/2 -translate-y-1/2 bg-black/60 hover:bg-black text-white p-2 sm:p-2.5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer z-10"
                                         >
                                             <ChevronRight className="w-4 h-4" />
                                         </button>
@@ -806,7 +806,7 @@ function EventSpecialView({ event, onClose, language }: { event: any; onClose: (
                                 <button
                                     key={idx}
                                     onClick={() => setActiveIndex(idx)}
-                                    className={`relative aspect-[4/3] w-20 sm:w-24 rounded-lg overflow-hidden border-2 shrink-0 transition-all cursor-pointer ${
+                                    className={`relative aspect-[4/3] w-16 sm:w-24 rounded-lg overflow-hidden border-2 shrink-0 transition-all cursor-pointer ${
                                         activeIndex === idx ? 'border-brand-yellow scale-102 shadow-md' : 'border-transparent hover:border-gray-200'
                                     }`}
                                 >
@@ -823,7 +823,7 @@ function EventSpecialView({ event, onClose, language }: { event: any; onClose: (
                         <span className="inline-block px-3 py-1 rounded-md bg-brand-yellow/10 text-brand-yellow-vibrant text-[10px] font-black uppercase tracking-wider">
                             {language === 'es' ? 'Paquete Especial Alquiler' : 'Special Rental Package'}
                         </span>
-                        <h2 className="font-tan text-3xl sm:text-4xl uppercase leading-tight text-brand-charcoal tracking-wide">
+                        <h2 className="font-tan text-2xl sm:text-4xl uppercase leading-tight text-brand-charcoal tracking-wide break-words whitespace-normal">
                             {event.name}
                         </h2>
                         
@@ -832,7 +832,7 @@ function EventSpecialView({ event, onClose, language }: { event: any; onClose: (
                                 <span className="block text-[10px] font-black text-gray-400 uppercase tracking-widest leading-none mb-1">
                                     {language === 'es' ? 'Precio estimado' : 'Estimated Price'}
                                 </span>
-                                <span className="font-tan text-3xl text-brand-black">Bs. {event.price}</span>
+                                <span className="font-tan text-2xl sm:text-3xl text-brand-black">Bs. {event.price}</span>
                             </div>
                         )}
 
@@ -840,14 +840,14 @@ function EventSpecialView({ event, onClose, language }: { event: any; onClose: (
                             <h4 className="text-xs font-black uppercase tracking-widest text-brand-charcoal/60 mb-2">
                                 {language === 'es' ? 'Detalles del Evento' : 'Event Details'}
                             </h4>
-                            <p className="text-gray-600 text-sm sm:text-base font-medium leading-relaxed whitespace-pre-line">
+                            <p className="text-gray-600 text-sm sm:text-base font-medium leading-relaxed whitespace-pre-line break-words">
                                 {event.description}
                             </p>
                         </div>
                     </div>
 
                     <a href={waLink} target="_blank" rel="noopener noreferrer" className="block w-full pt-4">
-                        <Button className="w-full h-14 bg-brand-yellow hover:bg-brand-yellow-light text-brand-black font-black uppercase tracking-wider rounded-xl shadow-lg transition-transform hover:scale-[1.01] text-sm cursor-pointer">
+                        <Button className="w-full min-h-14 h-auto py-3 px-4 bg-brand-yellow hover:bg-brand-yellow-light text-brand-black font-black uppercase tracking-wider rounded-xl shadow-lg transition-transform hover:scale-[1.01] text-xs sm:text-sm cursor-pointer flex items-center justify-center text-center leading-tight whitespace-normal">
                             {language === 'es' ? 'Reservar / Cotizar por WhatsApp' : 'Book / Inquire via WhatsApp'}
                         </Button>
                     </a>
