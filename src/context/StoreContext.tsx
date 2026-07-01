@@ -207,6 +207,14 @@ export interface ServiceOrder {
     date: string;
 }
 
+export interface EventItem {
+    id: string;
+    name: string;
+    description: string;
+    images: string[];
+    price?: number;
+}
+
 const LOCAL_ROUTES_KEY = 'briz_local_routes';
 const LOCAL_RENTAL_SETTINGS_KEY = 'briz_rental_settings';
 
@@ -225,6 +233,7 @@ interface StoreContextType {
     customers: Customer[];
     serviceOrders: ServiceOrder[];
     routes: CyclingRoute[];
+    events: EventItem[];
     bikeCategories: string[];
     isLoaded: boolean;
     rentalSettings: RentalSettings;
@@ -234,6 +243,11 @@ interface StoreContextType {
     addRoute: (route: CyclingRoute) => Promise<void>;
     updateRoute: (id: string, updates: Partial<CyclingRoute>) => Promise<void>;
     deleteRoute: (id: string) => Promise<void>;
+
+    // Events CRUD
+    addEvent: (event: EventItem) => Promise<void>;
+    updateEvent: (id: string, updates: Partial<EventItem>) => Promise<void>;
+    deleteEvent: (id: string) => Promise<void>;
 
     // Bike Categories CRUD
     addBikeCategory: (category: string) => Promise<void>;
@@ -318,6 +332,7 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
     const [customers, setCustomers] = useState<Customer[]>([]);
     const [serviceOrders, setServiceOrders] = useState<ServiceOrder[]>([]);
     const [routes, setRoutes] = useState<CyclingRoute[]>([]);
+    const [events, setEvents] = useState<EventItem[]>([]);
     const [localRoutes, setLocalRoutes] = useState<CyclingRoute[]>(() => safeJSON<CyclingRoute[]>(LOCAL_ROUTES_KEY, []));
     const [bikeCategories, setBikeCategories] = useState<string[]>([]);
     const [isLoaded, setIsLoaded] = useState(false);
@@ -455,9 +470,15 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
             console.error("Error fetching bike categories:", error);
         });
 
+        const unsubEvents = onSnapshot(query(collection(db, 'events')), (snap) => {
+            setEvents(snap.docs.map(doc => ({ ...doc.data() } as EventItem)));
+        }, (error) => {
+            console.error("Error fetching events:", error);
+        });
+
         setIsLoaded(true);
         return () => {
-            unsubInv(); unsubCombos(); unsubRentals(); unsubSales(); unsubCustomers(); unsubSO(); unsubSettings(); unsubRoutes(); unsubBikeCats();
+            unsubInv(); unsubCombos(); unsubRentals(); unsubSales(); unsubCustomers(); unsubSO(); unsubSettings(); unsubRoutes(); unsubBikeCats(); unsubEvents();
         };
     }, []);
 
@@ -711,6 +732,16 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
     };
     const deleteInventoryItem = async (id: string) => {
         await deleteDoc(doc(db, 'inventory', id));
+    };
+
+    const addEvent = async (event: EventItem) => {
+        await setDoc(doc(db, 'events', event.id), event);
+    };
+    const updateEvent = async (id: string, updates: Partial<EventItem>) => {
+        await updateDoc(doc(db, 'events', id), updates);
+    };
+    const deleteEvent = async (id: string) => {
+        await deleteDoc(doc(db, 'events', id));
     };
 
     const saveLocalRoutes = (updater: (current: CyclingRoute[]) => CyclingRoute[]) => {
@@ -1163,6 +1194,7 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
         getItemStock, getComboAvailability, calculatePrice, resetAllData,
         currentCustomer, loginCustomer, registerCustomer, logoutCustomer,
         routes: mergedRoutes, addRoute, updateRoute, deleteRoute,
+        events, addEvent, updateEvent, deleteEvent,
         bikeCategories, addBikeCategory, deleteBikeCategory, updateBikeCategory
     };
 

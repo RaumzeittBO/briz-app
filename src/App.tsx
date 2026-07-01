@@ -29,6 +29,7 @@ import SettingsPage from '@/pages/admin/SettingsPage';
 import AdminRoutesPage from '@/pages/admin/AdminRoutesPage';
 import AdminSeedPage from '@/pages/admin/AdminSeedPage';
 import AdminCommunityPage from '@/pages/admin/AdminCommunityPage';
+import AdminEventsPage from '@/pages/admin/AdminEventsPage';
 
 // Protected route wrapper
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -59,6 +60,7 @@ function AppRoutes() {
       <Route path="/admin" element={<ProtectedRoute><AdminLayout /></ProtectedRoute>}>
         <Route index element={<DashboardPage />} />
         <Route path="rentals" element={<AdminRentalsPage />} />
+        <Route path="events" element={<AdminEventsPage />} />
         <Route path="inventory" element={<InventoryPage />} />
         <Route path="sales" element={<AdminSalesPage />} />
         <Route path="service" element={<AdminServicePage />} />

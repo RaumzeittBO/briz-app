@@ -3,7 +3,8 @@ import { Link, Outlet, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
     LayoutDashboard, Bike, Package, ShoppingCart, Wrench, Users, BarChart3,
-    Settings, Menu, ChevronLeft, LogOut, Bell, Lock, MapPinned, MessagesSquare
+    Settings, Menu, ChevronLeft, LogOut, Bell, Lock, MapPinned, MessagesSquare,
+    Calendar
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -26,6 +27,7 @@ export default function AdminLayout() {
     const adminLinks = [
         { label: 'Dashboard', href: '/admin', icon: LayoutDashboard },
         { label: 'Alquileres', href: '/admin/rentals', icon: Bike, badge: pendingRentals > 0 ? pendingRentals : undefined },
+        { label: 'Eventos', href: '/admin/events', icon: Calendar },
         { label: 'Inventario', href: '/admin/inventory', icon: Package },
         { label: 'Ventas', href: '/admin/sales', icon: ShoppingCart },
         { label: 'Servicio', href: '/admin/service', icon: Wrench },

@@ -1,6 +1,6 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
-import { motion } from 'framer-motion';
-import { Search, Bike, ChevronRight, ShoppingCart, ShoppingBag } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Search, Bike, ChevronRight, ChevronLeft, ShoppingCart, ShoppingBag } from 'lucide-react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -93,7 +93,7 @@ const translateProductName = (name: string, lang: string) => {
 
 export default function RentalsPage() {
   const { language } = useLanguage();
-  const { inventory, combos, getComboAvailability, currentCustomer } = useStore();
+  const { inventory, combos, getComboAvailability, currentCustomer, events } = useStore();
   const { totalItems } = useCart();
 
   const [search, setSearch] = useState('');
@@ -118,6 +118,11 @@ export default function RentalsPage() {
   
   // Dynamic Scroll Container Refs
   const scrollRefs = useRef<Record<string, HTMLDivElement | null>>({});
+
+  const selectedEvent = useMemo(() => {
+    const activeCat = expandedCategory || category;
+    return (events || []).find(e => e.name === activeCat);
+  }, [events, category, expandedCategory]);
 
   const scrollRight = (catKey: string) => {
     const ref = scrollRefs.current[catKey];
@@ -219,8 +224,12 @@ export default function RentalsPage() {
     products.forEach(product => {
       productCategories(product).forEach(cat => productCategorySet.add(cat));
     });
+    // Add dynamic event names
+    (events || []).forEach(e => {
+      productCategorySet.add(e.name);
+    });
     return ['Todas', ...Array.from(productCategorySet).sort(sortCategories)];
-  }, [products]);
+  }, [products, events]);
 
   const filtered = useMemo(() => {
     return products.filter(p => {
@@ -519,10 +528,12 @@ export default function RentalsPage() {
         </div>
       </div>
 
-      {/* Products Category Sliders */}
+      {/* Products Category Sliders or Event View */}
       <section className="py-10 min-h-[50vh] bg-background">
         <div className="max-w-7xl mx-auto px-4">
-          {expandedCategory ? (
+          {selectedEvent ? (
+            <EventSpecialView event={selectedEvent} onClose={closeCategoryView} language={language} />
+          ) : expandedCategory ? (
             <div className="py-8">
               <div className="mb-7 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
                 <div>
@@ -625,4 +636,125 @@ export default function RentalsPage() {
       )}
     </div>
   );
+}
+
+function EventSpecialView({ event, onClose, language }: { event: any; onClose: () => void; language: string }) {
+    const [activeIndex, setActiveIndex] = useState(0);
+
+    const handlePrev = () => {
+        setActiveIndex((prev) => (prev === 0 ? event.images.length - 1 : prev - 1));
+    };
+
+    const handleNext = () => {
+        setActiveIndex((prev) => (prev === event.images.length - 1 ? 0 : prev + 1));
+    };
+
+    const waLink = `https://wa.me/59177860277?text=${encodeURIComponent(
+        language === 'es' 
+            ? `Hola Briz, deseo consultar sobre el evento especial de alquiler: ${event.name}`
+            : `Hello Briz, I want to inquire about the special rental event: ${event.name}`
+    )}`;
+
+    return (
+        <div className="py-6">
+            <button
+                type="button"
+                onClick={onClose}
+                className="mb-8 inline-flex rounded-full border border-brand-yellow/40 bg-white px-5 py-2 text-xs font-black text-brand-black shadow-sm hover:bg-brand-yellow transition-all cursor-pointer"
+            >
+                {language === 'es' ? '← Volver a categorías' : '← Back to categories'}
+            </button>
+
+            <div className="grid gap-10 lg:grid-cols-12 bg-white rounded-[2.5rem] border border-gray-100 p-6 sm:p-10 shadow-lg overflow-hidden">
+                {/* Left Side: Photo Carousel */}
+                <div className="lg:col-span-7 flex flex-col gap-4">
+                    {/* Main Active Image Display */}
+                    <div className="relative aspect-[16/10] bg-gray-50 rounded-2xl overflow-hidden group border border-gray-100 flex items-center justify-center">
+                        <AnimatePresence mode="wait">
+                            <motion.img
+                                key={activeIndex}
+                                src={event.images[activeIndex]}
+                                initial={{ opacity: 0 }}
+                                animate={{ opacity: 1 }}
+                                exit={{ opacity: 0 }}
+                                transition={{ duration: 0.3 }}
+                                className="w-full h-full object-cover"
+                            />
+                        </AnimatePresence>
+
+                        {/* Navigation Arrows */}
+                        {event.images.length > 1 && (
+                            <>
+                                <button
+                                    onClick={handlePrev}
+                                    className="absolute left-3 top-1/2 -translate-y-1/2 bg-black/60 hover:bg-black text-white p-2.5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
+                                >
+                                    <ChevronLeft className="w-4 h-4" />
+                                </button>
+                                <button
+                                    onClick={handleNext}
+                                    className="absolute right-3 top-1/2 -translate-y-1/2 bg-black/60 hover:bg-black text-white p-2.5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
+                                >
+                                    <ChevronRight className="w-4 h-4" />
+                                </button>
+                            </>
+                        )}
+                    </div>
+
+                    {/* Thumbnails Row */}
+                    {event.images.length > 1 && (
+                        <div className="flex gap-2 overflow-x-auto py-1 scroll-smooth no-scrollbar">
+                            {event.images.map((img: string, idx: number) => (
+                                <button
+                                    key={idx}
+                                    onClick={() => setActiveIndex(idx)}
+                                    className={`relative aspect-[4/3] w-20 sm:w-24 rounded-lg overflow-hidden border-2 shrink-0 transition-all cursor-pointer ${
+                                        activeIndex === idx ? 'border-brand-yellow scale-102 shadow-md' : 'border-transparent hover:border-gray-200'
+                                    }`}
+                                >
+                                    <img src={img} className="w-full h-full object-cover animate-fade-in" />
+                                </button>
+                            ))}
+                        </div>
+                    )}
+                </div>
+
+                {/* Right Side: Details & CTA */}
+                <div className="lg:col-span-5 flex flex-col justify-between gap-6 py-2">
+                    <div className="space-y-4">
+                        <span className="inline-block px-3 py-1 rounded-md bg-brand-yellow/10 text-brand-yellow-vibrant text-[10px] font-black uppercase tracking-wider">
+                            {language === 'es' ? 'Paquete Especial Alquiler' : 'Special Rental Package'}
+                        </span>
+                        <h2 className="font-tan text-3xl sm:text-4xl uppercase leading-tight text-brand-charcoal tracking-wide">
+                            {event.name}
+                        </h2>
+                        
+                        {event.price !== undefined && (
+                            <div className="pt-2">
+                                <span className="block text-[10px] font-black text-gray-400 uppercase tracking-widest leading-none mb-1">
+                                    {language === 'es' ? 'Precio estimado' : 'Estimated Price'}
+                                </span>
+                                <span className="font-tan text-3xl text-brand-black">Bs. {event.price}</span>
+                            </div>
+                        )}
+
+                        <div className="pt-4 border-t border-gray-100">
+                            <h4 className="text-xs font-black uppercase tracking-widest text-brand-charcoal/60 mb-2">
+                                {language === 'es' ? 'Detalles del Evento' : 'Event Details'}
+                            </h4>
+                            <p className="text-gray-600 text-sm sm:text-base font-medium leading-relaxed whitespace-pre-line">
+                                {event.description}
+                            </p>
+                        </div>
+                    </div>
+
+                    <a href={waLink} target="_blank" rel="noopener noreferrer" className="block w-full pt-4">
+                        <Button className="w-full h-14 bg-brand-yellow hover:bg-brand-yellow-light text-brand-black font-black uppercase tracking-wider rounded-xl shadow-lg transition-transform hover:scale-[1.01] text-sm cursor-pointer">
+                            {language === 'es' ? 'Reservar / Cotizar por WhatsApp' : 'Book / Inquire via WhatsApp'}
+                        </Button>
+                    </a>
+                </div>
+            </div>
+        </div>
+    );
 }

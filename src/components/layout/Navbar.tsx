@@ -63,7 +63,7 @@ const TireTrackSeparator = ({ className = '', style }: { className?: string; sty
     </svg>
 );
 
-import { useStore, type InventoryItem, type ComboProduct } from '@/context/StoreContext';
+import { useStore, type InventoryItem, type ComboProduct, type EventItem } from '@/context/StoreContext';
 import CustomerAuthModal from './CustomerAuthModal';
 
 const MECANICA_CATEGORIES = [
@@ -117,7 +117,7 @@ export default function Navbar() {
     const location = useLocation();
     const navigate = useNavigate();
     
-    const { currentCustomer, logoutCustomer, routes, inventory, combos } = useStore();
+    const { currentCustomer, logoutCustomer, routes, inventory, combos, events } = useStore();
     const { language, setLanguage } = useLanguage();
     const [authModalOpen, setAuthModalOpen] = useState(false);
     const [langDropdownOpen, setLangDropdownOpen] = useState(false);
@@ -157,6 +157,11 @@ export default function Navbar() {
             }
         });
 
+        // Dynamic Event categories
+        (events || []).forEach((e: EventItem) => {
+            productCategorySet.add(e.name);
+        });
+
         const RENTAL_SEED_CATEGORIES = [
             'Urbanas', 'Niñ@s', 'Montañeras', 'De ruta / pista', 'Antiguas', 
             'Tándems', 'Triciclos', 'Cuatriciclos', 'Accesorios', 'Eventos'
@@ -185,7 +190,7 @@ export default function Navbar() {
             label: cat,
             href: `/rentals?category=${encodeURIComponent(cat)}`
         }));
-    }, [inventory, combos]);
+    }, [inventory, combos, events]);
 
     const shopCategories = useMemo(() => {
         const categorySet = new Set<string>();
@@ -367,7 +372,7 @@ export default function Navbar() {
             `}</style>
 
             <div className="relative bg-brand-yellow">
-                <nav className="mx-auto" style={{ maxWidth: 1560, paddingLeft: 20, paddingRight: 20 }}>
+                <nav className="mx-auto relative" style={{ maxWidth: 1560, paddingLeft: 20, paddingRight: 20 }}>
                     {/* ═══════════ DESKTOP NAVBAR ═══════════ */}
                     <div className="hidden lg:flex items-center justify-between" style={{ height: 86 }}>
                         {/* Left: Logos + Centro text */}
@@ -409,7 +414,7 @@ export default function Navbar() {
                                 const categoriesList = getLinkCategories(link.label);
 
                                 return (
-                                    <div key={link.label} className="relative group">
+                                    <div key={link.label} className="group">
                                         <Link
                                             to={link.href}
                                             onClick={(event) => handleNavClick(event, link.href)}
@@ -428,10 +433,10 @@ export default function Navbar() {
                                             )}
                                         </Link>
 
-                                        {/* Desktop Dropdown on Hover */}
+                                        {/* Desktop Dropdown on Hover - Horizontal strip style */}
                                         {categoriesList.length > 0 && (
-                                            <div className="absolute left-1/2 -translate-x-1/2 top-full pt-2 opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto transition-all duration-200 z-50 transform translate-y-1 group-hover:translate-y-0">
-                                                <div className="bg-brand-charcoal border border-brand-yellow/20 rounded-2xl p-2 w-52 shadow-2xl flex flex-col gap-0.5">
+                                            <div className="absolute left-0 right-0 top-full pt-1 opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto transition-all duration-200 z-40 transform translate-y-1 group-hover:translate-y-0">
+                                                <div className="bg-brand-yellow border-t border-white/20 py-3.5 shadow-lg flex items-center justify-center gap-x-8 gap-y-3 flex-wrap px-6 rounded-b-[1.5rem]">
                                                     {categoriesList.map((cat: any) => (
                                                         <Link
                                                             key={cat.label}
@@ -444,7 +449,7 @@ export default function Navbar() {
                                                                     document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
                                                                 }
                                                             }}
-                                                            className="w-full text-left px-3.5 py-2 text-xs font-bold text-white/85 hover:text-brand-black hover:bg-brand-yellow rounded-xl transition-all duration-150 font-cocon capitalize leading-normal notranslate"
+                                                            className="text-xs font-black text-white hover:text-brand-charcoal transition-all duration-150 font-tangkiwood uppercase tracking-widest leading-normal notranslate drop-shadow-[0_1.5px_1.5px_rgba(0,0,0,0.65)] cursor-pointer"
                                                         >
                                                             {translateLabel(cat.label, language)}
                                                         </Link>
