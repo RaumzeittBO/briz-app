@@ -758,20 +758,22 @@ function EventSpecialView({ event, onClose, language }: { event: any; onClose: (
                 {/* Left Side: Photo Carousel */}
                 <div className="lg:col-span-7 flex flex-col gap-4">
                     {/* Main Active Image Display */}
-                    <div className="relative w-full h-[280px] xs:h-[350px] sm:h-[450px] md:h-[500px] bg-gray-50 rounded-2xl overflow-hidden group border border-gray-100 flex items-center justify-center">
+                    <div className="relative w-full h-[280px] xs:h-[350px] sm:h-[450px] md:h-[500px] bg-gray-50 rounded-2xl overflow-hidden group border border-gray-100">
                         {currentImages.length > 0 ? (
                             <>
-                                <AnimatePresence mode="wait">
-                                    <motion.img
-                                        key={`${activeSubIndex}-${activeIndex}`}
-                                        src={currentImages[activeIndex]}
-                                        initial={{ opacity: 0 }}
-                                        animate={{ opacity: 1 }}
-                                        exit={{ opacity: 0 }}
-                                        transition={{ duration: 0.3 }}
-                                        className="max-w-full max-h-full object-contain block"
-                                    />
-                                </AnimatePresence>
+                                <div className="absolute inset-0 flex items-center justify-center p-2 z-0">
+                                    <AnimatePresence mode="wait">
+                                        <motion.img
+                                            key={`${activeSubIndex}-${activeIndex}`}
+                                            src={currentImages[activeIndex]}
+                                            initial={{ opacity: 0 }}
+                                            animate={{ opacity: 1 }}
+                                            exit={{ opacity: 0 }}
+                                            transition={{ duration: 0.3 }}
+                                            className="max-w-full max-h-full object-contain pointer-events-none"
+                                        />
+                                    </AnimatePresence>
+                                </div>
 
                                 {/* Navigation Arrows */}
                                 {currentImages.length > 1 && (
