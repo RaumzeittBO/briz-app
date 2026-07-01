@@ -1,7 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { Upload, Loader2, CheckCircle2, XCircle, ImageIcon } from 'lucide-react';
 import { storage, auth } from '@/lib/firebase';
-import { ref as storageRef, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
+import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 
 // ── Image Compression ────────────────────────────────────────────────────────
 export const compressImage = (file: File, maxW = 1200, maxH = 1200, quality = 0.78): Promise<Blob> => {
@@ -48,45 +48,33 @@ export const compressImage = (file: File, maxW = 1200, maxH = 1200, quality = 0.
     });
 };
 
-// ── Upload with resumable task (no timeout hang) ─────────────────────────────
-export const uploadCompressedImage = (file: File, folder: string): Promise<string> => {
-    return new Promise(async (resolve, reject) => {
-        try {
-            // Verify auth token is present before attempting upload
-            const currentUser = auth.currentUser;
-            if (!currentUser) {
-                return reject(new Error('Debes estar autenticado para subir imágenes'));
-            }
+// ── Upload (simple multipart, not resumable) with 30s timeout ────────────────
+export const uploadCompressedImage = async (file: File, folder: string): Promise<string> => {
+    const currentUser = auth.currentUser;
+    console.log('[Upload] currentUser:', currentUser?.uid ?? 'NULL - no autenticado');
+    if (!currentUser) {
+        throw new Error('No autenticado. Por favor recarga la página.');
+    }
 
-            const compressedBlob = await compressImage(file);
-            const fileName = `${Date.now()}_${Math.random().toString(36).substring(2, 7)}.jpg`;
-            const path = storageRef(storage, `${folder}/${fileName}`);
+    console.log('[Upload] Comprimiendo:', file.name, `(${(file.size / 1024).toFixed(0)} KB)`);
+    const compressedBlob = await compressImage(file);
+    console.log('[Upload] Comprimido:', `${(compressedBlob.size / 1024).toFixed(0)} KB`, '— enviando a Storage...');
 
-            // uploadBytesResumable never hangs — it fires events instead of blocking
-            const task = uploadBytesResumable(path, compressedBlob, {
-                contentType: 'image/jpeg',
-            });
+    const fileName = `${Date.now()}_${Math.random().toString(36).substring(2, 7)}.jpg`;
+    const path = storageRef(storage, `${folder}/${fileName}`);
 
-            task.on(
-                'state_changed',
-                null, // progress callback (not needed here — handled per-file in the UI)
-                (error) => {
-                    console.error('Upload error:', error.code, error.message);
-                    reject(new Error(`Error de subida: ${error.code}`));
-                },
-                async () => {
-                    try {
-                        const url = await getDownloadURL(task.snapshot.ref);
-                        resolve(url);
-                    } catch (e) {
-                        reject(e);
-                    }
-                }
-            );
-        } catch (err) {
-            reject(err);
-        }
-    });
+    // Race uploadBytes against a 30-second timeout so it never hangs forever
+    const uploadPromise = uploadBytes(path, compressedBlob, { contentType: 'image/jpeg' });
+    const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('Timeout (30s): verifica tu conexión o las reglas de Storage')), 30000)
+    );
+
+    const result = await Promise.race([uploadPromise, timeoutPromise]);
+    console.log('[Upload] Subido exitosamente:', result.ref.fullPath);
+
+    const url = await getDownloadURL(result.ref);
+    console.log('[Upload] URL obtenida:', url);
+    return url;
 };
 
 // ── Per-file status ──────────────────────────────────────────────────────────
