@@ -8,9 +8,7 @@ import { useLanguage } from '@/context/LanguageContext';
 function WashiTape({ className }: { className: string }) {
     return (
         <div className={`absolute w-28 h-7 sm:w-36 sm:h-9 bg-[#FFFEE0]/82 border-x-2 border-dashed border-brand-black/15 backdrop-blur-[2px] shadow-[2px_2px_5px_rgba(0,0,0,0.06)] z-20 flex items-center justify-center select-none ${className}`}>
-            <div className="w-full h-full border-y border-dashed border-brand-black/5 flex items-center justify-center">
-                <span className="font-gochi text-[8px] sm:text-[10px] text-brand-black/35 uppercase tracking-widest font-black">BRIZ LIFE</span>
-            </div>
+            <div className="w-full h-full border-y border-dashed border-brand-black/5" />
         </div>
     );
 }

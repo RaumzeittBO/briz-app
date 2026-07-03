@@ -1,5 +1,5 @@
-import { createContext, useContext, useEffect, useState, useRef, type ComponentType, type CSSProperties, type ReactNode } from 'react';
-import { motion } from 'framer-motion';
+import { createContext, useContext, useEffect, useState, useRef, type CSSProperties, type ReactNode } from 'react';
+import { motion, useScroll, useTransform, useSpring, useMotionValue } from 'framer-motion';
 import { Link } from 'react-router-dom';
 import { useCommunity, type CommunityItem } from '@/context/CommunityContext';
 import { useStore } from '@/context/StoreContext';
@@ -13,7 +13,6 @@ import {
     ChevronRight,
     HeartHandshake,
     MessageCircleHeart,
-    Map,
     MapPinned,
     Route,
     ShieldCheck,
@@ -607,84 +606,65 @@ function HeroBikesBackdrop() {
     </div>;
 }
 
-function HeroCollage({ variant }: { variant: 'mobile' | 'desktop' }) {
-    const isMobile = variant === 'mobile';
-
+// Crinkled Translucent Washi Tape Sticker Component (No text)
+function WashiTape({ className }: { className: string }) {
     return (
-        <EditableLayer
-            id="heroCollage"
-            className={
-                isMobile
-                    ? 'relative mx-auto mt-6 mb-6 block w-[98vw] max-w-[650px] px-2 lg:hidden'
-                    : 'relative mx-auto hidden w-full max-w-none lg:ml-[-4.5rem] lg:mr-[-6rem] lg:mt-[-1rem] lg:block'
-            }
-        >
-        <motion.div
-            initial={{ opacity: 0, scale: 0.96, x: isMobile ? 0 : 20 }}
-            animate={{ opacity: 1, scale: 1, x: 0 }}
-            transition={{ duration: 0.85, delay: 0.08, ease: 'easeOut' }}
-        >
-            <motion.div
-                className="absolute left-[20%] top-[-6%] h-28 w-28 rounded-full border-2 border-brand-yellow/35 opacity-80 sm:h-48 sm:w-48"
-                animate={{ rotate: 360, scale: [1, 1.06, 1] }}
-                transition={{ rotate: { duration: 22, repeat: Infinity, ease: 'linear' }, scale: { duration: 5, repeat: Infinity, ease: 'easeInOut' } }}
-            />
-            <div className="absolute left-[25%] top-[-2%] h-20 w-20 rounded-full bg-brand-yellow/35 blur-2xl sm:h-32 sm:w-32" />
-            <svg className="absolute left-[4%] top-[2%] hidden h-44 w-36 text-[#C69F08]/45 sm:block" viewBox="0 0 120 160" fill="none" aria-hidden="true">
-                <path d="M58 154C43 104 47 55 84 8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-                <path d="M60 88C30 77 18 58 23 35" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-                <path d="M66 69C89 61 101 43 102 20" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-            </svg>
-            <motion.div
-                whileHover={{ scale: 1.025, y: -5, rotate: 0.25 }}
-                animate={{ y: [0, -10, 0], rotate: [0.35, -0.25, 0.35] }}
-                transition={{
-                    y: { duration: 6.2, repeat: Infinity, ease: 'easeInOut' },
-                    rotate: { duration: 6.2, repeat: Infinity, ease: 'easeInOut' },
-                    scale: { duration: 0.25 },
-                }}
-                className={isMobile ? 'relative mx-auto w-full' : 'relative ml-auto w-[min(62vw,880px)] xl:w-[min(60vw,940px)]'}
-            >
-                <SmartImage
-                    src={`${assetBase}/hero-collage-principal.webp?v=3`}
-                    fallbackSrcs={[`/menu-principal-celular/hero-collage-principal.webp?v=3`]}
-                    alt="Collage principal de bicicletas y experiencias Briz"
-                    placeholderLabel="hero-collage-principal.webp"
-                    loading="eager"
-                    fetchPriority="high"
-                    className="block h-auto w-full object-contain drop-shadow-[0_30px_40px_rgba(82,57,0,0.22)]"
-                    placeholderClassName="aspect-[1.25/1] rounded-[2.4rem] bg-[linear-gradient(135deg,#FFF4B8,#FFFDF3_48%,#DFF3EF)] shadow-[0_28px_70px_rgba(106,74,0,0.16)]"
-                />
-                <motion.span
-                    className="absolute bottom-[5%] left-[18%] -z-10 h-[34%] w-[70%] rounded-full bg-brand-yellow/35 blur-3xl"
-                    animate={{ scale: [0.9, 1.08, 0.9], opacity: [0.32, 0.64, 0.32] }}
-                    transition={{ duration: 5.8, repeat: Infinity, ease: 'easeInOut' }}
-                    aria-hidden="true"
-                />
-            </motion.div>
-            <motion.div
-                animate={{ y: [0, -9, 0], rotate: [0, -6, 0] }}
-                transition={{ duration: 4.4, repeat: Infinity, ease: 'easeInOut' }}
-                className="absolute bottom-[8%] left-[4%] hidden sm:grid h-12 w-12 place-items-center rounded-full bg-brand-yellow text-white shadow-[0_12px_26px_rgba(135,97,0,0.2)] ring-4 ring-white sm:h-14 sm:w-14"
-            >
-                <Bike className="h-6 w-6 sm:h-7 sm:w-7" />
-            </motion.div>
-            <motion.div
-                animate={{ y: [0, 8, 0], rotate: [0, 8, 0] }}
-                transition={{ duration: 4.9, repeat: Infinity, ease: 'easeInOut', delay: 0.3 }}
-                className="absolute right-[5%] top-[14%] hidden sm:grid h-11 w-11 place-items-center rounded-full bg-[#67B852] text-white shadow-[0_12px_24px_rgba(39,104,28,0.2)] ring-4 ring-white sm:h-12 sm:w-12"
-            >
-                <Sparkles className="h-5 w-5 sm:h-6 sm:w-6" />
-            </motion.div>
-        </motion.div>
-        </EditableLayer>
+        <div className={`absolute w-28 h-7 sm:w-36 sm:h-9 bg-[#FFFEE0]/82 border-x-2 border-dashed border-brand-black/15 backdrop-blur-[2px] shadow-[2px_2px_5px_rgba(0,0,0,0.06)] z-20 flex items-center justify-center select-none ${className}`}>
+            <div className="w-full h-full border-y border-dashed border-brand-black/5" />
+        </div>
     );
 }
 
 function HeroSection() {
     const { language } = useLanguage();
+    
+    // Mouse values locally inside HeroSection
+    const cardRef = useRef<HTMLDivElement>(null);
+    const x = useMotionValue(0);
+    const y = useMotionValue(0);
+    const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
+
+    // Transform coordinates [-0.5, 0.5] into angles of rotation [-6, 6] degrees
+    const rotateX = useTransform(y, [-0.5, 0.5], [6, -6]);
+    const rotateY = useTransform(x, [-0.5, 0.5], [-6, 6]);
+    
+    // Add smooth springs to avoid jittery movements
+    const springRotateX = useSpring(rotateX, { damping: 25, stiffness: 220 });
+    const springRotateY = useSpring(rotateY, { damping: 25, stiffness: 220 });
+    
+    // Floating transition on load and scroll
+    const cardScrollRef = useRef<HTMLDivElement>(null);
+    const { scrollYProgress } = useScroll({
+        target: cardScrollRef,
+        offset: ["start end", "end start"]
+    });
+    
+    // Smooth floating scale and rotate animation on scroll
+    const scrollRotate = useTransform(scrollYProgress, [0.1, 0.5, 0.9], [-1.2, 0, 1.2]);
+    const scrollScale = useTransform(scrollYProgress, [0.1, 0.5, 0.9], [0.98, 1, 0.98]);
+    
+    const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+        if (!cardRef.current) return;
+        const rect = cardRef.current.getBoundingClientRect();
+        const width = rect.width;
+        const height = rect.height;
+        const mouseX = e.clientX - rect.left - width / 2;
+        const mouseY = e.clientY - rect.top - height / 2;
+        x.set(mouseX / width);
+        y.set(mouseY / height);
+    };
+    
+    const handleMouseLeave = () => {
+        x.set(0);
+        y.set(0);
+    };
+
+    const webSrc = language === 'es' ? '/menu-principal-web/1.webp' : '/menu-principal-web/Ingles/1.webp';
+    const mobileSrc = language === 'es' ? '/menu-principal-celular/1.webp' : '/menu-principal-celular/Ingles/1.webp';
+
     return (
         <section className="relative isolate overflow-hidden bg-[#FFF8DF] pt-[86px] lg:pt-[104px]">
+            {/* Texture background */}
             <SmartImage
                 src={`${assetBase}/fondo-textura.webp`}
                 alt=""
@@ -693,127 +673,60 @@ function HeroSection() {
                 placeholderClassName="hidden"
             />
             <div className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(circle_at_24%_20%,rgba(255,210,0,0.34),transparent_34%),radial-gradient(circle_at_82%_36%,rgba(255,210,0,0.28),transparent_30%),radial-gradient(circle_at_66%_74%,rgba(255,210,0,0.14),transparent_28%),linear-gradient(180deg,#FFF9E8_0%,#FFFDF3_100%)]" />
+            
+            {/* Background elements */}
             <HeroParticles />
             <HeroBikesBackdrop />
             <LeafStem className="pointer-events-none absolute left-2 top-[34rem] hidden h-36 w-20 text-brand-yellow/50 lg:block" />
             <LeafStem className="pointer-events-none absolute right-2 top-40 hidden h-44 w-24 scale-x-[-1] text-brand-yellow/50 lg:block" />
 
-            <div className="mx-auto max-w-[1400px] px-4 pb-8 sm:px-6 lg:px-10">
-                <div className="grid min-h-[690px] items-center gap-0 py-7 sm:gap-7 lg:grid-cols-[0.42fr_0.58fr] lg:gap-0 lg:py-8">
-                    <motion.div
-                        initial={{ opacity: 0, x: -26 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        transition={{ duration: 0.7, ease: 'easeOut' }}
-                        className="relative z-10 mx-auto flex w-full max-w-[560px] flex-col items-center text-center lg:mx-0 lg:max-w-[680px] lg:items-start lg:text-left"
+            <div className="mx-auto max-w-[1400px] px-4 pb-8 sm:px-6 lg:px-10 flex justify-center">
+                <div ref={cardScrollRef} className="w-full flex justify-center py-6">
+                    <motion.div 
+                        ref={cardRef}
+                        onMouseMove={handleMouseMove}
+                        onMouseLeave={handleMouseLeave}
+                        style={{
+                            rotateX: isMobile ? 0 : springRotateX,
+                            rotateY: isMobile ? 0 : springRotateY,
+                            rotate: scrollRotate,
+                            scale: scrollScale,
+                            transformPerspective: isMobile ? undefined : 1000,
+                        }}
+                        whileHover={{ scale: 1.018 }}
+                        transition={{ duration: 0.2 }}
+                        className="relative bg-brand-yellow border-[6px] sm:border-[12px] border-brand-yellow outline outline-3 sm:outline-4 outline-brand-black shadow-[14px_14px_0_rgba(0,0,0,1)] sm:shadow-[20px_20px_0_rgba(0,0,0,1)] rounded-[1.8rem] sm:rounded-[2.4rem] w-full max-w-[98vw] md:max-w-[1480px] group transition-all hover:translate-y-[-4px] hover:shadow-[24px_24px_0_rgba(0,0,0,1)] select-none z-10"
                     >
-                        <EditableLayer id="heroLettering" className="relative mt-4 w-full max-w-[34rem] sm:mt-5 lg:ml-[-1.5rem] lg:w-[38rem]">
-                            <motion.div
-                                initial={{ opacity: 0, y: 18, rotate: -1.2, scale: 0.92 }}
-                                animate={{
-                                    opacity: 1,
-                                    y: [0, -7, 0],
-                                    rotate: [-0.7, 0.45, -0.7],
-                                    scale: language === 'en' ? 1.4 : 1,
-                                }}
-                                className={language === 'en' ? 'origin-center lg:origin-left' : 'origin-center'}
-                                transition={{
-                                    opacity: { duration: 0.5, delay: 0.15 },
-                                    scale: { duration: 0.7, delay: 0.15, ease: 'easeOut' },
-                                    y: { duration: 5.2, repeat: Infinity, ease: 'easeInOut' },
-                                    rotate: { duration: 5.2, repeat: Infinity, ease: 'easeInOut' },
-                                }}
-                            >
-                                <SmartImage
-                                    src={language === 'es' ? `${assetBase}/lettering-una-bicicleta.webp?v=3` : '/menu-principal-web/lettering-ingles.png'}
-                                    fallbackSrcs={language === 'es' ? [`/menu-principal-celular/lettering-una-bicicleta.webp?v=3`] : ['/menu-principal-web/lettering-ingles.png']}
-                                    alt={language === 'es' ? "Una bicicleta. Un ciclo de expresiones infinitas." : "A bicycle. A cycle of infinite expressions."}
-                                    placeholderLabel="lettering-una-bicicleta.webp"
+                        {/* Scrapbook corner tapes (plain, no text) */}
+                        <WashiTape className="-top-3 left-6 sm:left-14 rotate-[-12deg]" />
+                        <WashiTape className="-top-4 right-6 sm:right-14 rotate-[15deg]" />
+
+                        {/* Inner image container */}
+                        <div className="w-full h-auto overflow-hidden rounded-[1.35rem] sm:rounded-[1.7rem] relative">
+                            <div className="pointer-events-none absolute inset-0 bg-gradient-to-tr from-transparent via-white/5 to-white/10 z-10 mix-blend-overlay" />
+                            
+                            <picture className="w-full h-auto block select-none">
+                                <source media="(min-width: 768px)" srcSet={webSrc} />
+                                <img 
+                                    src={mobileSrc} 
+                                    alt="Menu Principal Briz"
+                                    className="w-full h-auto block border-b-2 border-brand-black"
+                                    style={{ 
+                                        transform: 'translateZ(0)',
+                                        backfaceVisibility: 'hidden',
+                                        WebkitFontSmoothing: 'antialiased'
+                                    }}
                                     loading="eager"
-                                    fetchPriority="high"
-                                    className="block h-auto w-full object-contain drop-shadow-[0_18px_24px_rgba(55,35,0,0.18)]"
-                                    placeholderClassName="aspect-[1.35/1] rounded-[1.6rem] border border-dashed border-brand-yellow/60 bg-[#FFF6CC]/70"
                                 />
-                                <motion.span
-                                    className="absolute left-[8%] top-[8%] -z-10 h-[64%] w-[72%] rounded-full bg-brand-yellow/24 blur-3xl"
-                                    animate={{ scale: [0.92, 1.08, 0.92], opacity: [0.38, 0.68, 0.38] }}
-                                    transition={{ duration: 4.8, repeat: Infinity, ease: 'easeInOut' }}
-                                    aria-hidden="true"
-                                />
-                            </motion.div>
-                        </EditableLayer>
-
-                        <HeroCollage variant="mobile" />
-
-                        <p className="mt-6 max-w-[25rem] font-cocon text-lg leading-relaxed text-brand-black/72 sm:mt-6 sm:text-xl lg:mt-6 lg:max-w-[33rem] lg:text-2xl">
-                            Alquila, recorre y vive experiencias únicas sobre dos ruedas.
-                        </p>
-
-                        <EditableLayer id="heroButtons" className="mt-5 flex w-full max-w-[34rem] flex-col items-center gap-3 px-3 sm:mt-7 sm:flex-row sm:px-0 lg:max-w-[42rem] lg:items-start lg:justify-start lg:gap-4">
-                            <HomeButton to="/rentals" icon={Bike} variant="yellow">
-                                Alquilar bicicleta
-                            </HomeButton>
-                            <HomeButton to="/routes" icon={Map} variant="white">
-                                Explorar rutas
-                            </HomeButton>
-                        </EditableLayer>
-
-                        <div className="mt-6 hidden items-center gap-3 sm:flex">
-                            <div className="flex -space-x-2">
-                                {['#FFD200', '#67B852', '#247EBC', '#FD7B2C'].map((color, index) => (
-                                    <span
-                                        key={color}
-                                        className="grid h-9 w-9 place-items-center rounded-full border-2 border-white font-maiandra text-[10px] font-bold text-white shadow-sm"
-                                        style={{ backgroundColor: color }}
-                                    >
-                                        {index + 1}
-                                    </span>
-                                ))}
-                            </div>
-                            <div>
-                                <div className="flex gap-0.5">
-                                    {Array.from({ length: 5 }).map((_, index) => (
-                                        <Star key={index} className="h-3.5 w-3.5 fill-brand-yellow text-brand-yellow" strokeWidth={0} />
-                                    ))}
-                                </div>
-                                <p className="font-maiandra text-xs text-brand-black/55">+1,250 aventureros felices</p>
-                            </div>
+                            </picture>
                         </div>
                     </motion.div>
-
-                    <HeroCollage variant="desktop" />
                 </div>
             </div>
         </section>
     );
 }
 
-function HomeButton({
-    to,
-    icon: Icon,
-    variant,
-    children,
-}: {
-    to: string;
-    icon: ComponentType<{ className?: string; strokeWidth?: number }>;
-    variant: 'yellow' | 'white';
-    children: string;
-}) {
-    const classes =
-        variant === 'yellow'
-            ? 'bg-brand-yellow text-brand-black shadow-[0_12px_24px_rgba(125,91,0,0.18)]'
-            : 'bg-white/90 text-brand-black shadow-[0_12px_24px_rgba(0,0,0,0.08)] ring-1 ring-brand-yellow/20';
-
-    return (
-        <Link
-            to={to}
-            className={`group inline-flex min-h-[3.25rem] w-full sm:w-auto sm:flex-1 items-center justify-center gap-2 rounded-full px-3 font-cocon text-xs font-bold transition duration-200 hover:-translate-y-0.5 hover:scale-[1.03] hover:shadow-[0_16px_28px_rgba(84,60,0,0.18)] sm:min-h-14 sm:gap-3 sm:px-6 sm:text-sm lg:min-h-16 lg:px-8 lg:text-base ${classes}`}
-        >
-            <Icon className="h-4 w-4 sm:h-5 sm:w-5 lg:h-6 lg:w-6" strokeWidth={2.2} />
-            <span>{children}</span>
-            <ArrowRight className="h-4 w-4 shrink-0 transition-transform group-hover:translate-x-1 lg:h-5 lg:w-5" strokeWidth={2.6} />
-        </Link>
-    );
-}
 
 function ServiceStrip() {
     return (
