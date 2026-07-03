@@ -6,7 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { useStore } from '@/context/StoreContext';
 import type { Customer } from '@/context/StoreContext';
-import { Download, ExternalLink, Search, Edit, User, UserPlus, Eye, FileText } from 'lucide-react';
+import { ExternalLink, Search, Edit, User, UserPlus, Eye, FileText } from 'lucide-react';
 
 export default function CustomersPage() {
     const { customers, updateCustomer, addOrUpdateCustomer, deleteCustomer, sales, rentals } = useStore();
@@ -255,32 +255,65 @@ export default function CustomersPage() {
                                                 <p className="text-[10px] font-bold uppercase tracking-widest text-brand-charcoal/45">Documento subido</p>
                                                 {detailsCustomer.documentoUrl && (
                                                     <div className="flex flex-wrap gap-2">
-                                                        <Button type="button" onClick={() => openDocument(detailsCustomer.documentoUrl)} className="h-9 rounded-full bg-brand-yellow px-4 text-xs font-black text-brand-black hover:bg-white">
-                                                            <ExternalLink className="mr-1.5 h-3.5 w-3.5" /> Abrir
+                                                        <Button type="button" onClick={() => openDocument(detailsCustomer.documentoUrl)} className="h-9 rounded-full bg-brand-yellow px-4 text-xs font-black text-brand-black hover:bg-white cursor-pointer">
+                                                            <ExternalLink className="mr-1.5 h-3.5 w-3.5" /> Anverso
                                                         </Button>
-                                                        <a href={detailsCustomer.documentoUrl} download target="_blank" rel="noreferrer" className="inline-flex h-9 items-center rounded-full border border-brand-yellow/40 bg-white px-4 text-xs font-black text-brand-charcoal hover:bg-brand-yellow">
-                                                            <Download className="mr-1.5 h-3.5 w-3.5" /> Descargar
-                                                        </a>
+                                                        {detailsCustomer.documentoReversoUrl && (
+                                                            <Button type="button" onClick={() => openDocument(detailsCustomer.documentoReversoUrl)} className="h-9 rounded-full bg-brand-yellow px-4 text-xs font-black text-brand-black hover:bg-white cursor-pointer">
+                                                                <ExternalLink className="mr-1.5 h-3.5 w-3.5" /> Reverso
+                                                            </Button>
+                                                        )}
                                                     </div>
                                                 )}
                                             </div>
-                                            <div className="min-h-[560px] rounded-2xl overflow-hidden bg-brand-yellow/5 border border-brand-yellow/15 flex items-center justify-center">
-                                                {detailsCustomer.documentoUrl ? (
-                                                    isPdfDocument(detailsCustomer.documentoUrl) ? (
-                                                        <object data={detailsCustomer.documentoUrl} type="application/pdf" className="h-[650px] w-full bg-white">
-                                                            <iframe
-                                                                src={detailsCustomer.documentoUrl}
-                                                                title={`Documento de ${detailsCustomer.name}`}
-                                                                className="h-[650px] w-full bg-white"
-                                                            />
-                                                        </object>
-                                                    ) : (
-                                                        <button type="button" onClick={() => openDocument(detailsCustomer.documentoUrl)} className="h-full w-full cursor-zoom-in">
-                                                            <img src={detailsCustomer.documentoUrl} className="h-[650px] w-full object-contain" alt={`Documento de ${detailsCustomer.name}`} />
-                                                        </button>
-                                                    )
-                                                ) : (
-                                                    <FileText className="w-16 h-16 text-brand-charcoal/20" />
+                                            
+                                            <div className="space-y-4 max-h-[680px] overflow-y-auto pr-1">
+                                                {/* Anverso / Front Side */}
+                                                <div>
+                                                    {detailsCustomer.documentoUrl && (detailsCustomer.documentoReversoUrl || isPdfDocument(detailsCustomer.documentoUrl)) && (
+                                                        <p className="text-[9px] font-black uppercase tracking-wider text-brand-charcoal/40 mb-1.5">Parte Frontal (Anverso) / Archivo Principal</p>
+                                                    )}
+                                                    <div className="min-h-[300px] rounded-2xl overflow-hidden bg-brand-yellow/5 border border-brand-yellow/15 flex items-center justify-center">
+                                                        {detailsCustomer.documentoUrl ? (
+                                                            isPdfDocument(detailsCustomer.documentoUrl) ? (
+                                                                <object data={detailsCustomer.documentoUrl} type="application/pdf" className="h-[550px] w-full bg-white">
+                                                                    <iframe
+                                                                        src={detailsCustomer.documentoUrl}
+                                                                        title={`Documento de ${detailsCustomer.name}`}
+                                                                        className="h-[550px] w-full bg-white"
+                                                                    />
+                                                                </object>
+                                                            ) : (
+                                                                <button type="button" onClick={() => openDocument(detailsCustomer.documentoUrl)} className="h-full w-full cursor-zoom-in flex items-center justify-center p-2 bg-white">
+                                                                    <img src={detailsCustomer.documentoUrl} className="max-h-[500px] max-w-full object-contain" alt={`Anverso de ${detailsCustomer.name}`} />
+                                                                </button>
+                                                            )
+                                                        ) : (
+                                                            <FileText className="w-16 h-16 text-brand-charcoal/20" />
+                                                        )}
+                                                    </div>
+                                                </div>
+
+                                                {/* Reverso / Back Side */}
+                                                {detailsCustomer.documentoReversoUrl && (
+                                                    <div>
+                                                        <p className="text-[9px] font-black uppercase tracking-wider text-brand-charcoal/40 mt-3 mb-1.5">Parte Posterior (Reverso)</p>
+                                                        <div className="min-h-[300px] rounded-2xl overflow-hidden bg-brand-yellow/5 border border-brand-yellow/15 flex items-center justify-center">
+                                                            {isPdfDocument(detailsCustomer.documentoReversoUrl) ? (
+                                                                <object data={detailsCustomer.documentoReversoUrl} type="application/pdf" className="h-[550px] w-full bg-white">
+                                                                    <iframe
+                                                                        src={detailsCustomer.documentoReversoUrl}
+                                                                        title={`Reverso de ${detailsCustomer.name}`}
+                                                                        className="h-[550px] w-full bg-white"
+                                                                    />
+                                                                </object>
+                                                            ) : (
+                                                                <button type="button" onClick={() => openDocument(detailsCustomer.documentoReversoUrl)} className="h-full w-full cursor-zoom-in flex items-center justify-center p-2 bg-white">
+                                                                    <img src={detailsCustomer.documentoReversoUrl} className="max-h-[500px] max-w-full object-contain" alt={`Reverso de ${detailsCustomer.name}`} />
+                                                                </button>
+                                                            )}
+                                                        </div>
+                                                    </div>
                                                 )}
                                             </div>
                                         </div>

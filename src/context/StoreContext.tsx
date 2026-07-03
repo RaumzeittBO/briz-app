@@ -241,6 +241,7 @@ interface StoreContextType {
     routes: CyclingRoute[];
     events: EventItem[];
     bikeCategories: string[];
+    shopCategories: string[];
     isLoaded: boolean;
     rentalSettings: RentalSettings;
     updateRentalSettings: (updates: Partial<RentalSettings>, qrFile: File | null) => Promise<void>;
@@ -259,6 +260,13 @@ interface StoreContextType {
     addBikeCategory: (category: string) => Promise<void>;
     deleteBikeCategory: (category: string) => Promise<void>;
     updateBikeCategory: (oldCategory: string, newCategory: string) => Promise<void>;
+    reorderBikeCategories: (categories: string[]) => Promise<void>;
+
+    // Shop Categories CRUD
+    addShopCategory: (category: string) => Promise<void>;
+    deleteShopCategory: (category: string) => Promise<void>;
+    updateShopCategory: (oldCategory: string, newCategory: string) => Promise<void>;
+    reorderShopCategories: (categories: string[]) => Promise<void>;
 
     // Inventory CRUD
     addInventoryItem: (item: InventoryItem) => Promise<void>;
@@ -341,6 +349,7 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
     const [events, setEvents] = useState<EventItem[]>([]);
     const [localRoutes, setLocalRoutes] = useState<CyclingRoute[]>(() => safeJSON<CyclingRoute[]>(LOCAL_ROUTES_KEY, []));
     const [bikeCategories, setBikeCategories] = useState<string[]>([]);
+    const [shopCategories, setShopCategories] = useState<string[]>([]);
     const [isLoaded, setIsLoaded] = useState(false);
 
     const [rentalSettings, setRentalSettings] = useState<RentalSettings>(() => safeJSON<RentalSettings>(LOCAL_RENTAL_SETTINGS_KEY, {
@@ -476,6 +485,18 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
             console.error("Error fetching bike categories:", error);
         });
 
+        const unsubShopCats = onSnapshot(doc(db, 'settings', 'shop_categories'), (snap) => {
+            if (snap.exists()) {
+                setShopCategories(snap.data().categories || []);
+            } else {
+                const defaults = ['Bicicletas', 'Accesorios', 'Repuestos', 'Indumentaria', 'Otros'];
+                setDoc(doc(db, 'settings', 'shop_categories'), { categories: defaults });
+                setShopCategories(defaults);
+            }
+        }, (error) => {
+            console.error("Error fetching shop categories:", error);
+        });
+
         const unsubEvents = onSnapshot(query(collection(db, 'events')), (snap) => {
             setEvents(snap.docs.map(doc => ({ ...doc.data() } as EventItem)));
         }, (error) => {
@@ -484,7 +505,7 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
 
         setIsLoaded(true);
         return () => {
-            unsubInv(); unsubCombos(); unsubRentals(); unsubSales(); unsubCustomers(); unsubSO(); unsubSettings(); unsubRoutes(); unsubBikeCats(); unsubEvents();
+            unsubInv(); unsubCombos(); unsubRentals(); unsubSales(); unsubCustomers(); unsubSO(); unsubSettings(); unsubRoutes(); unsubBikeCats(); unsubShopCats(); unsubEvents();
         };
     }, []);
 
@@ -791,7 +812,6 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
         }
         saveLocalRoutes(current => current.filter(r => r.id !== id));
     };
-
     const addBikeCategory = async (cat: string) => {
         const trimmed = cat.trim();
         if (trimmed && !bikeCategories.includes(trimmed)) {
@@ -822,6 +842,49 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
         for (const combo of combosToUpdate) {
             await updateCombo(combo.id, { category: trimmedNew });
         }
+    };
+    const reorderBikeCategories = async (nextCategories: string[]) => {
+        await setDoc(doc(db, 'settings', 'bike_categories'), { categories: nextCategories });
+        setBikeCategories(nextCategories);
+    };
+
+    const addShopCategory = async (cat: string) => {
+        const trimmed = cat.trim();
+        if (trimmed && !shopCategories.includes(trimmed)) {
+            const updated = [...shopCategories, trimmed];
+            await setDoc(doc(db, 'settings', 'shop_categories'), { categories: updated });
+            setShopCategories(updated);
+        }
+    };
+    const deleteShopCategory = async (cat: string) => {
+        const updated = shopCategories.filter(c => c !== cat);
+        await setDoc(doc(db, 'settings', 'shop_categories'), { categories: updated });
+        setShopCategories(updated);
+    };
+    const updateShopCategory = async (oldCat: string, newCat: string) => {
+        const trimmedOld = oldCat.trim();
+        const trimmedNew = newCat.trim();
+        if (!trimmedNew || trimmedOld === trimmedNew) return;
+
+        const updated = shopCategories.map(c => c === trimmedOld ? trimmedNew : c);
+        await setDoc(doc(db, 'settings', 'shop_categories'), { categories: updated });
+        setShopCategories(updated);
+
+        // Update items in inventory
+        const itemsToUpdate = inventory.filter(i => i.category === trimmedOld);
+        for (const item of itemsToUpdate) {
+            await updateInventoryItem(item.id, { category: trimmedNew });
+        }
+
+        // Update combos
+        const combosToUpdate = combos.filter(c => c.category === trimmedOld);
+        for (const combo of combosToUpdate) {
+            await updateCombo(combo.id, { category: trimmedNew });
+        }
+    };
+    const reorderShopCategories = async (nextCategories: string[]) => {
+        await setDoc(doc(db, 'settings', 'shop_categories'), { categories: nextCategories });
+        setShopCategories(nextCategories);
     };
 
     const addCombo = async (combo: ComboProduct) => {
@@ -1201,7 +1264,8 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
         currentCustomer, loginCustomer, registerCustomer, logoutCustomer,
         routes: mergedRoutes, addRoute, updateRoute, deleteRoute,
         events, addEvent, updateEvent, deleteEvent,
-        bikeCategories, addBikeCategory, deleteBikeCategory, updateBikeCategory
+        bikeCategories, addBikeCategory, deleteBikeCategory, updateBikeCategory, reorderBikeCategories,
+        shopCategories, addShopCategory, deleteShopCategory, updateShopCategory, reorderShopCategories
     };
 
     return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;

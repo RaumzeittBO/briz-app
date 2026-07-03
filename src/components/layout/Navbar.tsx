@@ -63,7 +63,7 @@ const TireTrackSeparator = ({ className = '', style }: { className?: string; sty
     </svg>
 );
 
-import { useStore, type InventoryItem, type ComboProduct, type EventItem } from '@/context/StoreContext';
+import { useStore, type InventoryItem, type ComboProduct } from '@/context/StoreContext';
 import CustomerAuthModal from './CustomerAuthModal';
 
 const MECANICA_CATEGORIES = [
@@ -117,7 +117,7 @@ export default function Navbar() {
     const location = useLocation();
     const navigate = useNavigate();
     
-    const { currentCustomer, logoutCustomer, routes, inventory, combos, events } = useStore();
+    const { currentCustomer, logoutCustomer, routes, inventory, combos, events, bikeCategories, shopCategories } = useStore();
     const { language, setLanguage } = useLanguage();
     const [authModalOpen, setAuthModalOpen] = useState(false);
     const [langDropdownOpen, setLangDropdownOpen] = useState(false);
@@ -157,32 +157,17 @@ export default function Navbar() {
             }
         });
 
-        // Dynamic Event categories
-        (events || []).forEach((e: EventItem) => {
-            productCategorySet.add(e.name);
-        });
-
-        const RENTAL_SEED_CATEGORIES = [
-            'Urbanas', 'Niñ@s', 'Montañeras', 'De ruta / pista', 'Antiguas', 
-            'Tándems', 'Triciclos', 'Cuatriciclos', 'Accesorios', 'Eventos'
-        ];
+        // Collapse events into a single "Eventos" item in menu
+        if ((events || []).length > 0) {
+            productCategorySet.add('Eventos');
+        }
 
         const sortCategories = (a: string, b: string) => {
-            const aPriority = a === 'Bicicletas' ? -1 : 0;
-            const bPriority = b === 'Bicicletas' ? -1 : 0;
-            if (aPriority !== bPriority) {
-                if (aPriority === -1) return -1;
-                return aPriority - bPriority;
-            }
-            if (a === 'Accesorios') return 1;
-            if (b === 'Accesorios') return -1;
-            const seedA = RENTAL_SEED_CATEGORIES.indexOf(a);
-            const seedB = RENTAL_SEED_CATEGORIES.indexOf(b);
-            if (seedA !== -1 || seedB !== -1) {
-                if (seedA === -1) return 1;
-                if (seedB === -1) return -1;
-                return seedA - seedB;
-            }
+            const indexA = bikeCategories.indexOf(a);
+            const indexB = bikeCategories.indexOf(b);
+            if (indexA !== -1 && indexB !== -1) return indexA - indexB;
+            if (indexA !== -1) return -1;
+            if (indexB !== -1) return 1;
             return a.localeCompare(b);
         };
 
@@ -190,34 +175,14 @@ export default function Navbar() {
             label: cat,
             href: `/rentals?category=${encodeURIComponent(cat)}`
         }));
-    }, [inventory, combos, events]);
+    }, [inventory, combos, events, bikeCategories]);
 
-    const shopCategories = useMemo(() => {
-        const categorySet = new Set<string>();
-
-        // Single inventory items available for sale
-        (inventory || []).filter((i: InventoryItem) => i.availableForSale && i.active).forEach((i: InventoryItem) => {
-            categorySet.add(i.category || (i.itemType === 'bike' ? 'Bicicletas' : 'Accesorios'));
-        });
-
-        // Combos available for sale
-        (combos || []).filter((c: ComboProduct) => c.availableForSale && c.active).forEach((c: ComboProduct) => {
-            categorySet.add(c.category || 'Bicicletas');
-        });
-
-        const sortShopCategories = (a: string, b: string) => {
-            if (a === 'Bicicletas') return -1;
-            if (b === 'Bicicletas') return 1;
-            if (a === 'Accesorios') return 1;
-            if (b === 'Accesorios') return -1;
-            return a.localeCompare(b);
-        };
-
-        return Array.from(categorySet).sort(sortShopCategories).map((cat: string) => ({
+    const shopCategoriesLinks = useMemo(() => {
+        return (shopCategories || []).map((cat: string) => ({
             label: cat,
             href: `/shop?category=${encodeURIComponent(cat)}`
         }));
-    }, [inventory, combos]);
+    }, [shopCategories]);
 
     const ciclotoursCategories = useMemo(() => {
         return (routes || []).map((r: any) => ({
@@ -228,7 +193,7 @@ export default function Navbar() {
 
     const getLinkCategories = (label: string) => {
         if (label === 'Alquiler' || label === 'Rentals') return rentalCategories;
-        if (label === 'Tienda' || label === 'Shop') return shopCategories;
+        if (label === 'Tienda' || label === 'Shop') return shopCategoriesLinks;
         if (label === 'Ciclotours') return ciclotoursCategories;
         if (label === 'Mecánica' || label === 'Mechanics') return MECANICA_CATEGORIES;
         if (label === 'Comunidad' || label === 'Community') return COMUNIDAD_CATEGORIES;
@@ -679,7 +644,7 @@ export default function Navbar() {
                                                 '/shop', 
                                                 Store, 
                                                 'Tienda', 
-                                                shopCategories
+                                                shopCategoriesLinks
                                             )}
 
                                             {/* ── CICLOTOURS ── */}

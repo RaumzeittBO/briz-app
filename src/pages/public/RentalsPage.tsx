@@ -12,7 +12,7 @@ import CustomerAuthModal from '@/components/layout/CustomerAuthModal';
 import RentalCheckoutWizard from '@/components/rentals/RentalCheckoutWizard';
 import type { RentalCartItem } from '@/components/rentals/RentalCheckoutWizard';
 import { useLanguage } from '@/context/LanguageContext';
-import { RENTAL_SEED_CATEGORIES } from '@/data/rentalSeedData';
+
 
 
 
@@ -30,27 +30,7 @@ type DisplayProduct = {
   pricePerHour: number; priceFrom5thHour: number; pricePerDay: number; pricePerWeek: number; pricePerMonth: number;
 };
 
-const CATEGORY_PRIORITY = ['Urbanas', 'Montañeras'];
 
-function sortCategories(a: string, b: string) {
-  const aPriority = CATEGORY_PRIORITY.indexOf(a);
-  const bPriority = CATEGORY_PRIORITY.indexOf(b);
-  if (aPriority !== -1 || bPriority !== -1) {
-    if (aPriority === -1) return 1;
-    if (bPriority === -1) return -1;
-    return aPriority - bPriority;
-  }
-  if (a === 'Accesorios') return 1;
-  if (b === 'Accesorios') return -1;
-  const seedA = RENTAL_SEED_CATEGORIES.indexOf(a);
-  const seedB = RENTAL_SEED_CATEGORIES.indexOf(b);
-  if (seedA !== -1 || seedB !== -1) {
-    if (seedA === -1) return 1;
-    if (seedB === -1) return -1;
-    return seedA - seedB;
-  }
-  return a.localeCompare(b);
-}
 
 function productCategories(product: DisplayProduct) {
   const mainCategory = product.category || (product.itemType === 'accessory' ? 'Accesorios' : 'Otros');
@@ -93,7 +73,16 @@ const translateProductName = (name: string, lang: string) => {
 
 export default function RentalsPage() {
   const { language } = useLanguage();
-  const { inventory, combos, getComboAvailability, currentCustomer, events } = useStore();
+  const { inventory, combos, getComboAvailability, currentCustomer, events, bikeCategories } = useStore();
+
+  const sortCategories = (a: string, b: string) => {
+    const indexA = bikeCategories.indexOf(a);
+    const indexB = bikeCategories.indexOf(b);
+    if (indexA !== -1 && indexB !== -1) return indexA - indexB;
+    if (indexA !== -1) return -1;
+    if (indexB !== -1) return 1;
+    return a.localeCompare(b);
+  };
   const { totalItems } = useCart();
 
   const [search, setSearch] = useState('');
@@ -224,9 +213,11 @@ export default function RentalsPage() {
     products.forEach(product => {
       productCategories(product).forEach(cat => productCategorySet.add(cat));
     });
-    // Events are shown in their own section, NOT in the category filter bar
+    if ((events || []).length > 0) {
+      productCategorySet.add('Eventos');
+    }
     return ['Todas', ...Array.from(productCategorySet).sort(sortCategories)];
-  }, [products]);
+  }, [products, events, bikeCategories]);
 
   const filtered = useMemo(() => {
     return products.filter(p => {
@@ -280,8 +271,13 @@ export default function RentalsPage() {
   };
 
   const closeCategoryView = () => {
-    setExpandedCategory(null);
-    setCategory('Todas');
+    if (selectedEvent) {
+      setExpandedCategory('Eventos');
+      setCategory('Eventos');
+    } else {
+      setExpandedCategory(null);
+      setCategory('Todas');
+    }
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -585,6 +581,65 @@ export default function RentalsPage() {
 
           {selectedEvent ? (
             <EventSpecialView event={selectedEvent} onClose={closeCategoryView} language={language} />
+          ) : expandedCategory === 'Eventos' ? (
+            <div className="py-8">
+              <div className="mb-7 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+                <div>
+                  <button
+                    type="button"
+                    onClick={closeCategoryView}
+                    className="mb-3 inline-flex rounded-full border border-brand-yellow/40 bg-white px-4 py-2 text-xs font-black text-brand-black shadow-sm hover:bg-brand-yellow"
+                  >
+                    ← Volver a categorías
+                  </button>
+                  <h1 
+                    className="font-tan text-[1.5rem] xs:text-[1.8rem] sm:text-[2.2rem] sm:leading-[1.18] lg:text-[2.6rem] uppercase tracking-normal text-brand-yellow [-webkit-text-stroke:1.1px_#000] drop-shadow-[1.5px_1.5px_0_rgba(0,0,0,1)] whitespace-normal break-words"
+                  >
+                    Eventos Especiales
+                  </h1>
+                  <p className="mt-3.5 sm:mt-2 text-[10px] sm:text-xs font-black uppercase text-gray-400 tracking-widest font-maiandra">
+                    {(events || []).length} {(events || []).length === 1 ? 'evento disponible' : 'eventos disponibles'}
+                  </p>
+                </div>
+              </div>
+              <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+                {(events || []).map(ev => {
+                  const firstImg = ev.subcategories?.[0]?.images?.[0] || ev.images?.[0] || '';
+                  return (
+                    <motion.div
+                      key={ev.id}
+                      whileHover={{ y: -5 }}
+                      transition={{ duration: 0.25 }}
+                      onClick={() => openCategoryView(ev.name)}
+                      className="cursor-pointer group rounded-[1.8rem] overflow-hidden bg-white border border-gray-100 shadow-sm hover:shadow-xl transition-all duration-300"
+                    >
+                      <div className="relative aspect-[16/9] bg-gray-50 overflow-hidden">
+                        {firstImg ? (
+                          <img src={firstImg} alt={ev.name} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center">
+                            <ImageIcon className="w-10 h-10 text-gray-200" />
+                          </div>
+                        )}
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
+                        <div className="absolute bottom-4 left-4 right-4">
+                          <h3 className="font-tan text-white text-xl uppercase drop-shadow-md leading-tight">{ev.name}</h3>
+                          {ev.price !== undefined && (
+                            <span className="inline-block mt-1 bg-brand-yellow text-brand-black text-[10px] font-black px-2 py-0.5 rounded-md uppercase">Desde Bs. {ev.price}</span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="p-5 flex items-center justify-between">
+                        <p className="text-xs text-gray-500 font-medium line-clamp-2 flex-1 pr-4">{ev.description}</p>
+                        <span className="shrink-0 bg-brand-yellow text-brand-black text-[10px] font-black px-3 py-2 rounded-full uppercase tracking-wide group-hover:bg-brand-black group-hover:text-brand-yellow transition-colors">
+                          Ver fotos →
+                        </span>
+                      </div>
+                    </motion.div>
+                  );
+                })}
+              </div>
+            </div>
           ) : expandedCategory ? (
             <div className="py-8">
               <div className="mb-7 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">

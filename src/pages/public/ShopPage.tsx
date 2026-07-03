@@ -32,16 +32,19 @@ type ShopItem = {
     image: string;
 };
 
-function sortShopCategories(a: string, b: string) {
-    if (a === 'Bicicletas') return -1;
-    if (b === 'Bicicletas') return 1;
-    if (a === 'Accesorios') return 1;
-    if (b === 'Accesorios') return -1;
-    return a.localeCompare(b);
-}
+
 
 export default function ShopPage() {
-    const { inventory, combos, addSale, addOrUpdateCustomer } = useStore();
+    const { inventory, combos, addSale, addOrUpdateCustomer, shopCategories } = useStore();
+
+    const sortShopCategories = (a: string, b: string) => {
+        const indexA = shopCategories.indexOf(a);
+        const indexB = shopCategories.indexOf(b);
+        if (indexA !== -1 && indexB !== -1) return indexA - indexB;
+        if (indexA !== -1) return -1;
+        if (indexB !== -1) return 1;
+        return a.localeCompare(b);
+    };
     const { items: cartItems, addToCart, removeFromCart, updateQuantity, clearCart, totalItems, totalPrice } = useCart();
 
     const [search, setSearch] = useState('');

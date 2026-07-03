@@ -5,10 +5,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Search, Plus, Edit, Trash2, Image as ImageIcon, Bike, Wrench, Layers, X, Settings } from 'lucide-react';
+import { Search, Plus, Edit, Trash2, Image as ImageIcon, Bike, Wrench, Layers, X, Settings, GripVertical } from 'lucide-react';
 import { useStore } from '@/context/StoreContext';
 import type { InventoryItem, ComboProduct, WheelSizeEntry, ComboComponent } from '@/context/StoreContext';
-import { RENTAL_SEED_CATEGORIES } from '@/data/rentalSeedData';
+
 import { FileUploader } from '@/components/ui/file-uploader';
 
 import { Label } from '@/components/ui/label';
@@ -17,25 +17,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 
 const WHEEL_OPTIONS = ['12','16','20','24','26','27','28','29'];
 const NON_BIKE_CATEGORIES = new Set(['Accesorios', 'Combinados']);
-const CATEGORY_PRIORITY = ['Urbanas', 'Montañeras'];
 
-function sortCategories(a: string, b: string) {
-  const aPriority = CATEGORY_PRIORITY.indexOf(a);
-  const bPriority = CATEGORY_PRIORITY.indexOf(b);
-  if (aPriority !== -1 || bPriority !== -1) {
-    if (aPriority === -1) return 1;
-    if (bPriority === -1) return -1;
-    return aPriority - bPriority;
-  }
-  const seedA = RENTAL_SEED_CATEGORIES.indexOf(a);
-  const seedB = RENTAL_SEED_CATEGORIES.indexOf(b);
-  if (seedA !== -1 || seedB !== -1) {
-    if (seedA === -1) return 1;
-    if (seedB === -1) return -1;
-    return seedA - seedB;
-  }
-  return a.localeCompare(b);
-}
 
 function defaultBike(): InventoryItem {
   return { id: `inv_${Date.now()}_${Math.random().toString(36).slice(2,7)}`, itemType:'bike', name:'', description:'', imageUrl:'', additionalImageUrls:[], active:true, availableForRental:true, availableForSale:false, hasWheelSizes:true, wheelSizes:[{size:'26',stock:0}], pricePerHour:0, priceFrom5thHour:0, pricePerDay:0, pricePerWeek:0, pricePerMonth:0, price1Hour:0, price2Hours:0, price3Hours:0, price4Hours:0, price8Hours:0, price24Hours:0, price1Week:0, price1Month:0 };
@@ -156,7 +138,8 @@ export default function InventoryPage() {
   const { 
     inventory, combos, addInventoryItem, updateInventoryItem, deleteInventoryItem, 
     addCombo, updateCombo, deleteCombo, getComboAvailability, 
-    bikeCategories, addBikeCategory, deleteBikeCategory, updateBikeCategory 
+    bikeCategories, addBikeCategory, deleteBikeCategory, updateBikeCategory, reorderBikeCategories,
+    shopCategories, addShopCategory, deleteShopCategory, updateShopCategory, reorderShopCategories
   } = useStore();
 
   const [tab, setTab] = useState('bikes');
@@ -164,11 +147,13 @@ export default function InventoryPage() {
   const [modal, setModal] = useState<{open:boolean; mode:'add'|'edit'; type:'bike'|'accessory'|'combo'}>({open:false,mode:'add',type:'bike'});
   const [editItem, setEditItem] = useState<any>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<{id:string; type:string; name:string} | null>(null);
-  const [localCategories, setLocalCategories] = useState<string[]>([]);
+
   const [categoryManagerOpen, setCategoryManagerOpen] = useState(false);
   const [editingCat, setEditingCat] = useState<string | null>(null);
   const [editingVal, setEditingVal] = useState("");
   const [newCategoryName, setNewCategoryName] = useState("");
+  const [catManagerTab, setCatManagerTab] = useState<'rental' | 'shop'>('rental');
+  const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
 
   const bikes = inventory.filter(i => i.itemType === 'bike');
   const accessories = inventory.filter(i => i.itemType === 'accessory');
@@ -177,20 +162,34 @@ export default function InventoryPage() {
   const filteredAccessories = accessories.filter(a => a.name.toLowerCase().includes(q));
   const filteredCombos = combos.filter(c => c.name.toLowerCase().includes(q));
   const availableBikeCategories = useMemo(() => {
-    const categories = new Set<string>();
-    const activeList = bikeCategories.length > 0 ? bikeCategories : RENTAL_SEED_CATEGORIES;
-    activeList.forEach(cat => categories.add(cat));
-    localCategories.forEach(cat => categories.add(cat));
+    const list = [...bikeCategories];
     inventory.forEach(item => {
-      if (item.itemType === 'bike' && item.category) categories.add(item.category);
+      if (item.availableForRental && item.category && !list.includes(item.category)) {
+        list.push(item.category);
+      }
     });
     combos.forEach(combo => {
-      if (combo.category) categories.add(combo.category);
+      if (combo.availableForRental && combo.category && !list.includes(combo.category)) {
+        list.push(combo.category);
+      }
     });
-    return Array.from(categories)
-      .filter(cat => cat.trim() && !NON_BIKE_CATEGORIES.has(cat))
-      .sort(sortCategories);
-  }, [bikeCategories, combos, inventory, localCategories]);
+    return list.filter(cat => cat.trim() && !NON_BIKE_CATEGORIES.has(cat));
+  }, [bikeCategories, inventory, combos]);
+
+  const availableShopCategories = useMemo(() => {
+    const list = [...shopCategories];
+    inventory.forEach(item => {
+      if (item.availableForSale && item.category && !list.includes(item.category)) {
+        list.push(item.category);
+      }
+    });
+    combos.forEach(combo => {
+      if (combo.availableForSale && combo.category && !list.includes(combo.category)) {
+        list.push(combo.category);
+      }
+    });
+    return list.filter(cat => cat.trim());
+  }, [shopCategories, inventory, combos]);
 
   const openAdd = (type: 'bike'|'accessory'|'combo') => {
     setEditItem(type==='bike'?defaultBike():type==='accessory'?defaultAccessory():defaultCombo());
@@ -466,19 +465,28 @@ export default function InventoryPage() {
                     <Input value={editItem.name} onChange={e=>setEditItem({...editItem,name:e.target.value})} className="bg-black/40 border-white/10 h-12 font-black text-lg rounded-xl mt-1 text-white" placeholder={modal.type==='bike'?'Ej: Urbana':'Ej: Canasta metálica'} required/>
                   </div>
 
-                  {/* Category Selection for Bikes */}
-                  {modal.type === 'bike' && (
+                  {/* Category Selection for all items */}
+                  {editItem && (
                     <div>
                       <div className="flex justify-between items-center mb-1">
-                        <Label className="text-[10px] text-white/40 font-bold uppercase tracking-wider">Categoría de Bicicleta</Label>
+                        <Label className="text-[10px] text-white/40 font-bold uppercase tracking-wider">
+                          {editItem.availableForSale ? 'Categoría de Tienda' : 'Categoría de Alquiler'}
+                        </Label>
                         <button 
                           type="button" 
                           onClick={() => {
-                            const newCat = prompt('Ingrese el nombre de la nueva categoría (ej. Urbana, Montaña, Ruta):');
+                            const isSale = editItem.availableForSale;
+                            const newCat = prompt(isSale 
+                              ? 'Ingrese el nombre de la nueva categoría de tienda (ej. Repuestos, Accesorios):' 
+                              : 'Ingrese el nombre de la nueva categoría de alquiler (ej. Urbana, Montañera):'
+                            );
                             if (newCat && newCat.trim()) {
                               const trimmed = newCat.trim();
-                              setLocalCategories(prev => prev.includes(trimmed) ? prev : [...prev, trimmed]);
-                              addBikeCategory(trimmed).catch((err) => console.warn('No se pudo guardar la categoría global:', err));
+                              if (isSale) {
+                                addShopCategory(trimmed).catch((err) => console.warn('No se pudo guardar la categoría:', err));
+                              } else {
+                                addBikeCategory(trimmed).catch((err) => console.warn('No se pudo guardar la categoría:', err));
+                              }
                               setEditItem({ ...editItem, category: trimmed });
                             }
                           }}
@@ -495,7 +503,7 @@ export default function InventoryPage() {
                           <SelectValue placeholder="Seleccione una categoría" />
                         </SelectTrigger>
                         <SelectContent className="bg-brand-charcoal border-white/10 text-white">
-                          {availableBikeCategories.map((cat) => (
+                          {(editItem.availableForSale ? availableShopCategories : availableBikeCategories).map((cat) => (
                             <SelectItem key={cat} value={cat} className="focus:bg-white/5 focus:text-white cursor-pointer">
                               {cat}
                             </SelectItem>
@@ -652,7 +660,7 @@ export default function InventoryPage() {
       {/* CATEGORY MANAGER DIALOG */}
       {categoryManagerOpen && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 backdrop-blur-md bg-black/60">
-          <div className="bg-brand-charcoal border border-white/10 rounded-3xl p-6 max-w-md w-full shadow-2xl space-y-6">
+          <div className="bg-brand-charcoal border border-white/10 rounded-3xl p-6 max-w-md w-full shadow-2xl space-y-5">
             <div className="flex justify-between items-center border-b border-white/10 pb-3">
               <h3 className="text-xl font-black text-white">Administrar Categorías</h3>
               <Button variant="ghost" size="icon" onClick={() => setCategoryManagerOpen(false)} className="w-8 h-8 rounded-lg text-white/40 hover:text-white hover:bg-white/10">
@@ -660,10 +668,40 @@ export default function InventoryPage() {
               </Button>
             </div>
 
+            {/* Tab Selector */}
+            <div className="grid grid-cols-2 p-1 bg-black/35 rounded-xl border border-white/5">
+              <button
+                onClick={() => {
+                  setCatManagerTab('rental');
+                  setEditingCat(null);
+                }}
+                className={`py-2 text-xs font-black uppercase tracking-wider rounded-lg transition-all ${
+                  catManagerTab === 'rental' 
+                    ? 'bg-brand-yellow text-brand-black shadow-md' 
+                    : 'text-white/60 hover:text-white hover:bg-white/5'
+                }`}
+              >
+                Alquileres
+              </button>
+              <button
+                onClick={() => {
+                  setCatManagerTab('shop');
+                  setEditingCat(null);
+                }}
+                className={`py-2 text-xs font-black uppercase tracking-wider rounded-lg transition-all ${
+                  catManagerTab === 'shop' 
+                    ? 'bg-brand-yellow text-brand-black shadow-md' 
+                    : 'text-white/60 hover:text-white hover:bg-white/5'
+                }`}
+              >
+                Tienda
+              </button>
+            </div>
+
             {/* Add Category Form */}
             <div className="flex gap-2">
               <Input
-                placeholder="Nueva categoría (ej. Ruta)..."
+                placeholder={catManagerTab === 'rental' ? 'Nueva categoría alquiler...' : 'Nueva categoría tienda...'}
                 value={newCategoryName}
                 onChange={e => setNewCategoryName(e.target.value)}
                 className="bg-black/40 border-white/10 h-10 text-sm rounded-xl text-white flex-1 focus:ring-brand-yellow/50"
@@ -673,7 +711,11 @@ export default function InventoryPage() {
                   const trimmed = newCategoryName.trim();
                   if (!trimmed) return;
                   try {
-                    await addBikeCategory(trimmed);
+                    if (catManagerTab === 'rental') {
+                      await addBikeCategory(trimmed);
+                    } else {
+                      await addShopCategory(trimmed);
+                    }
                     setNewCategoryName("");
                   } catch (err: any) {
                     alert('Error al agregar categoría: ' + (err.message || err));
@@ -685,12 +727,38 @@ export default function InventoryPage() {
               </Button>
             </div>
 
-            {/* List of categories */}
+            {/* List of categories with Drag and Drop */}
             <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
-              {availableBikeCategories.map(cat => {
+              {(catManagerTab === 'rental' ? bikeCategories : shopCategories).map((cat, idx) => {
                 const isEditing = editingCat === cat;
+                const isDragging = draggedIndex === idx;
+
                 return (
-                  <div key={cat} className="flex items-center justify-between bg-white/5 border border-white/5 rounded-xl p-3">
+                  <div 
+                    key={cat}
+                    draggable={!isEditing}
+                    onDragStart={() => setDraggedIndex(idx)}
+                    onDragOver={(e) => e.preventDefault()}
+                    onDrop={async () => {
+                      if (draggedIndex === null || draggedIndex === idx) return;
+                      const list = [...(catManagerTab === 'rental' ? bikeCategories : shopCategories)];
+                      const item = list[draggedIndex];
+                      list.splice(draggedIndex, 1);
+                      list.splice(idx, 0, item);
+                      if (catManagerTab === 'rental') {
+                        await reorderBikeCategories(list);
+                      } else {
+                        await reorderShopCategories(list);
+                      }
+                      setDraggedIndex(null);
+                    }}
+                    onDragEnd={() => setDraggedIndex(null)}
+                    className={`flex items-center justify-between bg-white/5 border rounded-xl p-2.5 transition-all ${
+                      isDragging 
+                        ? 'border-brand-yellow border-dashed bg-brand-yellow/5 opacity-50' 
+                        : 'border-white/5 hover:bg-white/10'
+                    }`}
+                  >
                     {isEditing ? (
                       <div className="flex gap-2 items-center w-full">
                         <Input
@@ -701,7 +769,11 @@ export default function InventoryPage() {
                           onKeyDown={async e => {
                             if (e.key === 'Enter') {
                               try {
-                                await updateBikeCategory(cat, editingVal);
+                                if (catManagerTab === 'rental') {
+                                  await updateBikeCategory(cat, editingVal);
+                                } else {
+                                  await updateShopCategory(cat, editingVal);
+                                }
                                 setEditingCat(null);
                               } catch (err: any) {
                                 alert('Error al actualizar categoría: ' + (err.message || err));
@@ -713,7 +785,11 @@ export default function InventoryPage() {
                           size="sm"
                           onClick={async () => {
                             try {
-                              await updateBikeCategory(cat, editingVal);
+                              if (catManagerTab === 'rental') {
+                                await updateBikeCategory(cat, editingVal);
+                              } else {
+                                await updateShopCategory(cat, editingVal);
+                              }
                               setEditingCat(null);
                             } catch (err: any) {
                               alert('Error al actualizar categoría: ' + (err.message || err));
@@ -734,8 +810,14 @@ export default function InventoryPage() {
                       </div>
                     ) : (
                       <>
-                        <span className="text-white text-sm font-bold">{cat}</span>
-                        <div className="flex gap-1">
+                        <div className="flex items-center gap-2.5 flex-1 min-w-0">
+                          {/* Drag Handle */}
+                          <div className="cursor-grab active:cursor-grabbing p-1 text-white/35 hover:text-white/60 transition-colors">
+                            <GripVertical className="w-4 h-4" />
+                          </div>
+                          <span className="text-white text-sm font-bold truncate">{cat}</span>
+                        </div>
+                        <div className="flex gap-1 shrink-0">
                           <Button
                             variant="ghost"
                             size="icon"
@@ -754,7 +836,11 @@ export default function InventoryPage() {
                             onClick={async () => {
                               if (confirm(`¿Estás seguro de eliminar la categoría "${cat}"?\nEsto no afectará los productos existentes, pero ya no aparecerá en los filtros.`)) {
                                 try {
-                                  await deleteBikeCategory(cat);
+                                  if (catManagerTab === 'rental') {
+                                    await deleteBikeCategory(cat);
+                                  } else {
+                                    await deleteShopCategory(cat);
+                                  }
                                 } catch (err: any) {
                                   alert('Error al eliminar categoría: ' + (err.message || err));
                                 }
@@ -771,6 +857,9 @@ export default function InventoryPage() {
                   </div>
                 );
               })}
+              {(catManagerTab === 'rental' ? bikeCategories : shopCategories).length === 0 && (
+                <p className="text-center py-4 text-white/30 text-xs font-bold uppercase tracking-wider">No hay categorías agregadas</p>
+              )}
             </div>
 
             <div className="flex justify-end pt-2 border-t border-white/5">
