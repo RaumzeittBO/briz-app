@@ -10,6 +10,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useStore } from '@/context/StoreContext';
+import { useLanguage } from '@/context/LanguageContext';
+import { t } from '@/lib/translations';
 import { db } from '@/lib/firebase';
 import { doc, setDoc } from 'firebase/firestore';
 import DeliveryMapPicker from './DeliveryMapPicker';
@@ -73,9 +75,10 @@ export default function RentalCheckoutWizard({
     step,
     setStep,
     onClose,
-    setAuthOpen
+    setAuthOpen,
 }: RentalCheckoutWizardProps) {
     const { currentCustomer, addRental, calculatePrice, rentalSettings } = useStore();
+    const { language } = useLanguage();
     const [loading, setLoading] = useState(false);
 
     // Step 1 local states
@@ -711,7 +714,7 @@ export default function RentalCheckoutWizard({
                     >
                         {/* Title & Badge */}
                         <div className="flex justify-between items-center">
-                            <h2 className="font-tangkiwood text-2xl sm:text-3xl text-brand-black leading-none">{selectedProduct.name}</h2>
+                            <h2 className="font-tangkiwood text-2xl sm:text-3xl text-brand-black leading-none">{t(selectedProduct.name, language as any)}</h2>
                             <span className="bg-brand-yellow text-brand-black border-0 text-[10px] font-black uppercase rounded-lg px-2.5 py-1 font-sans">
                                 {selectedProduct.type === 'combo' ? 'Combo' : selectedProduct.itemType === 'bike' ? 'Bicicleta' : 'Accesorio'}
                             </span>
@@ -795,7 +798,7 @@ export default function RentalCheckoutWizard({
 
                         {/* Description */}
                         <p className="text-xs sm:text-sm font-medium text-brand-black leading-relaxed text-justify font-sans bg-white/50 p-5 rounded-2xl border border-black/5">
-                            {selectedProduct.description || 'Alquila tu bicicleta ideal para pasear o entrenar por la ciudad con total comodidad y estilo.'}
+                            {t(selectedProduct.description, language as any) || t('Alquila tu bicicleta ideal para pasear o entrenar por la ciudad con total comodidad y estilo.', language as any)}
                         </p>
 
                         <div className="bg-white border border-gray-100 rounded-2xl p-4 shadow-sm">
@@ -1231,7 +1234,7 @@ export default function RentalCheckoutWizard({
                                     const price = calculatePrice(item.product.type || 'single', item.product.id, duration, 1);
                                     return (
                                         <div key={item.id} className="flex justify-between">
-                                            <span>{item.quantity}x {item.product.name} {item.selectedWheelSize ? `(Aro ${item.selectedWheelSize})` : ''}</span>
+                                            <span>{item.quantity}x {t(item.product.name, language as any)} {item.selectedWheelSize ? `(Aro ${item.selectedWheelSize})` : ''}</span>
                                             <span>Bs. {(price * item.quantity).toFixed(2)}</span>
                                         </div>
                                     );

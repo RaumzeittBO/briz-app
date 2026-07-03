@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, type ComponentType, type CSSProperties, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useState, useRef, type ComponentType, type CSSProperties, type ReactNode } from 'react';
 import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
 import { useCommunity, type CommunityItem } from '@/context/CommunityContext';
@@ -1391,9 +1391,13 @@ function CommunityReviewsCarousel() {
     const { currentCustomer } = useStore();
     const [authOpen, setAuthOpen] = useState(false);
     const [reviewOpen, setReviewOpen] = useState(false);
+    const [allReviewsOpen, setAllReviewsOpen] = useState(false);
     const [rating, setRating] = useState(5);
     const [message, setMessage] = useState('');
     const [sending, setSending] = useState(false);
+    
+    const reviewsScrollRef = useRef<HTMLDivElement>(null);
+
     const reviews = items.filter(item => item.type === 'review' && item.status === 'approved');
     const demoReviews: Array<Pick<CommunityItem, 'id' | 'content' | 'rating' | 'authorName' | 'authorAvatar'>> = [
         { id: 'demo-lucia', authorName: 'Lucía M.', rating: 5, content: 'Briz hizo que volver a pedalear por la ciudad se sienta fácil, seguro y muy divertido.' },
@@ -1402,12 +1406,24 @@ function CommunityReviewsCarousel() {
         { id: 'demo-diego', authorName: 'Diego P.', rating: 5, content: 'La atención fue increíble. Ya estoy organizando mi próxima rodada con amigos.' },
     ];
     const visibleReviews = reviews.length ? reviews : demoReviews;
-    const loopedReviews = visibleReviews.length > 1 ? [...visibleReviews, ...visibleReviews] : visibleReviews;
 
     const openReview = () => {
         if (!currentCustomer) { setAuthOpen(true); return; }
         setReviewOpen(true);
     };
+
+    const scrollLeft = () => {
+        if (reviewsScrollRef.current) {
+            reviewsScrollRef.current.scrollBy({ left: -300, behavior: 'smooth' });
+        }
+    };
+
+    const scrollRight = () => {
+        if (reviewsScrollRef.current) {
+            reviewsScrollRef.current.scrollBy({ left: 300, behavior: 'smooth' });
+        }
+    };
+
     const submitReview = async (event: React.FormEvent) => {
         event.preventDefault();
         if (!currentCustomer || !message.trim()) return;
@@ -1423,14 +1439,139 @@ function CommunityReviewsCarousel() {
     };
 
     return <>
-        <div className="min-w-0 w-full max-w-full overflow-hidden rounded-[1.35rem] border-2 border-brand-yellow/70 bg-[#063D47] py-4 shadow-[5px_5px_0_rgba(6,61,71,.2)]">
-            <div className="mb-3 flex flex-col items-center justify-between gap-2 px-4 text-center sm:flex-row sm:px-5 sm:text-left"><span className="flex items-center gap-2 font-cocon text-xs font-black uppercase tracking-wider text-white"><MessageCircleHeart className="h-4 w-4 text-brand-pink" />Opiniones</span><button onClick={openReview} className="rounded-full bg-brand-yellow px-3 py-1.5 text-xs font-black text-brand-black transition hover:bg-white">Deja tu opinión</button></div>
-            <div className="group overflow-hidden"><motion.div className="flex w-max gap-4 px-4" animate={{ x: ['0%', '-50%'] }} transition={{ duration: Math.max(38, visibleReviews.length * 13), repeat: Infinity, ease: 'linear' }}>
-                {loopedReviews.map((review, index) => <article key={`${review.id}-${index}`} className="w-[78vw] max-w-[300px] shrink-0 rounded-2xl bg-[#FFF8DF] p-4 text-left shadow-sm sm:w-[330px] sm:max-w-none"><div className="flex items-center gap-1 text-brand-pink">{Array.from({ length: review.rating || 5 }).map((_, star) => <Star key={star} className="h-3.5 w-3.5 fill-current" />)}</div><p className="mt-2 line-clamp-3 min-h-[3.75rem] font-cocon text-sm leading-relaxed text-[#063D47]">“{review.content}”</p><div className="mt-3 flex items-center gap-2 border-t border-[#063D47]/10 pt-3"><div className="grid h-7 w-7 place-items-center overflow-hidden rounded-full bg-brand-yellow text-[9px] font-black text-brand-black">{review.authorAvatar ? <img src={review.authorAvatar} alt="" className="h-full w-full object-cover" /> : review.authorName.slice(0, 2).toUpperCase()}</div><span className="text-xs font-black text-[#063D47]/70">{review.authorName}</span></div></article>)}
-            </motion.div></div>
+        <div className="min-w-0 w-full max-w-full overflow-hidden rounded-[1.35rem] border-2 border-brand-yellow/70 bg-[#063D47] py-4 shadow-[5px_5px_0_rgba(6,61,71,.2)] relative group/reviews">
+            {/* Header with Title and Buttons */}
+            <div className="mb-3 flex flex-col items-center justify-between gap-2 px-4 text-center sm:flex-row sm:px-5 sm:text-left">
+                <span className="flex items-center gap-2 font-cocon text-xs font-black uppercase tracking-wider text-white">
+                    <MessageCircleHeart className="h-4 w-4 text-brand-pink" />Opiniones
+                </span>
+                <div className="flex gap-2">
+                    <button onClick={() => setAllReviewsOpen(true)} className="rounded-full bg-white/10 px-3 py-1.5 text-xs font-black text-white border border-white/10 transition hover:bg-white hover:text-brand-black cursor-pointer">
+                        Ver todas las opiniones
+                    </button>
+                    <button onClick={openReview} className="rounded-full bg-brand-yellow px-3 py-1.5 text-xs font-black text-brand-black transition hover:bg-white cursor-pointer font-cocon">
+                        Deja tu opinión
+                    </button>
+                </div>
+            </div>
+
+            {/* Scrollable container with Left/Right Arrows */}
+            <div className="relative px-2">
+                {/* Arrow Left */}
+                <button 
+                    onClick={scrollLeft}
+                    className="absolute left-1 top-1/2 -translate-y-1/2 z-10 bg-white/95 text-brand-black hover:bg-brand-yellow shadow-md rounded-full w-8 h-8 flex items-center justify-center border border-gray-200 transition-all active:scale-95 opacity-0 group-hover/reviews:opacity-100 cursor-pointer"
+                    aria-label="Opinión anterior"
+                >
+                    <ChevronLeft className="w-5 h-5 text-brand-black" strokeWidth={2.5} />
+                </button>
+
+                {/* Arrow Right */}
+                <button 
+                    onClick={scrollRight}
+                    className="absolute right-1 top-1/2 -translate-y-1/2 z-10 bg-white/95 text-brand-black hover:bg-brand-yellow shadow-md rounded-full w-8 h-8 flex items-center justify-center border border-gray-200 transition-all active:scale-95 opacity-0 group-hover/reviews:opacity-100 cursor-pointer"
+                    aria-label="Siguiente opinión"
+                >
+                    <ChevronRight className="w-5 h-5 text-brand-black" strokeWidth={2.5} />
+                </button>
+
+                <div 
+                    ref={reviewsScrollRef}
+                    className="briz-horizontal-slider flex gap-4 overflow-x-auto pb-2 scroll-smooth snap-x snap-mandatory px-6"
+                >
+                    {visibleReviews.map((review, index) => (
+                        <article 
+                            key={`${review.id}-${index}`} 
+                            className="w-[78vw] max-w-[280px] shrink-0 rounded-2xl bg-[#FFF8DF] p-4 text-left shadow-sm sm:w-[300px] sm:max-w-none snap-start border border-[#063D47]/5 flex flex-col justify-between"
+                        >
+                            <div>
+                                <div className="flex items-center gap-1 text-brand-pink">
+                                    {Array.from({ length: review.rating || 5 }).map((_, star) => (
+                                        <Star key={star} className="h-3.5 w-3.5 fill-current" />
+                                    ))}
+                                </div>
+                                <p className="mt-2 line-clamp-3 min-h-[3.75rem] font-cocon text-sm leading-relaxed text-[#063D47]">
+                                    “{review.content}”
+                                </p>
+                            </div>
+                            <div className="mt-3 flex items-center gap-2 border-t border-[#063D47]/10 pt-3">
+                                <div className="grid h-7 w-7 place-items-center overflow-hidden rounded-full bg-brand-yellow text-[9px] font-black text-brand-black shadow-sm shrink-0">
+                                    {review.authorAvatar ? (
+                                        <img src={review.authorAvatar} alt="" className="h-full w-full object-cover" />
+                                    ) : (
+                                        review.authorName.slice(0, 2).toUpperCase()
+                                    )}
+                                </div>
+                                <span className="text-xs font-black text-[#063D47]/70 truncate">{review.authorName}</span>
+                            </div>
+                        </article>
+                    ))}
+                </div>
+            </div>
         </div>
+
         <CustomerAuthModal isOpen={authOpen} onClose={() => setAuthOpen(false)} onSuccess={() => { setAuthOpen(false); setReviewOpen(true); }} />
-        <Dialog open={reviewOpen} onOpenChange={setReviewOpen}><DialogContent className="max-w-md rounded-[1.75rem] bg-[#FFFDF3] p-0"><DialogHeader className="rounded-t-[1.75rem] bg-brand-yellow px-7 py-6"><DialogTitle className="font-tan text-3xl uppercase text-brand-black">Tu opinión cuenta</DialogTitle><p className="text-sm font-bold text-brand-charcoal/65">La revisaremos antes de publicarla.</p></DialogHeader><form onSubmit={submitReview} className="p-7"><p className="text-xs font-black uppercase tracking-widest text-brand-charcoal/50">¿Cómo fue tu experiencia?</p><div className="mt-2 flex gap-1">{[1, 2, 3, 4, 5].map(star => <button type="button" key={star} onClick={() => setRating(star)} className={star <= rating ? 'text-brand-yellow' : 'text-brand-charcoal/20'} aria-label={`${star} estrellas`}><Star className="h-7 w-7 fill-current" /></button>)}</div><Textarea required value={message} onChange={event => setMessage(event.target.value)} rows={5} maxLength={500} className="mt-5 resize-none bg-white" placeholder="Cuéntanos qué disfrutaste de Briz..." /><button disabled={sending} className="mt-4 h-12 w-full rounded-full bg-brand-charcoal font-black text-white hover:bg-brand-black disabled:opacity-60">{sending ? 'Enviando...' : 'Enviar a revisión'}</button></form></DialogContent></Dialog>
+        
+        {/* Write Review Dialog */}
+        <Dialog open={reviewOpen} onOpenChange={setReviewOpen}>
+            <DialogContent className="max-w-md rounded-[1.75rem] bg-[#FFFDF3] p-0 border-0 overflow-hidden">
+                <DialogHeader className="rounded-t-[1.75rem] bg-brand-yellow px-7 py-6">
+                    <DialogTitle className="font-tan text-3xl uppercase text-brand-black">Tu opinión cuenta</DialogTitle>
+                    <p className="text-sm font-bold text-brand-charcoal/65">La revisaremos antes de publicarla.</p>
+                </DialogHeader>
+                <form onSubmit={submitReview} className="p-7">
+                    <p className="text-xs font-black uppercase tracking-widest text-brand-charcoal/50">¿Cómo fue tu experiencia?</p>
+                    <div className="mt-2 flex gap-1">
+                        {[1, 2, 3, 4, 5].map(star => (
+                            <button type="button" key={star} onClick={() => setRating(star)} className={star <= rating ? 'text-brand-yellow' : 'text-brand-charcoal/20'} aria-label={`${star} estrellas`}>
+                                <Star className="h-7 w-7 fill-current" />
+                            </button>
+                        ))}
+                    </div>
+                    <Textarea required value={message} onChange={event => setMessage(event.target.value)} rows={5} maxLength={500} className="mt-5 resize-none bg-white border-gray-200 focus-visible:ring-brand-yellow rounded-xl p-3" placeholder="Cuéntanos qué disfrutaste de Briz..." />
+                    <button disabled={sending} className="mt-4 h-12 w-full rounded-full bg-brand-charcoal font-black text-white hover:bg-brand-black disabled:opacity-60 cursor-pointer">{sending ? 'Enviando...' : 'Enviar a revisión'}</button>
+                </form>
+            </DialogContent>
+        </Dialog>
+
+        {/* View All Reviews Dialog */}
+        <Dialog open={allReviewsOpen} onOpenChange={setAllReviewsOpen}>
+            <DialogContent className="max-w-4xl max-h-[85vh] overflow-y-auto rounded-[2rem] bg-[#FFFDF3] p-6 border-white/10 font-sans select-none">
+                <DialogHeader className="border-b border-gray-150 pb-4 mb-4">
+                    <DialogTitle className="text-3xl font-tan text-brand-black uppercase flex items-center gap-2">
+                        <MessageCircleHeart className="h-7 w-7 text-brand-pink" />
+                        Todas las Opiniones ({visibleReviews.length})
+                    </DialogTitle>
+                </DialogHeader>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pb-6">
+                    {visibleReviews.map((review, index) => (
+                        <div key={review.id || index} className="rounded-2xl bg-white border border-gray-100 p-5 shadow-sm hover:shadow-md transition-all flex flex-col justify-between">
+                            <div>
+                                <div className="flex items-center gap-1 text-brand-pink">
+                                    {Array.from({ length: review.rating || 5 }).map((_, star) => (
+                                        <Star key={star} className="h-3 w-3 fill-current" />
+                                    ))}
+                                </div>
+                                <p className="mt-3 text-xs leading-relaxed text-brand-charcoal font-medium italic">
+                                    “{review.content}”
+                                </p>
+                            </div>
+                            <div className="mt-4 flex items-center gap-2 border-t border-gray-50 pt-3 shrink-0">
+                                <div className="grid h-6 w-6 place-items-center overflow-hidden rounded-full bg-brand-yellow text-[8px] font-black text-brand-black shadow-sm">
+                                    {review.authorAvatar ? (
+                                        <img src={review.authorAvatar} alt="" className="h-full w-full object-cover" />
+                                    ) : (
+                                        review.authorName.slice(0, 2).toUpperCase()
+                                    )}
+                                </div>
+                                <span className="text-[11px] font-black text-brand-charcoal/70">{review.authorName}</span>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            </DialogContent>
+        </Dialog>
     </>;
 }
 

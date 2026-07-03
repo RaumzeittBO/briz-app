@@ -12,6 +12,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 
 import { useStore } from '@/context/StoreContext';
 import { useCart } from '@/context/CartContext';
+import { useLanguage } from '@/context/LanguageContext';
+import { t } from '@/lib/translations';
 
 import { generateShopWhatsAppLink } from '@/lib/whatsapp';
 
@@ -36,6 +38,7 @@ type ShopItem = {
 
 export default function ShopPage() {
     const { inventory, combos, addSale, addOrUpdateCustomer, shopCategories } = useStore();
+    const { language } = useLanguage();
 
     const sortShopCategories = (a: string, b: string) => {
         const indexA = shopCategories.indexOf(a);
@@ -276,10 +279,10 @@ export default function ShopPage() {
                                     <CardContent className="p-5 flex-1 flex flex-col justify-between bg-white">
                                         <div>
                                             <h3 className="font-tangkiwood text-lg sm:text-xl text-brand-black leading-tight truncate">
-                                                {item.name}
+                                                {t(item.name, language as any)}
                                             </h3>
                                             <p className="text-xs font-sans text-gray-400 mt-1 line-clamp-2 leading-relaxed">
-                                                {item.description || 'Disponible para compra'}
+                                                {t(item.description, language as any) || t('Disponible para compra', language as any)}
                                             </p>
                                         </div>
 
@@ -350,10 +353,10 @@ export default function ShopPage() {
             <CardContent className="p-5 flex-1 flex flex-col justify-between bg-white">
                 <div>
                     <h3 className="font-tangkiwood text-lg sm:text-xl text-brand-black leading-tight">
-                        {item.name}
+                        {t(item.name, language as any)}
                     </h3>
                     <p className="text-xs font-sans text-gray-400 mt-1 line-clamp-2 leading-relaxed">
-                        {item.description || 'Disponible para compra'}
+                        {t(item.description, language as any) || t('Disponible para compra', language as any)}
                     </p>
                 </div>
                 <div className="pt-4 border-t border-gray-50 mt-4">
@@ -422,7 +425,7 @@ export default function ShopPage() {
                                     onClick={() => {
                                         setExpandedCategory(null);
                                         setCategory(c);
-                                    }}>{c}</Button>
+                                    }}>{t(c, language as any)}</Button>
                             ))}
                         </motion.div>
                     </div>
@@ -518,8 +521,8 @@ export default function ShopPage() {
                                                 <div className="flex-1 flex flex-col justify-between">
                                                     <div className="flex justify-between items-start">
                                                         <div>
-                                                            <h4 className="font-extrabold text-brand-charcoal leading-tight">{item.name}</h4>
-                                                            <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mt-1">{item.itemType}</p>
+                                                            <h4 className="font-extrabold text-brand-charcoal leading-tight">{t(item.name, language as any)}</h4>
+                                                            <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mt-1">{t(item.itemType, language as any)}</p>
                                                         </div>
                                                         <button onClick={() => removeFromCart(item.id)} className="w-8 h-8 rounded-full flex items-center justify-center bg-gray-100 text-gray-400 hover:bg-red-50 hover:text-red-500 transition-colors">
                                                             <X className="w-4 h-4" strokeWidth={2} />

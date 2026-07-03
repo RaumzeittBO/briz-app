@@ -18,6 +18,7 @@ import {
     type LucideIcon,
 } from 'lucide-react';
 import { useLanguage } from '@/context/LanguageContext';
+import { t } from '@/lib/translations';
 
 type NavLinkItem = {
     label: string;
@@ -172,17 +173,17 @@ export default function Navbar() {
         };
 
         return Array.from(productCategorySet).sort(sortCategories).map((cat: string) => ({
-            label: cat,
+            label: t(cat, language as any),
             href: `/rentals?category=${encodeURIComponent(cat)}`
         }));
-    }, [inventory, combos, events, bikeCategories]);
+    }, [inventory, combos, events, bikeCategories, language]);
 
     const shopCategoriesLinks = useMemo(() => {
         return (shopCategories || []).map((cat: string) => ({
-            label: cat,
+            label: t(cat, language as any),
             href: `/shop?category=${encodeURIComponent(cat)}`
         }));
-    }, [shopCategories]);
+    }, [shopCategories, language]);
 
     const ciclotoursCategories = useMemo(() => {
         return (routes || []).map((r: any) => ({

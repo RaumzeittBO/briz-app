@@ -12,6 +12,7 @@ import CustomerAuthModal from '@/components/layout/CustomerAuthModal';
 import RentalCheckoutWizard from '@/components/rentals/RentalCheckoutWizard';
 import type { RentalCartItem } from '@/components/rentals/RentalCheckoutWizard';
 import { useLanguage } from '@/context/LanguageContext';
+import { t } from '@/lib/translations';
 
 
 
@@ -50,25 +51,11 @@ function getRentalPriceTiers(product: DisplayProduct) {
 
 
 const translateCategory = (cat: string, lang: string) => {
-  if (lang === 'es') return cat;
-  switch (cat) {
-    case 'Todas': return 'All';
-    case 'Urbanas': return 'Urban';
-    case 'Montañeras': return 'Mountain';
-    case 'Antiguas': return 'Vintage';
-    case 'Accesorios': return 'Accessories';
-    case 'Bicicletas': return 'Bikes';
-    case 'Otros': return 'Others';
-    default: return cat;
-  }
+  return t(cat, lang as any);
 };
 
 const translateProductName = (name: string, lang: string) => {
-  if (lang === 'es') return name;
-  return name.replace(/\bAntigua\b/g, 'Vintage')
-             .replace(/\bAntiguas\b/g, 'Vintage')
-             .replace(/\bMontañera\b/g, 'Mountain')
-             .replace(/\bUrbana\b/g, 'Urban');
+  return t(name, lang as any);
 };
 
 export default function RentalsPage() {
@@ -370,7 +357,7 @@ export default function RentalsPage() {
                           <span translate="no">{translateProductName(p.name, language)}</span>
                         </h3>
                         <p className="text-xs font-sans text-gray-400 mt-1 line-clamp-2 leading-relaxed">
-                          {p.description || 'Disponible para alquiler'}
+                          {t(p.description, language as any) || t('Disponible para alquiler', language as any)}
                         </p>
                       </div>
 
@@ -689,7 +676,7 @@ export default function RentalsPage() {
                               <span translate="no">{translateProductName(p.name, language)}</span>
                             </h3>
                             <p className="text-xs font-sans text-gray-400 mt-1 line-clamp-2 leading-relaxed">
-                              {p.description || 'Disponible para alquiler'}
+                              {t(p.description, language as any) || t('Disponible para alquiler', language as any)}
                             </p>
                           </div>
                           <div className="pt-4 border-t border-gray-50 mt-4">

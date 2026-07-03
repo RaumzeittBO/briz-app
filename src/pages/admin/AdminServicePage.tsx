@@ -9,7 +9,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { useStore } from '@/context/StoreContext';
 import type { ServiceOrder } from '@/context/StoreContext';
-import { Plus, Trash2, Wrench, Calendar, DollarSign, Pen, Image } from 'lucide-react';
+import { Plus, Trash2, Wrench, Calendar, DollarSign, Pen, Image, Receipt, MessageSquare, Printer } from 'lucide-react';
 
 const statusColors: Record<string, string> = {
     'Recibido': 'bg-blue-500/15 text-blue-500 border-blue-500/20 text-xs',
@@ -38,6 +38,7 @@ export default function AdminServicePage() {
     };
 
     const [currentOrder, setCurrentOrder] = useState<Partial<ServiceOrder>>(initialState);
+    const [receiptOrder, setReceiptOrder] = useState<ServiceOrder | null>(null);
 
     const handleOpenModal = (order?: ServiceOrder) => {
         if (order) {
@@ -113,6 +114,7 @@ export default function AdminServicePage() {
                                     <TableHead className="text-white/40 font-bold uppercase text-[10px] tracking-wider py-5 pl-6">Cliente</TableHead>
                                     <TableHead className="text-white/40 font-bold uppercase text-[10px] tracking-wider py-5">Vehículo / Problema</TableHead>
                                     <TableHead className="text-white/40 font-bold uppercase text-[10px] tracking-wider py-5">Estado</TableHead>
+                                    <TableHead className="text-white/40 font-bold uppercase text-[10px] tracking-wider py-5">Total</TableHead>
                                     <TableHead className="text-white/40 font-bold uppercase text-[10px] tracking-wider py-5">Entrega Est.</TableHead>
                                     <TableHead className="text-white/40 font-bold uppercase text-[10px] tracking-wider py-5 text-right pr-6">Acciones</TableHead>
                                 </TableRow>
@@ -120,7 +122,7 @@ export default function AdminServicePage() {
                             <TableBody>
                                 {serviceOrders.length === 0 ? (
                                     <TableRow>
-                                        <TableCell colSpan={5} className="py-20 text-center text-white/40 font-medium">
+                                        <TableCell colSpan={6} className="py-20 text-center text-white/40 font-medium">
                                             No hay órdenes de servicio activas.
                                         </TableCell>
                                     </TableRow>
@@ -144,6 +146,9 @@ export default function AdminServicePage() {
                                                     {so.status}
                                                 </Badge>
                                             </TableCell>
+                                            <TableCell className="py-4 text-white font-bold text-sm">
+                                                Bs. {so.costEstimate ? so.costEstimate.toFixed(2) : '0.00'}
+                                            </TableCell>
                                             <TableCell className="py-4">
                                                 <div className="flex items-center gap-2 text-white/70 font-bold">
                                                     <Calendar className="w-4 h-4 text-brand-yellow/50" />
@@ -165,8 +170,16 @@ export default function AdminServicePage() {
                                                     <Button
                                                         variant="ghost"
                                                         size="sm"
+                                                        onClick={() => setReceiptOrder(so)}
+                                                        className="h-9 px-3 rounded-full text-brand-yellow hover:text-brand-charcoal hover:bg-brand-yellow font-bold transition-all shadow-sm flex items-center gap-1 cursor-pointer"
+                                                    >
+                                                        <Receipt className="w-3.5 h-3.5" /> Recibo
+                                                    </Button>
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="sm"
                                                         onClick={() => handleOpenModal(so)}
-                                                        className="h-9 px-4 rounded-full text-white hover:text-brand-charcoal hover:bg-brand-yellow font-bold transition-all shadow-sm"
+                                                        className="h-9 px-4 rounded-full text-white hover:text-brand-charcoal hover:bg-brand-yellow font-bold transition-all shadow-sm cursor-pointer"
                                                     >
                                                         Editar
                                                     </Button>
@@ -174,7 +187,7 @@ export default function AdminServicePage() {
                                                         variant="ghost"
                                                         size="icon"
                                                         onClick={() => handleDelete(so.id)}
-                                                        className="h-9 w-9 rounded-full text-red-400/80 hover:text-white hover:bg-red-500 transition-all shadow-sm"
+                                                        className="h-9 w-9 rounded-full text-red-400/80 hover:text-white hover:bg-red-500 transition-all shadow-sm cursor-pointer"
                                                     >
                                                         <Trash2 className="w-4 h-4" />
                                                     </Button>
@@ -265,7 +278,7 @@ export default function AdminServicePage() {
                                     />
                                 </div>
                                 <div className="space-y-2">
-                                    <Label className="text-white/70">Costo Estimado (Bs.)</Label>
+                                    <Label className="text-white/70">Costo Total / Final (Bs.)</Label>
                                     <div className="relative">
                                         <span className="absolute left-3 top-1/2 -translate-y-1/2 text-white/40"><DollarSign className="w-4 h-4" /></span>
                                         <Input
@@ -330,6 +343,164 @@ export default function AdminServicePage() {
                             <Button type="submit" className="bg-brand-yellow text-brand-black hover:bg-brand-yellow-light font-bold h-12 px-8 flex-1 sm:flex-none">Guardar Cambios</Button>
                         </DialogFooter>
                     </form>
+                </DialogContent>
+            </Dialog>
+
+            {/* Service Receipt Dialog */}
+            <Dialog open={!!receiptOrder} onOpenChange={(open) => !open && setReceiptOrder(null)}>
+                <DialogContent className="bg-brand-charcoal border-white/10 text-white max-w-lg p-0 overflow-hidden font-sans">
+                    <DialogHeader className="p-6 pb-4 border-b border-white/5 bg-[#1A1A1A] flex flex-row items-center justify-between">
+                        <div>
+                            <DialogTitle className="text-xl font-black text-white flex items-center gap-2">
+                                <Receipt className="w-5 h-5 text-brand-yellow" /> Recibo de Servicio
+                            </DialogTitle>
+                            <DialogDescription className="text-white/40 text-xs">
+                                Visualiza, imprime o envía el recibo del taller.
+                            </DialogDescription>
+                        </div>
+                    </DialogHeader>
+
+                    {receiptOrder && (() => {
+                        const order = receiptOrder;
+                        const whatsappMsg = `*BRIZ - RECIBO DE SERVICIO*\n` +
+                            `---------------------------------------\n` +
+                            `*Cliente:* ${order.customer}\n` +
+                            `*Vehículo:* ${order.bikeType}\n` +
+                            `*Servicio:* ${order.issue}\n` +
+                            `*Detalles:* ${order.notes || 'Mantenimiento de taller'}\n` +
+                            `*Estado:* ${order.status}\n` +
+                            `*Total Final:* Bs. ${(order.costEstimate || 0).toFixed(2)}\n` +
+                            `---------------------------------------\n` +
+                            `¡Gracias por confiar en BRIZ!\n` +
+                            `Contacto Briz: +591 77860277`;
+
+                        const cleanPhone = order.phone.replace(/\D/g, '');
+                        // If no country code, add Bolivia (591)
+                        const finalPhone = cleanPhone.length <= 8 ? `591${cleanPhone}` : cleanPhone;
+                        const whatsappLink = `https://wa.me/${finalPhone}?text=${encodeURIComponent(whatsappMsg)}`;
+
+                        return (
+                            <div className="p-6 space-y-6">
+                                {/* Printable Area */}
+                                <div 
+                                    id="service-receipt-print"
+                                    className="bg-white text-brand-black p-6 rounded-2xl border border-gray-200 shadow-inner flex flex-col justify-between font-mono text-xs space-y-4"
+                                    style={{ color: '#111', fontFamily: 'monospace' }}
+                                >
+                                    <div className="text-center space-y-1 pb-3 border-b border-dashed border-gray-300">
+                                        <h2 className="text-xl font-black tracking-widest text-black">BRIZ</h2>
+                                        <p className="text-[10px] text-gray-500 font-bold uppercase">Servicio de Taller Profesional</p>
+                                        <p className="text-[9px] text-gray-400">Tel: +591 77860277</p>
+                                    </div>
+
+                                    <div className="space-y-2">
+                                        <div className="flex justify-between">
+                                            <span className="font-bold text-gray-500">ORDEN ID:</span>
+                                            <span className="font-bold text-black uppercase">{order.id?.substring(0, 8)}</span>
+                                        </div>
+                                        <div className="flex justify-between">
+                                            <span className="font-bold text-gray-500">FECHA:</span>
+                                            <span className="font-bold text-black">{order.date || new Date().toISOString().split('T')[0]}</span>
+                                        </div>
+                                        <div className="flex justify-between">
+                                            <span className="font-bold text-gray-500">ENTREGA:</span>
+                                            <span className="font-bold text-black">{order.estimatedDelivery}</span>
+                                        </div>
+                                    </div>
+
+                                    <div className="pt-3 border-t border-dashed border-gray-300 space-y-2">
+                                        <div>
+                                            <span className="font-bold text-gray-500 block text-[9px] uppercase tracking-wider">Cliente:</span>
+                                            <span className="font-black text-sm text-black">{order.customer}</span>
+                                            <span className="text-[10px] text-gray-500 block">WhatsApp: {order.phone}</span>
+                                        </div>
+                                        <div>
+                                            <span className="font-bold text-gray-500 block text-[9px] uppercase tracking-wider">Vehículo:</span>
+                                            <span className="font-bold text-black">{order.bikeType}</span>
+                                        </div>
+                                    </div>
+
+                                    <div className="pt-3 border-t border-dashed border-gray-300 space-y-2">
+                                        <div>
+                                            <span className="font-bold text-gray-500 block text-[9px] uppercase tracking-wider">Detalle del Trabajo:</span>
+                                            <p className="text-black italic leading-normal">"{order.issue}"</p>
+                                        </div>
+                                        {order.notes && (
+                                            <div>
+                                                <span className="font-bold text-gray-500 block text-[9px] uppercase tracking-wider">Notas Adicionales:</span>
+                                                <p className="text-gray-600 leading-normal">{order.notes}</p>
+                                            </div>
+                                        )}
+                                        <div>
+                                            <span className="font-bold text-gray-500 block text-[9px] uppercase tracking-wider">Estado Actual:</span>
+                                            <span className="inline-block bg-gray-100 text-black px-2 py-0.5 rounded font-black text-[10px] uppercase border border-gray-200">{order.status}</span>
+                                        </div>
+                                    </div>
+
+                                    <div className="pt-4 border-t-2 border-double border-gray-300 flex justify-between items-center">
+                                        <span className="font-black text-sm text-black">TOTAL FINAL</span>
+                                        <span className="font-black text-lg text-black">Bs. {(order.costEstimate || 0).toFixed(2)}</span>
+                                    </div>
+
+                                    <div className="text-center pt-4 border-t border-dashed border-gray-300">
+                                        <p className="text-[9px] font-bold uppercase tracking-widest text-gray-400">¡Muchas gracias por su preferencia!</p>
+                                        <p className="text-[8px] text-gray-300 mt-0.5">BRIZ - Movilidad y Comunidad</p>
+                                    </div>
+                                </div>
+
+                                {/* Custom styles to enable printing receipt section exclusively */}
+                                <style>{`
+                                    @media print {
+                                        body * {
+                                            visibility: hidden !important;
+                                        }
+                                        #service-receipt-print, #service-receipt-print * {
+                                            visibility: visible !important;
+                                        }
+                                        #service-receipt-print {
+                                            position: absolute !important;
+                                            left: 0 !important;
+                                            top: 0 !important;
+                                            width: 100% !important;
+                                            border: none !important;
+                                            box-shadow: none !important;
+                                            padding: 0 !important;
+                                            margin: 0 !important;
+                                        }
+                                    }
+                                `}</style>
+
+                                {/* Action Buttons */}
+                                <div className="flex gap-3 pt-2">
+                                    <Button 
+                                        type="button" 
+                                        variant="outline" 
+                                        onClick={() => setReceiptOrder(null)} 
+                                        className="hover:bg-white/5 h-11 text-xs uppercase font-bold px-4"
+                                    >
+                                        Cerrar
+                                    </Button>
+
+                                    <Button 
+                                        type="button" 
+                                        onClick={() => window.print()} 
+                                        className="bg-white/10 hover:bg-white/20 text-white font-bold h-11 text-xs uppercase px-4 flex items-center gap-1.5 cursor-pointer"
+                                    >
+                                        <Printer className="w-4 h-4" /> Imprimir
+                                    </Button>
+
+                                    <a 
+                                        href={whatsappLink}
+                                        target="_blank"
+                                        rel="noreferrer"
+                                        className="flex-1 bg-green-600 hover:bg-green-700 text-white font-black h-11 text-xs uppercase rounded-xl flex items-center justify-center gap-2 cursor-pointer shadow-md transition-all hover:scale-102"
+                                    >
+                                        <MessageSquare className="w-4 h-4" /> Enviar por WhatsApp
+                                    </a>
+                                </div>
+                            </div>
+                        );
+                    })()}
                 </DialogContent>
             </Dialog>
         </div>

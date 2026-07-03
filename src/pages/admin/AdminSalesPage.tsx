@@ -4,9 +4,13 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import type { Sale } from '@/context/StoreContext';
 import { useStore } from '@/context/StoreContext';
-import { Trash2, ShoppingBag, Receipt, PackageOpen } from 'lucide-react';
+import { Trash2, ShoppingBag, Receipt, PackageOpen, Plus, Search, ChevronRight, Printer } from 'lucide-react';
+import { db } from '@/lib/firebase';
+import { writeBatch, doc } from 'firebase/firestore';
 
 const statusColors: Record<string, string> = {
     'Completado': 'bg-green-500/15 text-green-600 border-0',
@@ -15,10 +19,491 @@ const statusColors: Record<string, string> = {
 };
 
 export default function AdminSalesPage() {
-    const { sales, updateSaleStatus, deleteSale } = useStore();
+    const { sales, updateSaleStatus, deleteSale, inventory, shopCategories } = useStore();
 
     // Modal State
     const [selectedSale, setSelectedSale] = useState<Sale | null>(null);
+
+    // Manual Sale Wizard States
+    const [newSaleModalOpen, setNewSaleModalOpen] = useState(false);
+    const [newSaleStep, setNewSaleStep] = useState<1 | 2 | 3>(1);
+    const [newSaleCart, setNewSaleCart] = useState<Array<{ product: any; quantity: number }>>([]);
+    const [newSaleForm, setNewSaleForm] = useState({
+        customerName: '',
+        customerNIT: '',
+        paymentMethod: 'efectivo' as 'efectivo' | 'qr',
+    });
+    const [wizardSearch, setWizardSearch] = useState('');
+    const [wizardCategory, setWizardCategory] = useState('all');
+    const [completedSaleData, setCompletedSaleData] = useState<any>(null);
+    const [isSaving, setIsSaving] = useState(false);
+
+    const addToCart = (product: any) => {
+        setNewSaleCart(prev => {
+            const existing = prev.find(item => item.product.id === product.id);
+            if (existing) {
+                return prev.map(item => 
+                    item.product.id === product.id 
+                        ? { ...item, quantity: item.quantity + 1 }
+                        : item
+                );
+            }
+            return [...prev, { product, quantity: 1 }];
+        });
+    };
+
+    const updateCartQuantity = (productId: string, delta: number) => {
+        setNewSaleCart(prev => {
+            return prev.map(item => {
+                if (item.product.id === productId) {
+                    const newQty = Math.max(1, item.quantity + delta);
+                    return { ...item, quantity: newQty };
+                }
+                return item;
+            });
+        });
+    };
+
+    const removeFromCart = (productId: string) => {
+        setNewSaleCart(prev => prev.filter(item => item.product.id !== productId));
+    };
+
+    const cartTotal = newSaleCart.reduce((acc, item) => acc + (item.product.salePrice || 0) * item.quantity, 0);
+
+    const availableForSaleProducts = (inventory || []).filter(item => {
+        if (!item.active || !item.availableForSale) return false;
+        
+        // Category Filter
+        if (wizardCategory !== 'all' && item.category !== wizardCategory) return false;
+
+        // Search text Filter
+        if (wizardSearch.trim().length > 0) {
+            const query = wizardSearch.toLowerCase();
+            return item.name.toLowerCase().includes(query) || (item.description || '').toLowerCase().includes(query);
+        }
+
+        return true;
+    });
+
+    const handleSaveSale = async () => {
+        if (newSaleCart.length === 0) return;
+        setIsSaving(true);
+        try {
+            const batch = writeBatch(db);
+            const saleId = 'sale_' + Math.random().toString(36).substring(2, 9);
+            const saleDocRef = doc(db, 'sales', saleId);
+
+            const saleItems = newSaleCart.map(c => ({
+                id: c.product.id,
+                name: c.product.name,
+                price: c.product.salePrice || 0,
+                quantity: c.quantity,
+                type: c.product.itemType || 'accessory'
+            }));
+
+            // 1. Write the sale document directly as Completed
+            const salePayload = {
+                id: saleId,
+                customerName: newSaleForm.customerName.trim() || 'Cliente General',
+                customerPhone: 'N/A',
+                customerCI: newSaleForm.customerNIT.trim() || 'N/A',
+                items: saleItems,
+                total: cartTotal,
+                status: 'Completado',
+                paymentMethod: newSaleForm.paymentMethod,
+                source: 'manual',
+                date: new Date().toISOString()
+            };
+
+            batch.set(saleDocRef, salePayload);
+
+            // 2. Decrement inventory stock
+            newSaleCart.forEach(c => {
+                const itemDocRef = doc(db, 'inventory', c.product.id);
+                // For accessories/items without wheel sizes, decrement standard stock
+                const currentStock = c.product.stock ?? 0;
+                batch.update(itemDocRef, {
+                    stock: Math.max(0, currentStock - c.quantity)
+                });
+            });
+
+            await batch.commit();
+
+            // Store completed data to show receipt first
+            setCompletedSaleData(salePayload);
+            setNewSaleStep(3); // Advance to final receipt print page
+            
+            // Clean cart
+            setNewSaleCart([]);
+        } catch (error: any) {
+            console.error('Error saving manual sale:', error);
+            alert('No se pudo registrar la venta: ' + error.message);
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
+    // RENDER STEP 1: Select products for sale
+    const renderWizardStep1 = () => {
+        return (
+            <div className="flex flex-col lg:flex-row gap-6 min-h-[50vh] max-h-[70vh]">
+                {/* Products List Panel */}
+                <div className="flex-1 flex flex-col space-y-4 min-w-0">
+                    <div className="flex flex-col sm:flex-row gap-3">
+                        <div className="relative flex-1">
+                            <Search className="absolute left-3 top-3 h-4 w-4 text-white/30" />
+                            <Input
+                                placeholder="Buscar repuestos o accesorios por nombre..."
+                                value={wizardSearch}
+                                onChange={e => setWizardSearch(e.target.value)}
+                                className="pl-9 bg-black/35 border-white/10 h-10 rounded-xl text-xs font-bold text-white focus-visible:ring-brand-yellow"
+                            />
+                        </div>
+                        <select
+                            value={wizardCategory}
+                            onChange={e => setWizardCategory(e.target.value)}
+                            className="bg-black/35 border border-white/10 rounded-xl px-3 py-2 text-xs font-bold text-white focus:border-brand-yellow outline-none shrink-0"
+                        >
+                            <option value="all" className="bg-brand-charcoal text-white">Todas las Categorías</option>
+                            {(shopCategories || []).map((cat: string) => (
+                                <option key={cat} value={cat} className="bg-brand-charcoal text-white">{cat}</option>
+                            ))}
+                        </select>
+                    </div>
+
+                    <div className="flex-1 overflow-y-auto pr-1 grid grid-cols-1 sm:grid-cols-2 gap-4 pb-4">
+                        {availableForSaleProducts.map(item => {
+                            const imgUrl = item.imageUrl || '/images/placeholder_bike.png';
+                            const stock = item.stock ?? 0;
+                            const isOutOfStock = stock <= 0;
+
+                            return (
+                                <div key={item.id} className="bg-black/20 border border-white/5 rounded-2xl p-4 flex flex-col justify-between hover:border-brand-yellow/30 transition-all">
+                                    <div className="space-y-2">
+                                        <span className="text-[9px] font-black uppercase text-brand-yellow tracking-widest">{item.category || 'Tienda'}</span>
+                                        <div className="aspect-[4/3] rounded-xl overflow-hidden bg-black/35 relative">
+                                            <img src={imgUrl} alt={item.name} className="w-full h-full object-cover" />
+                                            {isOutOfStock && (
+                                                <div className="absolute inset-0 bg-black/60 flex items-center justify-center">
+                                                    <span className="text-red-500 text-xs font-black uppercase tracking-wider">Agotado</span>
+                                                </div>
+                                            )}
+                                        </div>
+                                        <div>
+                                            <h4 className="text-sm font-black text-white">{item.name}</h4>
+                                            <p className="text-[10px] text-white/40 mt-0.5 line-clamp-2">{item.description}</p>
+                                        </div>
+                                    </div>
+
+                                    <div className="mt-4 pt-3 border-t border-white/5 space-y-3">
+                                        <div className="flex justify-between items-center text-[10px] font-bold text-white/50">
+                                            <span>Stock disponible:</span>
+                                            <span className={stock > 0 ? 'text-green-400' : 'text-red-400'}>{stock} uds.</span>
+                                        </div>
+                                        
+                                        <div className="flex justify-between items-center pt-1">
+                                            <span className="text-sm font-black text-brand-yellow">Bs. {item.salePrice || 0}</span>
+                                            <Button
+                                                type="button"
+                                                size="sm"
+                                                disabled={isOutOfStock}
+                                                onClick={() => addToCart(item)}
+                                                className="h-8 rounded-lg bg-brand-yellow hover:bg-brand-yellow-light text-brand-black font-black text-[10px] uppercase px-3 cursor-pointer"
+                                            >
+                                                <Plus className="w-3.5 h-3.5 mr-1" strokeWidth={3} /> Agregar
+                                            </Button>
+                                        </div>
+                                    </div>
+                                </div>
+                            );
+                        })}
+
+                        {availableForSaleProducts.length === 0 && (
+                            <div className="col-span-2 text-center py-12 text-white/30 text-xs italic">
+                                No se encontraron productos disponibles para venta en tienda.
+                            </div>
+                        )}
+                    </div>
+                </div>
+
+                {/* Cart sidebar Panel */}
+                <div className="w-full lg:w-80 bg-black/25 border border-white/5 rounded-2xl p-4 flex flex-col justify-between shrink-0">
+                    <div className="flex flex-col flex-1 min-h-0">
+                        <h3 className="text-xs font-black uppercase tracking-widest text-brand-yellow pb-3 border-b border-white/5 flex items-center gap-2">
+                            <span>🛒 Carrito de Ventas</span>
+                            <Badge className="bg-brand-yellow text-brand-black border-0 text-[10px] font-black">{newSaleCart.length}</Badge>
+                        </h3>
+
+                        <div className="flex-1 overflow-y-auto space-y-3 py-3 pr-1">
+                            {newSaleCart.map(item => (
+                                <div key={item.product.id} className="bg-white/[0.02] border border-white/5 p-3 rounded-xl flex gap-3 justify-between items-center">
+                                    <div className="min-w-0 flex-1">
+                                        <p className="text-xs font-bold text-white truncate">{item.product.name}</p>
+                                        <p className="text-[10px] text-white/40 font-bold mt-0.5">Bs. {item.product.salePrice || 0} c/u</p>
+                                    </div>
+
+                                    <div className="flex items-center gap-2">
+                                        <div className="flex items-center gap-1.5 bg-black/40 rounded-lg p-1 border border-white/5 shrink-0">
+                                            <button 
+                                                type="button" 
+                                                onClick={() => updateCartQuantity(item.product.id, -1)}
+                                                className="w-5 h-5 rounded hover:bg-white/10 text-white flex items-center justify-center cursor-pointer text-xs font-bold"
+                                            >
+                                                -
+                                            </button>
+                                            <span className="text-xs text-white font-black w-4 text-center">{item.quantity}</span>
+                                            <button 
+                                                type="button" 
+                                                onClick={() => updateCartQuantity(item.product.id, 1)}
+                                                disabled={item.quantity >= (item.product.stock || 0)}
+                                                className="w-5 h-5 rounded hover:bg-white/10 text-white flex items-center justify-center cursor-pointer text-xs font-bold disabled:opacity-30"
+                                            >
+                                                +
+                                            </button>
+                                        </div>
+                                        <button 
+                                            type="button" 
+                                            onClick={() => removeFromCart(item.product.id)}
+                                            className="text-red-400 hover:text-red-500 hover:bg-red-500/10 p-1.5 rounded-lg transition-colors cursor-pointer shrink-0"
+                                        >
+                                            <Trash2 className="w-3.5 h-3.5" />
+                                        </button>
+                                    </div>
+                                </div>
+                            ))}
+
+                            {newSaleCart.length === 0 && (
+                                <div className="text-center py-20 text-white/20 text-xs italic">
+                                    El carrito está vacío. Agregue repuestos o accesorios para vender.
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
+                    <div className="pt-3 border-t border-white/5 space-y-4 shrink-0">
+                        <div className="flex justify-between items-center text-xs">
+                            <span className="font-bold text-white/40 uppercase">Total Venta:</span>
+                            <span className="font-black text-lg text-brand-yellow">Bs. {cartTotal.toFixed(2)}</span>
+                        </div>
+                        <Button
+                            type="button"
+                            disabled={newSaleCart.length === 0}
+                            onClick={() => setNewSaleStep(2)}
+                            className="w-full bg-brand-yellow hover:bg-brand-yellow-light text-brand-black font-black uppercase text-xs tracking-wider h-11 rounded-xl cursor-pointer flex items-center justify-center gap-1"
+                        >
+                            Siguiente Paso <ChevronRight className="w-4 h-4" />
+                        </Button>
+                    </div>
+                </div>
+            </div>
+        );
+    };
+
+    // RENDER STEP 2: Customer details and payment options
+    const renderWizardStep2 = () => {
+        return (
+            <div className="space-y-6 min-h-[40vh] max-w-xl mx-auto py-4">
+                <div className="bg-black/25 border border-white/5 p-6 rounded-2xl space-y-4">
+                    <h3 className="text-sm font-black uppercase tracking-widest text-brand-yellow border-b border-white/5 pb-2">
+                        Información del Cliente y Pago
+                    </h3>
+
+                    <div className="space-y-2">
+                        <Label className="text-white/70 text-xs font-bold uppercase tracking-wider">Nombre del Cliente (Opcional)</Label>
+                        <Input
+                            value={newSaleForm.customerName}
+                            onChange={e => setNewSaleForm({ ...newSaleForm, customerName: e.target.value })}
+                            placeholder="Ej. Juan Pérez (Dejar en blanco para Cliente General)"
+                            className="bg-black/45 border-white/10 h-11 text-sm font-semibold text-white focus-visible:ring-brand-yellow"
+                        />
+                    </div>
+
+                    <div className="space-y-2">
+                        <Label className="text-white/70 text-xs font-bold uppercase tracking-wider">NIT / CI (Opcional)</Label>
+                        <Input
+                            value={newSaleForm.customerNIT}
+                            onChange={e => setNewSaleForm({ ...newSaleForm, customerNIT: e.target.value })}
+                            placeholder="Ej. 12345678"
+                            className="bg-black/45 border-white/10 h-11 text-sm font-semibold text-white focus-visible:ring-brand-yellow"
+                        />
+                    </div>
+
+                    <div className="space-y-2 pt-2">
+                        <Label className="text-white/70 text-xs font-bold uppercase tracking-wider block mb-2">Método de Pago</Label>
+                        <div className="grid grid-cols-2 gap-4">
+                            {[
+                                { id: 'efectivo', label: '💸 Efectivo' },
+                                { id: 'qr', label: '📱 QR Digital / Transf.' }
+                            ].map(method => (
+                                <button
+                                    key={method.id}
+                                    type="button"
+                                    onClick={() => setNewSaleForm({ ...newSaleForm, paymentMethod: method.id as any })}
+                                    className={`py-3 rounded-xl border font-bold text-xs uppercase transition-all flex items-center justify-center gap-2 cursor-pointer ${
+                                        newSaleForm.paymentMethod === method.id
+                                            ? 'bg-brand-yellow text-brand-black border-brand-yellow font-black shadow-md'
+                                            : 'bg-black/40 border-white/10 text-white/60 hover:bg-black/60 hover:text-white'
+                                    }`}
+                                >
+                                    {method.label}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+
+                <div className="bg-[#1A1A1A] border border-white/5 p-5 rounded-2xl flex justify-between items-center">
+                    <div>
+                        <span className="text-[10px] text-white/30 font-black uppercase block tracking-wider">Total de Artículos ({newSaleCart.reduce((s, c) => s + c.quantity, 0)} uds.)</span>
+                        <span className="text-xs text-white/60 font-semibold block mt-0.5">Método de pago seleccionado: {newSaleForm.paymentMethod === 'efectivo' ? 'Efectivo' : 'QR Digital'}</span>
+                    </div>
+                    <div className="text-right">
+                        <span className="text-[10px] text-white/30 font-black uppercase block tracking-wider">Total Venta</span>
+                        <span className="text-2xl font-black text-brand-yellow">Bs. {cartTotal.toFixed(2)}</span>
+                    </div>
+                </div>
+
+                <div className="flex gap-4 pt-2">
+                    <Button
+                        type="button"
+                        variant="ghost"
+                        onClick={() => setNewSaleStep(1)}
+                        className="hover:bg-white/5 h-12 px-6 uppercase text-xs font-bold"
+                    >
+                        Volver a Productos
+                    </Button>
+                    <Button
+                        type="button"
+                        disabled={isSaving}
+                        onClick={handleSaveSale}
+                        className="flex-1 bg-brand-yellow hover:bg-brand-yellow-light text-brand-black font-black uppercase text-xs tracking-wider h-12 rounded-xl cursor-pointer"
+                    >
+                        {isSaving ? 'Registrando...' : 'Registrar y Generar Recibo'}
+                    </Button>
+                </div>
+            </div>
+        );
+    };
+
+    // RENDER STEP 3: Virtual Receipt & Print Screen
+    const renderWizardStep3 = () => {
+        if (!completedSaleData) return null;
+        const sale = completedSaleData;
+
+        return (
+            <div className="space-y-6 max-w-xl mx-auto py-4">
+                <div 
+                    id="manual-sale-receipt-print"
+                    className="bg-white text-brand-black p-6 rounded-2xl border border-gray-200 shadow-inner flex flex-col justify-between font-mono text-xs space-y-4"
+                    style={{ color: '#111', fontFamily: 'monospace' }}
+                >
+                    <div className="text-center space-y-1 pb-3 border-b border-dashed border-gray-300">
+                        <h2 className="text-xl font-black tracking-widest text-black">BRIZ</h2>
+                        <p className="text-[10px] text-gray-500 font-bold uppercase">Recibo de Venta Oficial</p>
+                        <p className="text-[9px] text-gray-400">Tel: +591 77860277</p>
+                    </div>
+
+                    <div className="space-y-2">
+                        <div className="flex justify-between">
+                            <span className="font-bold text-gray-500">VENTA ID:</span>
+                            <span className="font-bold text-black uppercase">{sale.id}</span>
+                        </div>
+                        <div className="flex justify-between">
+                            <span className="font-bold text-gray-500">FECHA:</span>
+                            <span className="font-bold text-black">{new Date(sale.date).toLocaleString()}</span>
+                        </div>
+                        <div className="flex justify-between">
+                            <span className="font-bold text-gray-500">TIPO:</span>
+                            <span className="font-bold text-black">VENTA EN TIENDA</span>
+                        </div>
+                    </div>
+
+                    <div className="pt-3 border-t border-dashed border-gray-300 space-y-1">
+                        <div>
+                            <span className="font-bold text-gray-500 block text-[9px] uppercase tracking-wider">Cliente:</span>
+                            <span className="font-black text-sm text-black">{sale.customerName}</span>
+                        </div>
+                        {sale.customerCI && sale.customerCI !== 'N/A' && (
+                            <div>
+                                <span className="font-bold text-gray-500 block text-[9px] uppercase tracking-wider">NIT/CI:</span>
+                                <span className="font-bold text-black">{sale.customerCI}</span>
+                            </div>
+                        )}
+                    </div>
+
+                    <div className="pt-3 border-t border-dashed border-gray-300">
+                        <span className="font-bold text-gray-500 block text-[9px] uppercase tracking-wider mb-2">Artículos:</span>
+                        <div className="space-y-2">
+                            {sale.items.map((item: any, idx: number) => (
+                                <div key={idx} className="flex justify-between items-start text-[11px]">
+                                    <div className="pr-4">
+                                        <p className="font-bold text-black">{item.name}</p>
+                                        <p className="text-[10px] text-gray-500">{item.quantity} x Bs. {item.price.toFixed(2)}</p>
+                                    </div>
+                                    <span className="font-bold text-black shrink-0">Bs. {(item.quantity * item.price).toFixed(2)}</span>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+
+                    <div className="pt-4 border-t-2 border-double border-gray-300 flex justify-between items-center">
+                        <span className="font-black text-sm text-black">TOTAL PAGADO</span>
+                        <span className="font-black text-lg text-black">Bs. {(sale.total || 0).toFixed(2)}</span>
+                    </div>
+
+                    <div className="text-center pt-4 border-t border-dashed border-gray-300">
+                        <p className="text-[9px] font-bold uppercase tracking-widest text-gray-400">Método de pago: {sale.paymentMethod === 'efectivo' ? 'Efectivo' : 'QR / Transferencia'}</p>
+                        <p className="text-[9px] font-bold uppercase tracking-widest text-gray-400 mt-2">¡Muchas gracias por su compra!</p>
+                        <p className="text-[8px] text-gray-300 mt-0.5">BRIZ - Movilidad y Comunidad</p>
+                    </div>
+                </div>
+
+                {/* Printable receipt custom style */}
+                <style>{`
+                    @media print {
+                        body * {
+                            visibility: hidden !important;
+                        }
+                        #manual-sale-receipt-print, #manual-sale-receipt-print * {
+                            visibility: visible !important;
+                        }
+                        #manual-sale-receipt-print {
+                            position: absolute !important;
+                            left: 0 !important;
+                            top: 0 !important;
+                            width: 100% !important;
+                            border: none !important;
+                            box-shadow: none !important;
+                            padding: 0 !important;
+                            margin: 0 !important;
+                        }
+                    }
+                `}</style>
+
+                <div className="flex gap-4 pt-2">
+                    <Button
+                        type="button"
+                        onClick={() => window.print()}
+                        className="bg-white/10 hover:bg-white/20 text-white font-bold h-12 text-xs uppercase px-6 flex items-center gap-1.5 cursor-pointer border border-white/10"
+                    >
+                        <Printer className="w-4 h-4" /> Imprimir Recibo
+                    </Button>
+
+                    <Button
+                        type="button"
+                        onClick={() => {
+                            setNewSaleModalOpen(false);
+                            setNewSaleStep(1);
+                            setCompletedSaleData(null);
+                        }}
+                        className="flex-1 bg-brand-yellow hover:bg-brand-yellow-light text-brand-black font-black uppercase text-xs tracking-wider h-12 rounded-xl cursor-pointer"
+                    >
+                        Finalizar y Cerrar
+                    </Button>
+                </div>
+            </div>
+        );
+    };
 
     const handleDelete = (id: string) => {
         if (confirm('¿Estás seguro de eliminar este pedido permanentemente?')) {
@@ -43,6 +528,17 @@ export default function AdminSalesPage() {
                     </h1>
                     <p className="text-white/50 text-lg font-medium">Registros de compras, transacciones e ingresos en tienda.</p>
                 </div>
+                <Button
+                    onClick={() => {
+                        setNewSaleCart([]);
+                        setNewSaleStep(1);
+                        setCompletedSaleData(null);
+                        setNewSaleModalOpen(true);
+                    }}
+                    className="bg-white text-brand-black hover:bg-brand-yellow font-bold h-12 px-8 rounded-full shadow-lg transition-all hover:scale-105 cursor-pointer"
+                >
+                    <Plus className="w-5 h-5 mr-2" strokeWidth={3} /> Nueva Venta
+                </Button>
             </div>
 
             <Card className="bg-[#1A1A1A] border-white/5 rounded-[1.5rem] overflow-hidden shadow-xl">
@@ -171,6 +667,46 @@ export default function AdminSalesPage() {
                             </div>
                         </div>
                     )}
+                </DialogContent>
+            </Dialog>
+
+            {/* Manual Sales Creator Dialog */}
+            <Dialog open={newSaleModalOpen} onOpenChange={(open) => {
+                if (newSaleStep === 3) return;
+                setNewSaleModalOpen(open);
+            }}>
+                <DialogContent className="max-w-5xl bg-brand-charcoal border-white/10 text-white rounded-3xl p-6 font-sans select-none overflow-y-auto max-h-[90vh]">
+                    <DialogHeader className="border-b border-white/10 pb-4 mb-4">
+                        <DialogTitle className="text-2xl font-black text-white flex items-center gap-2">
+                            <ShoppingBag className="w-6 h-6 text-brand-yellow" />
+                            Nueva Venta Manual (Tienda)
+                        </DialogTitle>
+                    </DialogHeader>
+
+                    {/* Progress Indicator */}
+                    {newSaleStep !== 3 && (
+                        <div className="grid grid-cols-2 gap-2 mb-6">
+                            {[
+                                { step: 1, label: '1. Selección de Artículos' },
+                                { step: 2, label: '2. Pago y Cliente' }
+                            ].map(s => (
+                                <div
+                                    key={s.step}
+                                    className={`py-2 text-center rounded-xl text-[10px] font-black uppercase tracking-wider border transition-all ${
+                                        newSaleStep === s.step
+                                            ? 'bg-brand-yellow text-brand-black border-brand-yellow shadow-[0_4px_15px_rgba(255,210,0,0.15)]'
+                                            : 'bg-black/20 text-white/40 border-white/5'
+                                    }`}
+                                >
+                                    {s.label}
+                                </div>
+                            ))}
+                        </div>
+                    )}
+
+                    {newSaleStep === 1 && renderWizardStep1()}
+                    {newSaleStep === 2 && renderWizardStep2()}
+                    {newSaleStep === 3 && renderWizardStep3()}
                 </DialogContent>
             </Dialog>
         </div>
