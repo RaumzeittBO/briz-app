@@ -138,21 +138,23 @@ export default function InventoryPage() {
   const [newCategoryName, setNewCategoryName] = useState("");
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
 
-  const bikes = inventory.filter(i => i.itemType === 'bike' && i.availableForRental);
-  const accessories = inventory.filter(i => i.itemType === 'accessory' && i.availableForRental);
+  const bikes = inventory.filter(i => i.itemType === 'bike' && (!i.availableForSale || i.availableForRental));
+  const accessories = inventory.filter(i => i.itemType === 'accessory' && (!i.availableForSale || i.availableForRental));
   const q = search.toLowerCase();
   const filteredBikes = bikes.filter(b => b.name.toLowerCase().includes(q));
   const filteredAccessories = accessories.filter(a => a.name.toLowerCase().includes(q));
-  const filteredCombos = combos.filter(c => c.name.toLowerCase().includes(q) && c.availableForRental);
+  const filteredCombos = combos.filter(c => c.name.toLowerCase().includes(q) && (!c.availableForSale || c.availableForRental));
   const availableBikeCategories = useMemo(() => {
     const list = [...bikeCategories];
     inventory.forEach(item => {
-      if (item.availableForRental && item.category && !list.includes(item.category)) {
+      const isRentalItem = !item.availableForSale || item.availableForRental;
+      if (isRentalItem && item.category && !list.includes(item.category)) {
         list.push(item.category);
       }
     });
     combos.forEach(combo => {
-      if (combo.availableForRental && combo.category && !list.includes(combo.category)) {
+      const isRentalCombo = !combo.availableForSale || combo.availableForRental;
+      if (isRentalCombo && combo.category && !list.includes(combo.category)) {
         list.push(combo.category);
       }
     });
