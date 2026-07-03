@@ -70,6 +70,14 @@ export default function AdminSalesPage() {
 
     const cartTotal = newSaleCart.reduce((acc, item) => acc + (item.product.salePrice || 0) * item.quantity, 0);
 
+    // Helper: get total available stock for an item (handles bikes with wheelSizes)
+    const getItemStock = (item: any): number => {
+        if (item.hasWheelSizes && Array.isArray(item.wheelSizes)) {
+            return item.wheelSizes.reduce((sum: number, ws: any) => sum + (ws.stock || 0), 0);
+        }
+        return item.stock ?? 0;
+    };
+
     const availableForSaleProducts = (inventory || []).filter(item => {
         if (!item.active || !item.availableForSale) return false;
         
@@ -117,14 +125,28 @@ export default function AdminSalesPage() {
 
             batch.set(saleDocRef, salePayload);
 
-            // 2. Decrement inventory stock
+            // 2. Decrement inventory stock (handle bikes with wheelSizes)
             newSaleCart.forEach(c => {
                 const itemDocRef = doc(db, 'inventory', c.product.id);
-                // For accessories/items without wheel sizes, decrement standard stock
-                const currentStock = c.product.stock ?? 0;
-                batch.update(itemDocRef, {
-                    stock: Math.max(0, currentStock - c.quantity)
-                });
+                if (c.product.hasWheelSizes && Array.isArray(c.product.wheelSizes)) {
+                    // Distribute decrement proportionally across wheelSizes (largest first)
+                    let remaining = c.quantity;
+                    const updatedWheelSizes = [...c.product.wheelSizes].map((ws: any) => ({ ...ws }));
+                    // Sort by stock descending to take from most-stocked size first
+                    updatedWheelSizes.sort((a: any, b: any) => (b.stock || 0) - (a.stock || 0));
+                    for (const ws of updatedWheelSizes) {
+                        if (remaining <= 0) break;
+                        const take = Math.min(remaining, ws.stock || 0);
+                        ws.stock = (ws.stock || 0) - take;
+                        remaining -= take;
+                    }
+                    batch.update(itemDocRef, { wheelSizes: updatedWheelSizes });
+                } else {
+                    const currentStock = c.product.stock ?? 0;
+                    batch.update(itemDocRef, {
+                        stock: Math.max(0, currentStock - c.quantity)
+                    });
+                }
             });
 
             await batch.commit();
@@ -174,7 +196,7 @@ export default function AdminSalesPage() {
                     <div className="flex-1 overflow-y-auto pr-1 grid grid-cols-1 sm:grid-cols-2 gap-4 pb-4">
                         {availableForSaleProducts.map(item => {
                             const imgUrl = item.imageUrl || '/images/placeholder_bike.png';
-                            const stock = item.stock ?? 0;
+                            const stock = getItemStock(item);
                             const isOutOfStock = stock <= 0;
 
                             return (
@@ -255,7 +277,7 @@ export default function AdminSalesPage() {
                                             <button 
                                                 type="button" 
                                                 onClick={() => updateCartQuantity(item.product.id, 1)}
-                                                disabled={item.quantity >= (item.product.stock || 0)}
+                                                disabled={item.quantity >= getItemStock(item.product)}
                                                 className="w-5 h-5 rounded hover:bg-white/10 text-white flex items-center justify-center cursor-pointer text-xs font-bold disabled:opacity-30"
                                             >
                                                 +
@@ -505,10 +527,45 @@ export default function AdminSalesPage() {
         );
     };
 
-    const handleDelete = (id: string) => {
-        if (confirm('¿Estás seguro de eliminar este pedido permanentemente?')) {
-            deleteSale(id);
+    const handleDelete = async (id: string) => {
+        if (!confirm('¿Estás seguro de eliminar esta venta? El stock de los artículos será restaurado.')) return;
+        try {
+            // Find the sale to restore stock
+            const sale = sales.find(s => s.id === id);
+            if (sale && sale.items && sale.items.length > 0) {
+                const batch = writeBatch(db);
+                for (const saleItem of sale.items) {
+                    if (!saleItem.id) continue;
+                    const invItem = (inventory || []).find((inv: any) => inv.id === saleItem.id);
+                    if (!invItem) continue;
+                    const itemDocRef = doc(db, 'inventory', saleItem.id);
+                    if (invItem.hasWheelSizes && Array.isArray(invItem.wheelSizes)) {
+                        // Restore stock to wheelSizes proportionally (largest stock first)
+                        let remaining = saleItem.quantity;
+                        const updatedWheelSizes = invItem.wheelSizes.map((ws: any) => ({ ...ws }));
+                        updatedWheelSizes.sort((a: any, b: any) => (b.stock || 0) - (a.stock || 0));
+                        for (const ws of updatedWheelSizes) {
+                            if (remaining <= 0) break;
+                            ws.stock = (ws.stock || 0) + remaining;
+                            remaining = 0;
+                        }
+                        batch.update(itemDocRef, { wheelSizes: updatedWheelSizes });
+                    } else {
+                        const currentStock = invItem.stock ?? 0;
+                        batch.update(itemDocRef, { stock: currentStock + saleItem.quantity });
+                    }
+                }
+                // Delete the sale
+                batch.delete(doc(db, 'sales', id));
+                await batch.commit();
+            } else {
+                // No items to restore, just delete
+                await deleteSale(id);
+            }
             if (selectedSale?.id === id) setSelectedSale(null);
+        } catch (error: any) {
+            console.error('Error al eliminar venta:', error);
+            alert('No se pudo eliminar la venta: ' + error.message);
         }
     };
 

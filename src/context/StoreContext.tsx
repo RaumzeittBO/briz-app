@@ -165,11 +165,12 @@ export interface Sale {
     customerName: string;
     customerPhone: string;
     customerCI: string;
-    items: { name: string; price: number; quantity: number; image: string }[];
+    items: { id?: string; name: string; price: number; quantity: number; image?: string }[];
     total: number;
     status: 'Pendiente' | 'Completado' | 'Cancelado';
     paymentMethod: string;
-    notes: string;
+    notes?: string;
+    source?: string;
     date: string;
 }
 
