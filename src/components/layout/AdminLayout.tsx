@@ -4,40 +4,92 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
     LayoutDashboard, Bike, Package, ShoppingCart, Wrench, Users, BarChart3,
     Settings, Menu, ChevronLeft, LogOut, Bell, Lock, MapPinned, MessagesSquare,
-    Calendar, ShoppingBag
+    Calendar, ShoppingBag, GripVertical, Edit3, Check
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { useAuth } from '@/context/AuthContext';
-import { useStore } from '@/context/StoreContext';
+import { useStore, DEFAULT_ADMIN_LINKS } from '@/context/StoreContext';
 import { useCommunity } from '@/context/CommunityContext';
+
+const iconMap: Record<string, React.ComponentType<any>> = {
+    LayoutDashboard,
+    Bike,
+    Package,
+    ShoppingCart,
+    Wrench,
+    Users,
+    BarChart3,
+    Settings,
+    MapPinned,
+    MessagesSquare,
+    Calendar,
+    ShoppingBag
+};
 
 export default function AdminLayout() {
     const [sidebarOpen, setSidebarOpen] = useState(true);
     const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
     const location = useLocation();
     const { logout, setEditMode } = useAuth();
-    const { rentals } = useStore();
+    const { 
+        rentals, 
+        adminNavigationLinks, 
+        updateAdminNavigationLinks 
+    } = useStore();
     const { items } = useCommunity();
+
+    const [isEditingMenu, setIsEditingMenu] = useState(false);
+    const [tempLinks, setTempLinks] = useState<any[]>([]);
+    const [editingLinkKey, setEditingLinkKey] = useState<string | null>(null);
+    const [editingLabelVal, setEditingLabelVal] = useState("");
+    const [draggedIdx, setDraggedIdx] = useState<number | null>(null);
 
     const pendingRentals = rentals.filter(r => r.status === 'Pendiente').length;
     const pendingCommunity = items.filter(item => item.status === 'pending').length;
     const totalNotifications = pendingRentals + pendingCommunity;
 
-    const adminLinks = [
-        { label: 'Dashboard', href: '/admin', icon: LayoutDashboard },
-        { label: 'Alquileres', href: '/admin/rentals', icon: Bike, badge: pendingRentals > 0 ? pendingRentals : undefined },
-        { label: 'Tienda', href: '/admin/shop', icon: ShoppingBag },
-        { label: 'Eventos', href: '/admin/events', icon: Calendar },
-        { label: 'Inventario', href: '/admin/inventory', icon: Package },
-        { label: 'Ventas', href: '/admin/sales', icon: ShoppingCart },
-        { label: 'Servicio', href: '/admin/service', icon: Wrench },
-        { label: 'Clientes', href: '/admin/customers', icon: Users },
-        { label: 'Ciclotours', href: '/admin/routes', icon: MapPinned },
-        { label: 'Comunidad', href: '/admin/community', icon: MessagesSquare, badge: pendingCommunity || undefined },
-        { label: 'Reportes', href: '/admin/reports', icon: BarChart3 },
-        { label: 'Configuración', href: '/admin/settings', icon: Settings },
-    ];
+    const startEditingMenu = () => {
+        setTempLinks([...(adminNavigationLinks.length > 0 ? adminNavigationLinks : DEFAULT_ADMIN_LINKS)]);
+        setIsEditingMenu(true);
+    };
+
+    const saveMenuChanges = async () => {
+        try {
+            await updateAdminNavigationLinks(tempLinks);
+            setIsEditingMenu(false);
+            setEditingLinkKey(null);
+        } catch (error) {
+            alert("Error al guardar el orden del menú: " + error);
+        }
+    };
+
+    const cancelMenuChanges = () => {
+        setIsEditingMenu(false);
+        setEditingLinkKey(null);
+    };
+
+    const handleMenuDrop = (targetIdx: number) => {
+        if (draggedIdx === null || draggedIdx === targetIdx) return;
+        const list = [...tempLinks];
+        const item = list[draggedIdx];
+        list.splice(draggedIdx, 1);
+        list.splice(targetIdx, 0, item);
+        setTempLinks(list);
+        setDraggedIdx(null);
+    };
+
+    const saveLinkLabel = (key: string) => {
+        const list = tempLinks.map(l => l.key === key ? { ...l, label: editingLabelVal.trim() || l.label } : l);
+        setTempLinks(list);
+        setEditingLinkKey(null);
+    };
+
+    const getBadge = (key: string) => {
+        if (key === 'rentals' && pendingRentals > 0) return pendingRentals;
+        if (key === 'community' && pendingCommunity > 0) return pendingCommunity;
+        return undefined;
+    };
 
     const isActive = (href: string) => {
         if (href === '/admin') return location.pathname === '/admin';
@@ -66,12 +118,97 @@ export default function AdminLayout() {
 
             {/* Nav items */}
             <nav className="flex-1 p-5 space-y-2 overflow-y-auto custom-scrollbar">
-                {adminLinks.map((link) => {
-                    const Icon = link.icon;
-                    const active = isActive(link.href);
+                {/* Configuration header */}
+                <div className="flex justify-between items-center mb-3 px-2 border-b border-brand-yellow/15 pb-2">
+                    <span className="text-[9px] font-black uppercase text-brand-charcoal/45 tracking-wider">Secciones</span>
+                    {isEditingMenu ? (
+                        <div className="flex gap-3">
+                            <button type="button" onClick={saveMenuChanges} className="text-[9px] font-black uppercase text-emerald-600 hover:text-emerald-700 cursor-pointer">
+                                Guardar
+                            </button>
+                            <button type="button" onClick={cancelMenuChanges} className="text-[9px] font-black uppercase text-red-500 hover:text-red-600 cursor-pointer">
+                                Cancelar
+                            </button>
+                        </div>
+                    ) : (
+                        <button type="button" onClick={startEditingMenu} className="text-[9px] font-black uppercase text-brand-yellow-vibrant hover:underline cursor-pointer">
+                            Editar Menú
+                        </button>
+                    )}
+                </div>
+
+                {(isEditingMenu ? tempLinks : (adminNavigationLinks.length > 0 ? adminNavigationLinks : DEFAULT_ADMIN_LINKS)).map((link, idx) => {
+                    const Icon = iconMap[link.icon] || Package;
+                    const active = !isEditingMenu && isActive(link.href);
+                    const badge = getBadge(link.key);
+                    const isDragging = draggedIdx === idx;
+                    const isEditingThisLabel = editingLinkKey === link.key;
+
+                    if (isEditingMenu) {
+                        return (
+                            <div
+                                key={link.key}
+                                draggable={!isEditingThisLabel}
+                                onDragStart={() => setDraggedIdx(idx)}
+                                onDragOver={(e) => e.preventDefault()}
+                                onDrop={() => handleMenuDrop(idx)}
+                                onDragEnd={() => setDraggedIdx(null)}
+                                className={`flex items-center gap-3 px-3 py-2.5 rounded-2xl text-xs font-black uppercase tracking-widest transition-all duration-300 border ${
+                                    isDragging
+                                        ? 'border-brand-yellow border-dashed bg-brand-yellow/5 opacity-50'
+                                        : 'border-transparent bg-white/40 text-brand-charcoal/70 hover:bg-white/60'
+                                }`}
+                            >
+                                <div className="cursor-grab active:cursor-grabbing text-brand-charcoal/35 hover:text-brand-charcoal/60 p-0.5">
+                                    <GripVertical className="w-4 h-4" />
+                                </div>
+                                <Icon className="w-4.5 h-4.5 flex-shrink-0" />
+                                
+                                {isEditingThisLabel ? (
+                                    <div className="flex items-center gap-1.5 flex-1 min-w-0">
+                                        <input
+                                            type="text"
+                                            value={editingLabelVal}
+                                            onChange={e => setEditingLabelVal(e.target.value)}
+                                            className="bg-black/10 border-b border-brand-yellow text-xs font-black text-brand-charcoal px-1.5 py-0.5 rounded focus:outline-none flex-1 uppercase"
+                                            autoFocus
+                                            onKeyDown={e => {
+                                                if (e.key === 'Enter') saveLinkLabel(link.key);
+                                                else if (e.key === 'Escape') setEditingLinkKey(null);
+                                            }}
+                                            onClick={e => e.stopPropagation()}
+                                        />
+                                        <button
+                                            type="button"
+                                            onClick={() => saveLinkLabel(link.key)}
+                                            className="p-1 bg-emerald-500 hover:bg-emerald-600 text-white rounded cursor-pointer animate-pulse"
+                                        >
+                                            <Check className="w-3.5 h-3.5" />
+                                        </button>
+                                    </div>
+                                ) : (
+                                    <>
+                                        <span className="flex-1 truncate select-none">{link.label}</span>
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                setEditingLinkKey(link.key);
+                                                setEditingLabelVal(link.label);
+                                            }}
+                                            className="p-1 hover:bg-brand-yellow/20 text-brand-yellow-vibrant rounded transition-colors cursor-pointer"
+                                            title="Editar Nombre"
+                                        >
+                                            <Edit3 className="w-3.5 h-3.5" />
+                                        </button>
+                                    </>
+                                )}
+                            </div>
+                        );
+                    }
+
                     return (
                         <Link
-                            key={link.href}
+                            key={link.key}
                             to={link.href}
                             onClick={() => setMobileSidebarOpen(false)}
                             className={`flex items-center gap-4 px-4 py-3.5 rounded-2xl text-xs font-black uppercase tracking-widest transition-all duration-300 group
@@ -84,9 +221,9 @@ export default function AdminLayout() {
                             {(sidebarOpen || mobileSidebarOpen) && (
                                 <>
                                     <span className="flex-1 truncate">{link.label}</span>
-                                    {link.badge && (
+                                    {badge && (
                                         <Badge className={`border-0 text-[10px] font-black px-2 py-0.5 rounded-full ${active ? 'bg-black text-brand-yellow' : 'bg-brand-yellow text-black'}`}>
-                                            {link.badge}
+                                            {badge}
                                         </Badge>
                                     )}
                                 </>

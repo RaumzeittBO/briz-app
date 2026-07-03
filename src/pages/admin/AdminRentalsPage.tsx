@@ -4,6 +4,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useStore } from '@/context/StoreContext';
+import { FileUploader } from '@/components/ui/file-uploader';
 import type { Rental } from '@/context/StoreContext';
 import { 
   Trash2, 
@@ -26,12 +27,14 @@ import {
   Edit3,
   Save,
   Minus,
-  Plus
+  Plus,
+  ShoppingBag,
+  Users
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { generateAdminReplyWhatsAppLink } from '@/lib/whatsapp';
 import { db } from '@/lib/firebase';
-import { doc, setDoc } from 'firebase/firestore';
+import { doc, setDoc, writeBatch } from 'firebase/firestore';
 
 // Mappers for Spanish Translation
 const statusLabels: Record<string, string> = {
@@ -267,7 +270,9 @@ export default function AdminRentalsPage() {
     inventory,
     combos,
     customers,
-    calculatePrice
+    calculatePrice,
+    addRental,
+    bikeCategories
   } = useStore();
 
   const [search, setSearch] = useState('');
@@ -277,6 +282,38 @@ export default function AdminRentalsPage() {
   const [editingOrder, setEditingOrder] = useState(false);
   const [editForm, setEditForm] = useState<RentalEditForm | null>(null);
   const [searchProductQuery, setSearchProductQuery] = useState('');
+
+  // Manual Rental Wizard States
+  const [newRentalModalOpen, setNewRentalModalOpen] = useState(false);
+  const [newRentalStep, setNewRentalStep] = useState(1);
+  const [newRentalCart, setNewRentalCart] = useState<any[]>([]);
+  const [newRentalForm, setNewRentalForm] = useState({
+      date: new Date().toISOString().split('T')[0],
+      pickupTime: new Date().toTimeString().slice(0, 5),
+      duration: '1 hora',
+      deliveryService: false,
+      pickupService: false,
+      mapsLink: '',
+      notes: '',
+      paymentMethod: 'efectivo',
+      paymentStatus: 'paid' as 'unpaid' | 'paid',
+      status: 'confirmed' as 'confirmed' | 'pending'
+  });
+  const [newRentalCustomerMode, setNewRentalCustomerMode] = useState<'existing' | 'new'>('existing');
+  const [newRentalSelectedCustomerId, setNewRentalSelectedCustomerId] = useState<string | null>(null);
+  const [newRentalCustomerSearchQuery, setNewRentalCustomerSearchQuery] = useState('');
+  const [newRentalCustomerData, setNewRentalCustomerData] = useState({
+      name: '',
+      phone: '',
+      ci: '',
+      email: '',
+      nacionalidad: '',
+      departamento: '',
+      comoNosConociste: '',
+      autofotoUrl: '',
+      documentoUrl: '',
+      documentoReversoUrl: ''
+  });
 
   useEffect(() => {
     setShowClientProfile(false);
@@ -587,6 +624,1032 @@ export default function AdminRentalsPage() {
     return Math.floor((Date.now() - new Date(createdAt).getTime()) / 60000);
   };
 
+  // Manual Rental Wizard Helpers
+  const [wizardSearch, setWizardSearch] = useState('');
+  const [wizardCategory, setWizardCategory] = useState('all');
+  const [selectedSizes, setSelectedSizes] = useState<Record<string, string>>({});
+
+  const getCartTotal = () => {
+    return newRentalCart.reduce((total, item) => {
+      const isCombo = item.product.components !== undefined;
+      const price = calculatePrice(
+        isCombo ? 'combo' : 'single',
+        item.product.id,
+        newRentalForm.duration,
+        1
+      );
+      return total + price * item.quantity;
+    }, 0);
+  };
+
+  const wizardBikesAndCombos = useMemo(() => {
+    const bList = inventory.filter(i => i.itemType === 'bike' && (!i.availableForSale || i.availableForRental));
+    const cList = combos.filter(c => !c.availableForSale || c.availableForRental);
+    
+    const combined = [
+      ...bList.map(b => ({ ...b, type: 'single' })),
+      ...cList.map(c => ({ ...c, type: 'combo' }))
+    ];
+
+    return combined.filter(item => {
+      const matchesSearch = item.name.toLowerCase().includes(wizardSearch.toLowerCase());
+      const matchesCat = wizardCategory === 'all' || item.category === wizardCategory;
+      return matchesSearch && matchesCat;
+    });
+  }, [inventory, combos, wizardSearch, wizardCategory]);
+
+  const filteredCustomersForWizard = useMemo(() => {
+    if (!newRentalCustomerSearchQuery.trim()) return [];
+    const query = newRentalCustomerSearchQuery.toLowerCase();
+    return customers.filter(c => 
+      c.name.toLowerCase().includes(query) || 
+      c.phone.includes(query) || 
+      c.ci.toLowerCase().includes(query)
+    );
+  }, [customers, newRentalCustomerSearchQuery]);
+
+  const addToCart = (product: any, isCombo = false) => {
+    let size = '';
+    if (!isCombo && product.hasWheelSizes && product.wheelSizes) {
+      size = selectedSizes[product.id] || product.wheelSizes.find((w: any) => w.stock > 0)?.size || '';
+      if (!size) {
+        alert('No hay tallas/aros disponibles para este producto.');
+        return;
+      }
+    }
+
+    let componentSelections: any[] = [];
+    if (isCombo && product.components) {
+      product.components.forEach((comp: any) => {
+        const inventoryItem = inventory.find(inv => inv.id === comp.inventoryItemId);
+        if (inventoryItem?.hasWheelSizes && inventoryItem.wheelSizes) {
+          const compSize = selectedSizes[`${product.id}_${comp.inventoryItemId}`] || 
+                           inventoryItem.wheelSizes.find(w => w.stock > 0)?.size || '';
+          componentSelections.push({
+            inventoryItemId: comp.inventoryItemId,
+            wheelSize: compSize
+          });
+        }
+      });
+    }
+
+    const existingIdx = newRentalCart.findIndex(item => 
+      item.product.id === product.id && 
+      item.selectedWheelSize === size &&
+      JSON.stringify(item.componentSelections || []) === JSON.stringify(componentSelections)
+    );
+
+    if (existingIdx >= 0) {
+      const cartCopy = [...newRentalCart];
+      cartCopy[existingIdx].quantity += 1;
+      setNewRentalCart(cartCopy);
+    } else {
+      setNewRentalCart([...newRentalCart, {
+        product,
+        quantity: 1,
+        selectedWheelSize: size,
+        componentSelections
+      }]);
+    }
+  };
+
+  const handleWizardSubmit = async () => {
+    let finalCustomer: any = null;
+
+    if (newRentalCustomerMode === 'existing') {
+      finalCustomer = customers.find(c => c.id === newRentalSelectedCustomerId);
+      if (!finalCustomer) {
+        alert('Por favor selecciona un cliente registrado.');
+        return;
+      }
+    } else {
+      const c = newRentalCustomerData;
+      if (!c.name.trim() || !c.phone.trim() || !c.ci.trim()) {
+        alert('Por favor completa los campos obligatorios del cliente (Nombre, Teléfono, CI).');
+        return;
+      }
+      const custId = 'cust_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7);
+      finalCustomer = {
+        id: custId,
+        name: c.name.trim(),
+        phone: c.phone.trim(),
+        ci: c.ci.trim(),
+        email: c.email.trim(),
+        nacionalidad: c.nacionalidad.trim(),
+        departamento: c.departamento.trim(),
+        comoNosConociste: c.comoNosConociste.trim(),
+        autofotoUrl: c.autofotoUrl,
+        documentoUrl: c.documentoUrl,
+        documentoReversoUrl: c.documentoReversoUrl,
+        rentalsCount: 1,
+        purchasesCount: 0,
+        firstVisit: new Date().toISOString(),
+        lastVisit: new Date().toISOString(),
+        notes: 'Registrado manualmente en alquiler administrativo'
+      };
+      try {
+        await setDoc(doc(db, 'customers', custId), finalCustomer);
+      } catch (err) {
+        console.error('Error saving customer:', err);
+        alert('Error al guardar el nuevo cliente.');
+        return;
+      }
+    }
+
+    if (newRentalCart.length === 0) {
+      alert('El carrito del alquiler está vacío.');
+      return;
+    }
+
+    const payloads: any[] = newRentalCart.map(item => {
+      const isCombo = item.product.components !== undefined;
+      const price = calculatePrice(
+        isCombo ? 'combo' : 'single',
+        item.product.id,
+        newRentalForm.duration,
+        1
+      );
+      return {
+        customerName: finalCustomer.name,
+        customerPhone: finalCustomer.phone,
+        customerCI: finalCustomer.ci,
+        productType: isCombo ? 'combo' : 'single',
+        productId: item.product.id,
+        productName: item.product.name,
+        productNameSnapshot: item.product.name,
+        selectedWheelSize: item.selectedWheelSize || '',
+        componentSelections: item.componentSelections || [],
+        quantity: item.quantity,
+        duration: newRentalForm.duration,
+        date: newRentalForm.date,
+        pickupTime: newRentalForm.pickupTime,
+        total: price * item.quantity,
+        paymentMethod: newRentalForm.paymentMethod,
+        notes: newRentalForm.notes ? `[Manual] ${newRentalForm.notes}` : '[Manual]',
+        deliveryService: newRentalForm.deliveryService,
+        pickupService: newRentalForm.pickupService,
+        mapsLink: newRentalForm.mapsLink || '',
+        source: 'manual'
+      };
+    });
+
+    try {
+      const firstRental = payloads[0];
+      const createdFirst = await addRental({
+        ...firstRental,
+        paymentStatus: newRentalForm.paymentStatus === 'paid' ? 'paid' : 'unpaid'
+      });
+      const sharedCode = createdFirst.reservationCode;
+
+      const batch = writeBatch(db);
+
+      if (newRentalForm.status === 'confirmed') {
+        const invCopy = JSON.parse(JSON.stringify(inventory));
+        
+        const updateStock = (itemId: string, qty: number, wsSize?: string) => {
+          if (itemId.startsWith('srv_')) return true;
+          const itemIdx = invCopy.findIndex((i: any) => i.id === itemId);
+          if (itemIdx < 0) return false;
+          const item = invCopy[itemIdx];
+          if (item.hasWheelSizes && item.wheelSizes) {
+            const wsIdx = item.wheelSizes.findIndex((w: any) => w.size === wsSize);
+            if (wsIdx < 0) return false;
+            item.wheelSizes[wsIdx].stock = Math.max(0, item.wheelSizes[wsIdx].stock - qty);
+          } else {
+            item.stock = Math.max(0, (item.stock ?? 0) - qty);
+          }
+          batch.update(doc(db, 'inventory', itemId), { 
+            stock: item.stock !== undefined ? item.stock : null,
+            wheelSizes: item.wheelSizes || null
+          });
+          return true;
+        };
+
+        newRentalCart.forEach(item => {
+          const isCombo = item.product.components !== undefined;
+          if (!isCombo) {
+            updateStock(item.product.id, item.quantity, item.selectedWheelSize);
+          } else {
+            item.product.components.forEach((comp: any) => {
+              const selection = item.componentSelections?.find((cs: any) => cs.inventoryItemId === comp.inventoryItemId);
+              updateStock(comp.inventoryItemId, comp.quantity * item.quantity, selection?.wheelSize);
+            });
+          }
+        });
+
+        batch.update(doc(db, 'rentals', createdFirst.id), {
+          status: 'confirmed',
+          paymentStatus: newRentalForm.paymentStatus,
+          updatedAt: new Date().toISOString()
+        });
+
+        for (let i = 1; i < payloads.length; i++) {
+          const item = payloads[i];
+          const newId = 'rental_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7);
+          const fullItem = {
+            ...item,
+            id: newId,
+            reservationCode: sharedCode,
+            paymentStatus: newRentalForm.paymentStatus,
+            status: 'confirmed',
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            createdDate: new Date().toISOString()
+          };
+          batch.set(doc(db, 'rentals', newId), fullItem);
+        }
+      } else {
+        batch.update(doc(db, 'rentals', createdFirst.id), {
+          paymentStatus: newRentalForm.paymentStatus,
+          updatedAt: new Date().toISOString()
+        });
+
+        for (let i = 1; i < payloads.length; i++) {
+          const item = payloads[i];
+          const newId = 'rental_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7);
+          const fullItem = {
+            ...item,
+            id: newId,
+            reservationCode: sharedCode,
+            paymentStatus: newRentalForm.paymentStatus,
+            status: 'pending',
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            createdDate: new Date().toISOString()
+          };
+          batch.set(doc(db, 'rentals', newId), fullItem);
+        }
+      }
+
+      if (newRentalCustomerMode === 'existing') {
+        const custRef = doc(db, 'customers', finalCustomer.id);
+        batch.update(custRef, {
+          rentalsCount: (finalCustomer.rentalsCount || 0) + 1,
+          lastVisit: new Date().toISOString()
+        });
+      }
+
+      await batch.commit();
+      alert(`Alquiler manual creado con éxito. Código: ${sharedCode}`);
+      setNewRentalModalOpen(false);
+    } catch (error) {
+      console.error('Error creating manual rental:', error);
+      alert('Ocurrió un error al crear el alquiler.');
+    }
+  };
+
+  const renderStep1 = () => {
+    return (
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 font-sans text-white h-[60vh] overflow-hidden">
+        {/* Left Side: Product selection grid */}
+        <div className="lg:col-span-2 flex flex-col space-y-4 h-full overflow-hidden">
+          <div className="flex gap-2 shrink-0">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30" />
+              <Input
+                placeholder="Buscar bicicleta o combo por nombre..."
+                value={wizardSearch}
+                onChange={e => setWizardSearch(e.target.value)}
+                className="pl-9 bg-black/35 border-white/10 h-10 rounded-xl text-xs font-bold text-white focus-visible:ring-brand-yellow"
+              />
+            </div>
+            <select
+              value={wizardCategory}
+              onChange={e => setWizardCategory(e.target.value)}
+              className="bg-black/35 border border-white/10 rounded-xl px-3 py-2 text-xs font-bold text-white focus:border-brand-yellow outline-none"
+            >
+              <option value="all" className="bg-brand-charcoal text-white">Todas las Categorías</option>
+              {bikeCategories.map((cat: string) => (
+                <option key={cat} value={cat} className="bg-brand-charcoal text-white">{cat}</option>
+              ))}
+            </select>
+          </div>
+
+          <div className="flex-1 overflow-y-auto pr-1 grid grid-cols-1 md:grid-cols-2 gap-4 pb-10">
+            {wizardBikesAndCombos.map(rawItem => {
+              const item = rawItem as any;
+              const isCombo = item.type === 'combo';
+              const imgUrl = item.imageUrl || '/images/placeholder_bike.png';
+
+              let stock = 0;
+              if (!isCombo) {
+                if (item.hasWheelSizes && item.wheelSizes) {
+                  stock = item.wheelSizes.reduce((s: number, w: any) => s + w.stock, 0);
+                } else {
+                  stock = item.stock ?? 0;
+                }
+              } else {
+                const components = item.components || [];
+                const avails = components.map((comp: any) => {
+                  const invItem = inventory.find(inv => inv.id === comp.inventoryItemId);
+                  if (!invItem) return 0;
+                  if (invItem.hasWheelSizes && invItem.wheelSizes) {
+                    return invItem.wheelSizes.reduce((s, w) => s + w.stock, 0);
+                  }
+                  return invItem.stock ?? 0;
+                });
+                stock = avails.length > 0 ? Math.min(...avails) : 0;
+              }
+
+              const hasSizes = !isCombo && item.hasWheelSizes && item.wheelSizes;
+              const cardSizeKey = item.id;
+              const activeSize = selectedSizes[cardSizeKey] || (hasSizes ? item.wheelSizes.find((w: any) => w.stock > 0)?.size : '');
+
+              return (
+                <div key={item.id} className="bg-black/20 border border-white/5 rounded-2xl p-4 flex flex-col justify-between hover:border-brand-yellow/30 transition-all">
+                  <div className="space-y-2">
+                    <span className="text-[9px] font-black uppercase text-brand-yellow-vibrant tracking-widest">{item.category || 'Alquiler'}</span>
+                    <div className="aspect-[4/3] rounded-xl overflow-hidden bg-black/35 relative">
+                      <img src={imgUrl} alt={item.name} className="w-full h-full object-cover" />
+                      {stock === 0 && (
+                        <div className="absolute inset-0 bg-black/60 flex items-center justify-center">
+                          <span className="text-red-500 text-xs font-black uppercase tracking-wider">Agotado</span>
+                        </div>
+                      )}
+                    </div>
+                    <div>
+                      <h4 className="text-sm font-black text-white">{item.name}</h4>
+                      <p className="text-[10px] text-white/40 mt-0.5 line-clamp-2">{item.description}</p>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 pt-3 border-t border-white/5 space-y-3">
+                    <div className="flex justify-between items-center text-[10px] font-bold text-white/50">
+                      <span>Stock disponible:</span>
+                      <span className={stock > 0 ? 'text-green-400' : 'text-red-400'}>{stock} uds.</span>
+                    </div>
+
+                    {hasSizes && (
+                      <div className="space-y-1">
+                        <label className="text-[9px] text-white/30 font-bold uppercase tracking-wider">Seleccionar Aro</label>
+                        <select
+                          value={activeSize}
+                          onChange={e => setSelectedSizes({ ...selectedSizes, [cardSizeKey]: e.target.value })}
+                          className="w-full bg-black/35 border border-white/10 rounded-lg px-2.5 py-1.5 text-xs font-bold text-white outline-none focus:border-brand-yellow"
+                        >
+                          {item.wheelSizes.map((w: any) => (
+                            <option key={w.size} value={w.size} disabled={w.stock <= 0} className="bg-brand-charcoal text-white">
+                              Aro {w.size} ({w.stock} disponibles)
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+
+                    {isCombo && item.components && (
+                      <div className="space-y-1">
+                        <label className="text-[9px] text-white/30 font-bold uppercase tracking-wider">Configurar Componentes</label>
+                        <div className="space-y-1">
+                          {item.components.map((comp: any) => {
+                            const invItem = inventory.find(i => i.id === comp.inventoryItemId);
+                            if (!invItem?.hasWheelSizes || !invItem.wheelSizes) return null;
+                            const comboCompKey = `${item.id}_${comp.inventoryItemId}`;
+                            const compSize = selectedSizes[comboCompKey] || invItem.wheelSizes.find(w => w.stock > 0)?.size || '';
+                            return (
+                              <div key={comp.inventoryItemId} className="flex items-center justify-between gap-2 text-[10px]">
+                                <span className="text-white/60 truncate max-w-[120px]">{invItem.name}:</span>
+                                <select
+                                  value={compSize}
+                                  onChange={e => setSelectedSizes({ ...selectedSizes, [comboCompKey]: e.target.value })}
+                                  className="bg-black/35 border border-white/10 rounded px-1.5 py-1 text-[10px] font-bold text-white outline-none"
+                                >
+                                  {invItem.wheelSizes.map((w: any) => (
+                                    <option key={w.size} value={w.size} disabled={w.stock <= 0} className="bg-brand-charcoal text-white">
+                                      Aro {w.size}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    <Button
+                      type="button"
+                      disabled={stock === 0}
+                      onClick={() => addToCart(item, isCombo)}
+                      className="w-full h-9 bg-brand-yellow hover:bg-brand-yellow-light text-brand-black text-xs font-black uppercase rounded-xl cursor-pointer"
+                    >
+                      <Plus className="w-3.5 h-3.5 mr-1" strokeWidth={3} /> Agregar
+                    </Button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Right Side: Cart Summary */}
+        <div className="bg-black/25 border border-white/5 rounded-2xl p-4 flex flex-col justify-between h-full overflow-hidden">
+          <div className="flex flex-col h-full overflow-hidden">
+            <h3 className="text-sm font-black uppercase tracking-wider border-b border-white/10 pb-2 mb-3 text-brand-yellow-vibrant">
+              Resumen de Alquiler ({newRentalCart.reduce((s, c) => s + c.quantity, 0)})
+            </h3>
+
+            {newRentalCart.length === 0 ? (
+              <div className="flex-1 flex flex-col items-center justify-center text-white/30 space-y-2">
+                <ShoppingBag className="w-8 h-8 opacity-40" />
+                <p className="text-xs font-black uppercase tracking-wider">Carrito Vacío</p>
+              </div>
+            ) : (
+              <div className="flex-1 overflow-y-auto space-y-2 pr-1 pb-4">
+                {newRentalCart.map((item, idx) => {
+                  const isCombo = item.product.components !== undefined;
+                  const price = calculatePrice(
+                    isCombo ? 'combo' : 'single',
+                    item.product.id,
+                    newRentalForm.duration,
+                    1
+                  );
+                  return (
+                    <div key={idx} className="bg-white/5 border border-white/5 rounded-xl p-3 space-y-2">
+                      <div className="flex justify-between items-start gap-2">
+                        <div className="min-w-0 flex-1">
+                          <h5 className="text-xs font-black text-white truncate">{item.product.name}</h5>
+                          {item.selectedWheelSize && (
+                            <Badge className="bg-brand-yellow text-brand-black text-[9px] font-black rounded-md px-1 py-0 mt-0.5 border-0">
+                              Aro {item.selectedWheelSize}
+                            </Badge>
+                          )}
+                          {item.componentSelections && item.componentSelections.length > 0 && (
+                            <div className="flex gap-1 flex-wrap mt-0.5">
+                              {item.componentSelections.map((cs: any) => {
+                                const subItem = inventory.find(i => i.id === cs.inventoryItemId);
+                                return (
+                                  <Badge key={cs.inventoryItemId} className="bg-white/10 text-white/80 text-[8px] font-bold rounded px-1 py-0 border-0">
+                                    {subItem?.name}: Aro {cs.wheelSize}
+                                  </Badge>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+                        <button
+                          onClick={() => {
+                            const cartCopy = [...newRentalCart];
+                            cartCopy.splice(idx, 1);
+                            setNewRentalCart(cartCopy);
+                          }}
+                          className="text-red-400 hover:text-red-300 hover:bg-red-500/10 p-1 rounded-lg"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                      <div className="flex justify-between items-center pt-1.5 border-t border-white/5">
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => {
+                              const cartCopy = [...newRentalCart];
+                              if (cartCopy[idx].quantity > 1) {
+                                cartCopy[idx].quantity -= 1;
+                                setNewRentalCart(cartCopy);
+                              }
+                            }}
+                            className="bg-white/5 text-white hover:bg-white/10 w-6 h-6 flex items-center justify-center rounded-lg"
+                          >
+                            <Minus className="w-3 h-3" />
+                          </button>
+                          <span className="text-xs font-black text-white w-4 text-center">{item.quantity}</span>
+                          <button
+                            onClick={() => {
+                              const cartCopy = [...newRentalCart];
+                              cartCopy[idx].quantity += 1;
+                              setNewRentalCart(cartCopy);
+                            }}
+                            className="bg-white/5 text-white hover:bg-white/10 w-6 h-6 flex items-center justify-center rounded-lg"
+                          >
+                            <Plus className="w-3 h-3" />
+                          </button>
+                        </div>
+                        <span className="text-xs font-black text-brand-yellow">
+                          Bs. {price * item.quantity}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            <div className="border-t border-white/10 pt-3 mt-2 space-y-3 shrink-0">
+              <div className="flex justify-between items-center text-sm font-black">
+                <span>Total Estimado:</span>
+                <span className="text-brand-yellow">Bs. {getCartTotal()}</span>
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  onClick={() => setNewRentalModalOpen(false)}
+                  variant="ghost"
+                  className="flex-1 h-10 border border-white/10 hover:bg-white/5 text-white font-bold rounded-xl text-xs uppercase cursor-pointer"
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  disabled={newRentalCart.length === 0}
+                  onClick={() => setNewRentalStep(2)}
+                  className="flex-1 h-10 bg-brand-yellow hover:bg-brand-yellow-light text-brand-black font-black rounded-xl text-xs uppercase cursor-pointer"
+                >
+                  Siguiente
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const renderStep2 = () => {
+    return (
+      <div className="space-y-4 font-sans text-white max-w-xl mx-auto py-4">
+        <h3 className="text-base font-black uppercase tracking-wider text-brand-yellow-vibrant mb-4 text-center">
+          Detalles de Tiempos, Pago y Servicios
+        </h3>
+
+        <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-1">
+            <label className="text-[10px] text-white/40 font-bold uppercase">Fecha de Inicio</label>
+            <input
+              type="date"
+              value={newRentalForm.date}
+              onChange={e => setNewRentalForm({ ...newRentalForm, date: e.target.value })}
+              className="w-full bg-black/35 border border-white/10 rounded-xl px-3 h-10 text-xs font-bold text-white focus:border-brand-yellow outline-none"
+            />
+          </div>
+          <div className="space-y-1">
+            <label className="text-[10px] text-white/40 font-bold uppercase">Hora de Retiro</label>
+            <input
+              type="time"
+              value={newRentalForm.pickupTime}
+              onChange={e => setNewRentalForm({ ...newRentalForm, pickupTime: e.target.value })}
+              className="w-full bg-black/35 border border-white/10 rounded-xl px-3 h-10 text-xs font-bold text-white focus:border-brand-yellow outline-none"
+            />
+          </div>
+        </div>
+
+        <div className="space-y-1">
+          <label className="text-[10px] text-white/40 font-bold uppercase">Duración de Alquiler</label>
+          <select
+            value={newRentalForm.duration}
+            onChange={e => setNewRentalForm({ ...newRentalForm, duration: e.target.value })}
+            className="w-full bg-black/35 border border-white/10 rounded-xl px-3 h-10 text-xs font-bold text-white focus:border-brand-yellow outline-none"
+          >
+            {['1 hora', '2 horas', '3 horas', '4 horas', '8 horas', '24 horas', '1 semana', '1 mes'].map(d => (
+              <option key={d} value={d} className="bg-brand-charcoal text-white">{d}</option>
+            ))}
+          </select>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3 pt-2">
+          <label className="flex items-center gap-2 rounded-xl bg-black/25 p-3 text-xs font-bold text-white/70 cursor-pointer select-none border border-white/5 hover:border-white/10">
+            <input
+              type="checkbox"
+              checked={newRentalForm.deliveryService}
+              onChange={e => setNewRentalForm({ ...newRentalForm, deliveryService: e.target.checked })}
+              className="rounded border-white/10 bg-black/35 text-brand-yellow focus:ring-0"
+            />
+            Entrega a domicilio
+          </label>
+          <label className="flex items-center gap-2 rounded-xl bg-black/25 p-3 text-xs font-bold text-white/70 cursor-pointer select-none border border-white/5 hover:border-white/10">
+            <input
+              type="checkbox"
+              checked={newRentalForm.pickupService}
+              onChange={e => setNewRentalForm({ ...newRentalForm, pickupService: e.target.checked })}
+              className="rounded border-white/10 bg-black/35 text-brand-yellow focus:ring-0"
+            />
+            Recojo de retorno
+          </label>
+        </div>
+
+        {(newRentalForm.deliveryService || newRentalForm.pickupService) && (
+          <div className="space-y-1">
+            <label className="text-[10px] text-white/40 font-bold uppercase">Enlace Google Maps (Dirección)</label>
+            <Input
+              placeholder="Pegue el enlace de ubicación de Google Maps..."
+              value={newRentalForm.mapsLink}
+              onChange={e => setNewRentalForm({ ...newRentalForm, mapsLink: e.target.value })}
+              className="h-10 rounded-xl bg-black/35 border-white/10 text-white text-xs font-bold"
+            />
+          </div>
+        )}
+
+        <div className="grid grid-cols-3 gap-3 pt-2">
+          <div className="space-y-1">
+            <label className="text-[10px] text-white/40 font-bold uppercase">Método de Pago</label>
+            <select
+              value={newRentalForm.paymentMethod}
+              onChange={e => setNewRentalForm({ ...newRentalForm, paymentMethod: e.target.value })}
+              className="w-full bg-black/35 border border-white/10 rounded-xl px-3 h-10 text-xs font-bold text-white outline-none focus:border-brand-yellow"
+            >
+              <option value="efectivo" className="bg-brand-charcoal text-white">Efectivo</option>
+              <option value="qr" className="bg-brand-charcoal text-white">QR</option>
+              <option value="transferencia" className="bg-brand-charcoal text-white">Transferencia</option>
+            </select>
+          </div>
+          <div className="space-y-1">
+            <label className="text-[10px] text-white/40 font-bold uppercase">Estado de Pago</label>
+            <select
+              value={newRentalForm.paymentStatus}
+              onChange={e => setNewRentalForm({ ...newRentalForm, paymentStatus: e.target.value as any })}
+              className="w-full bg-black/35 border border-white/10 rounded-xl px-3 h-10 text-xs font-bold text-white outline-none focus:border-brand-yellow"
+            >
+              <option value="paid" className="bg-brand-charcoal text-white">Pagado</option>
+              <option value="unpaid" className="bg-brand-charcoal text-white">No Pagado</option>
+            </select>
+          </div>
+          <div className="space-y-1">
+            <label className="text-[10px] text-white/40 font-bold uppercase">Estado de Alquiler</label>
+            <select
+              value={newRentalForm.status}
+              onChange={e => setNewRentalForm({ ...newRentalForm, status: e.target.value as any })}
+              className="w-full bg-black/35 border border-white/10 rounded-xl px-3 h-10 text-xs font-bold text-white outline-none focus:border-brand-yellow"
+            >
+              <option value="confirmed" className="bg-brand-charcoal text-white">Confirmado</option>
+              <option value="pending" className="bg-brand-charcoal text-white">Pendiente</option>
+            </select>
+          </div>
+        </div>
+
+        <div className="space-y-1">
+          <label className="text-[10px] text-white/40 font-bold uppercase">Notas u Observaciones</label>
+          <textarea
+            placeholder="Escriba alguna nota sobre este alquiler manual..."
+            value={newRentalForm.notes}
+            onChange={e => setNewRentalForm({ ...newRentalForm, notes: e.target.value })}
+            className="w-full bg-black/35 border border-white/10 rounded-xl p-3 h-20 text-xs font-bold text-white outline-none focus:border-brand-yellow resize-none"
+          />
+        </div>
+
+        <div className="flex gap-2 pt-4">
+          <Button
+            onClick={() => setNewRentalStep(1)}
+            variant="ghost"
+            className="flex-1 h-10 border border-white/10 hover:bg-white/5 text-white font-bold rounded-xl text-xs uppercase cursor-pointer"
+          >
+            Atrás
+          </Button>
+          <Button
+            onClick={() => setNewRentalStep(3)}
+            className="flex-1 h-10 bg-brand-yellow hover:bg-brand-yellow-light text-brand-black font-black rounded-xl text-xs uppercase cursor-pointer"
+          >
+            Siguiente
+          </Button>
+        </div>
+      </div>
+    );
+  };
+
+  const renderStep3 = () => {
+    const isModeExisting = newRentalCustomerMode === 'existing';
+    const selectedCustomer = customers.find(c => c.id === newRentalSelectedCustomerId);
+
+    return (
+      <div className="space-y-4 font-sans text-white max-w-xl mx-auto py-4">
+        <h3 className="text-base font-black uppercase tracking-wider text-brand-yellow-vibrant mb-4 text-center">
+          Asociar Cliente
+        </h3>
+
+        <div className="grid grid-cols-2 p-1 bg-black/35 rounded-xl border border-white/5">
+          <button
+            type="button"
+            onClick={() => setNewRentalCustomerMode('existing')}
+            className={`py-2.5 text-xs font-black uppercase tracking-wider rounded-lg transition-all ${
+              isModeExisting
+                ? 'bg-brand-yellow text-brand-black shadow-md'
+                : 'text-white/60 hover:text-white hover:bg-white/5'
+            }`}
+          >
+            Cliente Registrado
+          </button>
+          <button
+            type="button"
+            onClick={() => setNewRentalCustomerMode('new')}
+            className={`py-2.5 text-xs font-black uppercase tracking-wider rounded-lg transition-all ${
+              !isModeExisting
+                ? 'bg-brand-yellow text-brand-black shadow-md'
+                : 'text-white/60 hover:text-white hover:bg-white/5'
+            }`}
+          >
+            Nuevo Cliente
+          </button>
+        </div>
+
+        {isModeExisting ? (
+          <div className="space-y-4">
+            <div className="space-y-1">
+              <label className="text-[10px] text-white/40 font-bold uppercase">Buscar Cliente</label>
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30" />
+                <Input
+                  placeholder="Buscar por nombre, teléfono o CI..."
+                  value={newRentalCustomerSearchQuery}
+                  onChange={e => setNewRentalCustomerSearchQuery(e.target.value)}
+                  className="pl-9 bg-black/35 border-white/10 h-10 rounded-xl text-xs font-bold text-white focus-visible:ring-brand-yellow"
+                />
+              </div>
+            </div>
+
+            {newRentalCustomerSearchQuery.trim() !== '' && (
+              <div className="bg-black/25 border border-white/5 rounded-xl max-h-40 overflow-y-auto p-2 space-y-1">
+                {filteredCustomersForWizard.length === 0 ? (
+                  <p className="text-center py-4 text-white/30 text-xs font-bold">No se encontraron clientes</p>
+                ) : (
+                  filteredCustomersForWizard.map(c => (
+                    <button
+                      key={c.id}
+                      type="button"
+                      onClick={() => {
+                        setNewRentalSelectedCustomerId(c.id);
+                        setNewRentalCustomerSearchQuery('');
+                      }}
+                      className={`w-full text-left p-2.5 rounded-lg text-xs font-bold transition-all hover:bg-white/5 flex justify-between items-center ${
+                        newRentalSelectedCustomerId === c.id ? 'bg-brand-yellow/10 text-brand-yellow border border-brand-yellow/20' : 'text-white/80'
+                      }`}
+                    >
+                      <div>
+                        <p className="font-black text-white">{c.name}</p>
+                        <p className="text-[10px] text-white/50">Telf: {c.phone} | CI: {c.ci}</p>
+                      </div>
+                      {newRentalSelectedCustomerId === c.id && <Check className="w-4 h-4 text-brand-yellow" />}
+                    </button>
+                  ))
+                )}
+              </div>
+            )}
+
+            {selectedCustomer ? (
+              <div className="bg-brand-yellow/5 border border-brand-yellow/20 rounded-2xl p-4 space-y-2">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-sm font-black text-brand-yellow">{selectedCustomer.name}</h4>
+                  <Badge className="bg-brand-yellow text-brand-black text-[9px] font-black rounded border-0">
+                    Cliente Registrado
+                  </Badge>
+                </div>
+                <div className="grid grid-cols-2 gap-2 text-xs text-white/70 font-sans">
+                  <p><strong>Teléfono:</strong> {selectedCustomer.phone}</p>
+                  <p><strong>Documento (CI):</strong> {selectedCustomer.ci}</p>
+                  <p><strong>Nacionalidad:</strong> {selectedCustomer.nacionalidad || 'No definida'}</p>
+                  <p><strong>Departamento:</strong> {selectedCustomer.departamento || 'No definido'}</p>
+                  <p><strong>Visitas:</strong> {selectedCustomer.rentalsCount || 0} rentas</p>
+                  <p><strong>Última visita:</strong> {selectedCustomer.lastVisit ? new Date(selectedCustomer.lastVisit).toLocaleDateString() : 'Nunca'}</p>
+                </div>
+              </div>
+            ) : (
+              <div className="text-center py-8 text-white/30 border border-white/5 border-dashed rounded-2xl">
+                <Users className="w-8 h-8 mx-auto opacity-30 mb-1" />
+                <p className="text-xs font-black uppercase tracking-wider">Ningún cliente seleccionado</p>
+                <p className="text-[10px] text-white/40">Busca arriba o marca "Nuevo Cliente" para registrarlo.</p>
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="space-y-4 max-h-96 overflow-y-auto pr-1 pb-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1">
+                <label className="text-[10px] text-white/40 font-bold uppercase">Nombre Completo *</label>
+                <Input
+                  required
+                  value={newRentalCustomerData.name}
+                  onChange={e => setNewRentalCustomerData({...newRentalCustomerData, name: e.target.value})}
+                  className="bg-black/35 border-white/10 h-10 text-xs font-bold text-white rounded-xl"
+                  placeholder="Nombre y apellido..."
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-[10px] text-white/40 font-bold uppercase">Teléfono / WhatsApp *</label>
+                <Input
+                  required
+                  value={newRentalCustomerData.phone}
+                  onChange={e => setNewRentalCustomerData({...newRentalCustomerData, phone: e.target.value})}
+                  className="bg-black/35 border-white/10 h-10 text-xs font-bold text-white rounded-xl"
+                  placeholder="Número de contacto..."
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1">
+                <label className="text-[10px] text-white/40 font-bold uppercase">Cédula de Identidad (CI) *</label>
+                <Input
+                  required
+                  value={newRentalCustomerData.ci}
+                  onChange={e => setNewRentalCustomerData({...newRentalCustomerData, ci: e.target.value})}
+                  className="bg-black/35 border-white/10 h-10 text-xs font-bold text-white rounded-xl"
+                  placeholder="Nº de carnet o pasaporte..."
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-[10px] text-white/40 font-bold uppercase">Correo Electrónico</label>
+                <Input
+                  value={newRentalCustomerData.email}
+                  onChange={e => setNewRentalCustomerData({...newRentalCustomerData, email: e.target.value})}
+                  className="bg-black/35 border-white/10 h-10 text-xs font-bold text-white rounded-xl"
+                  placeholder="ejemplo@correo.com"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-3 gap-3">
+              <div className="space-y-1">
+                <label className="text-[10px] text-white/40 font-bold uppercase">Nacionalidad</label>
+                <Input
+                  value={newRentalCustomerData.nacionalidad}
+                  onChange={e => setNewRentalCustomerData({...newRentalCustomerData, nacionalidad: e.target.value})}
+                  className="bg-black/35 border-white/10 h-10 text-xs font-bold text-white rounded-xl"
+                  placeholder="Boliviana, etc."
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-[10px] text-white/40 font-bold uppercase">Departamento</label>
+                <Input
+                  value={newRentalCustomerData.departamento}
+                  onChange={e => setNewRentalCustomerData({...newRentalCustomerData, departamento: e.target.value})}
+                  className="bg-black/35 border-white/10 h-10 text-xs font-bold text-white rounded-xl"
+                  placeholder="Cochabamba, etc."
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-[10px] text-white/40 font-bold uppercase">¿Cómo nos conoció?</label>
+                <select
+                  value={newRentalCustomerData.comoNosConociste}
+                  onChange={e => setNewRentalCustomerData({...newRentalCustomerData, comoNosConociste: e.target.value})}
+                  className="w-full bg-black/35 border border-white/10 rounded-xl px-2.5 h-10 text-xs font-bold text-white outline-none"
+                >
+                  <option value="" className="bg-brand-charcoal text-white">Seleccionar...</option>
+                  <option value="Redes Sociales" className="bg-brand-charcoal text-white">Redes Sociales</option>
+                  <option value="Recomendación" className="bg-brand-charcoal text-white">Recomendación</option>
+                  <option value="Pasó por el local" className="bg-brand-charcoal text-white">Pasó por el local</option>
+                  <option value="Otro" className="bg-brand-charcoal text-white">Otro</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-3 gap-3 pt-2">
+              <div className="space-y-1 bg-white/5 p-3 rounded-xl border border-white/5">
+                <label className="text-[9px] text-white/40 font-bold uppercase block text-center mb-1">Foto Rostro</label>
+                <FileUploader
+                  onUpload={url => setNewRentalCustomerData(prev => ({...prev, autofotoUrl: url}))}
+                  folder="customers"
+                  className="h-10 px-2 flex items-center justify-center gap-1 bg-black/40 border border-white/10 hover:border-brand-yellow/50 rounded-lg text-[9px] font-black text-white cursor-pointer w-full"
+                />
+                {newRentalCustomerData.autofotoUrl && (
+                  <span className="text-[9px] text-emerald-400 font-bold block text-center mt-1">✓ Cargada</span>
+                )}
+              </div>
+              <div className="space-y-1 bg-white/5 p-3 rounded-xl border border-white/5">
+                <label className="text-[9px] text-white/40 font-bold uppercase block text-center mb-1">CI Anverso</label>
+                <FileUploader
+                  onUpload={url => setNewRentalCustomerData(prev => ({...prev, documentoUrl: url}))}
+                  folder="customers"
+                  className="h-10 px-2 flex items-center justify-center gap-1 bg-black/40 border border-white/10 hover:border-brand-yellow/50 rounded-lg text-[9px] font-black text-white cursor-pointer w-full"
+                />
+                {newRentalCustomerData.documentoUrl && (
+                  <span className="text-[9px] text-emerald-400 font-bold block text-center mt-1">✓ Cargada</span>
+                )}
+              </div>
+              <div className="space-y-1 bg-white/5 p-3 rounded-xl border border-white/5">
+                <label className="text-[9px] text-white/40 font-bold uppercase block text-center mb-1">CI Reverso</label>
+                <FileUploader
+                  onUpload={url => setNewRentalCustomerData(prev => ({...prev, documentoReversoUrl: url}))}
+                  folder="customers"
+                  className="h-10 px-2 flex items-center justify-center gap-1 bg-black/40 border border-white/10 hover:border-brand-yellow/50 rounded-lg text-[9px] font-black text-white cursor-pointer w-full"
+                />
+                {newRentalCustomerData.documentoReversoUrl && (
+                  <span className="text-[9px] text-emerald-400 font-bold block text-center mt-1">✓ Cargada</span>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        <div className="flex gap-2 pt-4">
+          <Button
+            onClick={() => setNewRentalStep(2)}
+            variant="ghost"
+            className="flex-1 h-10 border border-white/10 hover:bg-white/5 text-white font-bold rounded-xl text-xs uppercase cursor-pointer"
+          >
+            Atrás
+          </Button>
+          <Button
+            disabled={isModeExisting ? !selectedCustomer : (!newRentalCustomerData.name.trim() || !newRentalCustomerData.phone.trim() || !newRentalCustomerData.ci.trim())}
+            onClick={() => setNewRentalStep(4)}
+            className="flex-1 h-10 bg-brand-yellow hover:bg-brand-yellow-light text-brand-black font-black rounded-xl text-xs uppercase cursor-pointer"
+          >
+            Siguiente
+          </Button>
+        </div>
+      </div>
+    );
+  };
+
+  const renderStep4 = () => {
+    const isModeExisting = newRentalCustomerMode === 'existing';
+    const customerName = isModeExisting 
+      ? customers.find(c => c.id === newRentalSelectedCustomerId)?.name 
+      : newRentalCustomerData.name;
+    const customerPhone = isModeExisting 
+      ? customers.find(c => c.id === newRentalSelectedCustomerId)?.phone 
+      : newRentalCustomerData.phone;
+    const customerCI = isModeExisting 
+      ? customers.find(c => c.id === newRentalSelectedCustomerId)?.ci 
+      : newRentalCustomerData.ci;
+
+    const cartTotal = getCartTotal();
+
+    return (
+      <div className="space-y-4 font-sans text-white max-w-xl mx-auto py-4">
+        <h3 className="text-base font-black uppercase tracking-wider text-brand-yellow-vibrant mb-4 text-center">
+          Resumen de Confirmación
+        </h3>
+
+        <div className="bg-black/25 border border-white/5 rounded-2xl p-4 space-y-3">
+          <h4 className="text-xs font-black uppercase tracking-wider text-white/50 border-b border-white/5 pb-1">
+            Datos del Cliente
+          </h4>
+          <div className="grid grid-cols-2 gap-2 text-xs">
+            <p><strong>Nombre:</strong> {customerName}</p>
+            <p><strong>Teléfono:</strong> {customerPhone}</p>
+            <p><strong>CI:</strong> {customerCI}</p>
+            <p><strong>Tipo registro:</strong> {isModeExisting ? 'Existente' : 'Nuevo Registro'}</p>
+          </div>
+        </div>
+
+        <div className="bg-black/25 border border-white/5 rounded-2xl p-4 space-y-3">
+          <h4 className="text-xs font-black uppercase tracking-wider text-white/50 border-b border-white/5 pb-1">
+            Detalles Operativos
+          </h4>
+          <div className="grid grid-cols-2 gap-2 text-xs">
+            <p><strong>Fecha:</strong> {newRentalForm.date}</p>
+            <p><strong>Hora:</strong> {newRentalForm.pickupTime}</p>
+            <p><strong>Duración:</strong> {newRentalForm.duration}</p>
+            <p><strong>Método de pago:</strong> {newRentalForm.paymentMethod.toUpperCase()}</p>
+            <p><strong>Estado de pago:</strong> {newRentalForm.paymentStatus === 'paid' ? 'PAGADO' : 'PENDIENTE'}</p>
+            <p><strong>Estado operativo:</strong> {newRentalForm.status === 'confirmed' ? 'CONFIRMADO' : 'PENDIENTE'}</p>
+            {newRentalForm.notes && (
+              <p className="col-span-2"><strong>Notas:</strong> {newRentalForm.notes}</p>
+            )}
+          </div>
+        </div>
+
+        <div className="bg-black/25 border border-white/5 rounded-2xl p-4 space-y-3">
+          <h4 className="text-xs font-black uppercase tracking-wider text-white/50 border-b border-white/5 pb-1">
+            Detalle de Artículos
+          </h4>
+          <div className="space-y-2">
+            {newRentalCart.map((item, idx) => {
+              const isCombo = item.product.components !== undefined;
+              const price = calculatePrice(
+                isCombo ? 'combo' : 'single',
+                item.product.id,
+                newRentalForm.duration,
+                1
+              );
+              return (
+                <div key={idx} className="flex justify-between items-center text-xs">
+                  <div>
+                    <p className="font-bold">{item.product.name} x {item.quantity}</p>
+                    {item.selectedWheelSize && (
+                      <p className="text-[10px] text-white/40">Aro {item.selectedWheelSize}</p>
+                    )}
+                    {item.componentSelections && item.componentSelections.length > 0 && (
+                      <p className="text-[9px] text-white/30">
+                        {item.componentSelections.map((cs: any) => `Aro ${cs.wheelSize}`).join(', ')}
+                      </p>
+                    )}
+                  </div>
+                  <span className="font-black text-brand-yellow">Bs. {price * item.quantity}</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="bg-brand-yellow text-brand-black p-5 rounded-2xl text-center shadow-lg shadow-brand-yellow/10">
+          <p className="text-[10px] font-black uppercase tracking-wider mb-0.5">Monto Total a Cobrar</p>
+          <p className="text-3xl font-black">Bs. {cartTotal}</p>
+        </div>
+
+        <div className="flex gap-2 pt-4">
+          <Button
+            onClick={() => setNewRentalStep(3)}
+            variant="ghost"
+            className="flex-1 h-10 border border-white/10 hover:bg-white/5 text-white font-bold rounded-xl text-xs uppercase cursor-pointer"
+          >
+            Atrás
+          </Button>
+          <Button
+            onClick={handleWizardSubmit}
+            className="flex-1 h-10 bg-brand-yellow hover:bg-brand-yellow-light text-brand-black font-black rounded-xl text-xs uppercase cursor-pointer"
+          >
+            <CheckCircle2 className="w-4 h-4 mr-1.5" /> Crear Alquiler
+          </Button>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="space-y-6 pb-20">
       {/* Header with sound toggle */}
@@ -613,6 +1676,45 @@ export default function AdminRentalsPage() {
           >
             {soundEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
             {soundEnabled ? 'Sonido: Activado' : 'Sonido: Silenciado'}
+          </Button>
+
+          <Button
+            onClick={() => {
+              setNewRentalCart([]);
+              setNewRentalStep(1);
+              setNewRentalForm({
+                date: new Date().toISOString().split('T')[0],
+                pickupTime: new Date().toTimeString().slice(0, 5),
+                duration: '1 hora',
+                deliveryService: false,
+                pickupService: false,
+                mapsLink: '',
+                notes: '',
+                paymentMethod: 'efectivo',
+                paymentStatus: 'paid',
+                status: 'confirmed'
+              });
+              setNewRentalCustomerMode('existing');
+              setNewRentalSelectedCustomerId(null);
+              setNewRentalCustomerSearchQuery('');
+              setNewRentalCustomerData({
+                name: '',
+                phone: '',
+                ci: '',
+                email: '',
+                nacionalidad: '',
+                departamento: '',
+                comoNosConociste: '',
+                autofotoUrl: '',
+                documentoUrl: '',
+                documentoReversoUrl: ''
+              });
+              setNewRentalModalOpen(true);
+            }}
+            className="bg-brand-yellow text-brand-black hover:bg-brand-yellow/90 font-black text-xs uppercase rounded-xl h-10 px-4 flex items-center gap-2 shadow-lg shadow-brand-yellow/15"
+          >
+            <Plus className="w-4 h-4" strokeWidth={3} />
+            <span>Nuevo Alquiler</span>
           </Button>
 
           <div className="relative flex-1 sm:flex-initial sm:w-64">
@@ -1586,6 +2688,47 @@ export default function AdminRentalsPage() {
               </div>
             </>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Manual Rental Creation Dialog */}
+      <Dialog open={newRentalModalOpen} onOpenChange={setNewRentalModalOpen}>
+        <DialogContent className="max-w-5xl bg-brand-charcoal border-white/10 text-white rounded-3xl p-6 font-sans select-none overflow-y-auto max-h-[90vh]">
+          <DialogHeader className="border-b border-white/10 pb-4 mb-4">
+            <DialogTitle className="text-2xl font-black text-white flex items-center gap-2">
+              <CalendarClock className="w-6 h-6 text-brand-yellow" />
+              Nuevo Alquiler Manual
+            </DialogTitle>
+          </DialogHeader>
+
+          {/* Steps Progress Indicator */}
+          <div className="grid grid-cols-4 gap-2 mb-6">
+            {[
+              { step: 1, label: '1. Productos' },
+              { step: 2, label: '2. Tiempos' },
+              { step: 3, label: '3. Cliente' },
+              { step: 4, label: '4. Confirmación' }
+            ].map(s => (
+              <div
+                key={s.step}
+                className={`py-2 text-center rounded-xl text-[10px] font-black uppercase tracking-wider border transition-all ${
+                  newRentalStep === s.step
+                    ? 'bg-brand-yellow text-brand-black border-brand-yellow shadow-[0_4px_15px_rgba(255,210,0,0.15)]'
+                    : newRentalStep > s.step
+                      ? 'bg-brand-yellow/10 text-brand-yellow border-brand-yellow/20'
+                      : 'bg-black/20 text-white/40 border-white/5'
+                }`}
+              >
+                {s.label}
+              </div>
+            ))}
+          </div>
+
+          {/* Steps Content */}
+          {newRentalStep === 1 && renderStep1()}
+          {newRentalStep === 2 && renderStep2()}
+          {newRentalStep === 3 && renderStep3()}
+          {newRentalStep === 4 && renderStep4()}
         </DialogContent>
       </Dialog>
     </div>

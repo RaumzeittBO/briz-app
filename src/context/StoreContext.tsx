@@ -157,6 +157,7 @@ export interface Rental {
     mapsLink?: string;
     deliveryService?: boolean;
     pickupService?: boolean;
+    source?: 'web' | 'manual';
 }
 
 export interface Sale {
@@ -322,6 +323,8 @@ interface StoreContextType {
         remember: boolean
     ) => Promise<Customer>;
     logoutCustomer: () => void;
+    adminNavigationLinks: any[];
+    updateAdminNavigationLinks: (links: any[]) => Promise<void>;
 }
 
 export const StoreContext = createContext<StoreContextType | null>(null);
@@ -339,6 +342,21 @@ export const useStore = () => {
 const DEFAULT_INVENTORY: InventoryItem[] = RENTAL_SEED_INVENTORY;
 const DEFAULT_COMBOS: ComboProduct[] = RENTAL_SEED_COMBOS;
 
+export const DEFAULT_ADMIN_LINKS = [
+    { key: 'dashboard', label: 'Dashboard', href: '/admin', icon: 'LayoutDashboard' },
+    { key: 'rentals', label: 'Alquileres', href: '/admin/rentals', icon: 'Bike' },
+    { key: 'shop', label: 'Tienda', href: '/admin/shop', icon: 'ShoppingBag' },
+    { key: 'events', label: 'Eventos', href: '/admin/events', icon: 'Calendar' },
+    { key: 'inventory', label: 'Inventario', href: '/admin/inventory', icon: 'Package' },
+    { key: 'sales', label: 'Ventas', href: '/admin/sales', icon: 'ShoppingCart' },
+    { key: 'service', label: 'Servicio', href: '/admin/service', icon: 'Wrench' },
+    { key: 'customers', label: 'Clientes', href: '/admin/customers', icon: 'Users' },
+    { key: 'routes', label: 'Ciclotours', href: '/admin/routes', icon: 'MapPinned' },
+    { key: 'community', label: 'Comunidad', href: '/admin/community', icon: 'MessagesSquare' },
+    { key: 'reports', label: 'Reportes', href: '/admin/reports', icon: 'BarChart3' },
+    { key: 'settings', label: 'Configuración', href: '/admin/settings', icon: 'Settings' }
+];
+
 export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
     const [inventory, setInventory] = useState<InventoryItem[]>([]);
     const [combos, setCombos] = useState<ComboProduct[]>([]);
@@ -351,6 +369,7 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
     const [localRoutes, setLocalRoutes] = useState<CyclingRoute[]>(() => safeJSON<CyclingRoute[]>(LOCAL_ROUTES_KEY, []));
     const [bikeCategories, setBikeCategories] = useState<string[]>([]);
     const [shopCategories, setShopCategories] = useState<string[]>([]);
+    const [adminNavigationLinks, setAdminNavigationLinks] = useState<any[]>([]);
     const [isLoaded, setIsLoaded] = useState(false);
 
     const [rentalSettings, setRentalSettings] = useState<RentalSettings>(() => safeJSON<RentalSettings>(LOCAL_RENTAL_SETTINGS_KEY, {
@@ -505,6 +524,17 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
             console.error("Error fetching shop categories:", error);
         });
 
+        const unsubAdminNav = onSnapshot(doc(db, 'settings', 'admin_navigation'), (snap) => {
+            if (snap.exists()) {
+                setAdminNavigationLinks(snap.data().links || DEFAULT_ADMIN_LINKS);
+            } else {
+                setDoc(doc(db, 'settings', 'admin_navigation'), { links: DEFAULT_ADMIN_LINKS });
+                setAdminNavigationLinks(DEFAULT_ADMIN_LINKS);
+            }
+        }, (error) => {
+            console.error("Error fetching admin navigation links:", error);
+        });
+
         const unsubEvents = onSnapshot(query(collection(db, 'events')), (snap) => {
             setEvents(snap.docs.map(doc => ({ ...doc.data() } as EventItem)));
         }, (error) => {
@@ -513,7 +543,7 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
 
         setIsLoaded(true);
         return () => {
-            unsubInv(); unsubCombos(); unsubRentals(); unsubSales(); unsubCustomers(); unsubSO(); unsubSettings(); unsubRoutes(); unsubBikeCats(); unsubShopCats(); unsubEvents();
+            unsubInv(); unsubCombos(); unsubRentals(); unsubSales(); unsubCustomers(); unsubSO(); unsubSettings(); unsubRoutes(); unsubBikeCats(); unsubShopCats(); unsubAdminNav(); unsubEvents();
         };
     }, []);
 
@@ -1178,6 +1208,10 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
         await deleteDoc(doc(db, 'serviceOrders', id));
     };
 
+    const updateAdminNavigationLinks = async (links: any[]) => {
+        await setDoc(doc(db, 'settings', 'admin_navigation'), { links });
+    };
+
     const fileToCompressedDataUrl = (file: File) => new Promise<string>((resolve, reject) => {
         const reader = new FileReader();
         reader.onload = () => {
@@ -1273,7 +1307,8 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
         routes: mergedRoutes, addRoute, updateRoute, deleteRoute,
         events, addEvent, updateEvent, deleteEvent,
         bikeCategories, addBikeCategory, deleteBikeCategory, updateBikeCategory, reorderBikeCategories,
-        shopCategories, addShopCategory, deleteShopCategory, updateShopCategory, reorderShopCategories
+        shopCategories, addShopCategory, deleteShopCategory, updateShopCategory, reorderShopCategories,
+        adminNavigationLinks, updateAdminNavigationLinks
     };
 
     return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;
