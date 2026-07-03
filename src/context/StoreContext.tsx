@@ -18,6 +18,7 @@ import {
     RENTAL_SEED_COMBOS,
     RENTAL_SEED_INVENTORY,
 } from '../data/rentalSeedData';
+import { SHOP_SEED_CATEGORIES } from '../data/shopSeedData';
 export type { CyclingRoute };
 
 // ===========================
@@ -487,9 +488,16 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
 
         const unsubShopCats = onSnapshot(doc(db, 'settings', 'shop_categories'), (snap) => {
             if (snap.exists()) {
-                setShopCategories(snap.data().categories || []);
+                const cats = snap.data().categories || [];
+                if (cats.includes('Bicicletas') && cats.includes('Indumentaria') && !cats.includes('Bicicletas plegables')) {
+                    const defaults = SHOP_SEED_CATEGORIES;
+                    setDoc(doc(db, 'settings', 'shop_categories'), { categories: defaults });
+                    setShopCategories(defaults);
+                } else {
+                    setShopCategories(cats);
+                }
             } else {
-                const defaults = ['Bicicletas', 'Accesorios', 'Repuestos', 'Indumentaria', 'Otros'];
+                const defaults = SHOP_SEED_CATEGORIES;
                 setDoc(doc(db, 'settings', 'shop_categories'), { categories: defaults });
                 setShopCategories(defaults);
             }

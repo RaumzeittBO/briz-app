@@ -77,21 +77,6 @@ function PriceFields({ editItem, setEditItem }: any) {
         </div>
       )}
 
-      {editItem.availableForSale && (
-        <div className="space-y-2 pt-2 border-t border-white/5">
-          <h4 className="text-xs font-black text-blue-400 uppercase tracking-widest">Precio de Venta (Bs.)</h4>
-          <div className="space-y-1">
-            <Label className="text-[10px] text-white/40 font-bold uppercase">Precio final de venta</Label>
-            <Input
-              type="number"
-              min={0}
-              value={toEditableNumber(editItem.salePrice)}
-              onChange={e => setEditItem({ ...editItem, salePrice: e.target.value === '' ? '' : Number(e.target.value) })}
-              className="bg-black/40 border-white/10 h-10 font-bold text-blue-400 rounded-xl"
-            />
-          </div>
-        </div>
-      )}
     </div>
   );
 }
@@ -138,8 +123,7 @@ export default function InventoryPage() {
   const { 
     inventory, combos, addInventoryItem, updateInventoryItem, deleteInventoryItem, 
     addCombo, updateCombo, deleteCombo, getComboAvailability, 
-    bikeCategories, addBikeCategory, deleteBikeCategory, updateBikeCategory, reorderBikeCategories,
-    shopCategories, addShopCategory, deleteShopCategory, updateShopCategory, reorderShopCategories
+    bikeCategories, addBikeCategory, deleteBikeCategory, updateBikeCategory, reorderBikeCategories
   } = useStore();
 
   const [tab, setTab] = useState('bikes');
@@ -152,15 +136,14 @@ export default function InventoryPage() {
   const [editingCat, setEditingCat] = useState<string | null>(null);
   const [editingVal, setEditingVal] = useState("");
   const [newCategoryName, setNewCategoryName] = useState("");
-  const [catManagerTab, setCatManagerTab] = useState<'rental' | 'shop'>('rental');
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
 
-  const bikes = inventory.filter(i => i.itemType === 'bike');
-  const accessories = inventory.filter(i => i.itemType === 'accessory');
+  const bikes = inventory.filter(i => i.itemType === 'bike' && i.availableForRental);
+  const accessories = inventory.filter(i => i.itemType === 'accessory' && i.availableForRental);
   const q = search.toLowerCase();
   const filteredBikes = bikes.filter(b => b.name.toLowerCase().includes(q));
   const filteredAccessories = accessories.filter(a => a.name.toLowerCase().includes(q));
-  const filteredCombos = combos.filter(c => c.name.toLowerCase().includes(q));
+  const filteredCombos = combos.filter(c => c.name.toLowerCase().includes(q) && c.availableForRental);
   const availableBikeCategories = useMemo(() => {
     const list = [...bikeCategories];
     inventory.forEach(item => {
@@ -175,21 +158,6 @@ export default function InventoryPage() {
     });
     return list.filter(cat => cat.trim() && !NON_BIKE_CATEGORIES.has(cat));
   }, [bikeCategories, inventory, combos]);
-
-  const availableShopCategories = useMemo(() => {
-    const list = [...shopCategories];
-    inventory.forEach(item => {
-      if (item.availableForSale && item.category && !list.includes(item.category)) {
-        list.push(item.category);
-      }
-    });
-    combos.forEach(combo => {
-      if (combo.availableForSale && combo.category && !list.includes(combo.category)) {
-        list.push(combo.category);
-      }
-    });
-    return list.filter(cat => cat.trim());
-  }, [shopCategories, inventory, combos]);
 
   const openAdd = (type: 'bike'|'accessory'|'combo') => {
     setEditItem(type==='bike'?defaultBike():type==='accessory'?defaultAccessory():defaultCombo());
@@ -465,28 +433,18 @@ export default function InventoryPage() {
                     <Input value={editItem.name} onChange={e=>setEditItem({...editItem,name:e.target.value})} className="bg-black/40 border-white/10 h-12 font-black text-lg rounded-xl mt-1 text-white" placeholder={modal.type==='bike'?'Ej: Urbana':'Ej: Canasta metálica'} required/>
                   </div>
 
-                  {/* Category Selection for all items */}
+                  {/* Category Selection */}
                   {editItem && (
                     <div>
                       <div className="flex justify-between items-center mb-1">
-                        <Label className="text-[10px] text-white/40 font-bold uppercase tracking-wider">
-                          {editItem.availableForSale ? 'Categoría de Tienda' : 'Categoría de Alquiler'}
-                        </Label>
+                        <Label className="text-[10px] text-white/40 font-bold uppercase tracking-wider">Categoría de Alquiler</Label>
                         <button 
                           type="button" 
                           onClick={() => {
-                            const isSale = editItem.availableForSale;
-                            const newCat = prompt(isSale 
-                              ? 'Ingrese el nombre de la nueva categoría de tienda (ej. Repuestos, Accesorios):' 
-                              : 'Ingrese el nombre de la nueva categoría de alquiler (ej. Urbana, Montañera):'
-                            );
+                            const newCat = prompt('Ingrese el nombre de la nueva categoría de alquiler (ej. Urbana, Montañera):');
                             if (newCat && newCat.trim()) {
                               const trimmed = newCat.trim();
-                              if (isSale) {
-                                addShopCategory(trimmed).catch((err) => console.warn('No se pudo guardar la categoría:', err));
-                              } else {
-                                addBikeCategory(trimmed).catch((err) => console.warn('No se pudo guardar la categoría:', err));
-                              }
+                              addBikeCategory(trimmed).catch((err) => console.warn('No se pudo guardar la categoría:', err));
                               setEditItem({ ...editItem, category: trimmed });
                             }
                           }}
@@ -503,7 +461,7 @@ export default function InventoryPage() {
                           <SelectValue placeholder="Seleccione una categoría" />
                         </SelectTrigger>
                         <SelectContent className="bg-brand-charcoal border-white/10 text-white">
-                          {(editItem.availableForSale ? availableShopCategories : availableBikeCategories).map((cat) => (
+                          {availableBikeCategories.map((cat) => (
                             <SelectItem key={cat} value={cat} className="focus:bg-white/5 focus:text-white cursor-pointer">
                               {cat}
                             </SelectItem>
@@ -525,16 +483,6 @@ export default function InventoryPage() {
                       <Checkbox checked={editItem.active} onCheckedChange={v=>setEditItem({...editItem,active:Boolean(v)})} className="data-[state=checked]:bg-green-500 data-[state=checked]:border-green-500"/>
                       <span className="text-xs font-bold text-white/60">Activo</span>
                     </label>
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <Checkbox checked={editItem.availableForRental} onCheckedChange={v=>setEditItem({...editItem,availableForRental:Boolean(v)})} className="data-[state=checked]:bg-brand-yellow data-[state=checked]:border-brand-yellow data-[state=checked]:text-brand-black"/>
-                      <span className="text-xs font-bold text-white/60">Disponible para alquiler</span>
-                    </label>
-                    {modal.type !== 'combo' && (
-                      <label className="flex items-center gap-2 cursor-pointer">
-                        <Checkbox checked={editItem.availableForSale} onCheckedChange={v=>setEditItem({...editItem,availableForSale:Boolean(v)})} className="data-[state=checked]:bg-blue-500 data-[state=checked]:border-blue-500"/>
-                        <span className="text-xs font-bold text-white/60">Disponible para venta</span>
-                      </label>
-                    )}
                   </div>
                 </div>
 
@@ -662,46 +610,16 @@ export default function InventoryPage() {
         <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 backdrop-blur-md bg-black/60">
           <div className="bg-brand-charcoal border border-white/10 rounded-3xl p-6 max-w-md w-full shadow-2xl space-y-5">
             <div className="flex justify-between items-center border-b border-white/10 pb-3">
-              <h3 className="text-xl font-black text-white">Administrar Categorías</h3>
+              <h3 className="text-xl font-black text-white">Administrar Categorías de Alquiler</h3>
               <Button variant="ghost" size="icon" onClick={() => setCategoryManagerOpen(false)} className="w-8 h-8 rounded-lg text-white/40 hover:text-white hover:bg-white/10">
                 <X className="w-4 h-4" />
               </Button>
             </div>
 
-            {/* Tab Selector */}
-            <div className="grid grid-cols-2 p-1 bg-black/35 rounded-xl border border-white/5">
-              <button
-                onClick={() => {
-                  setCatManagerTab('rental');
-                  setEditingCat(null);
-                }}
-                className={`py-2 text-xs font-black uppercase tracking-wider rounded-lg transition-all ${
-                  catManagerTab === 'rental' 
-                    ? 'bg-brand-yellow text-brand-black shadow-md' 
-                    : 'text-white/60 hover:text-white hover:bg-white/5'
-                }`}
-              >
-                Alquileres
-              </button>
-              <button
-                onClick={() => {
-                  setCatManagerTab('shop');
-                  setEditingCat(null);
-                }}
-                className={`py-2 text-xs font-black uppercase tracking-wider rounded-lg transition-all ${
-                  catManagerTab === 'shop' 
-                    ? 'bg-brand-yellow text-brand-black shadow-md' 
-                    : 'text-white/60 hover:text-white hover:bg-white/5'
-                }`}
-              >
-                Tienda
-              </button>
-            </div>
-
             {/* Add Category Form */}
             <div className="flex gap-2">
               <Input
-                placeholder={catManagerTab === 'rental' ? 'Nueva categoría alquiler...' : 'Nueva categoría tienda...'}
+                placeholder="Nueva categoría alquiler..."
                 value={newCategoryName}
                 onChange={e => setNewCategoryName(e.target.value)}
                 className="bg-black/40 border-white/10 h-10 text-sm rounded-xl text-white flex-1 focus:ring-brand-yellow/50"
@@ -711,11 +629,7 @@ export default function InventoryPage() {
                   const trimmed = newCategoryName.trim();
                   if (!trimmed) return;
                   try {
-                    if (catManagerTab === 'rental') {
-                      await addBikeCategory(trimmed);
-                    } else {
-                      await addShopCategory(trimmed);
-                    }
+                    await addBikeCategory(trimmed);
                     setNewCategoryName("");
                   } catch (err: any) {
                     alert('Error al agregar categoría: ' + (err.message || err));
@@ -729,7 +643,7 @@ export default function InventoryPage() {
 
             {/* List of categories with Drag and Drop */}
             <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
-              {(catManagerTab === 'rental' ? bikeCategories : shopCategories).map((cat, idx) => {
+              {bikeCategories.map((cat, idx) => {
                 const isEditing = editingCat === cat;
                 const isDragging = draggedIndex === idx;
 
@@ -741,15 +655,11 @@ export default function InventoryPage() {
                     onDragOver={(e) => e.preventDefault()}
                     onDrop={async () => {
                       if (draggedIndex === null || draggedIndex === idx) return;
-                      const list = [...(catManagerTab === 'rental' ? bikeCategories : shopCategories)];
+                      const list = [...bikeCategories];
                       const item = list[draggedIndex];
                       list.splice(draggedIndex, 1);
                       list.splice(idx, 0, item);
-                      if (catManagerTab === 'rental') {
-                        await reorderBikeCategories(list);
-                      } else {
-                        await reorderShopCategories(list);
-                      }
+                      await reorderBikeCategories(list);
                       setDraggedIndex(null);
                     }}
                     onDragEnd={() => setDraggedIndex(null)}
@@ -769,11 +679,7 @@ export default function InventoryPage() {
                           onKeyDown={async e => {
                             if (e.key === 'Enter') {
                               try {
-                                if (catManagerTab === 'rental') {
-                                  await updateBikeCategory(cat, editingVal);
-                                } else {
-                                  await updateShopCategory(cat, editingVal);
-                                }
+                                await updateBikeCategory(cat, editingVal);
                                 setEditingCat(null);
                               } catch (err: any) {
                                 alert('Error al actualizar categoría: ' + (err.message || err));
@@ -785,11 +691,7 @@ export default function InventoryPage() {
                           size="sm"
                           onClick={async () => {
                             try {
-                              if (catManagerTab === 'rental') {
-                                await updateBikeCategory(cat, editingVal);
-                              } else {
-                                await updateShopCategory(cat, editingVal);
-                              }
+                              await updateBikeCategory(cat, editingVal);
                               setEditingCat(null);
                             } catch (err: any) {
                               alert('Error al actualizar categoría: ' + (err.message || err));
@@ -836,11 +738,7 @@ export default function InventoryPage() {
                             onClick={async () => {
                               if (confirm(`¿Estás seguro de eliminar la categoría "${cat}"?\nEsto no afectará los productos existentes, pero ya no aparecerá en los filtros.`)) {
                                 try {
-                                  if (catManagerTab === 'rental') {
-                                    await deleteBikeCategory(cat);
-                                  } else {
-                                    await deleteShopCategory(cat);
-                                  }
+                                  await deleteBikeCategory(cat);
                                 } catch (err: any) {
                                   alert('Error al eliminar categoría: ' + (err.message || err));
                                 }
@@ -857,7 +755,7 @@ export default function InventoryPage() {
                   </div>
                 );
               })}
-              {(catManagerTab === 'rental' ? bikeCategories : shopCategories).length === 0 && (
+              {bikeCategories.length === 0 && (
                 <p className="text-center py-4 text-white/30 text-xs font-bold uppercase tracking-wider">No hay categorías agregadas</p>
               )}
             </div>

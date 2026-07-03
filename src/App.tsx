@@ -20,6 +20,7 @@ import ProfilePage from '@/pages/public/ProfilePage';
 import LoginPage from '@/pages/admin/LoginPage';
 import DashboardPage from '@/pages/admin/DashboardPage';
 import AdminRentalsPage from '@/pages/admin/AdminRentalsPage';
+import AdminShopPage from '@/pages/admin/AdminShopPage';
 import InventoryPage from '@/pages/admin/InventoryPage';
 import AdminSalesPage from '@/pages/admin/AdminSalesPage';
 import AdminServicePage from '@/pages/admin/AdminServicePage';
@@ -60,6 +61,7 @@ function AppRoutes() {
       <Route path="/admin" element={<ProtectedRoute><AdminLayout /></ProtectedRoute>}>
         <Route index element={<DashboardPage />} />
         <Route path="rentals" element={<AdminRentalsPage />} />
+        <Route path="shop" element={<AdminShopPage />} />
         <Route path="events" element={<AdminEventsPage />} />
         <Route path="inventory" element={<InventoryPage />} />
         <Route path="sales" element={<AdminSalesPage />} />
