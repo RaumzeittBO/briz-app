@@ -71,6 +71,12 @@ export default function ShopPage() {
         }
     }, [searchParams]);
 
+    useEffect(() => {
+        if (searchParams.get('cart') === 'open') {
+            setShowCart(true);
+        }
+    }, [searchParams]);
+
     // Dynamic Scroll Container Refs
     const scrollRefs = useRef<Record<string, HTMLDivElement | null>>({});
 

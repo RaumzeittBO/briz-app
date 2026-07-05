@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useState, useRef, type CSSProperties, type ReactNode } from 'react';
 import { motion, useScroll, useTransform, useSpring, useMotionValue } from 'framer-motion';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useCommunity, type CommunityItem } from '@/context/CommunityContext';
 import { useStore } from '@/context/StoreContext';
 import CustomerAuthModal from '@/components/layout/CustomerAuthModal';
@@ -21,10 +21,13 @@ import {
     Store,
     Wrench,
     UsersRound,
+    Search,
+    ShoppingCart,
     type LucideIcon,
 } from 'lucide-react';
 
 import { useLanguage } from '@/context/LanguageContext';
+import { useCart } from '@/context/CartContext';
 
 const assetBase = '/menu-principal-web';
 const designStorageKey = 'briz-home-design-editor-v4';
@@ -659,9 +662,44 @@ function HeroSection() {
         y.set(0);
     };
 
-    const webSrc = language === 'es' ? '/menu-principal-web/2.webp' : '/menu-principal-web/Ingles/2.webp';
-    const mobileSrc = language === 'es' ? '/menu-principal-celular/2.webp' : '/menu-principal-celular/Ingles/2.webp';
+    const [searchQuery, setSearchQuery] = useState('');
+    const [isSearchFocused, setIsSearchFocused] = useState(false);
+    const navigate = useNavigate();
+    const { totalItems } = useCart();
+
+    const searchKeywords = [
+        { keyword: 'alquiler', label: 'Alquiler de Bicicletas', href: '/rentals' },
+        { keyword: 'rent', label: 'Bicycle Rentals', href: '/rentals' },
+        { keyword: 'tienda', label: 'Tienda de Accesorios y Bicicletas', href: '/shop' },
+        { keyword: 'shop', label: 'Accessories & Shop', href: '/shop' },
+        { keyword: 'taller', label: 'Taller de Mecánica / Servicios', href: '/service' },
+        { keyword: 'mecanica', label: 'Servicio Mecánico Profesional', href: '/service' },
+        { keyword: 'service', label: 'Mechanical Workshop', href: '/service' },
+        { keyword: 'ciclotours', label: 'Ciclotours y Rutas Turísticas', href: '/routes' },
+        { keyword: 'rutas', label: 'Rutas e Itinerarios', href: '/routes' },
+        { keyword: 'tours', label: 'Cycling Tours', href: '/routes' },
+        { keyword: 'comunidad', label: 'Eventos de la Comunidad Briz', href: '/community' },
+        { keyword: 'eventos', label: 'Próximos Eventos y Salidas', href: '/community' },
+        { keyword: 'opiniones', label: 'Opiniones y Reseñas de Clientes', href: '#reviews' },
+        { keyword: 'contacto', label: 'Contacto y Ubicación', href: '/contact' },
+    ];
+
+    const suggestions = searchQuery.trim() === '' ? [] : searchKeywords.filter(item => 
+        item.keyword.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        item.label.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+
+    const webSrc = '/menu-principal-web/2.webp';
+    const mobileSrc = '/menu-principal-celular/2.webp';
     const bienvenidosSrc = language === 'es' ? '/Bienvenidos.png' : '/welcome.png';
+
+    const handleCartClick = () => {
+        if (totalItems > 0) {
+            navigate('/shop?cart=open');
+        } else {
+            navigate('/shop');
+        }
+    };
 
     return (
         <section className="relative isolate overflow-hidden bg-[#FFF8DF] pt-[86px] lg:pt-[104px]">
@@ -702,6 +740,62 @@ function HeroSection() {
                         <WashiTape className="-top-3 left-6 sm:left-14 rotate-[-12deg]" />
                         <WashiTape className="-top-4 right-6 sm:right-14 rotate-[15deg]" />
 
+                        {/* Shopping Cart Button */}
+                        <button
+                            onClick={handleCartClick}
+                            className="absolute right-[4%] top-[3%] w-10 h-10 lg:right-[4%] lg:top-[5%] lg:w-14 lg:h-14 rounded-full bg-white border-2 border-brand-black shadow-[4px_4px_0_rgba(0,0,0,1)] hover:bg-brand-yellow flex items-center justify-center z-30 transition-all active:scale-95 cursor-pointer group/cart"
+                            aria-label="Ver Carrito"
+                        >
+                            <ShoppingCart className="w-4 h-4 lg:w-6 lg:h-6 text-brand-black group-hover/cart:scale-110 transition-transform" />
+                            {totalItems > 0 && (
+                                <span className="absolute -top-1.5 -right-1.5 bg-brand-pink text-white text-[9px] lg:text-[10px] font-black w-5 h-5 rounded-full flex items-center justify-center border-2 border-brand-black shadow-sm">
+                                    {totalItems}
+                                </span>
+                            )}
+                        </button>
+
+                        {/* Search Bar centered above Cholita's hat */}
+                        <div className="absolute top-[21%] left-1/2 -translate-x-1/2 w-[66%] sm:w-[50%] lg:w-[35%] lg:left-[55%] z-40">
+                            <div className="relative w-full">
+                                <input
+                                    type="text"
+                                    placeholder={language === 'es' ? 'Buscar en Briz...' : 'Search in Briz...'}
+                                    value={searchQuery}
+                                    onChange={(e) => setSearchQuery(e.target.value)}
+                                    onFocus={() => setIsSearchFocused(true)}
+                                    onBlur={() => setTimeout(() => setIsSearchFocused(false), 250)}
+                                    className="w-full h-8 sm:h-11 px-3 sm:px-4 pr-9 rounded-full bg-white/50 backdrop-blur-md border border-white/70 shadow-sm focus:outline-none focus:bg-white/85 focus:border-brand-yellow font-cocon text-[10px] sm:text-xs text-brand-black placeholder-brand-black/55 transition-all"
+                                />
+                                <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 sm:w-4 sm:h-4 text-brand-black/45" strokeWidth={2.5} />
+                            </div>
+
+                            {/* Dropdown Suggestions */}
+                            {isSearchFocused && suggestions.length > 0 && (
+                                <div className="absolute top-[110%] left-0 right-0 bg-[#FFFDF3]/95 backdrop-blur-md border-2 border-brand-black rounded-2xl shadow-xl z-50 overflow-hidden text-left p-1 max-h-52 overflow-y-auto">
+                                    {suggestions.map((s) => (
+                                        <button
+                                            key={s.href}
+                                            onMouseDown={() => {
+                                                if (s.href.startsWith('#')) {
+                                                    const element = document.querySelector(s.href);
+                                                    if (element) {
+                                                        element.scrollIntoView({ behavior: 'smooth' });
+                                                    }
+                                                } else {
+                                                    navigate(s.href);
+                                                }
+                                                setSearchQuery('');
+                                            }}
+                                            className="w-full px-3 py-2 rounded-xl text-left font-cocon text-[10px] sm:text-xs text-brand-black hover:bg-brand-yellow transition-colors flex items-center justify-between"
+                                        >
+                                            <span>{s.label}</span>
+                                            <span className="text-[8px] uppercase tracking-wider text-brand-black/35 font-bold">Ir ➜</span>
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+
                         {/* Animated overlay images */}
                         <motion.img
                             src={bienvenidosSrc}
@@ -716,7 +810,7 @@ function HeroSection() {
                                 repeat: Infinity,
                                 ease: 'easeInOut'
                             }}
-                            className="absolute left-[3%] top-[3%] w-[38%] sm:w-[32%] lg:left-[4%] lg:top-[30%] lg:w-[28%] lg:-translate-y-1/2 z-30 pointer-events-none drop-shadow-[0_8px_16px_rgba(0,0,0,0.15)]"
+                            className="absolute left-[4%] top-[3%] w-[76%] sm:w-[60%] lg:left-[4%] lg:top-[30%] lg:w-[56%] lg:-translate-y-1/2 z-30 pointer-events-none drop-shadow-[0_8px_16px_rgba(0,0,0,0.15)]"
                         />
 
                         <motion.img
@@ -733,7 +827,7 @@ function HeroSection() {
                                 ease: 'easeInOut',
                                 delay: 0.5
                             }}
-                            className="absolute bottom-[3%] left-[6%] w-[68%] sm:w-[50%] lg:bottom-[-5%] lg:left-1/2 lg:-translate-x-1/2 lg:w-[26%] z-30 pointer-events-none drop-shadow-[0_8px_16px_rgba(0,0,0,0.15)]"
+                            className="absolute bottom-[4%] left-1/2 -translate-x-1/2 w-[65%] sm:w-[45%] lg:bottom-[5%] lg:left-1/2 lg:-translate-x-1/2 lg:w-[22%] z-30 pointer-events-none drop-shadow-[0_8px_16px_rgba(0,0,0,0.15)]"
                         />
 
                         {/* Inner image container */}
