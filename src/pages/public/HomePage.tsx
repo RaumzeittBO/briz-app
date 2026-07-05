@@ -659,8 +659,9 @@ function HeroSection() {
         y.set(0);
     };
 
-    const webSrc = language === 'es' ? '/menu-principal-web/1.webp' : '/menu-principal-web/Ingles/1.webp';
-    const mobileSrc = language === 'es' ? '/menu-principal-celular/1.webp' : '/menu-principal-celular/Ingles/1.webp';
+    const webSrc = language === 'es' ? '/menu-principal-web/2.webp' : '/menu-principal-web/Ingles/2.webp';
+    const mobileSrc = language === 'es' ? '/menu-principal-celular/2.webp' : '/menu-principal-celular/Ingles/2.webp';
+    const bienvenidosSrc = language === 'es' ? '/Bienvenidos.png' : '/welcome.png';
 
     return (
         <section className="relative isolate overflow-hidden bg-[#FFF8DF] pt-[86px] lg:pt-[104px]">
@@ -680,7 +681,7 @@ function HeroSection() {
             <LeafStem className="pointer-events-none absolute left-2 top-[34rem] hidden h-36 w-20 text-brand-yellow/50 lg:block" />
             <LeafStem className="pointer-events-none absolute right-2 top-40 hidden h-44 w-24 scale-x-[-1] text-brand-yellow/50 lg:block" />
 
-            <div className="mx-auto max-w-[1400px] px-4 pb-8 sm:px-6 lg:px-10 flex justify-center">
+            <div className="mx-auto max-w-[1540px] px-2 sm:px-6 lg:px-10 flex justify-center w-full">
                 <div ref={cardScrollRef} className="w-full flex justify-center py-6">
                     <motion.div 
                         ref={cardRef}
@@ -695,14 +696,48 @@ function HeroSection() {
                         }}
                         whileHover={{ scale: 1.018 }}
                         transition={{ duration: 0.2 }}
-                        className="relative bg-brand-yellow border-[6px] sm:border-[12px] border-brand-yellow outline outline-3 sm:outline-4 outline-brand-black shadow-[14px_14px_0_rgba(0,0,0,1)] sm:shadow-[20px_20px_0_rgba(0,0,0,1)] rounded-[1.8rem] sm:rounded-[2.4rem] w-full max-w-[98vw] md:max-w-[1480px] group transition-all hover:translate-y-[-4px] hover:shadow-[24px_24px_0_rgba(0,0,0,1)] select-none z-10"
+                        className="relative bg-brand-yellow border-[3px] sm:border-[8px] border-brand-yellow outline outline-2 sm:outline-[3px] outline-brand-black shadow-[10px_10px_0_rgba(0,0,0,1)] sm:shadow-[20px_20px_0_rgba(0,0,0,1)] rounded-[1.4rem] sm:rounded-[2rem] w-full max-w-[99vw] md:max-w-[1480px] group transition-all hover:translate-y-[-4px] hover:shadow-[24px_24px_0_rgba(0,0,0,1)] select-none z-10"
                     >
                         {/* Scrapbook corner tapes (plain, no text) */}
                         <WashiTape className="-top-3 left-6 sm:left-14 rotate-[-12deg]" />
                         <WashiTape className="-top-4 right-6 sm:right-14 rotate-[15deg]" />
 
+                        {/* Animated overlay images */}
+                        <motion.img
+                            src={bienvenidosSrc}
+                            alt="Bienvenidos"
+                            animate={{ 
+                                y: [0, -6, 0],
+                                rotate: [-0.5, 0.5, -0.5],
+                                scale: [1, 1.02, 1]
+                            }}
+                            transition={{
+                                duration: 5.5,
+                                repeat: Infinity,
+                                ease: 'easeInOut'
+                            }}
+                            className="absolute left-[3%] top-[3%] w-[38%] sm:w-[32%] lg:left-[4%] lg:top-[30%] lg:w-[28%] lg:-translate-y-1/2 z-30 pointer-events-none drop-shadow-[0_8px_16px_rgba(0,0,0,0.15)]"
+                        />
+
+                        <motion.img
+                            src="/vive.webp"
+                            alt="Vive la experiencia Briz"
+                            animate={{ 
+                                y: [0, 6, 0],
+                                rotate: [0.5, -0.5, 0.5],
+                                scale: [1, 1.015, 1]
+                            }}
+                            transition={{
+                                duration: 6,
+                                repeat: Infinity,
+                                ease: 'easeInOut',
+                                delay: 0.5
+                            }}
+                            className="absolute bottom-[3%] left-[6%] w-[68%] sm:w-[50%] lg:bottom-[-5%] lg:left-1/2 lg:-translate-x-1/2 lg:w-[26%] z-30 pointer-events-none drop-shadow-[0_8px_16px_rgba(0,0,0,0.15)]"
+                        />
+
                         {/* Inner image container */}
-                        <div className="w-full h-auto overflow-hidden rounded-[1.35rem] sm:rounded-[1.7rem] relative">
+                        <div className="w-full h-auto overflow-hidden rounded-[1.25rem] sm:rounded-[1.65rem] relative">
                             <div className="pointer-events-none absolute inset-0 bg-gradient-to-tr from-transparent via-white/5 to-white/10 z-10 mix-blend-overlay" />
                             
                             <picture className="w-full h-auto block select-none">
