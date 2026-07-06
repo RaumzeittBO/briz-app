@@ -734,7 +734,7 @@ function HeroSection() {
                         }}
                         whileHover={{ scale: 1.018 }}
                         transition={{ duration: 0.2 }}
-                        className="relative bg-brand-yellow border-[3px] sm:border-[8px] border-brand-yellow outline outline-2 sm:outline-[3px] outline-brand-black shadow-[10px_10px_0_rgba(0,0,0,1)] sm:shadow-[20px_20px_0_rgba(0,0,0,1)] rounded-[1.4rem] sm:rounded-[2rem] w-full max-w-[99vw] md:max-w-[1480px] group transition-all hover:translate-y-[-4px] hover:shadow-[24px_24px_0_rgba(0,0,0,1)] select-none z-10"
+                        className="relative bg-brand-yellow border-[3px] sm:border-[8px] border-brand-yellow outline outline-2 sm:outline-[3px] outline-brand-black shadow-[10px_10px_0_rgba(0,0,0,1)] sm:shadow-[20px_20px_0_rgba(0,0,0,1)] rounded-[1.4rem] sm:rounded-[2rem] w-full max-w-[99vw] md:max-w-[1480px] aspect-[10/17.5] md:aspect-auto group transition-all hover:translate-y-[-4px] hover:shadow-[24px_24px_0_rgba(0,0,0,1)] select-none z-10"
                     >
                         {/* Scrapbook corner tapes (plain, no text) */}
                         <WashiTape className="-top-3 left-6 sm:left-14 rotate-[-12deg]" />
@@ -810,7 +810,7 @@ function HeroSection() {
                                 repeat: Infinity,
                                 ease: 'easeInOut'
                             }}
-                            className="absolute left-[4%] top-[3%] w-[76%] sm:w-[60%] lg:left-[4%] lg:top-[30%] lg:w-[56%] lg:-translate-y-1/2 z-30 pointer-events-none drop-shadow-[0_8px_16px_rgba(0,0,0,0.15)]"
+                            className="absolute left-[2.5%] top-[1.8%] w-[90%] sm:w-[65%] lg:left-[2%] lg:top-[50%] lg:w-[48%] lg:-translate-y-1/2 z-30 pointer-events-none drop-shadow-[0_8px_16px_rgba(0,0,0,0.15)]"
                         />
 
                         <motion.img
@@ -831,7 +831,7 @@ function HeroSection() {
                         />
 
                         {/* Inner image container */}
-                        <div className="w-full h-auto overflow-hidden rounded-[1.25rem] sm:rounded-[1.65rem] relative">
+                        <div className="w-full h-full overflow-hidden rounded-[1.25rem] sm:rounded-[1.65rem] relative aspect-[10/17.5] md:aspect-auto">
                             <div className="pointer-events-none absolute inset-0 bg-gradient-to-tr from-transparent via-white/5 to-white/10 z-10 mix-blend-overlay" />
                             
                             <picture className="w-full h-auto block select-none">
