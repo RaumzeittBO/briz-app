@@ -442,7 +442,7 @@ export default function CustomerAuthModal({ isOpen, onClose, onSuccess }: Custom
 
                 {/* Form header */}
                 <div className="p-8 pb-5 border-b border-brand-charcoal/5 flex flex-col items-center justify-center bg-brand-yellow/10">
-                    <img src="/logo_bicicleta_principal.png" alt="Briz logo" className="h-14 w-auto object-contain mb-3" />
+                    <img src="/logoamarillo.png" alt="Briz logo" className="h-20 w-auto object-contain mb-3" />
                     <DialogTitle className="text-lg sm:text-xl md:text-2xl font-tangkiwood uppercase tracking-wide text-brand-charcoal text-center px-4 w-full break-words">
                         {mode === 'login' 
                             ? 'INICIAR SESIÓN' 
@@ -553,11 +553,11 @@ export default function CustomerAuthModal({ isOpen, onClose, onSuccess }: Custom
                             </Button>
 
                             <div className="text-center pt-3 border-t border-brand-charcoal/5 mt-4">
-                                <p className="text-xs text-brand-charcoal/40 font-medium font-maiandra">¿No tienes una cuenta aún?</p>
+                                <p className="text-xs text-red-600 font-semibold font-maiandra">¿No tienes una cuenta aún?</p>
                                 <Button 
                                     type="button" 
                                     onClick={toggleMode} 
-                                    className="mt-2 bg-brand-charcoal/5 hover:bg-brand-yellow hover:text-brand-black text-brand-charcoal rounded-xl h-11 text-xs font-black uppercase tracking-widest px-6 w-full sm:w-auto font-sans transition-all border border-transparent cursor-pointer"
+                                    className="mt-2 bg-brand-orange hover:bg-brand-orange/90 text-white rounded-xl h-11 text-xs font-black uppercase tracking-widest px-6 w-full sm:w-auto font-sans transition-all border border-transparent cursor-pointer shadow-lg shadow-brand-orange/10"
                                 >
                                     USUARIO NUEVO / REGISTRARSE
                                 </Button>

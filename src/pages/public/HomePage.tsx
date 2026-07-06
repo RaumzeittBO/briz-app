@@ -810,7 +810,7 @@ function HeroSection() {
                                 repeat: Infinity,
                                 ease: 'easeInOut'
                             }}
-                            className="absolute left-[-7.5%] top-[-3.5%] w-[90%] sm:w-[65%] lg:left-[-28%] lg:top-[45%] lg:w-[72%] lg:-translate-y-1/2 z-30 pointer-events-none drop-shadow-[0_8px_16px_rgba(0,0,0,0.15)]"
+                            className="absolute left-[-7.5%] top-[-3.5%] w-[90%] sm:w-[65%] lg:left-[-13%] lg:top-[45%] lg:w-[72%] lg:-translate-y-1/2 z-30 pointer-events-none drop-shadow-[0_8px_16px_rgba(0,0,0,0.15)]"
                         />
 
                         <motion.img
@@ -1007,7 +1007,7 @@ function ServiceStrip() {
                 {/* PC/Desktop scrapbook image container (hidden on mobile) */}
                 <EditableLayer
                     id="servicesImage"
-                    className="hidden lg:block relative w-full max-w-[620px] ml-auto px-4 z-10"
+                    className="hidden lg:block relative w-full max-w-[860px] lg:-translate-x-[120px] ml-auto px-4 z-10"
                 >
                     <motion.div 
                         ref={servicesCardRef}
