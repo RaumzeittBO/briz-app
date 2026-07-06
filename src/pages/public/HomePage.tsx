@@ -810,7 +810,7 @@ function HeroSection() {
                                 repeat: Infinity,
                                 ease: 'easeInOut'
                             }}
-                            className="absolute left-[2.5%] top-[1.8%] w-[90%] sm:w-[65%] lg:left-[2%] lg:top-[50%] lg:w-[48%] lg:-translate-y-1/2 z-30 pointer-events-none drop-shadow-[0_8px_16px_rgba(0,0,0,0.15)]"
+                            className="absolute left-[-7.5%] top-[-3.5%] w-[90%] sm:w-[65%] lg:left-[-8%] lg:top-[30%] lg:w-[72%] lg:-translate-y-1/2 z-30 pointer-events-none drop-shadow-[0_8px_16px_rgba(0,0,0,0.15)]"
                         />
 
                         <motion.img
@@ -857,11 +857,107 @@ function HeroSection() {
 }
 
 
+function ServicesBackgroundDecorations() {
+    return (
+        <div className="pointer-events-none absolute inset-0 z-0 overflow-hidden" aria-hidden="true">
+            {/* Floating Sparkles & Dots in Briz Colors */}
+            {[
+                { left: '8%', top: '15%', size: 12, color: '#FFD200', duration: 6.8 },
+                { left: '88%', top: '22%', size: 14, color: '#FA0E95', duration: 7.6 },
+                { left: '4%', top: '65%', size: 10, color: '#24A9C5', duration: 8.2 },
+                { left: '92%', top: '78%', size: 12, color: '#FFD200', duration: 7.0 },
+            ].map((particle, idx) => (
+                <motion.div
+                    key={idx}
+                    className="absolute rounded-full opacity-[0.2] blur-[0.5px]"
+                    style={{
+                        left: particle.left,
+                        top: particle.top,
+                        width: particle.size,
+                        height: particle.size,
+                        backgroundColor: particle.color,
+                        boxShadow: `0 0 ${particle.size * 2.5}px ${particle.color}`,
+                    }}
+                    animate={{
+                        y: [0, -20, 0],
+                        x: [0, 10, 0],
+                        scale: [0.9, 1.25, 0.9],
+                    }}
+                    transition={{
+                        duration: particle.duration,
+                        repeat: Infinity,
+                        ease: 'easeInOut',
+                        delay: idx * 0.5,
+                    }}
+                />
+            ))}
+
+            {/* Doodled bike paths drawing in the background */}
+            <div className="absolute top-[10%] left-[-4%] w-[38%] h-36 opacity-[0.12]">
+                <svg className="w-full h-full text-brand-yellow" viewBox="0 0 400 120" fill="none" preserveAspectRatio="none">
+                    <motion.path 
+                        d="M10 90 Q 130 15, 250 100 T 390 40" 
+                        stroke="currentColor" 
+                        strokeWidth="3.5" 
+                        strokeDasharray="9 9"
+                        strokeLinecap="round"
+                        initial={{ pathLength: 0 }}
+                        whileInView={{ pathLength: 1 }}
+                        viewport={{ once: true, amount: 0.1 }}
+                        transition={{ duration: 2.2, ease: "easeInOut" }}
+                    />
+                </svg>
+            </div>
+            
+            <div className="absolute bottom-[10%] right-[-4%] w-[38%] h-36 opacity-[0.12]">
+                <svg className="w-full h-full text-brand-yellow" viewBox="0 0 400 120" fill="none" preserveAspectRatio="none">
+                    <motion.path 
+                        d="M390 40 Q 270 100, 150 15 T 10 90" 
+                        stroke="currentColor" 
+                        strokeWidth="3.5" 
+                        strokeDasharray="9 9"
+                        strokeLinecap="round"
+                        initial={{ pathLength: 0 }}
+                        whileInView={{ pathLength: 1 }}
+                        viewport={{ once: true, amount: 0.1 }}
+                        transition={{ duration: 2.2, ease: "easeInOut" }}
+                      />
+                </svg>
+            </div>
+        </div>
+    );
+}
+
 function ServiceStrip() {
+    const servicesCardRef = useRef<HTMLDivElement>(null);
+    const sx = useMotionValue(0);
+    const sy = useMotionValue(0);
+    const servicesSpringRotateX = useSpring(useTransform(sy, [-0.5, 0.5], [6, -6]), { damping: 25, stiffness: 220 });
+    const servicesSpringRotateY = useSpring(useTransform(sx, [-0.5, 0.5], [-6, 6]), { damping: 25, stiffness: 220 });
+
+    const handleServicesMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+        if (!servicesCardRef.current) return;
+        const rect = servicesCardRef.current.getBoundingClientRect();
+        const width = rect.width;
+        const height = rect.height;
+        const mouseX = e.clientX - rect.left - width / 2;
+        const mouseY = e.clientY - rect.top - height / 2;
+        sx.set(mouseX / width);
+        sy.set(mouseY / height);
+    };
+
+    const handleServicesMouseLeave = () => {
+        sx.set(0);
+        sy.set(0);
+    };
+
     return (
         <section className="relative isolate overflow-hidden bg-[#FFFDF3] px-4 py-8 sm:px-6 lg:px-8 lg:py-10">
+            {/* Background design elements from Conocenos */}
+            <ServicesBackgroundDecorations />
+            
             <div className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(circle_at_78%_18%,rgba(255,210,0,0.16),transparent_28%),radial-gradient(circle_at_16%_75%,rgba(36,169,197,0.08),transparent_22%)]" />
-            <div className="mx-auto grid max-w-[1400px] items-center gap-2 lg:grid-cols-[0.31fr_0.69fr] lg:gap-0">
+            <div className="mx-auto grid max-w-[1400px] items-center gap-2 lg:grid-cols-[0.31fr_0.69fr] lg:gap-0 relative z-10">
                 <motion.div
                     {...fadeUp}
                     className="relative z-10 mx-auto w-full max-w-[26rem] py-3 text-left lg:mx-0 lg:py-10"
@@ -908,42 +1004,87 @@ function ServiceStrip() {
                     </div>
                 </motion.div>
 
+                {/* PC/Desktop scrapbook image container (hidden on mobile) */}
                 <EditableLayer
                     id="servicesImage"
-                    className="relative mx-auto mt-6 mb-0 block w-[96vw] max-w-[96vw] sm:w-full sm:max-w-[32rem] sm:ml-0 px-2 lg:ml-auto lg:mr-[calc((1400px-100vw)/2)] lg:mt-0 lg:w-[min(78vw,1080px)] lg:max-w-none"
+                    className="hidden lg:block relative mx-auto lg:ml-auto lg:mr-[calc((1400px-100vw)/2)] lg:mt-0 lg:w-[min(78vw,1080px)] lg:max-w-none px-2 z-10"
                 >
-                <motion.div
-                    initial={{ opacity: 0, x: 34, scale: 0.96 }}
-                    whileInView={{ opacity: 1, x: 0, scale: 1 }}
-                    viewport={{ once: true, amount: 0.25 }}
-                    transition={{ duration: 0.75, ease: 'easeOut' }}
-                >
-                    <motion.div
-                        animate={{ y: [0, -9, 0], rotate: [0.2, -0.25, 0.2] }}
-                        transition={{ duration: 6.4, repeat: Infinity, ease: 'easeInOut' }}
+                    <motion.div 
+                        ref={servicesCardRef}
+                        onMouseMove={handleServicesMouseMove}
+                        onMouseLeave={handleServicesMouseLeave}
+                        style={{
+                            rotateX: servicesSpringRotateX,
+                            rotateY: servicesSpringRotateY,
+                            transformPerspective: 1000,
+                        }}
+                        whileHover={{ scale: 1.018 }}
+                        transition={{ duration: 0.2 }}
+                        className="relative bg-brand-yellow border-[8px] border-brand-yellow outline outline-[3px] outline-brand-black shadow-[20px_20px_0_rgba(0,0,0,1)] rounded-[2rem] w-full select-none z-10"
                     >
-                        <SmartImage
-                            src={`${assetBase}/web2.webp`}
-                            fallbackSrcs={[`${assetBase}/Web2.webp`]}
-                            alt="Vive la experiencia Briz en Cochabamba"
-                            placeholderLabel="web2.webp"
-                            loading="eager"
-                            fetchPriority="high"
-                            decoding="sync"
-                            className="block h-auto w-full object-contain mix-blend-multiply drop-shadow-[0_30px_42px_rgba(82,57,0,0.2)]"
-                            placeholderClassName="aspect-[1.25/1] rounded-[2.4rem] bg-[linear-gradient(135deg,#FFF4B8,#FFFDF3_48%,#DFF3EF)] shadow-[0_28px_70px_rgba(106,74,0,0.16)]"
-                        />
+                        {/* Scrapbook corner tapes */}
+                        <WashiTape className="-top-3 left-14 rotate-[-12deg]" />
+                        <WashiTape className="-top-4 right-14 rotate-[15deg]" />
+
+                        {/* Inner image container */}
+                        <div className="w-full h-auto overflow-hidden rounded-[1.65rem] relative">
+                            <div className="pointer-events-none absolute inset-0 bg-gradient-to-tr from-transparent via-white/5 to-white/10 z-10 mix-blend-overlay" />
+                            <img 
+                                src="/menu-principal-web/1.webp" 
+                                alt="Servicios Briz PC"
+                                className="w-full h-auto block border-b-2 border-brand-black"
+                                loading="lazy"
+                            />
+                        </div>
                     </motion.div>
-                    <RouteLine className="pointer-events-none absolute left-[-18%] top-[18%] hidden h-40 w-80 rotate-90 text-brand-yellow/50 sm:block" />
-                    <motion.span
-                        className="absolute bottom-[7%] left-[20%] -z-10 h-[28%] w-[68%] rounded-full bg-brand-yellow/30 blur-3xl"
-                        animate={{ opacity: [0.35, 0.7, 0.35], scale: [0.92, 1.08, 0.92] }}
-                        transition={{ duration: 5.5, repeat: Infinity, ease: 'easeInOut' }}
-                    />
-                    <div className="pointer-events-none absolute inset-[10%] -z-10 rounded-full bg-brand-yellow/35 blur-3xl" />
-                    {[['12%', '18%', 8], ['78%', '26%', 10], ['65%', '76%', 7], ['26%', '74%', 6]].map(([left, top, size], index) => <motion.span key={index} className="pointer-events-none absolute z-10 rounded-full bg-brand-yellow" style={{ left: left as string, top: top as string, width: size as number, height: size as number, boxShadow: '0 0 18px rgba(255,210,0,.9)' }} animate={{ y: [0, -16, 0], opacity: [.2, .95, .2], scale: [.6, 1.3, .6] }} transition={{ duration: 3.8 + index, repeat: Infinity, ease: 'easeInOut', delay: index * .4 }} />)}
-                </motion.div>
                 </EditableLayer>
+            </div>
+        </section>
+    );
+}
+
+function MobileServicesCardSection() {
+    const cardRef = useRef<HTMLDivElement>(null);
+    const cardScrollRef = useRef<HTMLDivElement>(null);
+    const { scrollYProgress } = useScroll({
+        target: cardScrollRef,
+        offset: ["start end", "end start"]
+    });
+    
+    const scrollRotate = useTransform(scrollYProgress, [0.1, 0.5, 0.9], [-1.2, 0, 1.2]);
+    const scrollScale = useTransform(scrollYProgress, [0.1, 0.5, 0.9], [0.98, 1, 0.98]);
+
+    return (
+        <section className="block lg:hidden relative isolate overflow-hidden bg-[#FFFDF3] pb-12 pt-2 px-2">
+            {/* Background design elements from Conocenos */}
+            <ServicesBackgroundDecorations />
+
+            <div className="mx-auto max-w-[1540px] px-2 flex justify-center w-full relative z-10">
+                <div ref={cardScrollRef} className="w-full flex justify-center py-6">
+                    <motion.div 
+                        ref={cardRef}
+                        style={{
+                            rotate: scrollRotate,
+                            scale: scrollScale,
+                        }}
+                        className="relative bg-brand-yellow border-[3px] border-brand-yellow outline outline-2 outline-brand-black shadow-[10px_10px_0_rgba(0,0,0,1)] rounded-[1.4rem] w-full max-w-[99vw] aspect-[10/17.5] select-none z-10"
+                    >
+                        {/* Scrapbook corner tapes */}
+                        <WashiTape className="-top-3 left-6 rotate-[-12deg]" />
+                        <WashiTape className="-top-4 right-6 rotate-[15deg]" />
+
+                        {/* Inner image container */}
+                        <div className="w-full h-full overflow-hidden rounded-[1.25rem] relative aspect-[10/17.5]">
+                            <div className="pointer-events-none absolute inset-0 bg-gradient-to-tr from-transparent via-white/5 to-white/10 z-10 mix-blend-overlay" />
+                            <img 
+                                src="/menu-principal-celular/1.webp" 
+                                alt="Servicios Briz Celular"
+                                className="w-full h-auto block border-b-2 border-brand-black"
+                                loading="lazy"
+                            />
+                        </div>
+                    </motion.div>
+                </div>
             </div>
         </section>
     );
@@ -2032,6 +2173,7 @@ export default function HomePage() {
             <div className="overflow-hidden bg-[#FFFDF3]">
                 <HeroSection />
                 <ServiceStrip />
+                <MobileServicesCardSection />
                 <ContinuousSectionDivider />
                 <WhyChooseBrizSection />
                 <BrandSection />
