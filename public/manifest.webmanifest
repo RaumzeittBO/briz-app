@@ -8,8 +8,8 @@
   "theme_color": "#F5C400",
   "icons": [
     {
-      "src": "/logoamarillo.png",
-      "sizes": "any",
+      "src": "/favicon.png",
+      "sizes": "512x512",
       "type": "image/png",
       "purpose": "any maskable"
     }
