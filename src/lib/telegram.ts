@@ -30,7 +30,7 @@ export const sendTelegramNotification = async (
     if (!token || !chatId) {
         console.error(
             `[Telegram] VARIABLES DE ENTORNO FALTANTES. Token: ${!!token}, ChatId: ${!!chatId}. ` +
-            `Configura VITE_TELEGRAM_BOT_TOKEN y VITE_TELEGRAM_CHAT_ID en Vercel > Settings > Environment Variables.`
+            `Configura VITE_TELEGRAM_BOT_TOKEN y VITE_TELEGRAM_CHAT_ID en el entorno de produccion.`
         );
         return;
     }
@@ -99,7 +99,7 @@ export const sendTelegramNotification = async (
             const newChatId = String(result.parameters.migrate_to_chat_id);
             console.warn(
                 `[Telegram] El grupo fue migrado a supergrupo. Nuevo chat_id: ${newChatId}. ` +
-                `IMPORTANTE: Actualiza VITE_TELEGRAM_CHAT_ID en Vercel a: ${newChatId}`
+                `IMPORTANTE: Actualiza VITE_TELEGRAM_CHAT_ID en el entorno de produccion a: ${newChatId}`
             );
             result = await sendToChat(newChatId);
         }
@@ -113,7 +113,7 @@ export const sendTelegramNotification = async (
             } else if (result.error_code === 400 && result.description?.includes('chat not found')) {
                 console.error(
                     `[Telegram] ERROR 400 - Chat ID incorrecto (${chatId}). El grupo pudo haber sido migrado. ` +
-                    `Verifica y actualiza VITE_TELEGRAM_CHAT_ID en Vercel > Settings > Environment Variables.`
+                    `Verifica y actualiza VITE_TELEGRAM_CHAT_ID en el entorno de produccion.`
                 );
             } else {
                 console.error(`[Telegram] Error ${result.error_code}:`, result.description);

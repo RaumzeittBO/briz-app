@@ -1,0 +1,17 @@
+{
+  "name": "Briz",
+  "short_name": "Briz",
+  "description": "Centro de la Bicicleta BRIZ",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#F5C400",
+  "theme_color": "#F5C400",
+  "icons": [
+    {
+      "src": "/logoamarillo.png",
+      "sizes": "any",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
