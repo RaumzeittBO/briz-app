@@ -98,10 +98,21 @@ src/
 
 ## 4. RIESGOS CONOCIDOS Y LO QUE NO DEBE CONSIDERARSE VALIDADO EN PRODUCCIÓN TODAVÍA
 
+> **SEGURIDAD PENDIENTE:** la autenticación pública de clientes y el cálculo de disponibilidad todavía dependen de acceso directo a Firestore. Es obligatorio diseñar una solución de autenticación/autorización segura y una API o mecanismo de disponibilidad pública sin exponer datos privados. El hashing PBKDF2 en el cliente no resuelve este problema. También debe eliminarse el uso de tokens de Telegram en variables `VITE_` y rotarse cualquier token que haya sido expuesto.
+
+### Lista Estricta de Pendientes de Validación y Desarrollo (No marcar como completamente terminados hasta superar validación integral):
+- **Pruebas integrales con Firebase Emulator.**
+- **Ciclo completo en vivo: Reserva → confirmación → entrega → devolución.**
+- **Conciliación real de stock y reportes.**
+- **Validación visual móvil y escritorio.**
+- **Revisión manual completa de traducciones.**
+- **Diez artes pendientes en inglés.**
+- **Gestor de imágenes de la página principal desde Admin.**
+
 1. **Pruebas contra Firestore Real / Emulador (`PENDIENTE DE VALIDACIÓN`):**
-   - `scripts/verify-briz-core.ts` valida exhaustivamente toda la lógica pura y las transiciones de estado en memoria, pero las transacciones `runTransaction(db, ...)` dentro de `StoreContext.tsx` deben probarse interactivamente en el navegador (`npm run dev`) antes de dar el visto bueno final a producción.
+   - `scripts/verify-briz-core.ts` valida exhaustivamente toda la lógica pura y las transiciones de estado en memoria (`PRUEBA UNITARIA SUPERADA`), pero las transacciones `runTransaction(db, ...)` dentro de `StoreContext.tsx` deben probarse interactivamente con Firebase Emulator y navegador (`npm run dev`) antes de dar el visto bueno final a producción.
 2. **Despliegue de `firestore.rules` (`BLOQUEADO`):**
-   - No desplegar `firestore.rules` cerrando `allow read` en `customers` y `rentals` hasta que el login de clientes se mueva a Firebase Auth o Cloud Function. Actualmente el cliente web necesita leer `customers` para autenticar y `rentals` para calcular intervalos ocupados.
+   - No desplegar `firestore.rules` cerrando `allow read` en `customers` y `rentals` hasta que el login de clientes se mueva a Firebase Auth o Cloud Function y exista un endpoint/colección pública sanitizada de disponibilidad.
 3. **Artes Gráficos Pendientes de Diseño en Inglés (`BLOQUEADO POR DISEÑO`):**
    - Hay 10 imágenes con texto incrustado cuyo archivo en inglés aún no existe o tiene el diseño en español copiado por error. `src/lib/artworkRegistry.ts` muestra de forma segura el arte original en español para evitar enlaces rotos (404). Ver lista exacta en [`BRIZ_ARTES_EN_INGLES.md`](./BRIZ_ARTES_EN_INGLES.md).
 

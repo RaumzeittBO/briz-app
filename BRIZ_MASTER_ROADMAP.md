@@ -119,16 +119,26 @@ Siguiendo la Regla Obligatoria #11, **no se han inventado tarifas de multas ni b
 ## 5. RIESGOS DE SEGURIDAD Y DESPLIEGUE (`BLOQUEADO` PARA PRODUCCIÓN)
 
 > [!CAUTION]
-> **RIESGO CRÍTICO ANTES DE EJECUTAR `firebase deploy --only firestore:rules`:**
+> **SEGURIDAD PENDIENTE:** la autenticación pública de clientes y el cálculo de disponibilidad todavía dependen de acceso directo a Firestore. Es obligatorio diseñar una solución de autenticación/autorización segura y una API o mecanismo de disponibilidad pública sin exponer datos privados. El hashing PBKDF2 en el cliente no resuelve este problema. También debe eliminarse el uso de tokens de Telegram en variables `VITE_` y rotarse cualquier token que haya sido expuesto.
+
+### Pendientes Obligatorios de Validación y Cierre (No considerar terminados por tener solo pruebas unitarias):
+- **Pruebas integrales con Firebase Emulator.**
+- **Reserva → confirmación → entrega → devolución.**
+- **Conciliación real de stock y reportes.**
+- **Validación visual móvil y escritorio.**
+- **Revisión manual completa de traducciones.**
+- **Diez artes pendientes en inglés.**
+- **Gestor de imágenes de la página principal desde Admin.**
+
+> [!WARNING]
+> **DETALLE TÉCNICO ANTES DE EJECUTAR `firebase deploy --only firestore:rules`:**
 > 1. **Autenticación de Clientes (`customers`) y Alquileres (`rentals`):**
 >    - Actualmente, el login de clientes (`CustomerAuthModal.tsx` y `StoreContext.tsx`) consulta directamente la colección `customers` desde el navegador (`where('email', '==', ...)` o leyendo la colección) sin usar Firebase Authentication (`request.auth == null` para clientes públicos), y el motor público de disponibilidad necesita conocer los intervalos ocupados de `rentals`.
 >    - Si en `firestore.rules` se bloquea hoy `allow read` en `customers` y `rentals` exigiendo `request.auth != null`, **se romperá inmediatamente el inicio de sesión de clientes, el perfil de cliente y el cálculo de disponibilidad en la web pública**.
->    - **Mitigación ya implementada en código:** Las contraseñas nuevas y actualizadas al iniciar sesión se almacenan con **PBKDF2-HMAC-SHA256 (100,000 iteraciones + sal aleatoria)** en lugar de texto plano.
 >    - **Solución definitiva requerida antes de cerrar `allow read` en producción:**
->      1. Migrar las contraseñas en texto plano existentes en Firestore ejecutando un script administrativo con respaldo previo, o
->      2. Mover la verificación de login de clientes (`loginCustomer`) y la consulta pública de intervalos ocupados (`rentals_busy_slots`) a una Cloud Function / colección pública sin PII (`customerName`, `customerPhone`, `customerDoc`), y entonces activar `allow read: if isAdmin()` sobre `customers` y `rentals`.
-> 2. **Variables de Entorno (`.env`):**
->    - Mover `VITE_TELEGRAM_BOT_TOKEN` y `VITE_TELEGRAM_CHAT_ID` a variables de entorno o Cloud Functions antes de hacer público el repositorio.
+>      1. Diseñar e implementar autenticación/autorización segura para clientes (Firebase Auth o Cloud Functions) y una API o colección pública sanitizada de disponibilidad (`rentals_busy_slots`) sin exponer PII (`customerName`, `customerPhone`, `customerDoc`), y entonces activar `allow read: if isAdmin()` sobre `customers` y `rentals`.
+> 2. **Tokens de Telegram:**
+>    - Eliminar por completo el uso de `VITE_TELEGRAM_BOT_TOKEN` en el cliente (moviendo el envío a un endpoint/Cloud Function backend) y rotar inmediatamente en BotFather cualquier token que haya estado expuesto.
 
 ---
 
