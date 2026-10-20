@@ -5,6 +5,8 @@
 - Commit base confirmado: `e7b4d5de8af5b09b2b69b0cf0d019acef07532ce` en `briz/stabilization-review-20261020`.
 - Rama de trabajo: `codex/briz-critical-stabilization-20261020`.
 - Cambios locales: endurecimiento inicial de reglas, eliminación del alta automática del primer admin, propagación de errores de reserva/contador y apagado de envío Telegram desde navegador. El estado de pruebas y archivos se registra al final de `BRIZ_MASTER_ROADMAP.md`.
+- Commit subido: `70b85b3` en `origin/codex/briz-critical-stabilization-20261020`.
+- Validación del bloque: core 16/16, TypeScript, build y lint aislado de `src/lib/telegram.ts` aprobados; lint global falla con 234 problemas preexistentes. Sin Emulator configurado, no hubo pruebas de reglas ni concurrencia. Build conserva avisos de `/noise.png` y bundle grande.
 - **Bloqueo de compatibilidad:** no desplegar las nuevas reglas hasta implementar una Cloud Function/API confiable para crear grupos de alquiler con precios y disponibilidad calculados en servidor; migrar clientes a Firebase Auth con un camino de recuperación de cuentas existentes; y leer disponibilidad pública desde `rentals_busy_slots` sanitizado. La web actual no cumple aún esos caminos.
 - La notificación Telegram está temporalmente desactivada. Falta una Function que use secretos protegidos y un outbox/idempotencia para evitar duplicados. Rotar en BotFather los tokens que pudieron exponerse antes de reactivar.
 - El contador efectivamente usado en el código base es `settings/rental_counter`; referencias a `counters/rentals_YYYY` son desactualizadas.
