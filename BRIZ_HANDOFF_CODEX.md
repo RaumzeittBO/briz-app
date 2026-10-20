@@ -2,15 +2,17 @@
 
 ## Estado verificado por Codex — 2026-10-20
 
-- Commit base confirmado: `e7b4d5de8af5b09b2b69b0cf0d019acef07532ce` en `briz/stabilization-review-20261020`.
-- Rama de trabajo: `codex/briz-critical-stabilization-20261020`.
-- Cambios locales: endurecimiento inicial de reglas, eliminación del alta automática del primer admin, propagación de errores de reserva/contador y apagado de envío Telegram desde navegador. El estado de pruebas y archivos se registra al final de `BRIZ_MASTER_ROADMAP.md`.
-- Commit subido: `70b85b3` en `origin/codex/briz-critical-stabilization-20261020`.
-- Validación del bloque: core 16/16, TypeScript, build y lint aislado de `src/lib/telegram.ts` aprobados; lint global falla con 234 problemas preexistentes. Sin Emulator configurado, no hubo pruebas de reglas ni concurrencia. Build conserva avisos de `/noise.png` y bundle grande.
-- **Bloqueo de compatibilidad:** no desplegar las nuevas reglas hasta implementar una Cloud Function/API confiable para crear grupos de alquiler con precios y disponibilidad calculados en servidor; migrar clientes a Firebase Auth con un camino de recuperación de cuentas existentes; y leer disponibilidad pública desde `rentals_busy_slots` sanitizado. La web actual no cumple aún esos caminos.
-- La notificación Telegram está temporalmente desactivada. Falta una Function que use secretos protegidos y un outbox/idempotencia para evitar duplicados. Rotar en BotFather los tokens que pudieron exponerse antes de reactivar.
-- El contador efectivamente usado en el código base es `settings/rental_counter`; referencias a `counters/rentals_YYYY` son desactualizadas.
+- Rama activa: `codex/briz-critical-stabilization-20261020`; se conservan los commits `70b85b3` y `bc501ca`.
+- Bloque 2: seguridad por rol/tienda, Firebase Auth para clientes, Functions con Admin SDK, reservas públicas y manuales atómicas/idempotentes, consulta sanitizada de clientes, historial propio, slots públicos y outbox Telegram.
+- Validación real aislada en Emulator: suite de reglas Firestore/Storage y suite integrada Auth/Firestore/Functions/Storage. Solo IDs y datos ficticios `demo-briz-security`; sin producción, billing, secretos o migraciones.
+- `npm run build`, `npm run build --prefix functions`, `npx tsc --noEmit` y `scripts/verify-briz-core.ts` pasan. `npm run lint` sigue con hallazgos previos amplios; resultado detallado en `BRIZ_MASTER_ROADMAP.md`.
+- Pendientes: configurar App Check antes del tráfico público; Blaze/APIs para desplegar Functions; secretos Telegram después de rotar el token; anexar una nueva línea a un grupo existente actualmente intenta una escritura directa y se bloquea con las reglas; ampliar pruebas de confirmación/entrega/devolución y datos históricos.
+- **No desplegar a producción, no migrar usuarios ni tocar inventario real. No fusionar con main.**
+- SHA de bloque 2: pendiente de commit/push.
 
+> El resto de este documento conserva contexto histórico del repositorio. Para el estado vigente y los pendientes, sigue esta sección y el inicio de `BRIZ_MASTER_ROADMAP.md`.
+
+---
 > **Propósito:** Permitir que **Codex** (o cualquier ingeniero/agente subsecuente) continúe el trabajo sobre `g:\ProjectBriz` con contexto total, sin depender del historial de chat de Gemini y sin repetir ni destruir avances ya probados.
 
 ---

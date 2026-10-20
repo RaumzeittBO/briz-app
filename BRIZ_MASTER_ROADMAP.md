@@ -1,25 +1,29 @@
 # BRIZ (`briz.com.bo`) — MASTER ROADMAP & ENGINEERING LOG
 
-> **ÚLTIMA ACTUALIZACIÓN:** 2026-10-20 (Continuación Controlada, Validación Real y Nuevos Pendientes)  
-> **ESTADO GENERAL DEL PROYECTO:** En estabilización avanzada — Motor de alquileres, stock transaccional, seguridad PBKDF2, traducción pública integral, registro de artes en inglés y correcciones móviles en ejecución y validación.  
+> **ÚLTIMA ACTUALIZACIÓN:** 2026-10-20 (Bloque 2 validado en Emulator; pendiente compatibilidad completa para despliegue)
+> **ESTADO GENERAL DEL PROYECTO:** Backend/Auth y reglas implementados localmente; producción sigue bloqueada hasta configurar App Check, Functions/secrets y cerrar las operaciones administrativas históricas pendientes.
 > **DOCUMENTO COMPLEMENTARIO OBLIGATORIO:** Ver [`BRIZ_HANDOFF_CODEX.md`](./BRIZ_HANDOFF_CODEX.md) y [`BRIZ_ARTES_EN_INGLES.md`](./BRIZ_ARTES_EN_INGLES.md).
 
-## Continuación Codex — 2026-10-20
+## Continuación Codex Bloque 2 — 2026-10-20
 
-- Base comprobada: `e7b4d5de8af5b09b2b69b0cf0d019acef07532ce`, rama `briz/stabilization-review-20261020`.
-- Rama de trabajo: `codex/briz-critical-stabilization-20261020`.
-- Cambios en curso: reglas ahora requieren registro activo con rol válido para admin; lectura/escritura pública de clientes y alquileres se cerró; `rentals_busy_slots` es la colección pública prevista para disponibilidad; se quitó el bootstrap del primer administrador en el navegador; errores de escritura de `addRental` y de contador ya se propagan; se retiraron las credenciales Telegram `VITE_*` del módulo web.
-- **No desplegar estas reglas todavía.** El checkout de navegador aún depende de escrituras directas, el login de clientes aún valida hashes descargados, y el lector público aún consulta `rentals`. El cierre de reglas expone estos bloqueos de forma segura, pero el flujo necesita Functions con Admin SDK para crear reservas transaccionalmente, Firebase Auth para cuentas existentes y una proyección sanitizada para disponibilidad. Telegram queda pausado hasta añadir Functions con secretos. No hay migración de cuentas implementada todavía.
-- Contador real observado en el cliente: `settings/rental_counter`; documentación histórica que menciona `counters/rentals_YYYY` es incorrecta para este commit. La escritura al contador también debe moverse al endpoint de reservas antes de habilitar las reglas cerradas.
-- Commit de este bloque: `70b85b3` (`fix(security): close public customer and rental access`), subido a la rama remota `origin/codex/briz-critical-stabilization-20261020`.
-- Pruebas ejecutadas: `npx tsx scripts/verify-briz-core.ts` aprobado (16/16); `npx tsc --noEmit` aprobado; `npm run build` aprobado (Vite reportó `/noise.png` no resuelto en build y un chunk JS de ~1.97 MB); `npm run lint` falló con 234 hallazgos preexistentes en el repositorio (incluye `initial_store.tsx` binario y `src_backup`); lint aislado de `src/lib/telegram.ts` aprobado; `git diff --check` aprobado.
-- Firebase Emulator: pendiente, no configurado en `firebase.json` y no existe suite de reglas/E2E. No se ejecutaron los 18 flujos pedidos, ni se modificó Firebase real.
-- Próximo paso exacto: añadir Functions con Admin SDK para alta idempotente de grupos, validación autoritativa de precios/stock, transición de `rentals_busy_slots` y outbox Telegram; migrar clientes existentes a Firebase Auth con recuperación segura; conectar el frontend a esos endpoints; luego configurar Emulator y pruebas de reglas/concurrencia antes de mantener el cierre de reglas.
+- Rama activa: `codex/briz-critical-stabilization-20261020`. Base conservada: `70b85b3` y `bc501ca`; el bloque 2 está en preparación local hasta el commit registrado abajo.
+- Seguridad Firestore/Storage: roles separados (`admin`, `manager`, `mechanic`, `viewer`), alcance por tienda cuando el documento lo define; clientes no escriben ventas, reservas, roles ni perfiles; `customers` no se puede leer desde el SDK cliente porque aún puede contener hashes heredados. Admin y manager consultan la callable sanitizada `getAdminCustomers`.
+- Backend Functions v2 / Node 22: `createRentalGroup` crea grupos y clientes manuales en transacción, calcula precios/stock desde catálogo, asigna código BRIZ, verifica solapamientos por aro y componentes, coordina bloqueos por recurso, limita solicitudes, registra idempotencia y escribe outbox/proyección pública. Incluye reservas administrativas manuales con verificación del rol.
+- Auth de cliente: Firebase Authentication, verificación de correo, recuperación por enlace de Firebase, registro privado de archivos en Storage, perfil sanitizado, consulta autorizada de historial con `getMyRentals`; el enlace de legado requiere verificar el mismo correo y borra el hash antiguo al vincularlo.
+- Disponibilidad: la web consulta `rentals_busy_slots`, que contiene solo recurso, aro, cantidades, intervalos y estado; datos de personas, pago y dirección quedan en rentals privados.
+- Telegram: trigger de Functions con Secret Manager y outbox. La ejecución local usa solo placeholders ignorados por Git y omite la entrega externa. No hay secretos productivos configurados. Rotar en BotFather cualquier token que se haya expuesto antes.
+- Firebase Emulator configurado para Auth, Firestore, Functions y Storage. Datos de prueba solo sintéticos, proyecto `demo-briz-security`.
+- Pruebas realizadas: `npm run test:firebase` aprobado (16 pruebas de reglas y 6 flujos integrados en los emuladores, incluyendo la protección de roles); `npx tsx scripts/verify-briz-core.ts` aprobado (16/16); `npx tsc --noEmit`, `npm run build` y `npm run build --prefix functions` aprobados. `npm run lint` falló con 220 problemas (210 errores, 10 warnings), principalmente `initial_store.tsx` binario, `src_backup`, `any` y reglas React.
+- Avisos de build actuales: `/noise.png` no se resuelve durante Vite build y bundle principal ~1.98 MB minificado.
+- **No se desplegó ni se modificó Firebase real. No se migraron cuentas reales ni se tocaron inventarios.**
+- Requisitos de producción pendientes: Functions requieren plan Blaze y APIs/credenciales habilitadas; no activar facturación sin autorización. Configurar App Check de web y cambiar `enforceAppCheck` antes de abrir callables públicamente. Cargar secretos Telegram solo después de rotar el token y autorizarlo.
+- Compatibilidad pendiente antes de reglas cerradas en producción: el botón administrativo para agregar una nueva línea a una reserva existente todavía usa escritura directa en `AdminRentalsPage.tsx` y será rechazado por `allow create: false`; debe migrarse a callable de anexado a grupo. Revisar también reglas/funciones de confirmación, entrega, devolución y cancelación contra datos históricos en Emulator.
+- **Último commit del bloque 2:** pendiente de crear y subir tras la validación final.
+- Próximo paso: registrar SHA y subir solo a la rama Codex; después implementar callable para anexar líneas a grupos y ampliar las pruebas de ciclo administrativo y regresión de historiales históricos.
 
 ---
 
 ## HANDOFF — LEER PRIMERO
-
 Si eres **Codex** o **Gemini** retomando este repositorio sin acceso al historial de conversación, lee esta sección y [`BRIZ_HANDOFF_CODEX.md`](./BRIZ_HANDOFF_CODEX.md) antes de tocar cualquier archivo:
 
 1. **Rama y Commit Base:**

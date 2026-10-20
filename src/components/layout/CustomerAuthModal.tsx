@@ -103,7 +103,7 @@ const COUNTRIES_LIST = [
 ];
 
 export default function CustomerAuthModal({ isOpen, onClose, onSuccess }: CustomerAuthModalProps) {
-    const { loginCustomer, registerCustomer, updateCustomer, verifyCustomerRecovery } = useStore();
+    const { loginCustomer, registerCustomer, verifyCustomerRecovery } = useStore();
     const { language } = useLanguage();
     
     // Auth Mode: 'login' | 'register' | 'forgot' | 'reset'
@@ -129,11 +129,6 @@ export default function CustomerAuthModal({ isOpen, onClose, onSuccess }: Custom
 
     // Recovery states
     const [recoveryEmail, setRecoveryEmail] = useState('');
-    const [recoveryPhone, setRecoveryPhone] = useState('');
-    const [recoveryPrefix, setRecoveryPrefix] = useState('+591');
-    const [newPassword, setNewPassword] = useState('');
-    const [confirmNewPassword, setConfirmNewPassword] = useState('');
-    const [matchedCustomerId, setMatchedCustomerId] = useState<string | null>(null);
 
     // Selfie Capture states
     const [cameraActive, setCameraActive] = useState(false);
@@ -179,10 +174,6 @@ export default function CustomerAuthModal({ isOpen, onClose, onSuccess }: Custom
             setLoading(false);
             setMode('login');
             setRecoveryEmail('');
-            setRecoveryPhone('');
-            setNewPassword('');
-            setConfirmNewPassword('');
-            setMatchedCustomerId(null);
         }
     }, [isOpen, stream]);
 
@@ -301,7 +292,7 @@ export default function CustomerAuthModal({ isOpen, onClose, onSuccess }: Custom
             }
         } catch (err) {
             console.error(err);
-            setError("Ocurrió un error inesperado al intentar iniciar sesión.");
+            setError(err instanceof Error ? err.message : "Ocurrió un error inesperado al intentar iniciar sesión.");
         } finally {
             setLoading(false);
         }
@@ -351,12 +342,10 @@ export default function CustomerAuthModal({ isOpen, onClose, onSuccess }: Custom
             };
 
             await registerCustomer(customerData, selfieBlob, docFileAnverso, docFileReverso, remember);
-            setSuccessMessage("¡Tu cuenta ha sido creada con éxito! Iniciando sesión...");
-            
-            setTimeout(() => {
-                if (onSuccess) onSuccess();
-                onClose();
-            }, 1800);
+            setSuccessMessage("Cuenta creada. Revisa tu correo y confirma la dirección antes de iniciar sesión.");
+            setMode('login');
+            setEmail(email.trim().toLowerCase());
+            setPassword('');
         } catch (err: any) {
             console.error(err);
             setError(err.message || "No se pudo registrar tu usuario. Verifica si el correo ya está registrado.");
@@ -371,13 +360,10 @@ export default function CustomerAuthModal({ isOpen, onClose, onSuccess }: Custom
         setSuccessMessage(null);
         setLoading(true);
         try {
-            const matchedId = await verifyCustomerRecovery(recoveryEmail, recoveryPhone);
-            if (matchedId) {
-                setMatchedCustomerId(matchedId);
-                setMode('reset');
-            } else {
-                setError("No se encontró ningún cliente con ese correo y número de WhatsApp registrados.");
-            }
+            await verifyCustomerRecovery(recoveryEmail);
+            setEmail(recoveryEmail.trim().toLowerCase());
+            setMode('login');
+            setSuccessMessage('Si existe una cuenta con ese correo, recibirás un enlace para restablecer la contraseña.');
         } catch {
             setError("No se pudo verificar la cuenta en este momento.");
         } finally {
@@ -385,41 +371,9 @@ export default function CustomerAuthModal({ isOpen, onClose, onSuccess }: Custom
         }
     };
 
-    const handleResetPasswordSubmit = async (e: React.FormEvent) => {
+    const handleResetPasswordSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        setError(null);
-        
-        if (newPassword.length < 6) {
-            setError("La nueva contraseña debe tener al menos 6 caracteres.");
-            return;
-        }
-        if (newPassword !== confirmNewPassword) {
-            setError("Las contraseñas no coinciden.");
-            return;
-        }
-        
-        if (matchedCustomerId) {
-            setLoading(true);
-            try {
-                await updateCustomer(matchedCustomerId, { password: newPassword });
-                setSuccessMessage("¡Contraseña restablecida con éxito! Ya puedes iniciar sesión.");
-                setEmail(recoveryEmail);
-                setTimeout(() => {
-                    setMode('login');
-                    setRecoveryEmail('');
-                    setRecoveryPhone('');
-                    setNewPassword('');
-                    setConfirmNewPassword('');
-                    setMatchedCustomerId(null);
-                    setSuccessMessage(null);
-                }, 2000);
-            } catch (err) {
-                console.error(err);
-                setError("Error al actualizar la contraseña.");
-            } finally {
-                setLoading(false);
-            }
-        }
+        setMode('forgot');
     };
 
     const toggleMode = () => {
@@ -849,7 +803,7 @@ export default function CustomerAuthModal({ isOpen, onClose, onSuccess }: Custom
                     ) : mode === 'forgot' ? (
                         <form onSubmit={handleVerifyRecovery} className="space-y-5">
                             <p className="text-xs text-brand-charcoal/70 font-maiandra leading-relaxed">
-                                Ingresa el correo electrónico y el número de WhatsApp vinculados a tu cuenta para verificar tu perfil.
+                                Ingresa el correo vinculado a tu cuenta. Si existe, recibirás un enlace seguro para restablecer la contraseña.
                             </p>
                             <div className="space-y-2">
                                 <Label className="text-[10px] text-brand-charcoal/60 font-bold uppercase tracking-widest font-maiandra">{language === 'es' ? 'Correo Electrónico' : 'Email Address'}</Label>
@@ -865,35 +819,11 @@ export default function CustomerAuthModal({ isOpen, onClose, onSuccess }: Custom
                                     />
                                 </div>
                             </div>
-                            <div className="space-y-2">
-                                <Label className="text-[10px] text-brand-charcoal/60 font-bold uppercase tracking-widest font-maiandra">Número de WhatsApp</Label>
-                                <div className="relative flex items-center">
-                                    <select 
-                                        value={recoveryPrefix} 
-                                        onChange={e => setRecoveryPrefix(e.target.value)} 
-                                        className="absolute left-2 bg-transparent text-brand-charcoal/70 font-black text-xs font-sans border-0 focus:outline-none cursor-pointer z-10 pr-1 h-full"
-                                    >
-                                        {COUNTRY_PREFIXES.map(p => (
-                                            <option key={p.code} value={p.code} className="bg-white text-brand-black">
-                                                {p.flag} {p.code}
-                                            </option>
-                                        ))}
-                                    </select>
-                                    <Input 
-                                        required 
-                                        type="tel" 
-                                        value={recoveryPhone} 
-                                        onChange={e => setRecoveryPhone(e.target.value.replace(/\D/g, ''))} 
-                                        placeholder="77889900" 
-                                        className="pl-24 bg-white border border-brand-charcoal/15 h-12 text-sm text-brand-black font-bold rounded-xl focus-visible:ring-brand-yellow focus-visible:border-brand-yellow font-sans shadow-sm" 
-                                    />
-                                </div>
-                            </div>
-                            <Button 
+                            <Button
                                 type="submit" 
                                 className="w-full bg-brand-yellow text-brand-black hover:bg-brand-yellow/90 font-black rounded-xl h-12 uppercase text-xs tracking-widest transition-all mt-4 font-sans shadow-lg cursor-pointer"
                             >
-                                {language === 'es' ? 'VERIFICAR DATOS' : 'VERIFY DETAILS'}
+                                {language === 'es' ? 'ENVIAR ENLACE' : 'SEND RESET LINK'}
                             </Button>
                             <div className="text-center pt-3 border-t border-brand-charcoal/5 mt-4">
                                 <Button 
@@ -907,44 +837,8 @@ export default function CustomerAuthModal({ isOpen, onClose, onSuccess }: Custom
                         </form>
                     ) : (
                         <form onSubmit={handleResetPasswordSubmit} className="space-y-5">
-                            <p className="text-xs text-brand-charcoal/70 font-maiandra leading-relaxed">
-                                Datos verificados con éxito. Ingresa tu nueva contraseña a continuación.
-                            </p>
-                            <div className="space-y-2">
-                                <Label className="text-[10px] text-brand-charcoal/60 font-bold uppercase tracking-widest font-maiandra">{language === 'es' ? 'Nueva Contraseña' : 'New Password'}</Label>
-                                <div className="relative">
-                                    <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-brand-charcoal/30" />
-                                    <Input 
-                                        type="password" 
-                                        required 
-                                        value={newPassword}
-                                        onChange={e => setNewPassword(e.target.value)}
-                                        placeholder="Min. 6 caracteres" 
-                                        className="pl-12 bg-white border border-brand-charcoal/15 h-12 text-sm text-brand-black font-bold rounded-xl focus-visible:ring-brand-yellow focus-visible:border-brand-yellow font-sans shadow-sm"
-                                    />
-                                </div>
-                            </div>
-                            <div className="space-y-2">
-                                <Label className="text-[10px] text-brand-charcoal/60 font-bold uppercase tracking-widest font-maiandra">{language === 'es' ? 'Confirmar Nueva Contraseña' : 'Confirm New Password'}</Label>
-                                <div className="relative">
-                                    <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-brand-charcoal/30" />
-                                    <Input 
-                                        type="password" 
-                                        required 
-                                        value={confirmNewPassword}
-                                        onChange={e => setConfirmNewPassword(e.target.value)}
-                                        placeholder="Repite tu contraseña" 
-                                        className="pl-12 bg-white border border-brand-charcoal/15 h-12 text-sm text-brand-black font-bold rounded-xl focus-visible:ring-brand-yellow focus-visible:border-brand-yellow font-sans shadow-sm"
-                                    />
-                                </div>
-                            </div>
-                            <Button 
-                                type="submit" 
-                                disabled={loading}
-                                className="w-full bg-brand-yellow text-brand-black hover:bg-brand-yellow/90 font-black rounded-xl h-12 uppercase text-xs tracking-widest transition-all mt-4 font-sans shadow-lg cursor-pointer"
-                            >
-                                {loading ? (language === 'es' ? 'Restableciendo...' : 'Resetting...') : (language === 'es' ? 'CAMBIAR CONTRASEÑA' : 'CHANGE PASSWORD')}
-                            </Button>
+                            <p className="text-xs text-brand-charcoal/70 font-maiandra leading-relaxed">Usa el enlace seguro enviado por correo para establecer una contraseña nueva.</p>
+                            <Button type="button" onClick={() => setMode('login')} className="w-full">VOLVER AL LOGIN</Button>
                         </form>
                     )}
                 </div>

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Bike, CalendarDays, Clock, CreditCard, MapPin, User } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -68,19 +68,34 @@ function groupRentals(rentals: Rental[]) {
 }
 
 export default function ProfilePage() {
-    const { currentCustomer, rentals } = useStore();
+    const { currentCustomer, getMyRentalHistory } = useStore();
     const { language } = useLanguage();
     const [authOpen, setAuthOpen] = useState(false);
+    const [customerRentals, setCustomerRentals] = useState<Rental[]>([]);
+    const [historyForCustomer, setHistoryForCustomer] = useState<string | null>(null);
+    const [historyErrorForCustomer, setHistoryErrorForCustomer] = useState<string | null>(null);
+    const customerId = currentCustomer?.id;
 
-    const customerRentals = useMemo(() => {
-        if (!currentCustomer) return [];
-        return rentals.filter(rental =>
-            rental.customerCI === currentCustomer.ci ||
-            rental.customerPhone === currentCustomer.phone
-        );
-    }, [currentCustomer, rentals]);
+    useEffect(() => {
+        let active = true;
+        if (!customerId) {
+            return () => { active = false; };
+        }
+        getMyRentalHistory()
+            .then(history => {
+                if (active) {
+                    setCustomerRentals(history);
+                    setHistoryForCustomer(customerId);
+                    setHistoryErrorForCustomer(null);
+                }
+            })
+            .catch(() => { if (active) setHistoryErrorForCustomer(customerId); });
+        return () => { active = false; };
+    }, [customerId, getMyRentalHistory]);
 
-    const rentalGroups = useMemo(() => groupRentals(customerRentals), [customerRentals]);
+    const historyLoading = Boolean(currentCustomer && historyForCustomer !== currentCustomer.id && historyErrorForCustomer !== currentCustomer.id);
+    const historyError = Boolean(currentCustomer && historyErrorForCustomer === currentCustomer.id);
+    const rentalGroups = useMemo(() => groupRentals(historyForCustomer === currentCustomer?.id ? customerRentals : []), [currentCustomer?.id, customerRentals, historyForCustomer]);
     const statusMap = language === 'es' ? statusLabelEs : statusLabelEn;
 
     if (!currentCustomer) {
@@ -151,7 +166,23 @@ export default function ProfilePage() {
                         </Badge>
                     </div>
 
-                    {rentalGroups.length === 0 ? (
+                    {historyLoading ? (
+                        <div className="rounded-[2rem] border border-brand-yellow/20 bg-white p-10 text-center text-sm font-bold text-brand-charcoal/60">
+                            {language === 'es' ? 'Cargando tu historial…' : 'Loading your history…'}
+                        </div>
+                    ) : historyError ? (
+                        <div role="alert" className="rounded-[2rem] border border-red-200 bg-white p-10 text-center text-sm font-bold text-red-700">
+                            {language === 'es' ? 'No se pudo cargar el historial. Intenta de nuevo.' : 'Could not load your history. Please try again.'}
+                            <Button onClick={() => {
+                                if (!currentCustomer) return;
+                                getMyRentalHistory().then((history) => {
+                                    setCustomerRentals(history);
+                                    setHistoryForCustomer(currentCustomer.id);
+                                    setHistoryErrorForCustomer(null);
+                                }).catch(() => setHistoryErrorForCustomer(currentCustomer.id));
+                            }} className="ml-3">{language === 'es' ? 'Reintentar' : 'Retry'}</Button>
+                        </div>
+                    ) : rentalGroups.length === 0 ? (
                         <div className="rounded-[2rem] border border-brand-yellow/20 bg-white p-10 text-center">
                             <Bike className="mx-auto h-12 w-12 text-brand-yellow-vibrant" />
                             <p className="mt-4 text-sm font-bold text-brand-charcoal/60">

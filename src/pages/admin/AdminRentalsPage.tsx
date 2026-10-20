@@ -37,7 +37,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { generateAdminReplyWhatsAppLink } from '@/lib/whatsapp';
 import { db } from '@/lib/firebase';
-import { doc, setDoc, writeBatch } from 'firebase/firestore';
+import { doc, setDoc } from 'firebase/firestore';
 
 // Mappers for Spanish Translation
 const statusLabels: Record<string, string> = {
@@ -302,7 +302,7 @@ export default function AdminRentalsPage() {
     combos,
     customers,
     calculatePrice,
-    addRental,
+    createRentalGroup,
     bikeCategories
   } = useStore();
 
@@ -804,138 +804,76 @@ export default function AdminRentalsPage() {
 
   const handleWizardSubmit = async () => {
     let finalCustomer: any = null;
-
     if (newRentalCustomerMode === 'existing') {
       finalCustomer = customers.find(c => c.id === newRentalSelectedCustomerId);
-      if (!finalCustomer) {
-        alert('Por favor selecciona un cliente registrado.');
-        return;
-      }
+      if (!finalCustomer) { alert('Por favor selecciona un cliente registrado.'); return; }
     } else {
-      const c = newRentalCustomerData;
-      if (!c.name.trim() || !c.phone.trim() || !c.ci.trim()) {
+      const customer = newRentalCustomerData;
+      if (!customer.name.trim() || !customer.phone.trim() || !customer.ci.trim()) {
         alert('Por favor completa los campos obligatorios del cliente (Nombre, Teléfono, CI).');
         return;
       }
-      const custId = 'cust_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7);
       finalCustomer = {
-        id: custId,
-        name: c.name.trim(),
-        phone: c.phone.trim(),
-        ci: c.ci.trim(),
-        email: c.email.trim(),
-        nacionalidad: c.nacionalidad.trim(),
-        departamento: c.departamento.trim(),
-        comoNosConociste: c.comoNosConociste.trim(),
-        autofotoUrl: c.autofotoUrl,
-        documentoUrl: c.documentoUrl,
-        documentoReversoUrl: c.documentoReversoUrl,
-        rentalsCount: 1,
-        purchasesCount: 0,
-        firstVisit: new Date().toISOString(),
-        lastVisit: new Date().toISOString(),
-        notes: 'Registrado manualmente en alquiler administrativo'
+        name: customer.name.trim(), phone: customer.phone.trim(), ci: customer.ci.trim(),
+        email: customer.email.trim(), nacionalidad: customer.nacionalidad.trim(),
+        departamento: customer.departamento.trim(), comoNosConociste: customer.comoNosConociste.trim(),
       };
-      try {
-        await setDoc(doc(db, 'customers', custId), finalCustomer);
-      } catch (err) {
-        console.error('Error saving customer:', err);
-        alert('Error al guardar el nuevo cliente.');
-        return;
-      }
     }
+    if (newRentalCart.length === 0) { alert('El carrito del alquiler está vacío.'); return; }
 
-    if (newRentalCart.length === 0) {
-      alert('El carrito del alquiler está vacío.');
-      return;
-    }
-
-    const payloads: any[] = newRentalCart.map(item => {
-      const isCombo = item.product.components !== undefined;
-      const price = calculatePrice(
-        isCombo ? 'combo' : 'single',
-        item.product.id,
-        newRentalForm.duration,
-        1
-      );
-      return {
-        customerName: finalCustomer.name,
-        customerPhone: finalCustomer.phone,
-        customerCI: finalCustomer.ci,
-        productType: isCombo ? 'combo' : 'single',
-        productId: item.product.id,
-        productName: item.product.name,
-        productNameSnapshot: item.product.name,
-        selectedWheelSize: item.selectedWheelSize || '',
-        componentSelections: item.componentSelections || [],
-        quantity: item.quantity,
-        duration: newRentalForm.duration,
-        date: newRentalForm.date,
-        pickupTime: newRentalForm.pickupTime,
-        total: price * item.quantity,
-        paymentMethod: newRentalForm.paymentMethod,
-        notes: newRentalForm.notes ? `[Manual] ${newRentalForm.notes}` : '[Manual]',
-        deliveryService: newRentalForm.deliveryService,
-        pickupService: newRentalForm.pickupService,
-        mapsLink: newRentalForm.mapsLink || '',
-        source: 'manual'
-      };
-    });
+    const lines = newRentalCart.map(item => ({
+      productId: item.product.id,
+      productType: (item.product.components !== undefined ? 'combo' : 'single') as 'combo' | 'single',
+      quantity: item.quantity,
+      ...(item.selectedWheelSize ? { wheelSize: item.selectedWheelSize } : {}),
+    }));
+    const paymentMethod: 'QR' | 'Transferencia' | 'Efectivo' = newRentalForm.paymentMethod.toLowerCase().includes('qr')
+      ? 'QR' : newRentalForm.paymentMethod.toLowerCase().includes('transfer') ? 'Transferencia' : 'Efectivo';
+    const adminCustomer = {
+      ...(newRentalCustomerMode === 'existing' ? { id: finalCustomer.id } : {}),
+      name: finalCustomer.name, phone: finalCustomer.phone, ci: finalCustomer.ci,
+      email: finalCustomer.email || '', nacionalidad: finalCustomer.nacionalidad || '',
+      departamento: finalCustomer.departamento || '', comoNosConociste: finalCustomer.comoNosConociste || '',
+    };
+    const booking = {
+      adminManual: true,
+      adminCustomer,
+      adminNotes: newRentalForm.notes,
+      adminPaymentStatus: newRentalForm.paymentStatus,
+      adminDeliveryService: newRentalForm.deliveryService,
+      adminPickupService: newRentalForm.pickupService,
+      adminMapsLink: newRentalForm.mapsLink,
+      lines,
+      accessories: [],
+      date: newRentalForm.date,
+      pickupTime: newRentalForm.pickupTime,
+      duration: newRentalForm.duration,
+      paymentMethod,
+    };
 
     try {
-      const firstRental = payloads[0];
-      const createdFirst = await addRental({
-        ...firstRental,
-        paymentStatus: newRentalForm.paymentStatus === 'paid' ? 'paid' : 'unpaid'
-      });
-      const sharedCode = createdFirst.reservationCode;
-      const createdIds: string[] = [createdFirst.id];
-
-      const batch = writeBatch(db);
-      for (let i = 1; i < payloads.length; i++) {
-        const item = payloads[i];
-        const newId = 'rental_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7) + '_' + i;
-        createdIds.push(newId);
-        const fullItem = {
-          ...item,
-          id: newId,
-          reservationCode: sharedCode,
-          paymentStatus: newRentalForm.paymentStatus,
-          status: 'pending',
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-          createdDate: new Date().toISOString()
-        };
-        batch.set(doc(db, 'rentals', newId), fullItem);
-      }
-
-      if (newRentalCustomerMode === 'existing') {
-        const custRef = doc(db, 'customers', finalCustomer.id);
-        batch.update(custRef, {
-          rentalsCount: (finalCustomer.rentalsCount || 0) + 1,
-          lastVisit: new Date().toISOString()
-        });
-      }
-
-      await batch.commit();
-
+      const fingerprint = JSON.stringify(booking);
+      const storageKey = 'briz_admin_checkout_idempotency';
+      const saved = JSON.parse(sessionStorage.getItem(storageKey) || 'null') as { fingerprint?: string; key?: string } | null;
+      const idempotencyKey = saved?.fingerprint === fingerprint && saved.key ? saved.key : `admin_${crypto.randomUUID()}`;
+      sessionStorage.setItem(storageKey, JSON.stringify({ fingerprint, key: idempotencyKey }));
+      const result = await createRentalGroup({ ...booking, idempotencyKey });
+      sessionStorage.removeItem(storageKey);
       if (newRentalForm.status === 'confirmed') {
-        const confirmRes = await confirmRentalGroup(createdIds, 'admin (manual)');
+        const confirmRes = await confirmRentalGroup(result.rentalIds, 'admin (manual)');
         if (!confirmRes.ok) {
-          alert(`Alquiler creado como PENDIENTE (${sharedCode}), pero no pudo confirmarse automáticamente:\n${confirmRes.error}`);
+          alert(`Alquiler creado como PENDIENTE (${result.reservationCode}), pero no pudo confirmarse automáticamente:\n${confirmRes.error}`);
           setNewRentalModalOpen(false);
           return;
         }
       }
-
-      alert(`Alquiler manual creado con éxito. Código: ${sharedCode}`);
+      alert(`Alquiler manual creado con éxito. Código: ${result.reservationCode}`);
       setNewRentalModalOpen(false);
     } catch (error) {
       console.error('Error creating manual rental:', error);
-      alert('Ocurrió un error al crear el alquiler.');
+      alert(error instanceof Error ? error.message : 'Ocurrió un error al crear el alquiler.');
     }
   };
-
   const renderStep1 = () => {
     return (
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 font-sans text-white h-[60vh] overflow-hidden">

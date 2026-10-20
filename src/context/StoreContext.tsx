@@ -1,11 +1,11 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import {
     collection,
     doc,
     setDoc,
     updateDoc,
     deleteDoc,
-    getDocs,
+    getDoc,
     onSnapshot,
     query,
     orderBy,
@@ -13,7 +13,17 @@ import {
     writeBatch,
     runTransaction
 } from 'firebase/firestore';
-import { onAuthStateChanged } from 'firebase/auth';
+import {
+    browserLocalPersistence,
+    browserSessionPersistence,
+    createUserWithEmailAndPassword,
+    onAuthStateChanged,
+    sendEmailVerification,
+    sendPasswordResetEmail,
+    setPersistence,
+    signInWithEmailAndPassword,
+    signOut,
+} from 'firebase/auth';
 import { auth, db, storage } from '../lib/firebase';
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { cyclingRoutes as DEFAULT_ROUTES, type CyclingRoute } from '../data/mockData';
@@ -23,14 +33,7 @@ import {
     RENTAL_SEED_INVENTORY,
 } from '../data/rentalSeedData';
 import { SHOP_SEED_CATEGORIES } from '../data/shopSeedData';
-import {
-    hashPassword,
-    isPasswordHashed,
-    sanitizeCustomerForSession,
-    sanitizeRentalForPublicAvailability,
-    verifyPassword
-} from '../lib/security';
-import { getBoliviaYear } from '../lib/dateUtils';
+import { beginCustomerRegistration, createCustomerProfile as createCustomerProfileBackend, getMyRentals as getMyRentalsBackend, getAdminCustomers as getAdminCustomersBackend, createRentalGroup as createRentalGroupBackend, createServiceOrder as createServiceOrderBackend, type ReservationGroupInput } from '../lib/backend';
 import { calculateProductRentalPrice } from '../lib/rentalPricing';
 import {
     getAvailableStockForInterval as calcItemStockForInterval,
@@ -261,6 +264,7 @@ export interface Customer {
     autofotoUrl?: string;
     documentoUrl?: string;
     documentoReversoUrl?: string;
+    store?: string;
 }
 
 export interface ServiceOrder {
@@ -358,14 +362,6 @@ interface StoreContextType {
     deleteCombo: (id: string) => Promise<void>;
 
     // Rental CRUD & Group Atomic Operations
-    generateNextReservationCode: () => Promise<string>;
-    addRental: (
-        rental: Omit<Rental, 'id' | 'reservationCode' | 'status' | 'createdAt' | 'updatedAt' | 'paymentStatus'> & {
-            reservationCode?: string;
-            status?: Rental['status'];
-            paymentStatus?: Rental['paymentStatus'];
-        }
-    ) => Promise<Rental>;
     confirmRental: (id: string, actor?: string) => Promise<boolean>;
     confirmRentalGroup: (ids: string[], actor?: string) => Promise<{ ok: boolean; error?: string }>;
     deliverRentalGroup: (ids: string[], actor?: string) => Promise<void>;
@@ -388,7 +384,9 @@ interface StoreContextType {
     addOrUpdateCustomer: (c: { name: string; phone: string; ci: string }, isPurchase: boolean) => Promise<void>;
     updateCustomer: (id: string, c: Partial<Customer>) => Promise<void>;
     deleteCustomer: (id: string) => Promise<void>;
-    verifyCustomerRecovery: (email: string, phone: string) => Promise<string | null>;
+    verifyCustomerRecovery: (email: string) => Promise<boolean>;
+    getMyRentalHistory: () => Promise<Rental[]>;
+    createRentalGroup: (input: ReservationGroupInput) => Promise<{ reservationCode: string; rentalIds: string[]; total: number; duplicate: boolean }>;
 
     // Service Order CRUD
     addServiceOrder: (so: Omit<ServiceOrder, 'id' | 'date'>) => Promise<void>;
@@ -437,6 +435,26 @@ interface StoreContextType {
 
 export const StoreContext = createContext<StoreContextType | null>(null);
 
+function customerFromPublicProfile(profile: {
+    id: string; email: string; name: string; phone: string; ci: string;
+    nacionalidad?: string; departamento?: string; comoNosConociste?: string;
+    rentalsCount?: number; purchasesCount?: number;
+}): Customer {
+    return {
+        id: profile.id, email: profile.email, name: profile.name, phone: profile.phone, ci: profile.ci,
+        nacionalidad: profile.nacionalidad, departamento: profile.departamento,
+        comoNosConociste: profile.comoNosConociste,
+        rentalsCount: Number(profile.rentalsCount) || 0,
+        purchasesCount: Number(profile.purchasesCount) || 0,
+        firstVisit: '', lastVisit: '', notes: '',
+    };
+}
+
+function fileExtension(file: File): string {
+    const extension = file.name.split('.').pop()?.toLowerCase() || (file.type === 'application/pdf' ? 'pdf' : 'jpg');
+    return /^[a-z0-9]{1,8}$/.test(extension) ? extension : 'jpg';
+}
+
 export const useStore = () => {
     const context = useContext(StoreContext);
     if (!context) throw new Error('useStore must be used within StoreProvider');
@@ -480,6 +498,7 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
     const [adminNavigationLinks, setAdminNavigationLinks] = useState<any[]>([]);
     const [isLoaded, setIsLoaded] = useState(false);
     const [isAdminSession, setIsAdminSession] = useState(false);
+    const [adminStoreScope, setAdminStoreScope] = useState<string>('all');
 
     const [rentalSettings, setRentalSettings] = useState<RentalSettings>(() => safeJSON<RentalSettings>(LOCAL_RENTAL_SETTINGS_KEY, {
         bankName: 'Banco Nacional de Bolivia (BNB)',
@@ -492,10 +511,50 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
     // Customer Session state
     const [currentCustomer, setCurrentCustomer] = useState<Customer | null>(null);
 
-    // Track Firebase Auth admin state to avoid subscribing to private collections on public sessions
+    // Only active, explicitly registered staff can subscribe to private collections.
     useEffect(() => {
-        const unsubAuth = onAuthStateChanged(auth, (fbUser) => {
-            setIsAdminSession(Boolean(fbUser));
+        const unsubAuth = onAuthStateChanged(auth, async (fbUser) => {
+            setIsAdminSession(false);
+            setAdminStoreScope('all');
+            setCurrentCustomer(null);
+            localStorage.removeItem('briz_logged_customer');
+            if (!fbUser) return;
+            try {
+                const adminSnapshot = await getDoc(doc(db, 'adminUsers', fbUser.uid));
+                const adminData = adminSnapshot.exists() ? adminSnapshot.data() : null;
+                const allowedRole = ['admin', 'manager', 'mechanic', 'viewer'].includes(String(adminData?.role));
+                if (adminData?.active === true && allowedRole) {
+                    setIsAdminSession(true);
+                    setAdminStoreScope(String(adminData.store || 'all'));
+                }
+            } catch {
+                // Customer accounts are not allowed to read admin authorization records.
+            }
+            if (fbUser.emailVerified) {
+                try {
+                    const profileSnap = await getDoc(doc(db, 'customerProfiles', fbUser.uid));
+                    if (profileSnap.exists()) {
+                        const profile = profileSnap.data();
+                        setCurrentCustomer({
+                            id: fbUser.uid,
+                            name: String(profile.name || ''),
+                            phone: String(profile.phone || ''),
+                            ci: String(profile.ci || ''),
+                            email: String(profile.email || fbUser.email || ''),
+                            nacionalidad: String(profile.nacionalidad || ''),
+                            departamento: String(profile.departamento || ''),
+                            comoNosConociste: String(profile.comoNosConociste || ''),
+                            rentalsCount: Number(profile.rentalsCount) || 0,
+                            purchasesCount: Number(profile.purchasesCount) || 0,
+                            firstVisit: '',
+                            lastVisit: '',
+                            notes: '',
+                        });
+                    }
+                } catch {
+                    // A verified account with an incomplete registration remains signed in without a profile.
+                }
+            }
         });
         return unsubAuth;
     }, []);
@@ -554,23 +613,6 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
             console.error('Failed to seed default routes:', e);
         }
     };
-
-    // Load saved customer session (stripping any legacy plaintext password)
-    useEffect(() => {
-        const saved = localStorage.getItem('briz_logged_customer');
-        if (saved) {
-            try {
-                const parsed = JSON.parse(saved) as Customer;
-                const sanitized = sanitizeCustomerForSession(parsed);
-                setCurrentCustomer(sanitized);
-                if (parsed.password) {
-                    localStorage.setItem('briz_logged_customer', JSON.stringify(sanitized));
-                }
-            } catch (e) {
-                console.error('Failed to parse saved customer session:', e);
-            }
-        }
-    }, []);
 
     // ---- Real-time Sync (Public Catalog & Settings) ----
     useEffect(() => {
@@ -664,51 +706,75 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
         };
     }, []);
 
-    // ---- Real-time Sync (Rentals & Private Admin Collections) ----
+    // ---- Real-time Sync (public sanitized slots and scoped admin collections) ----
     useEffect(() => {
-        // Rentals: Admin gets full records; Public gets sanitized records (except for the logged-in customer's own rentals)
+        const rentalsRef = collection(db, 'rentals');
+        const publicSlotsRef = collection(db, 'rentals_busy_slots');
+        const rentalQuery = isAdminSession
+            ? (adminStoreScope === 'all'
+                ? query(rentalsRef, orderBy('createdDate', 'desc'))
+                : query(rentalsRef, where('store', '==', adminStoreScope), orderBy('createdDate', 'desc')))
+            : null;
         const unsubRentals = onSnapshot(
-            query(collection(db, 'rentals'), orderBy('createdDate', 'desc')),
+            rentalQuery || publicSlotsRef,
             (snap) => {
-                const rawRentals = snap.docs.map(d => ({ ...d.data() } as Rental));
                 if (isAdminSession) {
-                    setRentals(rawRentals);
-                } else {
-                    const custCi = currentCustomer?.ci?.trim();
-                    const custPhone = currentCustomer?.phone?.trim();
-                    setRentals(
-                        rawRentals.map(r => {
-                            const isOwnRental =
-                                Boolean(custCi && r.customerCI === custCi) ||
-                                Boolean(custPhone && r.customerPhone === custPhone);
-                            return isOwnRental ? r : sanitizeRentalForPublicAvailability(r);
-                        })
-                    );
+                    setRentals(snap.docs.map(d => ({ ...d.data(), id: d.id } as Rental)));
+                    return;
                 }
+                const publicRentals = snap.docs.map((d) => {
+                    const slot = d.data();
+                    const start = new Date(Number(slot.startMs));
+                    const end = new Date(Number(slot.endMs));
+                    const date = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/La_Paz' }).format(start);
+                    const timeParts = new Intl.DateTimeFormat('en-GB', { timeZone: 'America/La_Paz', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts(start);
+                    const endParts = new Intl.DateTimeFormat('en-GB', { timeZone: 'America/La_Paz', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts(end);
+                    const pickupTime = `${timeParts.find(p => p.type === 'hour')?.value || '00'}:${timeParts.find(p => p.type === 'minute')?.value || '00'}`;
+                    const endTime = `${endParts.find(p => p.type === 'hour')?.value || '00'}:${endParts.find(p => p.type === 'minute')?.value || '00'}`;
+                    const durationHours = Math.max(1, Math.round((Number(slot.endMs) - Number(slot.startMs)) / 3_600_000));
+                    const item = inventory.find(candidate => candidate.id === slot.itemId);
+                    return {
+                        id: d.id,
+                        reservationCode: `public_${d.id}`,
+                        customerName: 'Reservado', customerPhone: '', customerCI: '',
+                        productType: 'single' as const,
+                        productId: String(slot.itemId || ''),
+                        productName: item?.name || 'Reservado',
+                        quantity: Number(slot.quantity) || 0,
+                        selectedWheelSize: String(slot.wheelSize || ''),
+                        duration: `${durationHours} horas`, date, pickupTime, endTime,
+                        startTimestamp: Number(slot.startMs), endTimestamp: Number(slot.endMs),
+                        total: 0, paymentMethod: '', paymentStatus: 'unpaid' as const,
+                        notes: '', status: String(slot.status || 'pending') as Rental['status'],
+                        createdAt: '', updatedAt: '',
+                    } as Rental;
+                });
+                setRentals(publicRentals);
             },
-            () => {
-                // If Firestore rules restrict public rentals read, fall back gracefully
-                setRentals([]);
-            }
+            () => setRentals([])
         );
 
         let unsubSales: (() => void) | undefined;
-        let unsubCustomers: (() => void) | undefined;
+        let customerLoadCancelled = false;
         let unsubSO: (() => void) | undefined;
 
         if (isAdminSession) {
+            const salesQuery = adminStoreScope === 'all'
+                ? query(collection(db, 'sales'), orderBy('date', 'desc'))
+                : query(collection(db, 'sales'), where('store', '==', adminStoreScope), orderBy('date', 'desc'));
+            const serviceOrdersQuery = adminStoreScope === 'all'
+                ? query(collection(db, 'serviceOrders'), orderBy('date', 'desc'))
+                : query(collection(db, 'serviceOrders'), where('store', '==', adminStoreScope), orderBy('date', 'desc'));
             unsubSales = onSnapshot(
-                query(collection(db, 'sales'), orderBy('date', 'desc')),
+                salesQuery,
                 (snap) => setSales(snap.docs.map(d => ({ ...d.data() } as Sale))),
                 (err) => console.error('Error fetching sales:', err)
             );
-            unsubCustomers = onSnapshot(
-                query(collection(db, 'customers')),
-                (snap) => setCustomers(snap.docs.map(d => ({ ...d.data() } as Customer))),
-                (err) => console.error('Error fetching customers:', err)
-            );
+            getAdminCustomersBackend()
+                .then((records) => { if (!customerLoadCancelled) setCustomers(records as unknown as Customer[]); })
+                .catch((err) => console.error('Error fetching sanitized customers:', err));
             unsubSO = onSnapshot(
-                query(collection(db, 'serviceOrders'), orderBy('date', 'desc')),
+                serviceOrdersQuery,
                 (snap) => setServiceOrders(snap.docs.map(d => ({ ...d.data() } as ServiceOrder))),
                 (err) => console.error('Error fetching service orders:', err)
             );
@@ -721,10 +787,10 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
         return () => {
             unsubRentals();
             if (unsubSales) unsubSales();
-            if (unsubCustomers) unsubCustomers();
+            customerLoadCancelled = true;
             if (unsubSO) unsubSO();
         };
-    }, [isAdminSession, currentCustomer?.ci, currentCustomer?.phone]);
+    }, [isAdminSession, adminStoreScope, inventory]);
 
     // ---- One-time Migration from LocalStorage ----
     useEffect(() => {
@@ -780,7 +846,7 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
         pickupTime?: string,
         duration?: string | number,
         excludeReservationCode?: string,
-        includePendingReservations: boolean = false
+    includePendingReservations: boolean = true
     ): number => {
         return calcItemStockForInterval({
             inventory,
@@ -803,7 +869,7 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
         pickupTime?: string,
         duration?: string | number,
         excludeReservationCode?: string,
-        includePendingReservations: boolean = false
+        includePendingReservations: boolean = true
     ): number => {
         return calcComboAvailForInterval({
             inventory,
@@ -827,63 +893,26 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
         return calculateProductRentalPrice(pricing, duration, quantity);
     };
 
-    // CUSTOMER AUTH ACTIONS (WITH PASSWORD HASHING & TARGETED FIRESTORE QUERIES)
+    // Customer passwords are handled only by Firebase Authentication.
     const loginCustomer = async (email: string, password: string, remember: boolean): Promise<Customer | null> => {
-        const cleanEmail = email.toLowerCase().trim();
-        let candidateList: Customer[] = customers.filter(c => c.email?.toLowerCase().trim() === cleanEmail);
-
-        if (candidateList.length === 0) {
-            try {
-                const snap = await getDocs(query(collection(db, 'customers')));
-                candidateList = snap.docs
-                    .map(d => ({ ...d.data() } as Customer))
-                    .filter(c => c.email?.toLowerCase().trim() === cleanEmail);
-            } catch (e) {
-                console.error('Error querying customer during login:', e);
-            }
+        await setPersistence(auth, remember ? browserLocalPersistence : browserSessionPersistence);
+        const credential = await signInWithEmailAndPassword(auth, email.trim().toLowerCase(), password);
+        if (!credential.user.emailVerified) {
+            await signOut(auth);
+            throw new Error('Verifica tu correo electrónico con el enlace que te enviamos antes de iniciar sesión.');
         }
-
-        for (const cust of candidateList) {
-            const { valid, needsUpgrade } = await verifyPassword(password, cust.password);
-            if (valid) {
-                if (needsUpgrade) {
-                    const hashedPassword = await hashPassword(password);
-                    await updateDoc(doc(db, 'customers', cust.id), { password: hashedPassword }).catch(() => undefined);
-                }
-                const sanitized = sanitizeCustomerForSession(cust);
-                setCurrentCustomer(sanitized);
-                if (remember) {
-                    localStorage.setItem('briz_logged_customer', JSON.stringify(sanitized));
-                } else {
-                    localStorage.removeItem('briz_logged_customer');
-                }
-                return sanitized;
-            }
-        }
-        return null;
+        const profile = await createCustomerProfileBackend();
+        const customer = customerFromPublicProfile(profile);
+        setCurrentCustomer(customer);
+        return customer;
     };
 
-    const verifyCustomerRecovery = async (email: string, phone: string): Promise<string | null> => {
+    const verifyCustomerRecovery = async (email: string): Promise<boolean> => {
         const cleanEmail = email.toLowerCase().trim();
-        const cleanSearchPhone = phone.replace(/\D/g, '').slice(-8);
-        if (!cleanEmail || !cleanSearchPhone) return null;
-
-        let sourceList = customers;
-        if (sourceList.length === 0) {
-            try {
-                const snap = await getDocs(query(collection(db, 'customers')));
-                sourceList = snap.docs.map(d => ({ ...d.data() } as Customer));
-            } catch (e) {
-                console.error('Error querying customers for recovery:', e);
-            }
-        }
-
-        const match = sourceList.find(
-            c =>
-                c.email?.toLowerCase().trim() === cleanEmail &&
-                c.phone?.replace(/\D/g, '').slice(-8) === cleanSearchPhone
-        );
-        return match ? match.id : null;
+        if (!cleanEmail) return false;
+        // Firebase applies abuse controls and does not reveal whether an address has an account.
+        await sendPasswordResetEmail(auth, cleanEmail).catch(() => undefined);
+        return true;
     };
 
     const registerCustomer = async (
@@ -893,143 +922,69 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
         docFileReverso: File | null,
         remember: boolean
     ): Promise<Customer> => {
-        const cleanEmail = customerData.email?.toLowerCase().trim() || '';
-        let emailExists = customers.some(c => c.email?.toLowerCase().trim() === cleanEmail);
-
-        if (!emailExists && cleanEmail) {
-            try {
-                const snap = await getDocs(query(collection(db, 'customers')));
-                emailExists = snap.docs.some(d => (d.data() as Customer).email?.toLowerCase().trim() === cleanEmail);
-            } catch {
-                // Continue if offline
+        const cleanEmail = customerData.email?.trim().toLowerCase() || '';
+        if (!cleanEmail || !customerData.password) throw new Error('El correo y la contraseña son obligatorios.');
+        if (!selfieBlob || !docFileAnverso || !docFileReverso) throw new Error('Adjunta la foto y ambos lados del documento.');
+        const id = `cust_pending_${Date.now()}`;
+        let authCreated = false;
+        try {
+            await setPersistence(auth, remember ? browserLocalPersistence : browserSessionPersistence);
+            const credential = await createUserWithEmailAndPassword(auth, cleanEmail, customerData.password);
+            authCreated = true;
+            const uid = credential.user.uid;
+            const files = [
+                { name: 'selfie.jpg', blob: selfieBlob, contentType: selfieBlob.type || 'image/jpeg' },
+                { name: `document-front.${fileExtension(docFileAnverso)}`, blob: docFileAnverso, contentType: docFileAnverso.type || 'application/octet-stream' },
+                { name: `document-back.${fileExtension(docFileReverso)}`, blob: docFileReverso, contentType: docFileReverso.type || 'application/octet-stream' },
+            ];
+            const privatePaths: Record<string, string> = {};
+            for (const file of files) {
+                const path = `customerUploads/${uid}/${file.name}`;
+                await uploadBytes(storageRef(storage, path), file.blob, { contentType: file.contentType });
+                if (file.name === 'selfie.jpg') privatePaths.autofotoPath = path;
+                else if (file.name.startsWith('document-front.')) privatePaths.documentoPath = path;
+                else privatePaths.documentoReversoPath = path;
             }
+            await beginCustomerRegistration({
+                name: customerData.name,
+                phone: customerData.phone,
+                ci: customerData.ci,
+                nacionalidad: customerData.nacionalidad || '',
+                departamento: customerData.departamento || '',
+                comoNosConociste: customerData.comoNosConociste || '',
+                ...privatePaths,
+            });
+            await sendEmailVerification(credential.user);
+            await signOut(auth);
+            setCurrentCustomer(null);
+            return {
+                id,
+                name: customerData.name,
+                phone: customerData.phone,
+                ci: customerData.ci,
+                email: cleanEmail,
+                rentalsCount: 0, purchasesCount: 0, firstVisit: '', lastVisit: '', notes: '',
+            };
+        } catch (error) {
+            if (authCreated && auth.currentUser) await signOut(auth).catch(() => undefined);
+            throw error;
         }
-
-        if (emailExists) {
-            throw new Error('El correo electrónico ya está registrado.');
-        }
-
-        const id = generateId('cust');
-        let autofotoUrl = '';
-        let documentoUrl = '';
-        let documentoReversoUrl = '';
-
-        // Helper to prevent Firebase Storage uploads from hanging indefinitely (timeout in 6 seconds)
-        const uploadWithTimeout = async (ref: any, blobOrFile: Blob | File): Promise<any> => {
-            return Promise.race([
-                uploadBytes(ref, blobOrFile),
-                new Promise((_, reject) =>
-                    setTimeout(() => reject(new Error('Firebase Storage upload timeout')), 6000)
-                )
-            ]);
-        };
-
-        if (selfieBlob) {
-            try {
-                const pathRef = storageRef(storage, `customers/selfies/${id}_selfie.jpg`);
-                const result = await uploadWithTimeout(pathRef, selfieBlob);
-                autofotoUrl = await getDownloadURL(result.ref);
-            } catch (err) {
-                console.error('Error uploading selfie, using base64 fallback:', err);
-                try {
-                    const base64 = await new Promise<string>((resolve, reject) => {
-                        const reader = new FileReader();
-                        reader.onloadend = () => resolve(reader.result as string);
-                        reader.onerror = reject;
-                        reader.readAsDataURL(selfieBlob);
-                    });
-                    if (base64.length < 650000) {
-                        autofotoUrl = base64;
-                    }
-                } catch (fallbackErr) {
-                    console.error('Error creating base64 fallback for selfie:', fallbackErr);
-                }
-            }
-        }
-
-        if (docFileAnverso) {
-            try {
-                const fileExt = docFileAnverso.name.split('.').pop() || 'pdf';
-                const pathRef = storageRef(storage, `customers/documents/${id}_anverso.${fileExt}`);
-                const result = await uploadWithTimeout(pathRef, docFileAnverso);
-                documentoUrl = await getDownloadURL(result.ref);
-            } catch (err) {
-                console.error('Error uploading document front, checking for base64 fallback:', err);
-                if (docFileAnverso.size < 500000) {
-                    try {
-                        const base64 = await new Promise<string>((resolve, reject) => {
-                            const reader = new FileReader();
-                            reader.onloadend = () => resolve(reader.result as string);
-                            reader.onerror = reject;
-                            reader.readAsDataURL(docFileAnverso);
-                        });
-                        documentoUrl = base64;
-                    } catch (fallbackErr) {
-                        console.error('Error creating base64 fallback for document front:', fallbackErr);
-                    }
-                }
-            }
-        }
-
-        if (docFileReverso) {
-            try {
-                const fileExt = docFileReverso.name.split('.').pop() || 'pdf';
-                const pathRef = storageRef(storage, `customers/documents/${id}_reverso.${fileExt}`);
-                const result = await uploadWithTimeout(pathRef, docFileReverso);
-                documentoReversoUrl = await getDownloadURL(result.ref);
-            } catch (err) {
-                console.error('Error uploading document back, checking for base64 fallback:', err);
-                if (docFileReverso.size < 500000) {
-                    try {
-                        const base64 = await new Promise<string>((resolve, reject) => {
-                            const reader = new FileReader();
-                            reader.onloadend = () => resolve(reader.result as string);
-                            reader.onerror = reject;
-                            reader.readAsDataURL(docFileReverso);
-                        });
-                        documentoReversoUrl = base64;
-                    } catch (fallbackErr) {
-                        console.error('Error creating base64 fallback for document back:', fallbackErr);
-                    }
-                }
-            }
-        }
-
-        const hashedPassword = customerData.password
-            ? await hashPassword(customerData.password)
-            : undefined;
-
-        const newCustomer: Customer = {
-            id,
-            ...customerData,
-            ...(hashedPassword ? { password: hashedPassword } : {}),
-            rentalsCount: 0,
-            purchasesCount: 0,
-            firstVisit: new Date().toISOString(),
-            lastVisit: new Date().toISOString(),
-            notes: '',
-            autofotoUrl,
-            documentoUrl,
-            documentoReversoUrl
-        };
-
-        await setDoc(doc(db, 'customers', id), newCustomer);
-
-        const sanitized = sanitizeCustomerForSession(newCustomer);
-        setCurrentCustomer(sanitized);
-        if (remember) {
-            localStorage.setItem('briz_logged_customer', JSON.stringify(sanitized));
-        } else {
-            localStorage.removeItem('briz_logged_customer');
-        }
-
-        return sanitized;
     };
 
-    const logoutCustomer = () => {
+    const logoutCustomer = async () => {
+        await signOut(auth);
         setCurrentCustomer(null);
         localStorage.removeItem('briz_logged_customer');
     };
+
+    const customerUid = currentCustomer?.id;
+    const getMyRentalHistory = useCallback(async (): Promise<Rental[]> => {
+        if (!customerUid) return [];
+        const history = await getMyRentalsBackend();
+        return history as unknown as Rental[];
+    }, [customerUid]);
+
+    const createRentalGroup = (input: ReservationGroupInput) => createRentalGroupBackend(input);
 
     // CRUD ACTIONS
     const addInventoryItem = async (item: InventoryItem) => {
@@ -1173,93 +1128,6 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
     };
     const deleteCombo = async (id: string) => {
         await deleteDoc(doc(db, 'combos', id));
-    };
-
-    /**
-     * Transactional reservationCode generator (`BRIZ-YYYY-NNNN`)
-     * Uses Firestore document `settings/rental_counter` to guarantee uniqueness across concurrent users
-     * and even if historical rental documents were deleted.
-     */
-    const generateNextReservationCode = async (): Promise<string> => {
-        const currentYear = getBoliviaYear();
-        const yearPrefix = `BRIZ-${currentYear}-`;
-
-        // Calculate current max sequence in local state as baseline floor
-        let localMaxSeq = 0;
-        rentals.forEach(r => {
-            if (r.reservationCode && r.reservationCode.startsWith(yearPrefix)) {
-                const parts = r.reservationCode.split('-');
-                const num = parseInt(parts[parts.length - 1], 10);
-                if (!isNaN(num) && num > localMaxSeq) {
-                    localMaxSeq = num;
-                }
-            }
-        });
-
-        try {
-            const counterRef = doc(db, 'settings', 'rental_counter');
-            const nextSeq = await runTransaction(db, async (tx) => {
-                const snap = await tx.get(counterRef);
-                const data = snap.exists() ? snap.data() : {};
-                const storedYear = Number(data.year || currentYear);
-                const storedSeq = storedYear === currentYear ? Number(data.seq || 0) : 0;
-                const next = Math.max(storedSeq, localMaxSeq) + 1;
-                tx.set(counterRef, {
-                    year: currentYear,
-                    seq: next,
-                    updatedAt: new Date().toISOString()
-                }, { merge: true });
-                return next;
-            });
-            return `${yearPrefix}${String(nextSeq).padStart(4, '0')}`;
-        } catch (error) {
-            // A reservation code must never be guessed from local state: doing
-            // so can collide with another browser or a concurrent checkout.
-            throw new Error('No se pudo reservar un código único. Intente nuevamente cuando haya conexión.', { cause: error });
-        }
-    };
-
-    const addRental = async (
-        rental: Omit<Rental, 'id' | 'reservationCode' | 'status' | 'createdAt' | 'updatedAt' | 'paymentStatus'> & {
-            reservationCode?: string;
-            status?: Rental['status'];
-            paymentStatus?: Rental['paymentStatus'];
-        }
-    ): Promise<Rental> => {
-        const id = generateId('rental');
-        const reservationCode = rental.reservationCode || await generateNextReservationCode();
-        const method = (rental.paymentMethod || '').toLowerCase();
-        const defaultPaymentStatus: Rental['paymentStatus'] =
-            method === 'qr' || method.includes('transfer') ? 'pending_review' : 'unpaid';
-        const nowStr = new Date().toISOString();
-
-        const newRental: Rental = {
-            ...rental,
-            id,
-            reservationCode,
-            productNameSnapshot: rental.productNameSnapshot || rental.productName,
-            paymentStatus: rental.paymentStatus || defaultPaymentStatus,
-            status: rental.status || 'pending',
-            createdAt: nowStr,
-            updatedAt: nowStr,
-            createdDate: nowStr
-        };
-
-        const cleanData: Record<string, any> = {};
-        for (const [key, value] of Object.entries(newRental)) {
-            if (value !== undefined) {
-                cleanData[key] = value;
-            }
-        }
-
-        try {
-            await setDoc(doc(db, 'rentals', id), cleanData);
-        } catch (err) {
-            console.error('Firestore addRental error:', err);
-            throw err;
-        }
-
-        return newRental;
     };
 
     /**
@@ -1770,63 +1638,57 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
         const cleanPhone = (c.phone || '').trim();
         let existing = customers.find(cust => (cleanCi && cust.ci === cleanCi) || (cleanPhone && cust.phone === cleanPhone));
 
-        if (!existing && (cleanCi || cleanPhone)) {
-            try {
-                if (cleanCi) {
-                    const snapCi = await getDocs(query(collection(db, 'customers'), where('ci', '==', cleanCi)));
-                    if (!snapCi.empty) {
-                        existing = snapCi.docs[0].data() as Customer;
-                    }
-                }
-                if (!existing && cleanPhone) {
-                    const snapPhone = await getDocs(query(collection(db, 'customers'), where('phone', '==', cleanPhone)));
-                    if (!snapPhone.empty) {
-                        existing = snapPhone.docs[0].data() as Customer;
-                    }
-                }
-            } catch {
-                // Ignore query errors on public client
-            }
-        }
-
         if (existing) {
-            await updateDoc(doc(db, 'customers', existing.id), {
+            const updates = {
                 name: c.name || existing.name,
                 phone: c.phone || existing.phone,
                 ci: c.ci || existing.ci,
                 purchasesCount: (existing.purchasesCount || 0) + (isPurchase ? 1 : 0),
                 rentalsCount: (existing.rentalsCount || 0) + (!isPurchase ? 1 : 0),
                 lastVisit: new Date().toISOString()
-            });
+            };
+            await updateDoc(doc(db, 'customers', existing.id), updates);
+            setCustomers((current) => current.map((customer) => customer.id === existing!.id ? { ...customer, ...updates } : customer));
         } else {
             const id = generateId('cust');
-            await setDoc(doc(db, 'customers', id), {
+            const newCustomer: Customer = {
                 id,
                 ...c,
                 rentalsCount: isPurchase ? 0 : 1,
                 purchasesCount: isPurchase ? 1 : 0,
                 firstVisit: new Date().toISOString(),
                 lastVisit: new Date().toISOString(),
-                notes: ''
-            });
+                notes: '',
+                ...(isAdminSession && adminStoreScope !== 'all' ? { store: adminStoreScope } : {}),
+            };
+            await setDoc(doc(db, 'customers', id), newCustomer);
+            setCustomers((current) => [...current, newCustomer]);
         }
     };
 
     const updateCustomer = async (id: string, c: Partial<Customer>) => {
-        const updates = { ...c };
-        if (updates.password && !isPasswordHashed(updates.password)) {
-            updates.password = await hashPassword(updates.password);
-        }
-        await updateDoc(doc(db, 'customers', id), updates);
+        if ('password' in c) throw new Error('Las contraseñas se actualizan desde Firebase Authentication.');
+        await updateDoc(doc(db, 'customers', id), c);
+        setCustomers((current) => current.map((customer) => customer.id === id ? { ...customer, ...c } : customer));
     };
 
     const deleteCustomer = async (id: string) => {
         await deleteDoc(doc(db, 'customers', id));
+        setCustomers((current) => current.filter((customer) => customer.id !== id));
     };
 
     const addServiceOrder = async (so: Omit<ServiceOrder, 'id' | 'date'>) => {
-        const id = generateId('so');
-        await setDoc(doc(db, 'serviceOrders', id), { ...so, id, date: new Date().toISOString() });
+        if (isAdminSession) {
+            const id = generateId('so');
+            await setDoc(doc(db, 'serviceOrders', id), {
+                ...so,
+                ...(adminStoreScope !== 'all' ? { store: adminStoreScope } : {}),
+                id,
+                date: new Date().toISOString(),
+            });
+            return;
+        }
+        await createServiceOrderBackend(so);
     };
     const updateServiceOrder = async (id: string, so: Partial<ServiceOrder>) => {
         await updateDoc(doc(db, 'serviceOrders', id), so);
@@ -1924,8 +1786,7 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
         rentalSettings, updateRentalSettings,
         addInventoryItem, updateInventoryItem, deleteInventoryItem,
         addCombo, updateCombo, deleteCombo,
-        generateNextReservationCode,
-        addRental, confirmRental, confirmRentalGroup, deliverRentalGroup,
+        confirmRental, confirmRentalGroup, deliverRentalGroup,
         cancelRental, cancelRentalGroup, returnRental, returnRentalGroup,
         deleteRental, deleteRentalGroup,
         updateRental, updateRentalPaymentStatus, markRentalExpired,
@@ -1935,7 +1796,7 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
         getItemStock, getComboAvailability,
         getAvailableStockForInterval, getComboAvailabilityForInterval,
         calculatePrice, resetAllData,
-        currentCustomer, loginCustomer, registerCustomer, logoutCustomer,
+        currentCustomer, loginCustomer, registerCustomer, logoutCustomer, getMyRentalHistory, createRentalGroup,
         routes: mergedRoutes, addRoute, updateRoute, deleteRoute,
         events, addEvent, updateEvent, deleteEvent,
         bikeCategories, addBikeCategory, deleteBikeCategory, updateBikeCategory, reorderBikeCategories,

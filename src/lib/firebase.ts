@@ -2,6 +2,10 @@ import { initializeApp } from "firebase/app";
 import { getFirestore } from "firebase/firestore";
 import { getAuth } from "firebase/auth";
 import { getStorage } from "firebase/storage";
+import { connectAuthEmulator } from "firebase/auth";
+import { connectFirestoreEmulator } from "firebase/firestore";
+import { connectStorageEmulator } from "firebase/storage";
+import { connectFunctionsEmulator, getFunctions } from "firebase/functions";
 
 export const firebaseConfig = {
   apiKey: "AIzaSyB7qnGS7dlZzJXJ-15WdxUaZu68pABC8go",
@@ -21,5 +25,13 @@ const app = initializeApp(firebaseConfig);
 export const db = getFirestore(app);
 export const auth = getAuth(app);
 export const storage = getStorage(app);
+export const functions = getFunctions(app);
+
+if (import.meta.env.VITE_USE_FIREBASE_EMULATOR === "true") {
+  connectAuthEmulator(auth, "http://127.0.0.1:9099", { disableWarnings: true });
+  connectFirestoreEmulator(db, "127.0.0.1", 8080);
+  connectStorageEmulator(storage, "127.0.0.1", 9199);
+  connectFunctionsEmulator(functions, "127.0.0.1", 5001);
+}
 
 export default app;

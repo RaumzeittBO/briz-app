@@ -12,13 +12,10 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { useStore, type InventoryItem } from '@/context/StoreContext';
 import { useLanguage } from '@/context/LanguageContext';
 import { t, getLocalizedField } from '@/lib/translations';
-import { db } from '@/lib/firebase';
-import { doc, setDoc } from 'firebase/firestore';
 import DeliveryMapPicker from './DeliveryMapPicker';
-import { sendTelegramNotification } from '@/lib/telegram';
 import { addDaysToDateString, toBoliviaDateString } from '@/lib/dateUtils';
 import { getAccessoryAddonUnitPrice, parseDurationToHours } from '@/lib/rentalPricing';
-import { buildComboComponentSelections, getRentalInventoryDemands } from '@/lib/rentalAvailability';
+import { getRentalInventoryDemands } from '@/lib/rentalAvailability';
 
 // Types for wizard cart
 export interface RentalCartItem {
@@ -101,8 +98,7 @@ export default function RentalCheckoutWizard({
         inventory,
         combos,
         currentCustomer,
-        addRental,
-        addOrUpdateCustomer,
+        createRentalGroup,
         calculatePrice,
         rentalSettings,
         getAvailableStockForInterval,
@@ -654,206 +650,50 @@ export default function RentalCheckoutWizard({
 
         setLoading(true);
         try {
-            const generatedMapsLink = deliveryLatLng
-                ? `https://www.google.com/maps/?q=${deliveryLatLng.lat},${deliveryLatLng.lng}`
-                : '';
-
-            const paymentMethodLabel = paymentMethod === 'qr' ? 'QR' : paymentMethod === 'transfer' ? 'Transferencia' : 'Efectivo';
-            const rentalPayloads: any[] = [];
-
-            // 1. Bikes & Combos in the cart (including componentSelections for combos!)
-            cart.forEach(item => {
-                const productType: 'single' | 'combo' = item.product.type || 'single';
-                const unitPrice = calculatePrice(productType, item.product.id, duration, 1);
-
-                let componentSelections = undefined;
-                if (productType === 'combo') {
-                    const comboObj = combos.find(c => c.id === item.product.id);
-                    if (comboObj) {
-                        componentSelections = buildComboComponentSelections(comboObj, item.selectedWheelSize, inventory);
-                    }
-                }
-
-                rentalPayloads.push({
-                    customerName: currentCustomer.name,
-                    customerPhone: currentCustomer.phone,
-                    customerCI: currentCustomer.ci,
-                    customerEmail: currentCustomer.email,
-                    autofotoUrl: currentCustomer.autofotoUrl,
-                    documentoUrl: currentCustomer.documentoUrl,
-                    documentoReversoUrl: currentCustomer.documentoReversoUrl,
-                    productType,
-                    productId: item.product.id,
-                    productName: item.product.name,
-                    productNameSnapshot: item.product.name,
-                    selectedWheelSize: item.selectedWheelSize || '',
-                    ...(componentSelections ? { componentSelections } : {}),
-                    quantity: item.quantity,
-                    duration,
-                    date,
-                    pickupTime,
-                    endTime: returnTime,
-                    total: unitPrice * item.quantity,
-                    paymentMethod: paymentMethodLabel,
-                    notes: `Bicicleta alquilada.${deliveryChecked ? ' Servicio de entrega.' : ''}${pickupChecked ? ' Servicio de recojo.' : ''}${formattedAddress ? ` Dirección: ${formattedAddress}` : ''}`,
-                    mapsLink: generatedMapsLink,
-                    deliveryService: deliveryChecked,
-                    pickupService: pickupChecked,
-                    source: 'web'
-                });
+            const paymentMethodValue = paymentMethod === 'qr' ? 'QR' : paymentMethod === 'transfer' ? 'Transferencia' : 'Efectivo';
+            const lines = cart.map(item => ({
+                productId: item.product.id,
+                productType: (item.product.type || 'single') as 'single' | 'combo',
+                quantity: item.quantity,
+                ...(item.selectedWheelSize ? { wheelSize: item.selectedWheelSize } : {}),
+            }));
+            const accessories = selectedAccessoryEntries.map(entry => ({ itemId: entry.item.id, quantity: entry.quantity }));
+            const fingerprint = JSON.stringify({ lines, accessories, date, pickupTime, returnTime, duration, paymentMethodValue, discountCode: discountApplied ? discountCode.trim().toUpperCase() : '', deliveryChecked, pickupChecked, formattedAddress, deliveryLatLng });
+            const storageKey = 'briz_checkout_idempotency';
+            const saved = JSON.parse(sessionStorage.getItem(storageKey) || 'null') as { fingerprint?: string; key?: string } | null;
+            const idempotencyKey = saved?.fingerprint === fingerprint && saved.key
+                ? saved.key
+                : `checkout_${crypto.randomUUID()}`;
+            sessionStorage.setItem(storageKey, JSON.stringify({ fingerprint, key: idempotencyKey }));
+            const result = await createRentalGroup({
+                idempotencyKey,
+                lines,
+                accessories,
+                date,
+                pickupTime,
+                endTime: returnTime,
+                duration,
+                paymentMethod: paymentMethodValue,
+                ...(discountApplied ? { discountCode: discountCode.trim().toUpperCase() } : {}),
+                ...(deliveryChecked || pickupChecked ? {
+                    transport: {
+                        delivery: deliveryChecked,
+                        pickup: pickupChecked,
+                        address: formattedAddress,
+                        lat: deliveryLatLng!.lat,
+                        lng: deliveryLatLng!.lng,
+                    },
+                } : {}),
             });
-
-            // 2. Real Inventory Accessories selected in Step 3
-            selectedAccessoryEntries.forEach(accEntry => {
-                rentalPayloads.push({
-                    customerName: currentCustomer.name,
-                    customerPhone: currentCustomer.phone,
-                    customerCI: currentCustomer.ci,
-                    customerEmail: currentCustomer.email,
-                    productType: 'single',
-                    productId: accEntry.item.id,
-                    productName: accEntry.item.name,
-                    productNameSnapshot: accEntry.item.name,
-                    selectedWheelSize: '',
-                    quantity: accEntry.quantity,
-                    duration,
-                    date,
-                    pickupTime,
-                    endTime: returnTime,
-                    total: accEntry.lineTotal,
-                    paymentMethod: paymentMethodLabel,
-                    notes: 'Accesorio adicional de alquiler',
-                    mapsLink: generatedMapsLink,
-                    deliveryService: deliveryChecked,
-                    pickupService: pickupChecked,
-                    source: 'web'
-                });
-            });
-
-            // 3. Transportation as separate service items
-            if (deliveryChecked) {
-                const costPerTrip = isAddressInZone ? calculateShippingFee(totalBikes) : 0;
-                rentalPayloads.push({
-                    customerName: currentCustomer.name,
-                    customerPhone: currentCustomer.phone,
-                    customerCI: currentCustomer.ci,
-                    productType: 'single',
-                    productId: 'srv_delivery',
-                    productName: 'Servicio de entrega',
-                    productNameSnapshot: 'Servicio de entrega',
-                    selectedWheelSize: '',
-                    quantity: 1,
-                    duration,
-                    date,
-                    pickupTime,
-                    endTime: returnTime,
-                    total: costPerTrip,
-                    paymentMethod: paymentMethodLabel,
-                    notes: `Transporte de entrega. Dirección: ${formattedAddress} ${!isAddressInZone ? '[Fuera de Cobertura]' : ''}`,
-                    mapsLink: generatedMapsLink,
-                    deliveryService: true,
-                    pickupService: false,
-                    source: 'web'
-                });
-            }
-
-            if (pickupChecked) {
-                const costPerTrip = isAddressInZone ? calculateShippingFee(totalBikes) : 0;
-                rentalPayloads.push({
-                    customerName: currentCustomer.name,
-                    customerPhone: currentCustomer.phone,
-                    customerCI: currentCustomer.ci,
-                    productType: 'single',
-                    productId: 'srv_pickup',
-                    productName: 'Servicio de recojo',
-                    productNameSnapshot: 'Servicio de recojo',
-                    selectedWheelSize: '',
-                    quantity: 1,
-                    duration,
-                    date,
-                    pickupTime,
-                    endTime: returnTime,
-                    total: costPerTrip,
-                    paymentMethod: paymentMethodLabel,
-                    notes: `Transporte de recojo. Dirección: ${formattedAddress} ${!isAddressInZone ? '[Fuera de Cobertura]' : ''}`,
-                    mapsLink: generatedMapsLink,
-                    deliveryService: false,
-                    pickupService: true,
-                    source: 'web'
-                });
-            }
-
-            // Apply discount proportionally if a valid code was applied
-            if (discountRate > 0) {
-                rentalPayloads.forEach((p, idx) => {
-                    p.total = Number((p.total * (1 - discountRate)).toFixed(2));
-                    if (idx === 0) {
-                        p.notes += ` [Descuento aplicado: ${discountRate * 100}%]`;
-                    }
-                });
-            }
-
-            setConfirmedTotal(finalTotal);
-
-            // Write first item via addRental (which generates the transactional BRIZ-YYYY-NNNN code)
-            const firstRental = rentalPayloads[0];
-            const createdFirst = await addRental(firstRental);
-            const sharedCode = createdFirst.reservationCode;
-
-            // Write remaining items sharing the exact same reservationCode
-            const nowIso = new Date().toISOString();
-            for (let i = 1; i < rentalPayloads.length; i++) {
-                const item = rentalPayloads[i];
-                const newId = `rental_${Date.now()}_${i}_${Math.random().toString(36).substring(2, 7)}`;
-                const fullItem: Record<string, any> = {
-                    ...item,
-                    id: newId,
-                    reservationCode: sharedCode,
-                    paymentStatus: paymentMethod === 'qr' || paymentMethod === 'transfer' ? 'pending_review' : 'unpaid',
-                    status: 'pending',
-                    createdAt: nowIso,
-                    updatedAt: nowIso,
-                    createdDate: nowIso
-                };
-                Object.keys(fullItem).forEach(k => {
-                    if (fullItem[k] === undefined) delete fullItem[k];
-                });
-                await setDoc(doc(db, 'rentals', newId), fullItem);
-            }
-
-            // Update customer rental counter
-            await addOrUpdateCustomer(
-                { name: currentCustomer.name, phone: currentCustomer.phone, ci: currentCustomer.ci },
-                false
-            ).catch(() => undefined);
-
-            // Send Telegram Notification
-            try {
-                const firstItem = rentalPayloads[0];
-                const mapsLinkValue = firstItem?.mapsLink || rentalPayloads.find(p => p.mapsLink)?.mapsLink;
-                await sendTelegramNotification(
-                    sharedCode,
-                    rentalPayloads,
-                    finalTotal,
-                    currentCustomer,
-                    paymentMethodLabel,
-                    date,
-                    pickupTime,
-                    duration,
-                    mapsLinkValue
-                );
-            } catch (telegramErr) {
-                console.error('Failed to send Telegram notification:', telegramErr);
-            }
-
-            // Transition to confirmation screen & clear cart/accessories
-            setReservationCode(sharedCode);
+            sessionStorage.removeItem(storageKey);
+            setConfirmedTotal(result.total);
+            setReservationCode(result.reservationCode);
             setStep(5);
             setCart([]);
             setSelectedAccessories({});
         } catch (err) {
             console.error(err);
-            alert('No se pudo completar el pedido de reserva. Intente de nuevo.');
+            alert(err instanceof Error ? err.message : 'No se pudo completar el pedido de reserva. Intente de nuevo.');
         } finally {
             setLoading(false);
         }

@@ -2,34 +2,58 @@ rules_version = '2';
 
 service firebase.storage {
   match /b/{bucket}/o {
-    function isAdmin() {
-      return request.auth != null
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function hasRole(roles) {
+      return signedIn()
         && firestore.exists(/databases/(default)/documents/adminUsers/$(request.auth.uid))
-        && firestore.get(/databases/(default)/documents/adminUsers/$(request.auth.uid)).data.active != false
-        && firestore.get(/databases/(default)/documents/adminUsers/$(request.auth.uid)).data.role in ['admin', 'manager', 'mechanic', 'viewer'];
+        && firestore.get(/databases/(default)/documents/adminUsers/$(request.auth.uid)).data.active == true
+        && firestore.get(/databases/(default)/documents/adminUsers/$(request.auth.uid)).data.role in roles;
     }
 
     function isValidUpload() {
       return request.resource != null
         && request.resource.size < 10 * 1024 * 1024
-        && (
-          request.resource.contentType.matches('image/.*') ||
-          request.resource.contentType == 'application/pdf'
-        );
+        && (request.resource.contentType.matches('image/.*') || request.resource.contentType == 'application/pdf');
     }
 
+    match /customerUploads/{uid}/{allPaths=**} {
+      allow read: if (signedIn() && request.auth.uid == uid) || hasRole(['admin']);
+      allow write: if signedIn() && request.auth.uid == uid && isValidUpload();
+    }
+
+    // Legacy paths remain available only to the principal administrator.
     match /customers/{allPaths=**} {
-      allow read, write: if isAdmin();
+      allow read, write: if hasRole(['admin']);
     }
 
     match /rentals/{allPaths=**} {
-      allow read: if isAdmin();
-      allow write: if isAdmin() && isValidUpload();
+      allow read: if hasRole(['admin', 'manager', 'viewer']);
+      allow write: if hasRole(['admin', 'manager']) && isValidUpload();
+    }
+
+    match /serviceOrders/{store}/{allPaths=**} {
+      allow read, write: if hasRole(['admin', 'manager', 'mechanic'])
+        && (hasRole(['admin'])
+          || firestore.get(/databases/(default)/documents/adminUsers/$(request.auth.uid)).data.store == 'all'
+          || store == firestore.get(/databases/(default)/documents/adminUsers/$(request.auth.uid)).data.store);
+    }
+
+    // Payment QR uploads are intentionally public because renters need them at checkout.
+    match /settings/{fileName} {
+      allow read: if true;
+      allow write: if hasRole(['admin']) && isValidUpload();
+    }
+
+    match /public-assets/{allPaths=**} {
+      allow read: if true;
+      allow write: if hasRole(['admin']) && isValidUpload();
     }
 
     match /{allPaths=**} {
-      allow read: if !allPaths.matches('customers/.*') && !allPaths.matches('rentals/.*');
-      allow write: if isAdmin() && isValidUpload();
+      allow read, write: if false;
     }
   }
 }
