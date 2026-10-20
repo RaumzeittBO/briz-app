@@ -71,6 +71,15 @@ function exactObject(value: unknown): value is Record<string, unknown> {
     return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
+function coordinatesFromMapUrl(value: unknown): { lat: number; lng: number } | null {
+    const url = cleanString(value, 500);
+    const match = url.match(/[?&]q=(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)/i)
+        || url.match(/@(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)/);
+    if (!match) return null;
+    const lat = Number(match[1]); const lng = Number(match[2]);
+    return Number.isFinite(lat) && Number.isFinite(lng) ? { lat, lng } : null;
+}
+
 function validateBooking(data: unknown): BookingRequest {
     if (!exactObject(data) || Buffer.byteLength(JSON.stringify(data), 'utf8') > MAX_REQUEST_BYTES) {
         throw new HttpsError('invalid-argument', 'La solicitud de reserva no es válida.');
@@ -642,7 +651,7 @@ export const createRentalGroup = onCall(callable(), async (request) => {
                 ...line,
                 productName: String(line.productName || ''),
                 productNameSnapshot: String(line.productNameSnapshot || ''),
-                ...(product?.store ? { store: product.store } : {}),
+                ...(product?.store ? { store: product.store } : transactionRole?.role === 'manager' && transactionRole.store !== 'all' ? { store: transactionRole.store } : {}),
                 duration: input.duration,
                 date: input.date,
                 pickupTime: input.pickupTime,
@@ -771,6 +780,392 @@ export const syncRentalAvailabilityProjection = onDocumentWritten('rentals/{rent
         });
         tx.set(lockRef, { revision: (Number(lockSnap.data()?.revision) || 0) + 1, updatedAt: now });
     });
+});
+
+// Administrative rental mutations are deliberately server-only: the browser
+// submits intent, while role, store scope, current state and stock are checked
+// again inside the Firestore transaction.
+type AdminRentalAction = 'confirm' | 'deliver' | 'return' | 'cancel' | 'expire' | 'payment';
+const LEGACY_PENDING = ['pending', 'Pendiente'];
+const LEGACY_CONFIRMED = ['confirmed', 'Confirmado'];
+const LEGACY_DELIVERED = ['delivered', 'Entregado'];
+
+function requireRentalAdmin(role: DocumentData | undefined): void {
+    if (!role || role.active !== true || !['admin', 'manager'].includes(String(role.role))) {
+        throw new HttpsError('permission-denied', 'Se requiere el rol de administrador o manager.');
+    }
+}
+
+function rentalLinesDemands(rows: DocumentData[], inventory: CatalogItem[], combos: Combo[]): Demand[] {
+    return aggregateDemands(rows.flatMap((row) => rentalDemands({
+        productType: row.productType === 'combo' ? 'combo' : 'single', productId: String(row.productId || ''),
+        quantity: Number(row.quantity) || 0, selectedWheelSize: row.selectedWheelSize,
+        componentSelections: Array.isArray(row.componentSelections) ? row.componentSelections : undefined,
+        selectedAccessories: Array.isArray(row.selectedAccessories) ? row.selectedAccessories : undefined,
+    }, inventory, combos)));
+}
+
+function assertComboSelections(rows: DocumentData[], inventory: CatalogItem[], combos: Combo[]): void {
+    const inventoryById = new Map(inventory.map((item) => [item.id, item]));
+    const combosById = new Map(combos.map((combo) => [combo.id, combo]));
+    for (const row of rows) {
+        if (row.productType !== 'combo') continue;
+        const combo = combosById.get(String(row.productId));
+        if (!combo) throw new HttpsError('failed-precondition', `No se puede validar el combo histórico ${String(row.productName || row.productId)}.`);
+        for (const component of combo.components) {
+            const item = inventoryById.get(component.inventoryItemId);
+            if (!item?.hasWheelSizes || (item.wheelSizes || []).length < 2) continue;
+            const selection = Array.isArray(row.componentSelections) ? row.componentSelections.find((entry: { inventoryItemId?: string }) => entry.inventoryItemId === component.inventoryItemId) : undefined;
+            const wheelSize = selection?.wheelSize || (combo.components.length === 1 ? row.selectedWheelSize : undefined);
+            if (!wheelSize || !item.wheelSizes?.some((wheel) => wheel.size === wheelSize)) {
+                throw new HttpsError('failed-precondition', `El alquiler histórico no identifica el aro del componente ${item.name}; requiere revisión antes de cambiar stock.`);
+            }
+        }
+    }
+}
+
+function alterStock(item: CatalogItem, wheelSize: string | undefined, delta: number): CatalogItem {
+    const next = structuredClone(item);
+    if (next.hasWheelSizes && next.wheelSizes?.length) {
+        const idx = next.wheelSizes.findIndex((wheel) => wheel.size === (wheelSize || (next.wheelSizes?.length === 1 ? next.wheelSizes[0].size : '')));
+        if (idx < 0) throw new HttpsError('failed-precondition', `Selecciona un aro válido para ${next.name}.`);
+        const stock = Number(next.wheelSizes[idx].stock) || 0;
+        if (stock + delta < 0) throw new HttpsError('failed-precondition', `Stock insuficiente para ${next.name} aro ${next.wheelSizes[idx].size}.`);
+        next.wheelSizes[idx].stock = stock + delta;
+    } else {
+        const stock = Number(next.stock) || 0;
+        if (stock + delta < 0) throw new HttpsError('failed-precondition', `Stock insuficiente para ${next.name}.`);
+        next.stock = stock + delta;
+    }
+    return next;
+}
+
+function appendRentalAudit(row: DocumentData, uid: string, action: string, before: unknown, after: unknown, now: string): Record<string, unknown> {
+    const history = Array.isArray(row.auditLog) ? row.auditLog.slice(-49) : [];
+    return { auditLog: [...history, { action, actorUid: uid, at: now, before, after }] };
+}
+
+export const adminRentalAction = onCall(callable(), async (request) => {
+    const { uid } = requireAuth(request);
+    if (!exactObject(request.data)) throw new HttpsError('invalid-argument', 'Solicitud inválida.');
+    const action = String(request.data.action) as AdminRentalAction;
+    if (!['confirm', 'deliver', 'return', 'cancel', 'expire', 'payment'].includes(action)) throw new HttpsError('invalid-argument', 'Acción inválida.');
+    const ids = Array.isArray(request.data.rentalIds) ? [...new Set(request.data.rentalIds.map((id) => cleanString(id, 150)).filter(Boolean))] : [];
+    if (!ids.length || ids.length > 100) throw new HttpsError('invalid-argument', 'El grupo de alquiler no es válido.');
+    const roleRef = db.doc(`adminUsers/${uid}`);
+    await db.runTransaction(async (tx) => {
+        const roleSnap = await tx.get(roleRef);
+        const rentalSnaps = await Promise.all(ids.map((id) => tx.get(db.doc(`rentals/${id}`))));
+        const role = roleSnap.data();
+        requireRentalAdmin(role);
+        const refs = rentalSnaps.filter((snap) => snap.exists).map((snap) => snap.ref);
+        const rows: DocumentData[] = rentalSnaps.filter((snap) => snap.exists).map((snap) => ({ ...snap.data()!, id: snap.id } as DocumentData));
+        if (!rows.length || rows.length !== ids.length) throw new HttpsError('not-found', 'No se encontró el grupo completo.');
+        if (new Set(rows.map((row) => String(row.reservationCode || row.id))).size !== 1) throw new HttpsError('failed-precondition', 'La operación debe incluir líneas de un solo pedido.');
+        if (role?.role === 'manager' && role.store !== 'all' && rows.some((row) => !row.store || row.store !== role.store)) {
+            throw new HttpsError('permission-denied', 'El alquiler pertenece a otra tienda.');
+        }
+        const now = new Date().toISOString();
+        const target = action === 'confirm' ? 'confirmed' : action === 'deliver' ? 'delivered' : action === 'return' ? 'returned'
+            : action === 'cancel' ? 'cancelled' : action === 'expire' ? 'expired' : '';
+        if (action === 'payment') {
+            const paymentStatus = String(request.data.paymentStatus);
+            if (!['paid', 'unpaid', 'pending_review'].includes(paymentStatus)) throw new HttpsError('invalid-argument', 'Estado de pago inválido.');
+            rows.forEach((row, index) => tx.update(refs[index], {
+                paymentStatus, updatedAt: now, lastUpdatedBy: uid,
+                ...appendRentalAudit(row, uid, 'payment', row.paymentStatus || 'unpaid', paymentStatus, now),
+            } as DocumentData));
+            return;
+        }
+        const allowed = action === 'confirm' ? rows.every((row) => LEGACY_PENDING.includes(String(row.status)))
+            : action === 'deliver' ? rows.every((row) => LEGACY_CONFIRMED.includes(String(row.status)))
+            : action === 'return' ? rows.every((row) => LEGACY_DELIVERED.includes(String(row.status)))
+            : action === 'expire' ? rows.every((row) => LEGACY_PENDING.includes(String(row.status)))
+            : rows.every((row) => LEGACY_PENDING.includes(String(row.status)) || LEGACY_CONFIRMED.includes(String(row.status)));
+        if (!allowed) throw new HttpsError('failed-precondition', 'La acción no es válida para el estado actual del grupo.');
+        const inventorySnap = await tx.get(db.collection('inventory'));
+        const comboSnap = await tx.get(db.collection('combos'));
+        const activeRentalsSnap = action === 'confirm' ? await tx.get(db.collection('rentals').where('status', 'in', ACTIVE_STATUSES)) : null;
+        const inventory = inventorySnap.docs.map((snap) => ({ id: snap.id, ...snap.data() } as CatalogItem));
+        const combos = comboSnap.docs.map((snap) => ({ id: snap.id, ...snap.data() } as Combo));
+        assertComboSelections(rows, inventory, combos);
+        const invMap = new Map(inventory.map((item) => [item.id, item]));
+        const demands = rentalLinesDemands(rows, inventory, combos);
+        const maintenanceTouched = new Set<string>();
+        if (action === 'confirm' && activeRentalsSnap) {
+            const currentIds = new Set(rows.map((row) => String(row.id)));
+            const otherRows = activeRentalsSnap.docs.filter((snap) => !currentIds.has(snap.id)).map((snap) => snap.data()).filter((row) => isBlocking(String(row.status || '')));
+            for (const requested of demands) {
+                const item = invMap.get(requested.itemId);
+                if (!item) throw new HttpsError('failed-precondition', `No existe el inventario ${requested.itemId}.`);
+                const relevant = otherRows.flatMap((row) => rentalDemands(row as unknown as RentalLike, inventory, combos)
+                    .filter((demand) => demand.itemId === requested.itemId && (demand.wheelSize || '') === (requested.wheelSize || ''))
+                    .map((demand) => ({ row, demand })));
+                const held = relevant.filter(({ row }) => isHolding(String(row.status))).reduce((sum, entry) => sum + entry.demand.quantity, 0);
+                let interval: { startMs: number; endMs: number };
+                try { interval = getRentalWindow(rows[0] as unknown as RentalLike); }
+                catch { throw new HttpsError('failed-precondition', 'La fecha u horario del grupo no se pueden validar.'); }
+                if (interval.startMs < Date.now()) throw new HttpsError('failed-precondition', 'No se puede confirmar un alquiler con fecha u hora ya vencida.');
+                const todayStart = new Date(new Intl.DateTimeFormat('en-CA', { timeZone: 'America/La_Paz' }).format(new Date()) + 'T00:00:00-04:00').getTime();
+                const overlap = relevant.filter(({ row }) => {
+                    try {
+                        const window = getRentalWindow(row as unknown as RentalLike);
+                        return window.startMs < interval.endMs && interval.startMs < window.endMs
+                            || isHolding(String(row.status)) && interval.startMs < todayStart + 86_400_000 && window.endMs <= interval.startMs;
+                    } catch { return true; }
+                }).reduce((sum, entry) => sum + entry.demand.quantity, 0);
+                const available = Math.max(0, stockFor(item, requested.wheelSize) + held - overlap);
+                if (requested.quantity > available) throw new HttpsError('failed-precondition', `${item.name}: disponibilidad insuficiente para confirmar este horario; quedan ${available}.`);
+            }
+        }
+        const stockDelta = new Map<string, Demand>();
+        const addDelta = (demand: Demand, delta: number) => {
+            const key = `${demand.itemId}\0${demand.wheelSize || ''}`;
+            const old = stockDelta.get(key);
+            stockDelta.set(key, { ...demand, quantity: (old?.quantity || 0) + delta });
+        };
+        if (action === 'confirm') {
+            const docsToDeduct = rows.filter((row) => row.stockDeducted !== true);
+            if (docsToDeduct.length) {
+                const delta = rentalLinesDemands(docsToDeduct, inventory, combos);
+                delta.forEach((demand) => addDelta(demand, -demand.quantity));
+            }
+        } else if (action === 'cancel' || action === 'return') {
+            const restoreRows = rows.filter((row) => row.stockDeducted === true || (row.stockDeducted === undefined && [...LEGACY_CONFIRMED, ...LEGACY_DELIVERED].includes(String(row.status))));
+            rentalLinesDemands(restoreRows, inventory, combos).forEach((demand) => addDelta(demand, demand.quantity));
+            if (action === 'return') {
+                const damaged = Number(request.data.damagedUnits) || 0;
+                const restoredDemands = rentalLinesDemands(restoreRows, inventory, combos);
+                const bikeUnits = restoredDemands.filter((demand) => {
+                    const item = invMap.get(demand.itemId);
+                    return Boolean(item) && item?.itemType !== 'accessory';
+                }).reduce((sum, demand) => sum + demand.quantity, 0);
+                if (!Number.isInteger(damaged) || damaged < 0 || damaged > bikeUnits) throw new HttpsError('invalid-argument', 'La cantidad dañada supera las bicicletas entregadas.');
+                // Damaged bikes move to maintenance; accessories and healthy units return to shelf stock.
+                let remaining = damaged;
+                for (const demand of restoredDemands) {
+                    if (remaining <= 0) break;
+                    const item = invMap.get(demand.itemId);
+                    if (item?.itemType !== 'bike') continue;
+                    const qty = Math.min(remaining, demand.quantity);
+                    remaining -= qty;
+                    const key = `${item.id}\0${String(demand.wheelSize || '')}`;
+                    const prior = stockDelta.get(key);
+                    if (prior) prior.quantity -= qty;
+                    const updated = invMap.get(item.id)!;
+                    maintenanceTouched.add(item.id);
+                    if (updated.hasWheelSizes && updated.wheelSizes) {
+                        const idx = updated.wheelSizes.findIndex((wheel) => wheel.size === (demand.wheelSize || updated.wheelSizes?.[0]?.size));
+                        if (idx >= 0) updated.wheelSizes[idx].maintenanceStock = (updated.wheelSizes[idx].maintenanceStock || 0) + qty;
+                    }
+                    updated.maintenanceStock = (updated.maintenanceStock || 0) + qty;
+                }
+            }
+        }
+        for (const demand of stockDelta.values()) {
+            if (!demand.quantity) continue;
+            const item = invMap.get(demand.itemId);
+            if (!item) throw new HttpsError('failed-precondition', `No existe el inventario ${demand.itemId}.`);
+            invMap.set(item.id, alterStock(item, demand.wheelSize, demand.quantity));
+        }
+        for (const [itemId, item] of invMap) {
+            if (maintenanceTouched.has(itemId) || [...stockDelta.values()].some((demand) => demand.itemId === itemId && demand.quantity !== 0)) {
+                tx.update(db.doc(`inventory/${itemId}`), { ...(item.hasWheelSizes ? { wheelSizes: item.wheelSizes } : { stock: item.stock }), ...(typeof item.maintenanceStock === 'number' ? { maintenanceStock: item.maintenanceStock } : {}) });
+            }
+        }
+        rows.forEach((row, index) => {
+            const status = target || row.status;
+            const patch: Record<string, unknown> = { status, updatedAt: now, lastUpdatedBy: uid,
+                ...appendRentalAudit(row, uid, action, row.status, status, now) };
+            if (action === 'confirm') patch.stockDeducted = true;
+            if (action === 'cancel' || action === 'return') patch.stockDeducted = false;
+            if (action === 'deliver') patch.deliveredAt = now;
+            if (action === 'return') {
+                patch.returnedAt = now;
+                patch.returnCondition = Number(request.data.damagedUnits) > 0 ? 'damaged' : 'ok';
+                patch.damagedOnReturn = Number(request.data.damagedUnits) > 0;
+                patch.damagedUnits = Number(request.data.damagedUnits) || 0;
+                if (request.data.conditionNotes) patch.returnConditionNotes = cleanString(request.data.conditionNotes, 500);
+            }
+            tx.update(refs[index], patch as DocumentData);
+        });
+    });
+    return { ok: true };
+});
+
+export const updateRentalGroup = onCall(callable(), async (request) => {
+    const { uid } = requireAuth(request);
+    if (!exactObject(request.data) || !Array.isArray(request.data.items) || request.data.items.length < 1 || request.data.items.length > 30) {
+        throw new HttpsError('invalid-argument', 'El pedido debe tener entre 1 y 30 líneas.');
+    }
+    const code = cleanString(request.data.reservationCode, 120);
+    const requestedIds = Array.isArray(request.data.rentalIds) ? [...new Set(request.data.rentalIds.map((id) => cleanString(id, 150)).filter(Boolean))] : [];
+    if (!code && !requestedIds.length) throw new HttpsError('invalid-argument', 'El pedido no tiene identificadores válidos.');
+    const date = cleanString(request.data.date, 10);
+    const pickupTime = cleanString(request.data.pickupTime, 5);
+    const duration = cleanString(request.data.duration, 60);
+    const interval = getRentalWindow({ productType: 'single', productId: 'srv_edit', quantity: 1, status: 'pending', date, pickupTime, duration });
+    const desired = request.data.items.map((raw) => {
+        if (!exactObject(raw) || !['single', 'combo'].includes(String(raw.productType)) || !Number.isInteger(raw.quantity) || Number(raw.quantity) < 1 || Number(raw.quantity) > 20) {
+            throw new HttpsError('invalid-argument', 'Una línea del pedido no es válida.');
+        }
+        return { id: cleanString(raw.id, 150), productId: cleanString(raw.productId, 100), productType: raw.productType as 'single' | 'combo', quantity: Number(raw.quantity), selectedWheelSize: cleanString(raw.selectedWheelSize, 20) };
+    });
+    const roleRef = db.doc(`adminUsers/${uid}`);
+    await db.runTransaction(async (tx) => {
+        const roleSnap = await tx.get(roleRef);
+        requireRentalAdmin(roleSnap.data());
+        const role = roleSnap.data()!;
+        const groupSnap = code ? await tx.get(db.collection('rentals').where('reservationCode', '==', code)) : null;
+        let groupDocs: DocumentSnapshot<DocumentData>[] = groupSnap?.docs || [];
+        if (!groupDocs.length && requestedIds.length) groupDocs = await Promise.all(requestedIds.map((id) => tx.get(db.doc(`rentals/${id}`)))).then((snaps) => snaps.filter((snap) => snap.exists));
+        const oldRows: DocumentData[] = groupDocs.map((snap) => ({ ...snap.data(), id: snap.id } as DocumentData));
+        if (!oldRows.length) throw new HttpsError('not-found', 'No se encontró el grupo que deseas editar.');
+        const groupCode = String(oldRows[0].reservationCode || oldRows[0].id);
+        if (oldRows.some((row) => String(row.reservationCode || row.id) !== groupCode)) throw new HttpsError('failed-precondition', 'Las líneas no pertenecen al mismo pedido.');
+        if (role.role === 'manager' && role.store !== 'all' && oldRows.some((row) => !row.store || row.store !== role.store)) throw new HttpsError('permission-denied', 'No se puede validar la tienda de una línea histórica de este grupo.');
+        const statuses = new Set(oldRows.map((row) => String(row.status)));
+        if (statuses.size !== 1 || ![...LEGACY_PENDING, ...LEGACY_CONFIRMED, ...LEGACY_DELIVERED].includes([...statuses][0])) throw new HttpsError('failed-precondition', 'Solo se pueden editar pedidos pendientes, confirmados o entregados de forma coherente.');
+        const delivered = LEGACY_DELIVERED.includes([...statuses][0]);
+        if (!delivered && interval.startMs < Date.now()) throw new HttpsError('failed-precondition', 'La nueva fecha u hora del pedido debe estar en el futuro.');
+        const hasPaid = oldRows.some((row) => row.paymentStatus === 'paid');
+        const previousDelivery = oldRows.some((row) => row.deliveryService === true || row.productId === 'srv_delivery');
+        const previousPickup = oldRows.some((row) => row.pickupService === true || row.productId === 'srv_pickup');
+        if (hasPaid && (previousDelivery !== (request.data.deliveryService === true) || previousPickup !== (request.data.pickupService === true))) throw new HttpsError('failed-precondition', 'El pedido ya tiene un pago registrado. Ajusta el importe del servicio por separado.');
+        if (delivered && (previousDelivery !== (request.data.deliveryService === true) || previousPickup !== (request.data.pickupService === true))) throw new HttpsError('failed-precondition', 'No se pueden cambiar entrega o recojo después de entregar el alquiler.');
+        if (hasPaid && oldRows.some((row) => !desired.some((line) => line.id === String(row.id)))) throw new HttpsError('failed-precondition', 'No se pueden eliminar líneas de un pedido pagado; registra el ajuste del importe por separado.');
+        if (delivered && (date !== oldRows[0].date || pickupTime !== oldRows[0].pickupTime || duration !== oldRows[0].duration)) throw new HttpsError('failed-precondition', 'No se puede cambiar fecha, hora o duración después de entregar el alquiler.');
+        const [inventorySnap, comboSnap, allRentalsSnap] = await Promise.all([
+            tx.get(db.collection('inventory')), tx.get(db.collection('combos')),
+            tx.get(db.collection('rentals').where('status', 'in', ACTIVE_STATUSES)),
+        ]);
+        const inventory = inventorySnap.docs.map((snap) => ({ id: snap.id, ...snap.data() } as CatalogItem));
+        const combos = comboSnap.docs.map((snap) => ({ id: snap.id, ...snap.data() } as Combo));
+        assertComboSelections(oldRows, inventory, combos);
+        const inventoryById = new Map(inventory.map((item) => [item.id, item]));
+        const combosById = new Map(combos.map((item) => [item.id, item]));
+        const existingById = new Map(oldRows.map((row) => [String(row.id), row]));
+        const nextRows: Array<{ ref: FirebaseFirestore.DocumentReference; data: DocumentData }> = [];
+        for (const line of desired) {
+            const existing = line.id ? existingById.get(line.id) : undefined;
+            const product = line.productType === 'combo' ? combosById.get(line.productId) : inventoryById.get(line.productId);
+            if (line.productId.startsWith('srv_')) {
+                if (!existing || !line.id) throw new HttpsError('invalid-argument', 'No se pueden agregar servicios manuales desde la edición.');
+                if (line.productId === 'srv_delivery' && request.data.deliveryService !== true) continue;
+                if (line.productId === 'srv_pickup' && request.data.pickupService !== true) continue;
+                nextRows.push({ ref: db.doc(`rentals/${line.id}`), data: { ...existing, date, pickupTime, duration } });
+                continue;
+            }
+            if (!product || product.active !== true || product.availableForRental !== true) throw new HttpsError('failed-precondition', 'Uno de los productos ya no está disponible.');
+            if (role.role === 'manager' && role.store !== 'all' && product.store && product.store !== role.store) throw new HttpsError('permission-denied', 'El producto pertenece a otra tienda.');
+            const item = line.productType === 'single' ? inventoryById.get(line.productId) : undefined;
+            if (item?.hasWheelSizes && !line.selectedWheelSize) throw new HttpsError('invalid-argument', `Selecciona el aro para ${item.name}.`);
+            const combo = line.productType === 'combo' ? combosById.get(line.productId) : undefined;
+            const componentSelections = combo?.components.map((component) => {
+                const componentItem = inventoryById.get(component.inventoryItemId);
+                if ((component.requiresWheelSize || componentItem?.hasWheelSizes) && componentItem?.hasWheelSizes && componentItem.wheelSizes && componentItem.wheelSizes.length > 1 && !line.selectedWheelSize) throw new HttpsError('invalid-argument', 'Selecciona el aro del combo.');
+                return { inventoryItemId: component.inventoryItemId, ...(componentItem?.hasWheelSizes && line.selectedWheelSize ? { wheelSize: line.selectedWheelSize } : {}) };
+            });
+            const computed = item?.itemType === 'accessory' ? accessoryUnitPrice(item, duration) * line.quantity : sumLinePrice(product, duration, line.quantity);
+            if (hasPaid && (!existing || existing.productId !== line.productId || existing.productType !== line.productType || Number(existing.quantity) !== line.quantity)) throw new HttpsError('failed-precondition', 'El pedido ya tiene un pago registrado. Cambiar productos o cantidades requiere registrar el ajuste de pago por separado.');
+            const data: DocumentData = {
+                ...oldRows[0], ...(existing || {}), id: line.id || db.collection('rentals').doc().id,
+                reservationCode: groupCode, availabilityGroupId: oldRows[0].availabilityGroupId || digest(`legacy:${groupCode}`),
+                productId: line.productId, productType: line.productType, productName: product.name, productNameSnapshot: product.name,
+                quantity: line.quantity, selectedWheelSize: line.selectedWheelSize || '', ...(componentSelections ? { componentSelections } : {}),
+                total: existing && hasPaid ? existing.total : computed, date, pickupTime, duration,
+                startTimestamp: interval.startMs, endTimestamp: interval.endMs,
+                deliveryService: request.data.deliveryService === true, pickupService: request.data.pickupService === true,
+                mapsLink: cleanString(request.data.mapsLink, 500), notes: cleanString(request.data.notes, 1000),
+                updatedAt: new Date().toISOString(), lastUpdatedBy: uid,
+            };
+            nextRows.push({ ref: db.doc(`rentals/${data.id}`), data });
+        }
+        const bikeCount = nextRows.reduce((sum, { data }) => {
+            if (String(data.productId || '').startsWith('srv_')) return sum;
+            if (data.productType === 'combo') return sum + (Number(data.quantity) || 0);
+            const item = inventoryById.get(String(data.productId));
+            return item?.itemType === 'accessory' ? sum : sum + (Number(data.quantity) || 0);
+        }, 0);
+        const mapCoordinates = coordinatesFromMapUrl(request.data.mapsLink);
+        const deliveryFee = mapCoordinates && isInsideDeliveryZone(mapCoordinates.lat, mapCoordinates.lng) ? shippingFee(bikeCount) : 0;
+        if (mapCoordinates && !hasPaid) nextRows.forEach(({ data }) => {
+            if (data.productId === 'srv_delivery' || data.productId === 'srv_pickup') data.total = deliveryFee;
+        });
+        for (const service of [
+            { enabled: request.data.deliveryService === true, productId: 'srv_delivery', name: 'Servicio de entrega', fee: deliveryFee },
+            { enabled: request.data.pickupService === true, productId: 'srv_pickup', name: 'Servicio de recojo', fee: deliveryFee },
+        ]) {
+            if (!service.enabled || nextRows.some(({ data }) => data.productId === service.productId)) continue;
+            const oldService = oldRows.find((row) => row.productId === service.productId);
+            if (oldService) {
+                nextRows.push({ ref: db.doc(`rentals/${String(oldService.id)}`), data: { ...oldService, date, pickupTime, duration } });
+                continue;
+            }
+            if (!mapCoordinates) throw new HttpsError('failed-precondition', 'Para agregar entrega o recojo, registra un enlace de Maps que incluya las coordenadas; no se estimará una tarifa sin ubicación.');
+            if (hasPaid) throw new HttpsError('failed-precondition', 'El pedido ya tiene un pago registrado. Ajusta el importe por separado antes de agregar un servicio.');
+            const id = db.collection('rentals').doc().id;
+            nextRows.push({ ref: db.doc(`rentals/${id}`), data: {
+                ...oldRows[0], id, reservationCode: groupCode,
+                availabilityGroupId: oldRows[0].availabilityGroupId || digest(`legacy:${groupCode}`),
+                productType: 'single', productId: service.productId, productName: service.name,
+                productNameSnapshot: service.name, quantity: 1, selectedWheelSize: '', total: service.fee,
+                date, pickupTime, duration, startTimestamp: interval.startMs, endTimestamp: interval.endMs,
+                deliveryService: service.productId === 'srv_delivery', pickupService: service.productId === 'srv_pickup',
+                mapsLink: cleanString(request.data.mapsLink, 500), notes: cleanString(request.data.notes, 1000),
+                updatedAt: new Date().toISOString(), lastUpdatedBy: uid,
+            } });
+        }
+        if (!nextRows.some(({ data }) => !String(data.productId || '').startsWith('srv_'))) throw new HttpsError('failed-precondition', 'El alquiler debe conservar al menos una bicicleta, combo o accesorio.');
+        const nextIds = new Set(nextRows.map(({ ref }) => ref.id));
+        const nextDemand = rentalLinesDemands(nextRows.map(({ data }) => data), inventory, combos);
+        const oldDemand = rentalLinesDemands(oldRows, inventory, combos);
+        if (delivered && JSON.stringify(oldDemand) !== JSON.stringify(nextDemand)) throw new HttpsError('failed-precondition', 'No se pueden cambiar productos o cantidades después de entregar el alquiler.');
+        const oldKeys = new Map(oldDemand.map((demand) => [`${demand.itemId}\0${demand.wheelSize || ''}`, demand]));
+        const nextKeys = new Map(nextDemand.map((demand) => [`${demand.itemId}\0${demand.wheelSize || ''}`, demand]));
+        const deltas = new Map<string, Demand>();
+        for (const key of new Set([...oldKeys.keys(), ...nextKeys.keys()])) {
+            const before = oldKeys.get(key); const after = nextKeys.get(key);
+            deltas.set(key, { ...(after || before)!, quantity: (before?.quantity || 0) - (after?.quantity || 0) });
+        }
+        const holding = oldRows.some((row) => row.stockDeducted === true || (row.stockDeducted === undefined && [...LEGACY_CONFIRMED, ...LEGACY_DELIVERED].includes(String(row.status))));
+        if (holding) {
+            for (const delta of deltas.values()) {
+                if (!delta.quantity) continue;
+                const item = inventoryById.get(delta.itemId);
+                if (!item) throw new HttpsError('failed-precondition', `No existe el inventario ${delta.itemId}.`);
+                inventoryById.set(item.id, alterStock(item, delta.wheelSize, delta.quantity));
+            }
+        }
+        const currentDate = oldRows[0].date; const currentTime = oldRows[0].pickupTime || '09:00';
+        const scheduleChanged = date !== currentDate || pickupTime !== currentTime || duration !== String(oldRows[0].duration);
+        if (scheduleChanged || !delivered) {
+            const excluding = new Set(oldRows.map((row) => String(row.id)));
+            const otherRows = allRentalsSnap.docs.filter((snap) => !excluding.has(snap.id)).map((snap) => snap.data()).filter((row) => isBlocking(String(row.status || '')));
+            const todayStart = new Date(new Intl.DateTimeFormat('en-CA', { timeZone: 'America/La_Paz' }).format(new Date()) + 'T00:00:00-04:00').getTime();
+            const requestIsToday = interval.startMs < todayStart + 86_400_000;
+            for (const demand of nextDemand) {
+                const item = inventoryById.get(demand.itemId)!;
+                const relevant = otherRows.flatMap((row) => rentalDemands(row as unknown as RentalLike, inventory, combos).filter((other) => other.itemId === demand.itemId && (other.wheelSize || '') === (demand.wheelSize || '')).map((other) => ({ row, other })));
+                const held = relevant.filter(({ row }) => isHolding(String(row.status))).reduce((sum, value) => sum + value.other.quantity, 0);
+                const overlap = relevant.filter(({ row }) => { try { const window = getRentalWindow(row as unknown as RentalLike); return window.startMs < interval.endMs && interval.startMs < window.endMs || isHolding(String(row.status)) && requestIsToday && window.endMs <= interval.startMs; } catch { return true; } }).reduce((sum, value) => sum + value.other.quantity, 0);
+                if (demand.quantity > Math.max(0, stockFor(item, demand.wheelSize) + held - overlap)) throw new HttpsError('failed-precondition', `${item.name}: no hay stock disponible para el nuevo horario.`);
+            }
+        }
+        const lockKeys = new Set([...oldDemand, ...nextDemand].map(resourceKey));
+        const lockRefs = [...lockKeys].map((key) => db.doc(`_availabilityLocks/${key}`));
+        const locks = await Promise.all(lockRefs.map((ref) => tx.get(ref)));
+        lockRefs.forEach((ref, index) => tx.set(ref, { revision: (Number(locks[index].data()?.revision) || 0) + 1, updatedAt: Timestamp.now() }));
+        if (holding) for (const [itemId, item] of inventoryById) if (deltas.size && [...deltas.values()].some((delta) => delta.itemId === itemId && delta.quantity !== 0)) tx.update(db.doc(`inventory/${itemId}`), { ...(item.hasWheelSizes ? { wheelSizes: item.wheelSizes } : { stock: item.stock }) });
+        const now = new Date().toISOString();
+        for (const row of oldRows) if (!nextIds.has(String(row.id))) tx.delete(db.doc(`rentals/${row.id}`));
+        for (const { ref, data } of nextRows) {
+            const before = existingById.get(ref.id);
+            const auditLog = Array.isArray(before?.auditLog) ? before.auditLog.slice(-49) : [];
+            tx.set(ref, { ...data, updatedAt: now, lastUpdatedBy: uid, auditLog: [...auditLog, { action: 'edit', actorUid: uid, at: now, before: before ? { quantity: before.quantity, date: before.date, pickupTime: before.pickupTime, duration: before.duration, total: before.total } : null, after: { quantity: data.quantity, date: data.date, pickupTime: data.pickupTime, duration: data.duration, total: data.total } }], ...(holding ? { stockDeducted: true } : {}) } as DocumentData);
+        }
+    });
+    return { ok: true };
 });
 
 export const provisionAdminUser = onCall(callable(), async (request) => {

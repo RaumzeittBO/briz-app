@@ -11,7 +11,6 @@ import {
     orderBy,
     where,
     writeBatch,
-    runTransaction
 } from 'firebase/firestore';
 import {
     browserLocalPersistence,
@@ -25,6 +24,7 @@ import {
     signOut,
 } from 'firebase/auth';
 import { auth, db, storage } from '../lib/firebase';
+import { runAdminRentalAction, updateRentalGroup } from '../lib/backend';
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { cyclingRoutes as DEFAULT_ROUTES, type CyclingRoute } from '../data/mockData';
 import {
@@ -38,9 +38,6 @@ import { calculateProductRentalPrice } from '../lib/rentalPricing';
 import {
     getAvailableStockForInterval as calcItemStockForInterval,
     getComboAvailabilityForInterval as calcComboAvailForInterval,
-    isRentalHoldingStock,
-    isRentalPendingReservation,
-    resolveComboComponentWheelSize
 } from '../lib/rentalAvailability';
 
 export type { CyclingRoute };
@@ -1130,320 +1127,34 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
         await deleteDoc(doc(db, 'combos', id));
     };
 
-    /**
-     * Atomic group confirmation:
-     * Validates and deducts stock for ALL pending items in the reservation group at once.
-     * If any item in the group lacks stock, NO item is deducted or confirmed.
-     */
-    const confirmRentalGroup = async (ids: string[], actor?: string): Promise<{ ok: boolean; error?: string }> => {
-        const targetIds = Array.from(new Set(ids)).filter(Boolean);
-        if (targetIds.length === 0) return { ok: false, error: 'No se especificaron ítems para confirmar.' };
-
-        try {
-            await runTransaction(db, async (tx) => {
-                // 1. Read all rental docs in transaction
-                const rentalDocs = await Promise.all(targetIds.map(id => tx.get(doc(db, 'rentals', id))));
-                const pendingRentals: Rental[] = [];
-
-                for (const rSnap of rentalDocs) {
-                    if (!rSnap.exists()) continue;
-                    const rData = rSnap.data() as Rental;
-                    if (isRentalPendingReservation(rData.status)) {
-                        pendingRentals.push({ ...rData, id: rSnap.id });
-                    }
-                }
-
-                if (pendingRentals.length === 0) {
-                    return; // Already confirmed or nothing pending
-                }
-
-                // 2. Collect all required inventory item IDs across all rentals in the group
-                const requiredItemIds = new Set<string>();
-                for (const rental of pendingRentals) {
-                    if (rental.productId.startsWith('srv_')) continue;
-                    if (rental.productType === 'single') {
-                        requiredItemIds.add(rental.productId);
-                    } else {
-                        const combo = combos.find(c => c.id === rental.productId);
-                        if (!combo) {
-                            throw new Error(`El paquete combinado "${rental.productName}" ya no existe en el catálogo.`);
-                        }
-                        combo.components.forEach(comp => {
-                            if (!comp.inventoryItemId.startsWith('srv_')) {
-                                requiredItemIds.add(comp.inventoryItemId);
-                            }
-                        });
-                    }
-                }
-
-                // 3. Read all affected inventory documents inside the transaction
-                const invMap = new Map<string, InventoryItem>();
-                for (const itemId of requiredItemIds) {
-                    const iSnap = await tx.get(doc(db, 'inventory', itemId));
-                    if (!iSnap.exists()) {
-                        throw new Error(`El producto o accesorio (${itemId}) no existe en el inventario.`);
-                    }
-                    invMap.set(itemId, JSON.parse(JSON.stringify(iSnap.data())) as InventoryItem);
-                }
-
-                // 4. Deduct stock in-memory and validate every single component
-                const deductFromMap = (itemId: string, qty: number, wsSize?: string, label?: string) => {
-                    if (itemId.startsWith('srv_') || qty <= 0) return;
-                    const item = invMap.get(itemId);
-                    if (!item) {
-                        throw new Error(`Producto no encontrado: ${label || itemId}`);
-                    }
-                    if (item.hasWheelSizes && item.wheelSizes && item.wheelSizes.length > 0) {
-                        const targetWs = wsSize || (item.wheelSizes.length === 1 ? item.wheelSizes[0].size : undefined);
-                        const wsIdx = item.wheelSizes.findIndex(w => w.size === targetWs);
-                        if (wsIdx < 0) {
-                            throw new Error(`Aro "${targetWs || 'sin especificar'}" no válido para ${item.name}.`);
-                        }
-                        if ((item.wheelSizes[wsIdx].stock || 0) < qty) {
-                            throw new Error(
-                                `Stock insuficiente para ${item.name} (Aro ${targetWs}): disponible ${item.wheelSizes[wsIdx].stock}, requerido ${qty}.`
-                            );
-                        }
-                        item.wheelSizes[wsIdx].stock -= qty;
-                    } else {
-                        if ((item.stock ?? 0) < qty) {
-                            throw new Error(
-                                `Stock insuficiente para ${item.name}: disponible ${item.stock ?? 0}, requerido ${qty}.`
-                            );
-                        }
-                        item.stock = (item.stock ?? 0) - qty;
-                    }
-                };
-
-                for (const rental of pendingRentals) {
-                    if (rental.productId.startsWith('srv_')) continue;
-                    if (rental.productType === 'single') {
-                        deductFromMap(rental.productId, rental.quantity, rental.selectedWheelSize, rental.productName);
-                    } else {
-                        const combo = combos.find(c => c.id === rental.productId);
-                        if (!combo) {
-                            throw new Error(`Combo no encontrado: ${rental.productName}`);
-                        }
-                        for (const comp of combo.components) {
-                            const compItem = invMap.get(comp.inventoryItemId);
-                            const ws = (comp.requiresWheelSize || compItem?.hasWheelSizes)
-                                ? resolveComboComponentWheelSize(rental, comp.inventoryItemId, compItem)
-                                : undefined;
-                            deductFromMap(
-                                comp.inventoryItemId,
-                                comp.quantity * rental.quantity,
-                                ws,
-                                compItem?.name || rental.productName
-                            );
-                        }
-                    }
-                }
-
-                // 5. Commit all inventory updates and rental status updates atomically
-                const nowStr = new Date().toISOString();
-                for (const [itemId, updatedItem] of invMap.entries()) {
-                    tx.update(doc(db, 'inventory', itemId), {
-                        ...(updatedItem.hasWheelSizes ? { wheelSizes: updatedItem.wheelSizes } : { stock: updatedItem.stock })
-                    });
-                }
-
-                for (const rental of pendingRentals) {
-                    tx.update(doc(db, 'rentals', rental.id), {
-                        status: 'confirmed',
-                        updatedAt: nowStr,
-                        lastUpdatedBy: actor || 'admin'
-                    });
-                }
-            });
-
-            return { ok: true };
-        } catch (err: any) {
-            console.error('Atomic confirmRentalGroup failed:', err);
-            return { ok: false, error: err?.message || 'Error al confirmar la reserva.' };
-        }
+    /** Server callable validates role, interval and inventory and commits group-wide confirmation. */
+    const confirmRentalGroup = async (ids: string[], _actor?: string): Promise<{ ok: boolean; error?: string }> => {
+        void _actor;
+        try { await runAdminRentalAction('confirm', ids); return { ok: true }; }
+        catch (error) { return { ok: false, error: error instanceof Error ? error.message : 'Error al confirmar el grupo.' }; }
     };
-
     const confirmRental = async (id: string, actor?: string): Promise<boolean> => {
         const res = await confirmRentalGroup([id], actor);
         return res.ok;
     };
 
-    const deliverRentalGroup = async (ids: string[], actor?: string) => {
-        const targetIds = Array.from(new Set(ids)).filter(Boolean);
-        if (targetIds.length === 0) return;
-        const batch = writeBatch(db);
-        const nowStr = new Date().toISOString();
-        targetIds.forEach(id => {
-            const r = rentals.find(item => item.id === id);
-            if (r && (r.status === 'confirmed' || r.status === 'Confirmado')) {
-                batch.update(doc(db, 'rentals', id), {
-                    status: 'delivered',
-                    deliveredAt: nowStr,
-                    updatedAt: nowStr,
-                    lastUpdatedBy: actor || 'admin'
-                });
-            }
-        });
-        await batch.commit();
+    const deliverRentalGroup = async (ids: string[], _actor?: string) => {
+        void _actor;
+        await runAdminRentalAction('deliver', ids);
     };
-
     /**
      * Atomic helper to restore stock and transition status for a group of rentals
      * (used by both cancelRentalGroup and returnRentalGroup).
      */
     const restoreStockAndTransitionGroup = async (
-        ids: string[],
-        targetStatus: 'cancelled' | 'returned',
-        actor?: string,
-        returnOptions?: ReturnRentalOptions
+        ids: string[], targetStatus: 'cancelled' | 'returned', _actor?: string, returnOptions?: ReturnRentalOptions
     ) => {
-        const targetIds = Array.from(new Set(ids)).filter(Boolean);
-        if (targetIds.length === 0) return;
-
-        await runTransaction(db, async (tx) => {
-            const rentalSnaps = await Promise.all(targetIds.map(id => tx.get(doc(db, 'rentals', id))));
-            const existingRentals: Rental[] = [];
-
-            for (const snap of rentalSnaps) {
-                if (snap.exists()) {
-                    existingRentals.push({ ...(snap.data() as Rental), id: snap.id });
-                }
-            }
-
-            if (existingRentals.length === 0) return;
-
-            // Collect inventory items that need stock restoration (ONLY from rentals currently holding stock)
-            const holdingRentals = existingRentals.filter(r => isRentalHoldingStock(r.status));
-            const affectedItemIds = new Set<string>();
-
-            for (const rental of holdingRentals) {
-                if (rental.productId.startsWith('srv_')) continue;
-                if (rental.productType === 'single') {
-                    affectedItemIds.add(rental.productId);
-                } else {
-                    const combo = combos.find(c => c.id === rental.productId);
-                    combo?.components.forEach(comp => {
-                        if (!comp.inventoryItemId.startsWith('srv_')) {
-                            affectedItemIds.add(comp.inventoryItemId);
-                        }
-                    });
-                }
-            }
-
-            const invMap = new Map<string, InventoryItem>();
-            for (const itemId of affectedItemIds) {
-                const iSnap = await tx.get(doc(db, 'inventory', itemId));
-                if (iSnap.exists()) {
-                    invMap.set(itemId, JSON.parse(JSON.stringify(iSnap.data())) as InventoryItem);
-                }
-            }
-
-            let remainingDamagedToAllocate = Math.max(0, returnOptions?.damagedUnits || 0);
-
-            const restoreToMap = (itemId: string, qty: number, wsSize?: string, isBikeCandidate: boolean = false) => {
-                if (itemId.startsWith('srv_') || qty <= 0) return;
-                const item = invMap.get(itemId);
-                if (!item) return;
-
-                // If units were reported damaged on return, divert them to maintenanceStock instead of available stock
-                let damagedHere = 0;
-                if (targetStatus === 'returned' && remainingDamagedToAllocate > 0 && (isBikeCandidate || item.itemType === 'bike')) {
-                    damagedHere = Math.min(qty, remainingDamagedToAllocate);
-                    remainingDamagedToAllocate -= damagedHere;
-                }
-                const healthyQty = Math.max(0, qty - damagedHere);
-
-                if (item.hasWheelSizes && item.wheelSizes && item.wheelSizes.length > 0) {
-                    const targetWs = wsSize || (item.wheelSizes.length === 1 ? item.wheelSizes[0].size : item.wheelSizes[0]?.size);
-                    item.wheelSizes = item.wheelSizes.map(w => {
-                        if (w.size === targetWs) {
-                            return {
-                                ...w,
-                                stock: (w.stock || 0) + healthyQty,
-                                ...(damagedHere > 0 ? { maintenanceStock: (w.maintenanceStock || 0) + damagedHere } : {})
-                            };
-                        }
-                        return w;
-                    });
-                    if (damagedHere > 0) {
-                        item.maintenanceStock = (item.maintenanceStock || 0) + damagedHere;
-                    }
-                } else {
-                    item.stock = (item.stock ?? 0) + healthyQty;
-                    if (damagedHere > 0) {
-                        item.maintenanceStock = (item.maintenanceStock || 0) + damagedHere;
-                    }
-                }
-            };
-
-            for (const rental of holdingRentals) {
-                if (rental.productId.startsWith('srv_')) continue;
-                if (rental.productType === 'single') {
-                    const item = invMap.get(rental.productId);
-                    restoreToMap(
-                        rental.productId,
-                        rental.quantity,
-                        rental.selectedWheelSize,
-                        item?.itemType === 'bike'
-                    );
-                } else {
-                    const combo = combos.find(c => c.id === rental.productId);
-                    combo?.components.forEach(comp => {
-                        const compItem = invMap.get(comp.inventoryItemId);
-                        const ws = (comp.requiresWheelSize || compItem?.hasWheelSizes)
-                            ? resolveComboComponentWheelSize(rental, comp.inventoryItemId, compItem)
-                            : undefined;
-                        restoreToMap(
-                            comp.inventoryItemId,
-                            comp.quantity * rental.quantity,
-                            ws,
-                            comp.requiresWheelSize || compItem?.itemType === 'bike'
-                        );
-                    });
-                }
-            }
-
-            const nowStr = new Date().toISOString();
-            for (const [itemId, updatedItem] of invMap.entries()) {
-                tx.update(doc(db, 'inventory', itemId), {
-                    ...(updatedItem.hasWheelSizes ? { wheelSizes: updatedItem.wheelSizes } : { stock: updatedItem.stock }),
-                    ...(typeof updatedItem.maintenanceStock === 'number' ? { maintenanceStock: updatedItem.maintenanceStock } : {})
-                });
-            }
-
-            for (const rental of existingRentals) {
-                // Guard against returning an already returned rental twice
-                if (targetStatus === 'returned' && (rental.status === 'returned' || rental.status === 'Devuelto')) {
-                    continue;
-                }
-                if (targetStatus === 'cancelled' && (rental.status === 'cancelled' || rental.status === 'Cancelado')) {
-                    continue;
-                }
-
-                const extraFields: Record<string, any> = {};
-                if (targetStatus === 'returned') {
-                    extraFields.returnedAt = nowStr;
-                    if (returnOptions?.damagedUnits && returnOptions.damagedUnits > 0) {
-                        extraFields.damagedOnReturn = true;
-                    }
-                    if (returnOptions?.conditionNotes) {
-                        extraFields.returnConditionNotes = returnOptions.conditionNotes;
-                    }
-                    if (typeof returnOptions?.lateFee === 'number' && returnOptions.lateFee > 0) {
-                        extraFields.lateFee = returnOptions.lateFee;
-                    }
-                }
-
-                tx.update(doc(db, 'rentals', rental.id), {
-                    status: targetStatus,
-                    updatedAt: nowStr,
-                    lastUpdatedBy: actor || returnOptions?.actor || 'admin',
-                    ...extraFields
-                });
-            }
+        void _actor;
+        await runAdminRentalAction(targetStatus === 'cancelled' ? 'cancel' : 'return', ids, {
+            damagedUnits: returnOptions?.damagedUnits || 0,
+            conditionNotes: returnOptions?.conditionNotes,
         });
     };
-
     const cancelRentalGroup = async (ids: string[], actor?: string) => {
         await restoreStockAndTransitionGroup(ids, 'cancelled', actor);
     };
@@ -1460,168 +1171,45 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
         await restoreStockAndTransitionGroup([id], 'returned', actor, options);
     };
 
-    const updateRentalPaymentStatus = async (id: string, paymentStatus: Rental['paymentStatus'], actor?: string) => {
-        await updateDoc(doc(db, 'rentals', id), {
-            paymentStatus,
-            updatedAt: new Date().toISOString(),
-            lastUpdatedBy: actor || 'admin'
+    const updateRentalPaymentStatus = async (id: string, paymentStatus: Rental['paymentStatus'], _actor?: string) => {
+        void _actor;
+        await runAdminRentalAction('payment', [id], { paymentStatus });
+    };
+    const updateRental = async (id: string, updates: Partial<Rental>, _actor?: string) => {
+        void _actor;
+        const current = rentals.find((rental) => rental.id === id);
+        if (!current) throw new Error('No se encontró el alquiler que deseas editar.');
+        const groupCode = current.reservationCode || current.id;
+        const group = rentals.filter((rental) => (rental.reservationCode || rental.id) === groupCode);
+        await updateRentalGroup({
+            reservationCode: groupCode,
+            rentalIds: group.map((rental) => rental.id),
+            date: updates.date || current.date,
+            pickupTime: updates.pickupTime || current.pickupTime || '09:00',
+            duration: updates.duration ? String(updates.duration) : String(current.duration),
+            deliveryService: updates.deliveryService ?? Boolean(current.deliveryService),
+            pickupService: updates.pickupService ?? Boolean(current.pickupService),
+            mapsLink: updates.mapsLink ?? current.mapsLink ?? '',
+            notes: updates.notes ?? current.notes ?? '',
+            items: group.map((rental) => ({
+                id: rental.id, productId: rental.id === id ? updates.productId || rental.productId : rental.productId,
+                productType: rental.id === id ? updates.productType || rental.productType || 'single' : rental.productType || 'single',
+                quantity: rental.id === id ? updates.quantity ?? rental.quantity : rental.quantity,
+                selectedWheelSize: rental.id === id ? updates.selectedWheelSize ?? rental.selectedWheelSize : rental.selectedWheelSize,
+            })),
         });
     };
-
-    const updateRental = async (id: string, updates: Partial<Rental>, actor?: string) => {
-        const existing = rentals.find(r => r.id === id);
-        const cleanUpdates: Record<string, any> = {};
-        for (const [key, value] of Object.entries(updates)) {
-            if (value !== undefined && key !== 'id' && key !== 'reservationCode' && key !== 'createdAt' && key !== 'createdDate') {
-                cleanUpdates[key] = value;
-            }
-        }
-
-        // If the rental is currently holding stock (confirmed/delivered) and its product, quantity, or wheelSize changed,
-        // adjust the inventory stock differential atomically so stock never drifts!
-        const stockAffectingChange =
-            existing &&
-            isRentalHoldingStock(existing.status) &&
-            !existing.productId.startsWith('srv_') &&
-            (
-                (cleanUpdates.quantity !== undefined && cleanUpdates.quantity !== existing.quantity) ||
-                (cleanUpdates.productId !== undefined && cleanUpdates.productId !== existing.productId) ||
-                (cleanUpdates.productType !== undefined && cleanUpdates.productType !== existing.productType) ||
-                (cleanUpdates.selectedWheelSize !== undefined && cleanUpdates.selectedWheelSize !== existing.selectedWheelSize)
-            );
-
-        if (stockAffectingChange && existing) {
-            await runTransaction(db, async (tx) => {
-                const rRef = doc(db, 'rentals', id);
-                const rSnap = await tx.get(rRef);
-                if (!rSnap.exists()) return;
-                const currentRental = rSnap.data() as Rental;
-                const nextRental: Rental = { ...currentRental, ...cleanUpdates };
-
-                const itemIds = new Set<string>();
-                const collectIds = (r: Rental) => {
-                    if (r.productId.startsWith('srv_')) return;
-                    if (r.productType === 'single') itemIds.add(r.productId);
-                    else {
-                        const c = combos.find(cb => cb.id === r.productId);
-                        c?.components.forEach(comp => {
-                            if (!comp.inventoryItemId.startsWith('srv_')) itemIds.add(comp.inventoryItemId);
-                        });
-                    }
-                };
-                collectIds(currentRental);
-                collectIds(nextRental);
-
-                const invMap = new Map<string, InventoryItem>();
-                for (const itemId of itemIds) {
-                    const iSnap = await tx.get(doc(db, 'inventory', itemId));
-                    if (iSnap.exists()) {
-                        invMap.set(itemId, JSON.parse(JSON.stringify(iSnap.data())) as InventoryItem);
-                    }
-                }
-
-                const adjustMap = (r: Rental, direction: 1 | -1) => {
-                    if (r.productId.startsWith('srv_')) return;
-                    if (r.productType === 'single') {
-                        const item = invMap.get(r.productId);
-                        if (!item) throw new Error(`Producto ${r.productId} no encontrado.`);
-                        const delta = r.quantity * direction;
-                        if (item.hasWheelSizes && item.wheelSizes) {
-                            const ws = r.selectedWheelSize || item.wheelSizes[0]?.size;
-                            const idx = item.wheelSizes.findIndex(w => w.size === ws);
-                            if (idx < 0) throw new Error(`Aro ${ws} inválido para ${item.name}.`);
-                            const nextStock = (item.wheelSizes[idx].stock || 0) + delta;
-                            if (nextStock < 0) throw new Error(`Stock insuficiente para ${item.name} (Aro ${ws}).`);
-                            item.wheelSizes[idx].stock = nextStock;
-                        } else {
-                            const nextStock = (item.stock ?? 0) + delta;
-                            if (nextStock < 0) throw new Error(`Stock insuficiente para ${item.name}.`);
-                            item.stock = nextStock;
-                        }
-                    } else {
-                        const combo = combos.find(c => c.id === r.productId);
-                        if (!combo) throw new Error(`Combo ${r.productName} no encontrado.`);
-                        for (const comp of combo.components) {
-                            const item = invMap.get(comp.inventoryItemId);
-                            if (!item) continue;
-                            const delta = comp.quantity * r.quantity * direction;
-                            const ws = (comp.requiresWheelSize || item.hasWheelSizes)
-                                ? resolveComboComponentWheelSize(r, comp.inventoryItemId, item)
-                                : undefined;
-                            if (item.hasWheelSizes && item.wheelSizes) {
-                                const idx = item.wheelSizes.findIndex(w => w.size === ws);
-                                if (idx < 0) throw new Error(`Aro ${ws} inválido para ${item.name}.`);
-                                const nextStock = (item.wheelSizes[idx].stock || 0) + delta;
-                                if (nextStock < 0) throw new Error(`Stock insuficiente para ${item.name} (Aro ${ws}).`);
-                                item.wheelSizes[idx].stock = nextStock;
-                            } else {
-                                const nextStock = (item.stock ?? 0) + delta;
-                                if (nextStock < 0) throw new Error(`Stock insuficiente para ${item.name}.`);
-                                item.stock = nextStock;
-                            }
-                        }
-                    }
-                };
-
-                // 1. Restore old rental's deducted stock (+1)
-                adjustMap(currentRental, 1);
-                // 2. Deduct new rental's required stock (-1)
-                adjustMap(nextRental, -1);
-
-                for (const [itemId, updatedItem] of invMap.entries()) {
-                    tx.update(doc(db, 'inventory', itemId), {
-                        ...(updatedItem.hasWheelSizes ? { wheelSizes: updatedItem.wheelSizes } : { stock: updatedItem.stock })
-                    });
-                }
-
-                tx.update(rRef, {
-                    ...cleanUpdates,
-                    updatedAt: new Date().toISOString(),
-                    lastUpdatedBy: actor || 'admin'
-                });
-            });
-            return;
-        }
-
-        await updateDoc(doc(db, 'rentals', id), {
-            ...cleanUpdates,
-            updatedAt: new Date().toISOString(),
-            lastUpdatedBy: actor || 'admin'
-        });
+    const markRentalExpired = async (id: string, _actor?: string) => {
+        void _actor;
+        await runAdminRentalAction('expire', [id]);
     };
-
-    const markRentalExpired = async (id: string, actor?: string) => {
-        const rental = rentals.find(r => r.id === id);
-        if (!rental) return;
-        // Only pending reservations can expire; confirmed/delivered rentals hold physical bikes
-        if (!isRentalPendingReservation(rental.status)) return;
-        await updateDoc(doc(db, 'rentals', id), {
-            status: 'expired',
-            updatedAt: new Date().toISOString(),
-            lastUpdatedBy: actor || 'admin'
-        });
-    };
-
     const deleteRentalGroup = async (ids: string[]) => {
-        const targetIds = Array.from(new Set(ids)).filter(Boolean);
-        if (targetIds.length === 0) return;
-        // Restore stock ONLY for items that were actively holding stock ('confirmed'/'Confirmado'/'delivered'/'Entregado')
-        const holdingIds = targetIds.filter(id => {
-            const r = rentals.find(item => item.id === id);
-            return r && isRentalHoldingStock(r.status);
-        });
-        if (holdingIds.length > 0) {
-            await cancelRentalGroup(holdingIds, 'admin');
-        }
-        const batch = writeBatch(db);
-        targetIds.forEach(id => batch.delete(doc(db, 'rentals', id)));
-        await batch.commit();
+        await runAdminRentalAction('cancel', ids);
     };
 
     const deleteRental = async (id: string) => {
-        await deleteRentalGroup([id]);
+        await runAdminRentalAction('cancel', [id]);
     };
-
     const addSale = async (s: Omit<Sale, 'id' | 'date' | 'status'>) => {
         const id = generateId('sale');
         await setDoc(doc(db, 'sales', id), { ...s, id, status: 'Pendiente', date: new Date().toISOString() });
@@ -1772,7 +1360,7 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
 
     const resetAllData = async () => {
         const batch = writeBatch(db);
-        rentals.forEach(r => batch.delete(doc(db, 'rentals', r.id)));
+        // Rental history is intentionally excluded from browser-side bulk deletion.
         sales.forEach(s => batch.delete(doc(db, 'sales', s.id)));
         customers.forEach(c => batch.delete(doc(db, 'customers', c.id)));
         serviceOrders.forEach(s => batch.delete(doc(db, 'serviceOrders', s.id)));

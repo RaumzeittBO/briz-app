@@ -36,8 +36,7 @@ import {
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { generateAdminReplyWhatsAppLink } from '@/lib/whatsapp';
-import { db } from '@/lib/firebase';
-import { doc, setDoc } from 'firebase/firestore';
+import { runAdminRentalAction, updateRentalGroup } from '@/lib/backend';
 
 // Mappers for Spanish Translation
 const statusLabels: Record<string, string> = {
@@ -288,16 +287,6 @@ function ReservationAge({ createdAt }: { createdAt?: string }) {
 export default function AdminRentalsPage() {
   const { 
     rentals, 
-    confirmRental,
-    confirmRentalGroup,
-    deliverRentalGroup,
-    cancelRentalGroup,
-    returnRentalGroup,
-    deleteRentalGroup,
-    deleteRental, 
-    updateRental,
-    updateRentalPaymentStatus, 
-    markRentalExpired, 
     inventory,
     combos,
     customers,
@@ -316,9 +305,8 @@ export default function AdminRentalsPage() {
 
   // Return modal state (for damaged units / condition notes / late fees)
   const [returnModalGroup, setReturnModalGroup] = useState<GroupedRental | null>(null);
-  const [returnDamaged, setReturnDamaged] = useState(false);
+  const [returnDamagedUnits, setReturnDamagedUnits] = useState(0);
   const [returnNotes, setReturnNotes] = useState('');
-  const [returnLateFee, setReturnLateFee] = useState<string>('');
 
   // Manual Rental Wizard States
   const [newRentalModalOpen, setNewRentalModalOpen] = useState(false);
@@ -456,7 +444,9 @@ export default function AdminRentalsPage() {
 
   const handleConfirmGroup = async (group: GroupedRental) => {
     const ids = group.items.map(item => item.id);
-    const result = await confirmRentalGroup(ids, 'admin');
+    let result: { ok: boolean; error?: string };
+    try { await runAdminRentalAction('confirm', ids); result = { ok: true }; }
+    catch (error) { result = { ok: false, error: error instanceof Error ? error.message : 'No hay stock disponible para todos los componentes.' }; }
     if (!result.ok) {
       alert(`Error al confirmar la reserva:\n${result.error || 'No hay stock disponible para todos los componentes.'}`);
       return;
@@ -475,7 +465,7 @@ export default function AdminRentalsPage() {
 
   const handleDeliverGroup = async (group: GroupedRental) => {
     const ids = group.items.map(item => item.id);
-    await deliverRentalGroup(ids, 'admin');
+    await runAdminRentalAction('deliver', ids);
     if (selected?.id === group.id) {
       setSelected(prev => {
         if (!prev || prev.id !== group.id) return prev;
@@ -492,32 +482,25 @@ export default function AdminRentalsPage() {
   const handleCancelGroup = async (group: GroupedRental) => {
     if (!confirm('¿Seguro que deseas cancelar esta reserva de alquiler? Si estaba confirmada, el stock se restaurará automáticamente.')) return;
     const ids = group.items.map(item => item.id);
-    await cancelRentalGroup(ids, 'admin');
+    await runAdminRentalAction('cancel', ids);
     if (selected?.id === group.id) setSelected(null);
   };
 
   const openReturnDialog = (group: GroupedRental) => {
     setReturnModalGroup(group);
-    setReturnDamaged(false);
+    setReturnDamagedUnits(0);
     setReturnNotes('');
-    setReturnLateFee('');
   };
 
   const handleConfirmReturnGroup = async () => {
     if (!returnModalGroup) return;
     const ids = returnModalGroup.items.map(item => item.id);
-    const lateFeeNum = Number(returnLateFee) > 0 ? Number(returnLateFee) : 0;
-
-    await returnRentalGroup(ids, 'admin', {
-      damagedUnits: returnDamaged ? 1 : 0,
-      conditionNotes: returnNotes.trim() || undefined,
-      lateFee: lateFeeNum > 0 ? lateFeeNum : undefined,
-    });
+    await runAdminRentalAction('return', ids, { damagedUnits: returnDamagedUnits, conditionNotes: returnNotes.trim() || undefined });
 
     setReturnModalGroup(null);
     if (selected?.id === returnModalGroup.id) setSelected(null);
     alert(
-      returnDamaged
+      returnDamagedUnits > 0
         ? 'Devolución registrada. Las unidades dañadas quedaron apartadas en Mantenimiento/Taller y los demás accesorios fueron liberados.'
         : '¡Devolución registrada con éxito! Todas las bicicletas y accesorios volvieron al stock disponible.'
     );
@@ -525,16 +508,12 @@ export default function AdminRentalsPage() {
 
   const handleExpireGroup = async (group: GroupedRental) => {
     if (!confirm('¿Marcar esta reserva como expirada?')) return;
-    for (const item of group.items) {
-      await markRentalExpired(item.id, 'admin');
-    }
+    await runAdminRentalAction('expire', group.items.map(item => item.id));
     if (selected?.id === group.id) setSelected(null);
   };
 
   const handleMarkPaidGroup = async (group: GroupedRental, methodText: string) => {
-    for (const item of group.items) {
-      await updateRentalPaymentStatus(item.id, 'paid', `admin (${methodText})`);
-    }
+    await runAdminRentalAction('payment', group.items.map(item => item.id), { paymentStatus: 'paid', paymentMethodNote: methodText });
     if (selected?.id === group.id) {
       setSelected(prev => {
         if (!prev || prev.id !== group.id) return prev;
@@ -548,9 +527,9 @@ export default function AdminRentalsPage() {
   };
 
   const handleDeleteGroup = async (group: GroupedRental) => {
-    if (!confirm('¿Eliminar definitivamente este registro de la base de datos? Esta acción es irreversible.')) return;
+    if (!confirm('¿Cancelar este alquiler? El registro y su historial de pagos se conservarán.')) return;
     const ids = group.items.map(item => item.id);
-    await deleteRentalGroup(ids);
+    await runAdminRentalAction('cancel', ids);
     if (selected?.id === group.id) setSelected(null);
   };
 
@@ -603,85 +582,14 @@ export default function AdminRentalsPage() {
 
   const handleSaveEditedGroup = async () => {
     if (!selected || !editForm) return;
-
-    // 1. Identify deleted items: items in selected.items that are no longer in editForm.items
-    const editedIds = new Set(editForm.items.map(item => item.id));
-    for (const item of selected.items) {
-      if (!editedIds.has(item.id)) {
-        await deleteRental(item.id);
-      }
-    }
-
-    const wasConfirmed =
-      selected.status === 'confirmed' ||
-      selected.status === 'Confirmado' ||
-      selected.status === 'delivered' ||
-      selected.status === 'Entregado';
-
-    // 2. Process updates and new additions
-    for (const item of editForm.items) {
-      if (item.isNew) {
-        const newId = 'rental_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7);
-        const newDocRef = doc(db, 'rentals', newId);
-        const comboObj = item.productType === 'combo' ? combos.find(c => c.id === item.productId) : undefined;
-        const componentSelections = comboObj
-          ? comboObj.components.map(comp => {
-              const inv = inventory.find(i => i.id === comp.inventoryItemId);
-              return {
-                inventoryItemId: comp.inventoryItemId,
-                wheelSize: inv?.hasWheelSizes ? (item.selectedWheelSize || inv.wheelSizes?.[0]?.size || '') : undefined
-              };
-            })
-          : [];
-
-        const cleanData: Rental = {
-          id: newId,
-          reservationCode: selected.reservationCode || selected.id,
-          customerName: selected.customerName,
-          customerPhone: selected.customerPhone,
-          customerCI: selected.customerCI,
-          productId: item.productId,
-          productName: item.productName,
-          productNameSnapshot: item.productName,
-          productType: item.productType,
-          selectedWheelSize: item.selectedWheelSize || '',
-          componentSelections,
-          quantity: item.quantity,
-          total: item.total,
-          date: editForm.date,
-          pickupTime: editForm.pickupTime,
-          duration: editForm.duration,
-          paymentMethod: selected.paymentMethod,
-          paymentStatus: selected.paymentStatus,
-          status: wasConfirmed ? 'pending' : selected.status,
-          deliveryService: editForm.deliveryService,
-          pickupService: editForm.pickupService,
-          mapsLink: editForm.mapsLink,
-          notes: editForm.notes,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-          createdDate: new Date().toISOString()
-        };
-        await setDoc(newDocRef, cleanData);
-
-        if (wasConfirmed) {
-          await confirmRental(newId, 'admin (nuevo item en pedido)');
-        }
-      } else {
-        await updateRental(item.id, {
-          date: editForm.date,
-          pickupTime: editForm.pickupTime,
-          duration: editForm.duration,
-          selectedWheelSize: item.selectedWheelSize,
-          deliveryService: editForm.deliveryService,
-          pickupService: editForm.pickupService,
-          mapsLink: editForm.mapsLink,
-          notes: editForm.notes,
-          quantity: Math.max(1, item.quantity),
-          total: Math.max(0, item.total),
-        }, 'admin (edicion pedido)');
-      }
-    }
+    await updateRentalGroup({
+      reservationCode: selected.reservationCode || selected.id,
+      rentalIds: selected.items.map(item => item.id),
+      date: editForm.date, pickupTime: editForm.pickupTime, duration: editForm.duration,
+      deliveryService: editForm.deliveryService, pickupService: editForm.pickupService,
+      mapsLink: editForm.mapsLink, notes: editForm.notes,
+      items: editForm.items.map(item => ({ id: item.isNew ? '' : item.id, productId: item.productId, productType: item.productType, quantity: Math.max(1, item.quantity), selectedWheelSize: item.selectedWheelSize || '' })),
+    });
 
     setEditingOrder(false);
     setSelected(null);
@@ -860,12 +768,7 @@ export default function AdminRentalsPage() {
       const result = await createRentalGroup({ ...booking, idempotencyKey });
       sessionStorage.removeItem(storageKey);
       if (newRentalForm.status === 'confirmed') {
-        const confirmRes = await confirmRentalGroup(result.rentalIds, 'admin (manual)');
-        if (!confirmRes.ok) {
-          alert(`Alquiler creado como PENDIENTE (${result.reservationCode}), pero no pudo confirmarse automáticamente:\n${confirmRes.error}`);
-          setNewRentalModalOpen(false);
-          return;
-        }
+        await runAdminRentalAction('confirm', result.rentalIds);
       }
       alert(`Alquiler manual creado con éxito. Código: ${result.reservationCode}`);
       setNewRentalModalOpen(false);
@@ -1986,7 +1889,7 @@ export default function AdminRentalsPage() {
                       <Bike className="w-3.5 h-3.5 mr-1" /> Entregar
                     </Button>
                   )}
-                  {(g.status === 'confirmed' || g.status === 'Confirmado' || g.status === 'delivered' || g.status === 'Entregado') && (
+                  {(g.status === 'delivered' || g.status === 'Entregado') && (
                     <Button
                       size="sm"
                       onClick={() => openReturnDialog(g)}
@@ -2004,14 +1907,15 @@ export default function AdminRentalsPage() {
                   >
                     <Info className="w-4 h-4" />
                   </Button>
-                  <Button 
-                    variant="ghost" 
-                    size="icon" 
-                    className="w-9 h-9 rounded-xl bg-white/5 text-red-400/40 hover:bg-red-500 hover:text-white" 
-                    onClick={() => handleDeleteGroup(g)}
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </Button>
+                  {(g.status === 'pending' || g.status === 'Pendiente' || g.status === 'confirmed' || g.status === 'Confirmado') && (
+                    <Button
+                      variant="ghost" size="icon"
+                      className="w-9 h-9 rounded-xl bg-white/5 text-red-400/60 hover:bg-red-500 hover:text-white"
+                      onClick={() => handleDeleteGroup(g)} title="Cancelar y conservar historial"
+                    >
+                      <Ban className="w-4 h-4" />
+                    </Button>
+                  )}
                 </div>
               </div>
             ))
@@ -2040,31 +1944,14 @@ export default function AdminRentalsPage() {
                 ))}
               </div>
 
-              <label className="flex items-start gap-3 p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/25 cursor-pointer select-none">
-                <input
-                  type="checkbox"
-                  checked={returnDamaged}
-                  onChange={e => setReturnDamaged(e.target.checked)}
-                  className="mt-0.5 rounded border-amber-500/40 bg-black/40 text-amber-500 focus:ring-0"
-                />
-                <div className="text-xs">
-                  <p className="font-black text-amber-300 uppercase">¿Bicicleta devuelta con daño / requiere mantenimiento?</p>
-                  <p className="text-[11px] text-amber-200/70 mt-0.5">
-                    Si activas esta opción, la bicicleta pasará a <strong>Stock en Mantenimiento/Taller</strong> (no volverá al stock público disponible hasta ser reparada), pero los accesorios sanos sí se liberarán.
-                  </p>
-                </div>
-              </label>
-
-              <div className="space-y-1">
-                <label className="text-[10px] text-white/40 font-bold uppercase">Recargo por Retraso / Penalización (Bs.) — Opcional</label>
+              <div className="space-y-1 rounded-2xl bg-amber-500/10 border border-amber-500/25 p-3.5">
+                <label className="text-xs font-black text-amber-300 uppercase">Bicicletas dañadas o que requieren mantenimiento</label>
                 <Input
-                  type="number"
-                  min={0}
-                  placeholder="0"
-                  value={returnLateFee}
-                  onChange={e => setReturnLateFee(e.target.value)}
-                  className="bg-black/40 border-white/10 h-10 text-sm font-black text-brand-yellow rounded-xl"
+                  type="number" min={0} step={1} value={returnDamagedUnits}
+                  onChange={e => setReturnDamagedUnits(Math.max(0, Math.floor(Number(e.target.value) || 0)))}
+                  className="mt-2 bg-black/40 border-white/10 h-10 text-sm font-black text-brand-yellow rounded-xl"
                 />
+                <p className="text-[11px] text-amber-200/70 mt-1">Indica la cantidad exacta. Esas unidades irán a mantenimiento y no volverán al stock disponible.</p>
               </div>
 
               <div className="space-y-1">
@@ -2773,7 +2660,7 @@ export default function AdminRentalsPage() {
                       </Button>
                     )}
 
-                    {(selected.status === 'confirmed' || selected.status === 'Confirmado' || selected.status === 'delivered' || selected.status === 'Entregado') && (
+                    {(selected.status === 'delivered' || selected.status === 'Entregado') && (
                       <Button 
                         className="flex-1 h-11 bg-blue-500 hover:bg-blue-600 text-white font-black rounded-xl text-xs uppercase cursor-pointer" 
                         onClick={() => { openReturnDialog(selected); }}

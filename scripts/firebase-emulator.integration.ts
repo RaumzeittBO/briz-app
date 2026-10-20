@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { createRequire } from 'node:module';
 import { initializeApp } from 'firebase/app';
 import { getAuth, createUserWithEmailAndPassword, connectAuthEmulator, reload } from 'firebase/auth';
@@ -83,7 +84,7 @@ try {
     await adminDb.collection('inventory').doc('bike-emulator').set({
         id: 'bike-emulator', itemType: 'bike', name: 'Emulator Bike', active: true,
         availableForRental: true, hasWheelSizes: true,
-        wheelSizes: [{ size: '26', stock: 2, maintenanceStock: 0 }],
+        wheelSizes: [{ size: '26', stock: 2, maintenanceStock: 0 }, { size: '27', stock: 1, maintenanceStock: 0 }],
         pricePerHour: 20, price1Hour: 20, price24Hours: 70, pricePerDay: 70,
     });
     await adminDb.collection('inventory').doc('acc-emulator').set({
@@ -98,7 +99,10 @@ try {
     });
     await adminDb.collection('combos').doc('combo-emulator').set({
         id: 'combo-emulator', name: 'Emulator Combo', active: true, availableForRental: true,
-        components: [{ inventoryItemId: 'bike-emulator', quantity: 1, requiresWheelSize: true }],
+        components: [
+            { inventoryItemId: 'bike-emulator', quantity: 1, requiresWheelSize: true },
+            { inventoryItemId: 'acc-emulator', quantity: 1, requiresWheelSize: false },
+        ],
         pricePerHour: 30, price1Hour: 30, price24Hours: 90, pricePerDay: 90,
     });
     pass('Emulator catalog seeded with fictional inventory only');
@@ -128,18 +132,28 @@ try {
     assert.ok(ownHistory.rentals.some((rental) => rental.reservationCode === first.reservationCode));
     pass('Booking is priced on server, atomic, idempotent and emits private outbox/public sanitized slots');
 
+    const comboDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/La_Paz' }).format(new Date(Date.now() + 3 * 24 * 60 * 60 * 1000));
     const comboBooking = {
         idempotencyKey: `combo_${crypto.randomUUID()}`,
         lines: [{ productId: 'combo-emulator', productType: 'combo', quantity: 1, wheelSize: '26' }],
-        date: new Intl.DateTimeFormat('en-CA', { timeZone: 'America/La_Paz' }).format(new Date(Date.now() + 3 * 24 * 60 * 60 * 1000)),
+        accessories: [{ itemId: 'acc-emulator', quantity: 1 }],
+        date: comboDate,
         pickupTime: '14:00', duration: '1 hora', paymentMethod: 'QR',
     };
     const comboResult = await call<{ reservationCode: string; total: number }>(userA.functions, 'createRentalGroup', comboBooking);
-    assert.equal(comboResult.total, 30);
+    assert.equal(comboResult.total, 37);
     const comboDoc = await adminDb.collection('rentals').where('reservationCode', '==', comboResult.reservationCode).get();
-    assert.equal(comboDoc.size, 1);
-    assert.deepEqual(comboDoc.docs[0].data().componentSelections, [{ inventoryItemId: 'bike-emulator', wheelSize: '26' }]);
-    pass('Combo booking validates server-owned components and selected wheel size');
+    assert.equal(comboDoc.size, 2);
+    assert.deepEqual(comboDoc.docs[0].data().componentSelections, [
+        { inventoryItemId: 'bike-emulator', wheelSize: '26' }, { inventoryItemId: 'acc-emulator' },
+    ]);
+    await assert.rejects(() => call(userA.functions, 'createRentalGroup', {
+        idempotencyKey: `shared_${crypto.randomUUID()}`,
+        lines: [{ productId: 'combo-emulator', productType: 'combo', quantity: 1, wheelSize: '26' }],
+        accessories: [{ itemId: 'acc-emulator', quantity: 2 }], date: comboDate,
+        pickupTime: '14:00', duration: '1 hora', paymentMethod: 'QR',
+    }));
+    pass('Combo booking validates component aro and aggregates shared combo/accessory stock without double counting');
 
     const manualBooking = {
         adminManual: true,
@@ -162,10 +176,68 @@ try {
     assert.equal(manualRetry.rentalIds[0], manualResult.rentalIds[0]);
     pass('Administrative manual booking validates role, creates customer and rental atomically, and retries idempotently');
 
+    const editable = await call<{ rentalIds: string[]; reservationCode: string }>(userA.functions, 'createRentalGroup', {
+        adminManual: true,
+        adminCustomer: { id: userA.uid },
+        lines: [{ productId: 'bike-emulator', productType: 'single', quantity: 1, wheelSize: '26' }],
+        date: new Intl.DateTimeFormat('en-CA', { timeZone: 'America/La_Paz' }).format(new Date(Date.now() + 8 * 24 * 60 * 60 * 1000)),
+        pickupTime: '09:00', duration: '1 hora', paymentMethod: 'Efectivo', idempotencyKey: `edit_${crypto.randomUUID()}`,
+    });
+    const editDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/La_Paz' }).format(new Date(Date.now() + 9 * 24 * 60 * 60 * 1000));
+    await call(userA.functions, 'updateRentalGroup', {
+        reservationCode: editable.reservationCode, date: editDate, pickupTime: '10:00', duration: '2 horas',
+        deliveryService: false, pickupService: false, mapsLink: '', notes: 'Edited atomically',
+        items: [
+            { id: editable.rentalIds[0], productId: 'bike-emulator', productType: 'single', quantity: 1, selectedWheelSize: '26' },
+            { id: '', productId: 'bike-emulator', productType: 'single', quantity: 1, selectedWheelSize: '26' },
+            { id: '', productId: 'acc-emulator', productType: 'single', quantity: 1 },
+        ],
+    });
+    let editedGroup = await adminDb.collection('rentals').where('reservationCode', '==', editable.reservationCode).get();
+    assert.equal(editedGroup.size, 3, 'Group edit must append bicycle and accessory lines in the same transaction.');
+    assert.ok(editedGroup.docs.some((doc) => doc.get('productId') === 'acc-emulator'));
+    assert.ok(editedGroup.docs.every((doc) => doc.get('date') === editDate && doc.get('duration') === '2 horas'));
+    await call(userA.functions, 'updateRentalGroup', {
+        reservationCode: editable.reservationCode, date: editDate, pickupTime: '10:00', duration: '1 hora',
+        deliveryService: false, pickupService: false, mapsLink: '', notes: 'Removed a line',
+        items: [{ id: editable.rentalIds[0], productId: 'bike-emulator', productType: 'single', quantity: 1, selectedWheelSize: '26' }],
+    });
+    editedGroup = await adminDb.collection('rentals').where('reservationCode', '==', editable.reservationCode).get();
+    assert.equal(editedGroup.size, 1, 'Group edit must remove an old line atomically.');
+    assert.equal(editedGroup.docs[0].get('selectedWheelSize'), '26');
+    await assert.rejects(() => call(userA.functions, 'updateRentalGroup', {
+        reservationCode: editable.reservationCode, date: editDate, pickupTime: '10:00', duration: '1 hora',
+        deliveryService: false, pickupService: false, mapsLink: '', notes: '',
+        items: [{ id: editable.rentalIds[0], productId: 'bike-emulator', productType: 'single', quantity: 3, selectedWheelSize: '26' }],
+    }));
+    assert.equal((await adminDb.collection('rentals').where('reservationCode', '==', editable.reservationCode).get()).size, 1);
+    pass('Administrative group editing atomically adds/removes lines, changes size/date/time/duration, and rejects insufficient availability');
+
+    const lifecycle = await call<{ rentalIds: string[]; reservationCode: string }>(userA.functions, 'createRentalGroup', {
+        adminManual: true, adminCustomer: { id: userA.uid },
+        lines: [{ productId: 'bike-emulator', productType: 'single', quantity: 1, wheelSize: '26' }],
+        date: new Intl.DateTimeFormat('en-CA', { timeZone: 'America/La_Paz' }).format(new Date(Date.now() + 10 * 24 * 60 * 60 * 1000)),
+        pickupTime: '11:00', duration: '1 hora', paymentMethod: 'Efectivo', idempotencyKey: `cycle_${crypto.randomUUID()}`,
+    });
+    const beforeCycleStock = (await adminDb.collection('inventory').doc('bike-emulator').get()).get('wheelSizes')[0].stock;
+    await call(userA.functions, 'adminRentalAction', { action: 'confirm', rentalIds: lifecycle.rentalIds });
+    assert.equal((await adminDb.collection('inventory').doc('bike-emulator').get()).get('wheelSizes')[0].stock, beforeCycleStock - 1);
+    await assert.rejects(() => call(userA.functions, 'adminRentalAction', { action: 'confirm', rentalIds: lifecycle.rentalIds }));
+    await call(userA.functions, 'adminRentalAction', { action: 'deliver', rentalIds: lifecycle.rentalIds });
+    await call(userA.functions, 'adminRentalAction', { action: 'return', rentalIds: lifecycle.rentalIds, damagedUnits: 1, conditionNotes: 'Emulator test damage' });
+    const afterCycle = await adminDb.collection('inventory').doc('bike-emulator').get();
+    assert.equal(afterCycle.get('wheelSizes')[0].stock, beforeCycleStock - 1);
+    assert.equal(afterCycle.get('wheelSizes')[0].maintenanceStock, 1);
+    assert.equal((await adminDb.collection('rentals').doc(lifecycle.rentalIds[0]).get()).get('status'), 'returned');
+    await assert.rejects(() => call(userA.functions, 'adminRentalAction', { action: 'return', rentalIds: lifecycle.rentalIds, damagedUnits: 0 }));
+    pass('Administrative confirmation deducts once, delivery preserves stock, and damaged return restores only healthy stock');
+
     const userB = await client('rider-b@example.test', 'TestPass#123');
     await call(userB.functions, 'beginCustomerRegistration', { name: 'Rider B', phone: '+59170000002', ci: 'TEST-1002' });
     await verifyEmail(userB.auth, userB.uid);
     await call(userB.functions, 'createCustomerProfile');
+    await adminDb.collection('customers').doc(userB.uid).update({ store: 'shop-b' });
+    await adminDb.collection('adminUsers').doc(userB.uid).set({ uid: userB.uid, role: 'manager', active: true, store: 'shop-b' });
     const raceDate = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000);
     const raceBooking = (idempotencyKey: string) => ({
         idempotencyKey,
@@ -180,6 +252,126 @@ try {
     assert.equal([raceA, raceB].filter((item) => item.status === 'fulfilled').length, 1);
     assert.equal([raceA, raceB].filter((item) => item.status === 'rejected').length, 1);
     pass('Two simultaneous reservations cannot both claim the last bike');
+
+    const managerDate = (days: number) => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/La_Paz' }).format(new Date(Date.now() + days * 24 * 60 * 60 * 1000));
+    const managerBooking = (days: number) => ({
+        adminManual: true, adminCustomer: { id: userB.uid },
+        lines: [{ productId: 'bike-emulator', productType: 'single', quantity: 1, wheelSize: '26' }],
+        date: managerDate(days), pickupTime: '15:00', duration: '1 hora', paymentMethod: 'Efectivo', idempotencyKey: `manager_${crypto.randomUUID()}`,
+    });
+    const pendingManagerRental = await call<{ rentalIds: string[] }>(userB.functions, 'createRentalGroup', managerBooking(15));
+    await assert.rejects(() => call(userB.functions, 'adminRentalAction', { action: 'return', rentalIds: pendingManagerRental.rentalIds }));
+    const beforePendingCancel = (await adminDb.collection('inventory').doc('bike-emulator').get()).get('wheelSizes')[0].stock;
+    await call(userB.functions, 'adminRentalAction', { action: 'cancel', rentalIds: pendingManagerRental.rentalIds });
+    assert.equal((await adminDb.collection('inventory').doc('bike-emulator').get()).get('wheelSizes')[0].stock, beforePendingCancel);
+
+    const managerCycle = await call<{ rentalIds: string[]; reservationCode: string }>(userB.functions, 'createRentalGroup', managerBooking(16));
+    await call(userB.functions, 'adminRentalAction', { action: 'confirm', rentalIds: managerCycle.rentalIds });
+    await call(userB.functions, 'adminRentalAction', { action: 'deliver', rentalIds: managerCycle.rentalIds });
+    const paidBeforeReturn = (await adminDb.collection('rentals').doc(managerCycle.rentalIds[0]).get()).get('total');
+    const stockBeforeHealthyReturn = (await adminDb.collection('inventory').doc('bike-emulator').get()).get('wheelSizes')[0].stock;
+    await call(userB.functions, 'adminRentalAction', { action: 'return', rentalIds: managerCycle.rentalIds, damagedUnits: 0 });
+    const returnedManager = await adminDb.collection('rentals').doc(managerCycle.rentalIds[0]).get();
+    assert.equal(returnedManager.get('status'), 'returned');
+    assert.equal(returnedManager.get('total'), paidBeforeReturn, 'Return must retain historical charges.');
+    assert.equal((await adminDb.collection('inventory').doc('bike-emulator').get()).get('wheelSizes')[0].stock, stockBeforeHealthyReturn + 1);
+    const confirmedCancel = await call<{ rentalIds: string[] }>(userB.functions, 'createRentalGroup', managerBooking(17));
+    await call(userB.functions, 'adminRentalAction', { action: 'confirm', rentalIds: confirmedCancel.rentalIds });
+    const stockBeforeConfirmedCancel = (await adminDb.collection('inventory').doc('bike-emulator').get()).get('wheelSizes')[0].stock;
+    await call(userB.functions, 'adminRentalAction', { action: 'cancel', rentalIds: confirmedCancel.rentalIds });
+    assert.equal((await adminDb.collection('inventory').doc('bike-emulator').get()).get('wheelSizes')[0].stock, stockBeforeConfirmedCancel + 1);
+    assert.equal((await adminDb.collection('rentals').doc(confirmedCancel.rentalIds[0]).get()).get('status'), 'cancelled');
+    await adminDb.collection('rentals').doc(managerCycle.rentalIds[0]).update({ store: 'shop-other' });
+    await assert.rejects(() => call(userB.functions, 'adminRentalAction', { action: 'payment', rentalIds: managerCycle.rentalIds, paymentStatus: 'paid' }));
+    await adminDb.collection('adminUsers').doc(userB.uid).update({ role: 'mechanic' });
+    await assert.rejects(() => call(userB.functions, 'adminRentalAction', { action: 'payment', rentalIds: managerCycle.rentalIds, paymentStatus: 'paid' }));
+    await adminDb.collection('adminUsers').doc(userB.uid).update({ role: 'viewer' });
+    await assert.rejects(() => call(userB.functions, 'updateRentalGroup', {
+        reservationCode: managerCycle.reservationCode, date: managerDate(16), pickupTime: '15:00', duration: '1 hora',
+        deliveryService: false, pickupService: false, mapsLink: '', notes: '',
+        items: [{ id: managerCycle.rentalIds[0], productId: 'bike-emulator', productType: 'single', quantity: 1, selectedWheelSize: '26' }],
+    }));
+    pass('Manager can run scoped lifecycle actions; pending cancellation preserves stock, return-before-delivery and cross-store/mechanic/viewer actions are rejected');
+
+    await adminDb.collection('adminUsers').doc(userB.uid).update({ role: 'manager' });
+    const conflictSource = await call<{ rentalIds: string[]; reservationCode: string }>(userB.functions, 'createRentalGroup', {
+        adminManual: true, adminCustomer: { id: userB.uid },
+        lines: [{ productId: 'bike-race-emulator', productType: 'single', quantity: 1 }],
+        date: managerDate(18), pickupTime: '15:00', duration: '1 hora', paymentMethod: 'Efectivo', idempotencyKey: `move_${crypto.randomUUID()}`,
+    });
+    const contestedDate = managerDate(19);
+    const movePromise = call(userB.functions, 'updateRentalGroup', {
+        reservationCode: conflictSource.reservationCode, rentalIds: conflictSource.rentalIds,
+        date: contestedDate, pickupTime: '15:00', duration: '1 hora', deliveryService: false, pickupService: false,
+        mapsLink: '', notes: 'Concurrent admin edit',
+        items: [{ id: conflictSource.rentalIds[0], productId: 'bike-race-emulator', productType: 'single', quantity: 1 }],
+    });
+    const customerPromise = call(userB.functions, 'createRentalGroup', {
+        idempotencyKey: `concurrent_${crypto.randomUUID()}`,
+        lines: [{ productId: 'bike-race-emulator', productType: 'single', quantity: 1 }],
+        date: contestedDate, pickupTime: '15:00', duration: '1 hora', paymentMethod: 'QR',
+    });
+    const [adminMove, customerBooking] = await Promise.allSettled([movePromise, customerPromise]);
+    assert.equal([adminMove, customerBooking].filter((result) => result.status === 'fulfilled').length, 1);
+    const contestedRows = await adminDb.collection('rentals').where('date', '==', contestedDate).get();
+    assert.equal(contestedRows.docs.filter((doc) => doc.get('productId') === 'bike-race-emulator' && doc.get('pickupTime') === '15:00' && ['pending', 'Pendiente'].includes(doc.get('status'))).length, 1);
+    pass('A concurrent admin date edit and customer reservation cannot both claim the last bike');
+
+    const userARateKey = createHash('sha256').update(userA.uid).digest('hex');
+    await adminDb.collection('_requestLimits').doc(`reservations_${userARateKey}`).set({ windowStart: -1, count: 0 });
+    const deliveryGroup = await call<{ rentalIds: string[]; reservationCode: string }>(userA.functions, 'createRentalGroup', {
+        adminManual: true, adminCustomer: { id: userA.uid }, adminDeliveryService: true,
+        adminMapsLink: 'https://www.google.com/maps/?q=-17.390,-66.130',
+        lines: [{ productId: 'bike-race-emulator', productType: 'single', quantity: 1 }],
+        date: managerDate(21), pickupTime: '17:00', duration: '1 hora', paymentMethod: 'Efectivo', idempotencyKey: `delivery_${crypto.randomUUID()}`,
+    });
+    await call(userA.functions, 'updateRentalGroup', {
+        reservationCode: deliveryGroup.reservationCode, rentalIds: deliveryGroup.rentalIds,
+        date: managerDate(21), pickupTime: '17:00', duration: '1 hora', deliveryService: true, pickupService: false,
+        mapsLink: 'https://www.google.com/maps/?q=-17.390,-66.130', notes: 'Delivery enabled',
+        items: [{ id: deliveryGroup.rentalIds[0], productId: 'bike-race-emulator', productType: 'single', quantity: 1 }],
+    });
+    let deliveryRows = await adminDb.collection('rentals').where('reservationCode', '==', deliveryGroup.reservationCode).get();
+    assert.equal(deliveryRows.size, 2);
+    assert.equal(deliveryRows.docs.find((doc) => doc.get('productId') === 'srv_delivery')?.get('total'), 30);
+    await call(userA.functions, 'updateRentalGroup', {
+        reservationCode: deliveryGroup.reservationCode, rentalIds: deliveryRows.docs.map((doc) => doc.id),
+        date: managerDate(21), pickupTime: '17:00', duration: '1 hora', deliveryService: false, pickupService: false,
+        mapsLink: 'https://www.google.com/maps/?q=-17.390,-66.130', notes: 'Delivery removed',
+        items: deliveryRows.docs.map((doc) => ({ id: doc.id, productId: doc.get('productId'), productType: doc.get('productType'), quantity: doc.get('quantity'), selectedWheelSize: doc.get('selectedWheelSize') })),
+    });
+    deliveryRows = await adminDb.collection('rentals').where('reservationCode', '==', deliveryGroup.reservationCode).get();
+    assert.equal(deliveryRows.size, 1, 'Turning off delivery removes its service line transactionally.');
+    pass('Delivery/recojo edits add or remove their service line and calculate the configured zone fee from map coordinates');
+
+    const legacyDate = managerDate(20);
+    const legacyRentalId = `legacy_${crypto.randomUUID()}`;
+    await adminDb.collection('rentals').doc(legacyRentalId).set({
+        id: legacyRentalId, productId: 'bike-emulator', productName: 'Emulator Bike', productType: 'single',
+        selectedWheelSize: '26', quantity: 1, total: 20, status: 'Pendiente', date: legacyDate,
+        pickupTime: '10:00', duration: '1 hora', paymentStatus: 'unpaid',
+    });
+    await call(userA.functions, 'updateRentalGroup', {
+        reservationCode: legacyRentalId, rentalIds: [legacyRentalId], date: legacyDate, pickupTime: '10:00', duration: '1 hora',
+        deliveryService: false, pickupService: false, mapsLink: '', notes: 'Legacy record retained',
+        items: [{ id: legacyRentalId, productId: 'bike-emulator', productType: 'single', quantity: 1, selectedWheelSize: '26' }],
+    });
+    const legacyAfter = await adminDb.collection('rentals').doc(legacyRentalId).get();
+    assert.equal(legacyAfter.get('status'), 'Pendiente');
+    assert.equal(legacyAfter.get('store'), undefined);
+    assert.equal(legacyAfter.get('notes'), 'Legacy record retained');
+    const incompleteComboId = `legacy_combo_${crypto.randomUUID()}`;
+    await adminDb.collection('rentals').doc(incompleteComboId).set({
+        productId: 'combo-emulator', productName: 'Emulator Combo', productType: 'combo', quantity: 1,
+        total: 30, status: 'Pendiente', date: legacyDate, pickupTime: '12:00', duration: '1 hora',
+    });
+    await assert.rejects(() => call(userA.functions, 'updateRentalGroup', {
+        reservationCode: incompleteComboId, rentalIds: [incompleteComboId], date: legacyDate, pickupTime: '12:00', duration: '1 hora',
+        deliveryService: false, pickupService: false, mapsLink: '', notes: '',
+        items: [{ id: incompleteComboId, productId: 'combo-emulator', productType: 'combo', quantity: 1 }],
+    }));
+    assert.equal((await adminDb.collection('rentals').doc(incompleteComboId).get()).get('componentSelections'), undefined);
+    pass('Legacy Spanish-state rows without store/group fields remain visible and editable; incomplete combo sizes are rejected without invented data');
 
     const before = await adminDb.collection('rentals').where('reservationCode', '>=', 'BRIZ-').get();
     await assert.rejects(() => call(userA.functions, 'createRentalGroup', {

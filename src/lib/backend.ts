@@ -67,6 +67,28 @@ export async function createRentalGroup(input: ReservationGroupInput): Promise<{
     return result.data;
 }
 
+export type AdminRentalActionName = 'confirm' | 'deliver' | 'return' | 'cancel' | 'expire' | 'payment';
+export async function runAdminRentalAction(action: AdminRentalActionName, rentalIds: string[], options: Record<string, unknown> = {}): Promise<{ ok: boolean }> {
+    const result = await httpsCallable<{ action: AdminRentalActionName; rentalIds: string[] } & Record<string, unknown>, { ok: boolean }>(functions, 'adminRentalAction')({ action, rentalIds, ...options });
+    return result.data;
+}
+
+export interface UpdateRentalGroupInput {
+    reservationCode: string;
+    rentalIds: string[];
+    date: string;
+    pickupTime: string;
+    duration: string;
+    deliveryService: boolean;
+    pickupService: boolean;
+    mapsLink: string;
+    notes: string;
+    items: Array<{ id: string; productId: string; productType: 'single' | 'combo'; quantity: number; selectedWheelSize?: string }>;
+}
+export async function updateRentalGroup(input: UpdateRentalGroupInput): Promise<void> {
+    await httpsCallable<UpdateRentalGroupInput, { ok: boolean }>(functions, 'updateRentalGroup')(input);
+}
+
 export async function createServiceOrder(data: Record<string, unknown>): Promise<void> {
     await httpsCallable(functions, 'createServiceOrder')(data);
 }
