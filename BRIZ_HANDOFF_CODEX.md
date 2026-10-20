@@ -1,6 +1,6 @@
 # BRIZ (`briz.com.bo`) — DOCUMENTO DE HANDOFF TÉCNICO PARA CODEX
 
-## Estado verificado por Codex — 2026-10-20
+## Estado verificado por Codex — 2026-10-20 (Bloque 3)
 
 - Rama activa: `codex/briz-critical-stabilization-20261020`; se conservan los commits `70b85b3` y `bc501ca`.
 - Bloque 2: seguridad por rol/tienda, Firebase Auth para clientes, Functions con Admin SDK, reservas públicas y manuales atómicas/idempotentes, consulta sanitizada de clientes, historial propio, slots públicos y outbox Telegram.
@@ -9,6 +9,18 @@
 - Pendientes: configurar App Check antes del tráfico público; Blaze/APIs para desplegar Functions; secretos Telegram después de rotar el token; anexar una nueva línea a un grupo existente actualmente intenta una escritura directa y se bloquea con las reglas; ampliar pruebas de confirmación/entrega/devolución y datos históricos.
 - **No desplegar a producción, no migrar usuarios ni tocar inventario real. No fusionar con main.**
 - Implementación bloque 2: `6a09918` (`feat(firebase): secure booking and customer auth flows`); documentación y validación registradas en `92e20d9`.
+
+### Bloque 3 — edición y ciclo administrativo transaccional
+
+- Rama conservada: `codex/briz-critical-stabilization-20261020`, con `db522d4` como base inmediata del bloque.
+- `functions/src/index.ts` incorpora `updateRentalGroup` para reemplazar las múltiples escrituras de `handleSaveEditedGroup`, y `adminRentalAction` para confirmar/entregar/devolver/cancelar/expirar/registrar pagos. Ambas verifican rol/sede y vuelven a leer el estado dentro de transacciones Admin SDK.
+- El panel administrativo y las funciones de alquiler exportadas por `StoreContext.tsx` llaman al backend; la UI ya no agrega o modifica directamente documentos de alquiler. El botón que antes borraba ahora cancela y conserva historial. Devoluciones usan cantidad dañada explícita y no incluyen recargos no autorizados.
+- Historial compatible: los estados de reserva en español funcionan; al editar un registro sin sede o sin `availabilityGroupId` se conserva lo que se conoce y el sistema genera solo el identificador técnico faltante. Si un combo multiaro no identifica sus componentes, la operación se bloquea en vez de inventar el aro. Managers sin sede verificable son denegados.
+- La conciliación `scripts/reconcile-rentals.ts` no escribe nunca y se niega a ejecutarse sin el Emulator `demo-briz-security`. Ejecutar con `npm run reconcile:rentals`.
+- `npm run test:firebase` pasó con casos de edición/altas/bajas/aros/stock, entrega/recojo y tarifa de zona, ciclo de estados, pagos históricos, permisos, historial legacy, accesorios compartidos y carreras cliente-cliente/edición administrativa-cliente. `verify-briz-core` 16/16; `tsc`, build web y build Functions pasaron.
+- `npm run lint` continúa fallando globalmente; captura más reciente: 207 errores, 10 warnings (217 problemas). El ESLint dirigido a Functions/backend/scripts nuevos pasa. El build aún avisa por `/noise.png` y el bundle grande.
+- No se hizo recorrido visual del panel con navegador; la validación de este bloque es de transacciones/Functions contra Emulator. No hubo producción, despliegue, migración ni modificación de inventario real.
+- Próxima tarea exacta: recorrer `/admin/rentals` con navegador conectado solo a Emulator (crear y buscar cliente, crear manual, editar bici/combo/accesorio, confirmar, pagar, entregar, ampliar sin conflicto, devolver sana/dañada, cancelar y recargar); después ampliar casos de manager multi-sede y auditar disponibilidad/outbox con un dataset sintético de volumen.
 
 > El resto de este documento conserva contexto histórico del repositorio. Para el estado vigente y los pendientes, sigue esta sección y el inicio de `BRIZ_MASTER_ROADMAP.md`.
 
