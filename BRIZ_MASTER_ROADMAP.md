@@ -6,7 +6,7 @@
 
 ## Continuación Codex Bloque 2 — 2026-10-20
 
-- Rama activa: `codex/briz-critical-stabilization-20261020`. Base conservada: `70b85b3` y `bc501ca`; el bloque 2 está en preparación local hasta el commit registrado abajo.
+- Rama activa: `codex/briz-critical-stabilization-20261020`. Base conservada: `70b85b3` y `bc501ca`; implementación del bloque 2 en `6a09918` (`feat(firebase): secure booking and customer auth flows`).
 - Seguridad Firestore/Storage: roles separados (`admin`, `manager`, `mechanic`, `viewer`), alcance por tienda cuando el documento lo define; clientes no escriben ventas, reservas, roles ni perfiles; `customers` no se puede leer desde el SDK cliente porque aún puede contener hashes heredados. Admin y manager consultan la callable sanitizada `getAdminCustomers`.
 - Backend Functions v2 / Node 22: `createRentalGroup` crea grupos y clientes manuales en transacción, calcula precios/stock desde catálogo, asigna código BRIZ, verifica solapamientos por aro y componentes, coordina bloqueos por recurso, limita solicitudes, registra idempotencia y escribe outbox/proyección pública. Incluye reservas administrativas manuales con verificación del rol.
 - Auth de cliente: Firebase Authentication, verificación de correo, recuperación por enlace de Firebase, registro privado de archivos en Storage, perfil sanitizado, consulta autorizada de historial con `getMyRentals`; el enlace de legado requiere verificar el mismo correo y borra el hash antiguo al vincularlo.
@@ -18,8 +18,8 @@
 - **No se desplegó ni se modificó Firebase real. No se migraron cuentas reales ni se tocaron inventarios.**
 - Requisitos de producción pendientes: Functions requieren plan Blaze y APIs/credenciales habilitadas; no activar facturación sin autorización. Configurar App Check de web y cambiar `enforceAppCheck` antes de abrir callables públicamente. Cargar secretos Telegram solo después de rotar el token y autorizarlo.
 - Compatibilidad pendiente antes de reglas cerradas en producción: el botón administrativo para agregar una nueva línea a una reserva existente todavía usa escritura directa en `AdminRentalsPage.tsx` y será rechazado por `allow create: false`; debe migrarse a callable de anexado a grupo. Revisar también reglas/funciones de confirmación, entrega, devolución y cancelación contra datos históricos en Emulator.
-- **Último commit del bloque 2:** pendiente de crear y subir tras la validación final.
-- Próximo paso: registrar SHA y subir solo a la rama Codex; después implementar callable para anexar líneas a grupos y ampliar las pruebas de ciclo administrativo y regresión de historiales históricos.
+- **Commit de implementación del bloque 2:** `6a09918`; commit documental posterior: pendiente.
+- Próximo paso: subir commits solo a la rama Codex; después implementar callable para anexar líneas a grupos y ampliar las pruebas de ciclo administrativo y regresión de historiales históricos.
 
 ---
 

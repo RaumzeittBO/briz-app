@@ -8,7 +8,7 @@
 - `npm run build`, `npm run build --prefix functions`, `npx tsc --noEmit` y `scripts/verify-briz-core.ts` pasan. `npm run lint` sigue con hallazgos previos amplios; resultado detallado en `BRIZ_MASTER_ROADMAP.md`.
 - Pendientes: configurar App Check antes del tráfico público; Blaze/APIs para desplegar Functions; secretos Telegram después de rotar el token; anexar una nueva línea a un grupo existente actualmente intenta una escritura directa y se bloquea con las reglas; ampliar pruebas de confirmación/entrega/devolución y datos históricos.
 - **No desplegar a producción, no migrar usuarios ni tocar inventario real. No fusionar con main.**
-- SHA de bloque 2: pendiente de commit/push.
+- Implementación bloque 2: `6a09918` (`feat(firebase): secure booking and customer auth flows`); actualización documental: pendiente.
 
 > El resto de este documento conserva contexto histórico del repositorio. Para el estado vigente y los pendientes, sigue esta sección y el inicio de `BRIZ_MASTER_ROADMAP.md`.
 
