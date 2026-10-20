@@ -18,8 +18,8 @@
 - **No se desplegó ni se modificó Firebase real. No se migraron cuentas reales ni se tocaron inventarios.**
 - Requisitos de producción pendientes: Functions requieren plan Blaze y APIs/credenciales habilitadas; no activar facturación sin autorización. Configurar App Check de web y cambiar `enforceAppCheck` antes de abrir callables públicamente. Cargar secretos Telegram solo después de rotar el token y autorizarlo.
 - Compatibilidad pendiente antes de reglas cerradas en producción: el botón administrativo para agregar una nueva línea a una reserva existente todavía usa escritura directa en `AdminRentalsPage.tsx` y será rechazado por `allow create: false`; debe migrarse a callable de anexado a grupo. Revisar también reglas/funciones de confirmación, entrega, devolución y cancelación contra datos históricos en Emulator.
-- **Commit de implementación del bloque 2:** `6a09918`; commit documental posterior: pendiente.
-- Próximo paso: subir commits solo a la rama Codex; después implementar callable para anexar líneas a grupos y ampliar las pruebas de ciclo administrativo y regresión de historiales históricos.
+- **Commit de implementación del bloque 2:** `6a09918`; documentación y validación actualizadas en `92e20d9`.
+- Próximo paso: completar callable para anexar líneas a grupos y ampliar las pruebas de ciclo administrativo y regresión de historiales históricos.
 
 ---
 
