@@ -13,7 +13,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { useStore } from '@/context/StoreContext';
 import { useCart } from '@/context/CartContext';
 import { useLanguage } from '@/context/LanguageContext';
-import { t } from '@/lib/translations';
+import { t, getLocalizedField } from '@/lib/translations';
 
 import { generateShopWhatsAppLink } from '@/lib/whatsapp';
 
@@ -99,10 +99,10 @@ export default function ShopPage() {
         .map(i => ({
             id: i.id,
             itemType: i.itemType,
-            name: i.name,
+            name: getLocalizedField(i.name, i.nameEn, language),
             category: i.category || (i.itemType === 'bike' ? 'Bicicletas' : 'Accesorios'),
             price: i.salePrice ?? 0,
-            description: i.description,
+            description: getLocalizedField(i.description, i.descriptionEn, language),
             image: i.imageUrl,
         }));
 
@@ -111,10 +111,10 @@ export default function ShopPage() {
         .map((c: any) => ({
             id: c.id,
             itemType: 'product' as any,
-            name: c.name,
+            name: getLocalizedField(c.name, c.nameEn, language),
             category: c.category || 'Bicicletas',
             price: c.salePrice ?? 0,
-            description: c.description,
+            description: getLocalizedField(c.description, c.descriptionEn, language),
             image: c.imageUrl,
         }));
 
@@ -188,7 +188,9 @@ export default function ShopPage() {
             customerPhone: phone,
             customerCI: ci,
             items: cartItems.map(item => ({
+                id: item.id,
                 name: item.name,
+                type: item.itemType,
                 price: item.price,
                 quantity: item.quantity,
                 image: item.image || '',
@@ -200,7 +202,7 @@ export default function ShopPage() {
 
         addSale(sale);
 
-        const fullSaleRecord = { ...sale, id: 'temp', status: 'Pendiente', date: new Date().toISOString() };
+        const fullSaleRecord = { ...sale, id: 'temp', status: 'Pendiente', date: new Date().toISOString(), language };
         const link = generateShopWhatsAppLink(fullSaleRecord as any);
         window.open(link, '_blank');
 
@@ -228,10 +230,10 @@ export default function ShopPage() {
                         <h2 
                             className="font-tan text-[0.77rem] xs:text-[0.875rem] sm:text-[1.85rem] sm:leading-[1.22] lg:text-[2.2rem] uppercase tracking-normal text-brand-yellow [-webkit-text-stroke:1px_#000] drop-shadow-[1.2px_1.2px_0_rgba(0,0,0,1)] whitespace-nowrap sm:whitespace-normal"
                         >
-                            {title}
+                            {t(title, language as any)}
                         </h2>
                         <p className="text-[10px] sm:text-xs font-black uppercase text-gray-400 tracking-widest font-maiandra">
-                            {productsList.length} {productsList.length === 1 ? 'Producto' : 'Productos'}
+                            {productsList.length} {language === 'es' ? (productsList.length === 1 ? 'Producto' : 'Productos') : (productsList.length === 1 ? 'Product' : 'Products')}
                         </p>
                     </div>
                     <button
@@ -239,7 +241,7 @@ export default function ShopPage() {
                         onClick={() => openCategoryView(catKey)}
                         className="font-maiandra text-xs sm:text-sm text-gray-500 hover:text-brand-yellow hover:underline transition-all tracking-wide underline"
                     >
-                        Ver todo
+                        {language === 'es' ? 'Ver todo' : 'View all'}
                     </button>
                 </div>
 
@@ -278,7 +280,7 @@ export default function ShopPage() {
                                         )}
                                         
                                         <Badge className="absolute top-4 right-4 text-[9px] font-black uppercase px-2 py-1 border-0 bg-brand-yellow text-brand-black">
-                                            {item.itemType === 'bike' ? 'Bicicleta' : 'Accesorio'}
+                                            {item.itemType === 'bike' ? (language === 'es' ? 'Bicicleta' : 'Bike') : (language === 'es' ? 'Accesorio' : 'Accessory')}
                                         </Badge>
                                     </div>
 
@@ -306,7 +308,7 @@ export default function ShopPage() {
                                                     className="h-10 bg-brand-yellow text-brand-black hover:bg-brand-yellow-light shadow-md hover:-translate-y-0.5 transition-all rounded-full border-0 font-black text-xs flex items-center justify-center gap-1"
                                                     onClick={() => addToCart({ id: item.id, name: item.name, price: item.price, itemType: item.itemType, image: item.image })}
                                                 >
-                                                    <ShoppingCart className="w-3.5 h-3.5" strokeWidth={2} /> Añadir
+                                                    <ShoppingCart className="w-3.5 h-3.5" strokeWidth={2} /> {language === 'es' ? 'Añadir' : 'Add'}
                                                 </Button>
                                                 <a 
                                                     href="https://wa.me/59177860277" 
@@ -318,7 +320,7 @@ export default function ShopPage() {
                                                         variant="outline" 
                                                         className="w-full h-10 text-brand-charcoal border-gray-100 hover:border-brand-yellow hover:bg-brand-yellow/5 transition-all rounded-full font-black text-xs flex items-center justify-center gap-1"
                                                     >
-                                                        <MessageCircle className="w-3.5 h-3.5" strokeWidth={2} /> Consultar
+                                                        <MessageCircle className="w-3.5 h-3.5" strokeWidth={2} /> {language === 'es' ? 'Consultar' : 'Inquire'}
                                                     </Button>
                                                 </a>
                                             </div>
@@ -353,7 +355,7 @@ export default function ShopPage() {
                     </div>
                 )}
                 <Badge className="absolute top-4 right-4 text-[9px] font-black uppercase px-2 py-1 border-0 bg-brand-yellow text-brand-black">
-                    {item.itemType === 'bike' ? 'Bicicleta' : 'Accesorio'}
+                    {item.itemType === 'bike' ? (language === 'es' ? 'Bicicleta' : 'Bike') : (language === 'es' ? 'Accesorio' : 'Accessory')}
                 </Badge>
             </div>
             <CardContent className="p-5 flex-1 flex flex-col justify-between bg-white">
@@ -375,11 +377,11 @@ export default function ShopPage() {
                             className="h-10 bg-brand-yellow text-brand-black hover:bg-brand-yellow-light shadow-md hover:-translate-y-0.5 transition-all rounded-full border-0 font-black text-xs flex items-center justify-center gap-1"
                             onClick={() => addToCart({ id: item.id, name: item.name, price: item.price, itemType: item.itemType, image: item.image })}
                         >
-                            <ShoppingCart className="w-3.5 h-3.5" strokeWidth={2} /> AÃ±adir
+                            <ShoppingCart className="w-3.5 h-3.5" strokeWidth={2} /> {t('Añadir', language as any)}
                         </Button>
                         <a href="https://wa.me/59177860277" target="_blank" rel="noopener noreferrer" className="block">
                             <Button variant="outline" className="w-full h-10 text-brand-charcoal border-gray-100 hover:border-brand-yellow hover:bg-brand-yellow/5 transition-all rounded-full font-black text-xs flex items-center justify-center gap-1">
-                                <MessageCircle className="w-3.5 h-3.5" strokeWidth={2} /> Consultar
+                                <MessageCircle className="w-3.5 h-3.5" strokeWidth={2} /> {language === 'es' ? 'Consultar' : 'Inquire'}
                             </Button>
                         </a>
                     </div>
@@ -402,7 +404,7 @@ export default function ShopPage() {
                                                 <Search className="w-5 h-5" strokeWidth={1.5} />
                                             </div>
                                             <Input
-                                                placeholder="Buscar repuestos, accesorios..."
+                                                placeholder={language === 'es' ? 'Buscar repuestos, accesorios...' : 'Search parts, accessories...'}
                                                 className="h-16 pl-18 border-0 bg-transparent text-lg focus-visible:ring-0 focus-visible:ring-offset-0 placeholder:text-gray-400 font-medium"
                                                 value={search}
                                                 onChange={(e) => setSearch(e.target.value)}
@@ -412,11 +414,11 @@ export default function ShopPage() {
                                         <div className="px-4 w-full sm:w-auto pb-4 sm:pb-0 flex flex-col sm:flex-row items-center gap-2">
                                             <Button variant="outline" className="relative group w-full sm:w-auto rounded-full h-12 px-6 border-gray-200 bg-white shadow-sm hover:border-brand-yellow hover:bg-brand-yellow/5 transition-all text-brand-charcoal font-bold" onClick={() => setShowCart(true)}>
                                                 <ShoppingCart className="w-5 h-5 mr-2 group-hover:scale-110 transition-transform" strokeWidth={1.5} /> 
-                                                Carrito
+                                                {language === 'es' ? 'Carrito' : 'Cart'}
                                                 {totalItems > 0 && <Badge className="absolute -top-1 -right-1 bg-brand-yellow text-brand-black font-black text-xs min-w-5 h-5 flex items-center justify-center p-0 rounded-full shadow-md animate-in zoom-in">{totalItems}</Badge>}
                                             </Button>
                                             <Button className="w-full sm:w-auto h-12 px-8 rounded-full bg-brand-yellow text-brand-black hover:bg-brand-yellow-light transition-all font-black text-base shadow-lg hover:shadow-xl hover:-translate-y-0.5 border-0">
-                                                Buscar
+                                                {language === 'es' ? 'Buscar' : 'Search'}
                                             </Button>
                                         </div>
                                     </div>
@@ -450,21 +452,21 @@ export default function ShopPage() {
                                         onClick={closeCategoryView}
                                         className="mb-3 inline-flex rounded-full border border-brand-yellow/40 bg-white px-4 py-2 text-xs font-black text-brand-black shadow-sm hover:bg-brand-yellow"
                                     >
-                                        ← Volver a categorías
+                                        {language === 'es' ? '← Volver a categorías' : '← Back to categories'}
                                     </button>
                                     <h1 
                                         className="font-tan text-[0.875rem] xs:text-[1rem] sm:text-[2.2rem] sm:leading-[1.18] lg:text-[2.6rem] uppercase tracking-normal text-brand-yellow [-webkit-text-stroke:1.1px_#000] drop-shadow-[1.5px_1.5px_0_rgba(0,0,0,1)] whitespace-nowrap sm:whitespace-normal"
                                     >
-                                        {expandedCategory}
+                                        {t(expandedCategory, language as any)}
                                     </h1>
                                     <p className="mt-3.5 sm:mt-2 text-[10px] sm:text-xs font-black uppercase text-gray-400 tracking-widest font-maiandra">
-                                        {expandedProducts.length} {expandedProducts.length === 1 ? 'producto' : 'productos'}
+                                        {expandedProducts.length} {language === 'es' ? (expandedProducts.length === 1 ? 'producto' : 'productos') : (expandedProducts.length === 1 ? 'product' : 'products')}
                                     </p>
                                 </div>
                             </div>
                             {expandedProducts.length === 0 ? (
                                 <div className="rounded-3xl bg-white p-10 text-center text-gray-400 font-medium font-sans shadow-sm">
-                                    No encontramos productos en esta categoría.
+                                    {language === 'es' ? 'No encontramos productos en esta categoría.' : 'No products found in this category.'}
                                 </div>
                             ) : (
                                 <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
@@ -474,7 +476,7 @@ export default function ShopPage() {
                         </div>
                     ) : filtered.length === 0 ? (
                         <div className="text-center flex items-center justify-center h-full py-24">
-                            <p className="text-gray-500 font-medium text-lg">No encontramos productos que coincidan con tu búsqueda.</p>
+                            <p className="text-gray-500 font-medium text-lg">{language === 'es' ? 'No encontramos productos que coincidan con tu búsqueda.' : 'No products matched your search.'}</p>
                         </div>
                     ) : (
                         <div className="space-y-10">
@@ -494,10 +496,10 @@ export default function ShopPage() {
                     <div className="bg-brand-yellow p-8">
                         <DialogHeader>
                             <DialogTitle className="text-3xl font-black text-brand-black">
-                                {checkoutStep === 'cart' ? 'Tu Carrito' : 'Detalles de Compra'}
+                                {checkoutStep === 'cart' ? (language === 'es' ? 'Tu Carrito' : 'Your Cart') : (language === 'es' ? 'Detalles de Compra' : 'Purchase Details')}
                             </DialogTitle>
                             <p className="text-brand-black/70 font-medium">
-                                {checkoutStep === 'cart' ? 'Revisa tus productos antes de finalizar.' : 'Completa tus datos para procesar el pedido.'}
+                                {checkoutStep === 'cart' ? (language === 'es' ? 'Revisa tus productos antes de finalizar.' : 'Review your items before checking out.') : (language === 'es' ? 'Completa tus datos para procesar el pedido.' : 'Complete your details to process your order.')}
                             </p>
                         </DialogHeader>
                     </div>
@@ -508,8 +510,8 @@ export default function ShopPage() {
                                 <div className="w-20 h-20 bg-gray-50 rounded-full flex items-center justify-center mx-auto">
                                     <ShoppingCart className="w-10 h-10 text-gray-300" strokeWidth={1.5} />
                                 </div>
-                                <p className="text-gray-400 font-bold text-lg uppercase tracking-widest">Tu carrito está vacío</p>
-                                <Button onClick={() => setShowCart(false)} variant="outline" className="rounded-full border-gray-200 font-bold">Explorar Tienda</Button>
+                                <p className="text-gray-400 font-bold text-lg uppercase tracking-widest">{language === 'es' ? 'Tu carrito está vacío' : 'Your cart is empty'}</p>
+                                <Button onClick={() => setShowCart(false)} variant="outline" className="rounded-full border-gray-200 font-bold">{language === 'es' ? 'Explorar Tienda' : 'Explore Shop'}</Button>
                             </div>
                         ) : (
                             checkoutStep === 'cart' ? (
@@ -549,12 +551,12 @@ export default function ShopPage() {
 
                                     <div className="pt-6 border-t border-gray-100 space-y-6">
                                         <div className="flex justify-between items-center bg-brand-yellow/5 p-6 rounded-[2rem] border border-brand-yellow/10">
-                                            <span className="font-bold text-brand-charcoal/60 uppercase tracking-widest text-xs">Total a Pagar</span>
+                                            <span className="font-bold text-brand-charcoal/60 uppercase tracking-widest text-xs">{language === 'es' ? 'Total a Pagar' : 'Total to Pay'}</span>
                                             <span className="font-black text-4xl text-brand-charcoal">Bs. {totalPrice}</span>
                                         </div>
                                         <Button className="w-full h-16 bg-brand-yellow text-brand-black hover:bg-brand-yellow-light transition-all font-black text-lg rounded-full shadow-xl hover:shadow-brand-yellow/20 hover:-translate-y-1 border-0"
                                             onClick={() => setCheckoutStep('checkout')}>
-                                            Proceder al Pago
+                                            {language === 'es' ? 'Proceder al Pago' : 'Proceed to Checkout'}
                                         </Button>
                                     </div>
                                 </div>
@@ -562,11 +564,11 @@ export default function ShopPage() {
                                 <form onSubmit={handleCheckout} className="space-y-6">
                                     <div className="grid grid-cols-2 gap-4">
                                         <div className="space-y-2">
-                                            <Label className="font-bold text-xs uppercase tracking-widest text-gray-400 ml-1">Nombre</Label>
+                                            <Label className="font-bold text-xs uppercase tracking-widest text-gray-400 ml-1">{language === 'es' ? 'Nombre' : 'First Name'}</Label>
                                             <Input className="h-12 rounded-2xl border-gray-200 bg-gray-50/50" value={name} onChange={e => setName(e.target.value)} required />
                                         </div>
                                         <div className="space-y-2">
-                                            <Label className="font-bold text-xs uppercase tracking-widest text-gray-400 ml-1">Apellido</Label>
+                                            <Label className="font-bold text-xs uppercase tracking-widest text-gray-400 ml-1">{language === 'es' ? 'Apellido' : 'Last Name'}</Label>
                                             <Input className="h-12 rounded-2xl border-gray-200 bg-gray-50/50" value={lastName} onChange={e => setLastName(e.target.value)} required />
                                         </div>
                                     </div>
@@ -576,19 +578,19 @@ export default function ShopPage() {
                                             <Input className="h-12 rounded-2xl border-gray-200 bg-gray-50/50" value={phone} onChange={e => setPhone(e.target.value)} required placeholder="+591..." />
                                         </div>
                                         <div className="space-y-2">
-                                            <Label className="font-bold text-xs uppercase tracking-widest text-gray-400 ml-1">CI / Carnet</Label>
+                                            <Label className="font-bold text-xs uppercase tracking-widest text-gray-400 ml-1">{language === 'es' ? 'CI / Carnet' : 'ID / Passport'}</Label>
                                             <Input className="h-12 rounded-2xl border-gray-200 bg-gray-50/50" value={ci} onChange={e => setCi(e.target.value)} required />
                                         </div>
                                     </div>
                                     <div className="space-y-2">
-                                        <Label className="font-bold text-xs uppercase tracking-widest text-gray-400 ml-1">Notas (Opcional)</Label>
+                                        <Label className="font-bold text-xs uppercase tracking-widest text-gray-400 ml-1">{language === 'es' ? 'Notas (Opcional)' : 'Notes (Optional)'}</Label>
                                         <Textarea className="rounded-2xl border-gray-200 bg-gray-50/50 resize-none" value={notes} onChange={e => setNotes(e.target.value)} rows={3} placeholder="Alguna instrucción especial..." />
                                     </div>
 
                                     <div className="flex gap-4 pt-4 border-t border-gray-50">
-                                        <Button type="button" variant="outline" className="w-1/3 h-14 rounded-full font-bold border-gray-200" onClick={() => setCheckoutStep('cart')}>Atrás</Button>
+                                        <Button type="button" variant="outline" className="w-1/3 h-14 rounded-full font-bold border-gray-200" onClick={() => setCheckoutStep('cart')}>{language === 'es' ? 'Atrás' : 'Back'}</Button>
                                         <Button type="submit" className="w-2/3 h-14 bg-green-500 hover:bg-green-600 text-white font-black text-lg rounded-full shadow-lg hover:shadow-green-500/20 hover:-translate-y-1 transition-all">
-                                            <MessageCircle className="w-5 h-5 mr-3" strokeWidth={1.5} /> Enviar WhatsApp
+                                            <MessageCircle className="w-5 h-5 mr-3" strokeWidth={1.5} /> {language === 'es' ? 'Enviar WhatsApp' : 'Send via WhatsApp'}
                                         </Button>
                                     </div>
                                 </form>

@@ -4,17 +4,22 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { useStore } from '@/context/StoreContext';
+import { useLanguage } from '@/context/LanguageContext';
+import { getLocalizedField, t } from '@/lib/translations';
 
 const fadeUp = { initial: { opacity: 0, y: 30 }, whileInView: { opacity: 1, y: 0 }, viewport: { once: true }, transition: { duration: 0.6 } };
 
 const difficultyColor: Record<string, string> = {
+    'Fácil': 'bg-green-500/15 text-green-600 border-green-500/30',
     'FÃƒÂ¡cil': 'bg-green-500/15 text-green-600 border-green-500/30',
     'Moderado': 'bg-yellow-500/15 text-yellow-600 border-yellow-500/30',
+    'Difícil': 'bg-red-500/15 text-red-600 border-red-500/30',
     'DifÃƒÂ­cil': 'bg-red-500/15 text-red-600 border-red-500/30',
 };
 
 export default function RoutesPage() {
     const { routes } = useStore();
+    const { language } = useLanguage();
 
     return (
         <div className="pt-[80px] lg:pt-[120px] bg-background min-h-screen flex flex-col">
@@ -23,10 +28,15 @@ export default function RoutesPage() {
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                     <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-8">
                         {routes.map((route, i) => {
+                            const routeName = getLocalizedField(route.name, route.nameEn, language);
+                            const routeDesc = getLocalizedField(route.description, route.descriptionEn, language);
+                            const diffLabel = t(route.difficulty, language);
+                            const durationLabel = t(route.duration, language);
+
                             const headerContent = (
                                 <>
                                     {route.image ? (
-                                        <img src={route.image} className="absolute inset-0 w-full h-full object-cover group-hover:scale-110 transition-transform duration-1000" alt={route.name} />
+                                        <img src={route.image} className="absolute inset-0 w-full h-full object-cover group-hover:scale-110 transition-transform duration-1000" alt={routeName} />
                                     ) : (
                                         <div className="absolute inset-0 bg-brand-charcoal/5 group-hover:bg-brand-yellow/10 transition-colors duration-700" />
                                     )}
@@ -34,7 +44,7 @@ export default function RoutesPage() {
                                     {route.mapUrl && (
                                         <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center z-20">
                                             <span className="text-white font-black text-xs uppercase tracking-widest bg-brand-charcoal/90 px-4 py-2.5 rounded-full border-2 border-brand-yellow/50 shadow-lg flex items-center gap-1.5 transform translate-y-2 group-hover:translate-y-0 transition-transform duration-300">
-                                                Abrir en Google Maps
+                                                {language === 'es' ? 'Abrir en Google Maps' : 'Open in Google Maps'}
                                             </span>
                                         </div>
                                     )}
@@ -47,10 +57,14 @@ export default function RoutesPage() {
                                             >
                                                 <MapPin className="w-10 h-10 text-brand-charcoal group-hover:text-white transition-colors" strokeWidth={1.5} />
                                             </motion.div>
-                                            <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest group-hover:text-brand-charcoal/50 transition-colors">Visualizar Ruta</p>
+                                            <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest group-hover:text-brand-charcoal/50 transition-colors">
+                                                {language === 'es' ? 'Visualizar Ruta' : 'View Route'}
+                                            </p>
                                         </div>
                                     )}
-                                    <Badge className={`absolute top-6 right-6 px-4 py-2 font-black text-[10px] uppercase tracking-widest rounded-full shadow-lg border-0 z-30 ${difficultyColor[route.difficulty]}`}>{route.difficulty}</Badge>
+                                    <Badge className={`absolute top-6 right-6 px-4 py-2 font-black text-[10px] uppercase tracking-widest rounded-full shadow-lg border-0 z-30 ${difficultyColor[route.difficulty] || difficultyColor['Moderado']}`}>
+                                        {diffLabel}
+                                    </Badge>
                                 </>
                             );
 
@@ -68,17 +82,19 @@ export default function RoutesPage() {
                                         </div>
                                         <CardContent className="p-8 sm:p-10 flex-1 flex flex-col z-10 bg-white relative">
                                             <div className="mb-6">
-                                                <h3 className="font-black text-2xl text-brand-charcoal group-hover:text-brand-yellow transition-colors leading-tight mb-3">{route.name}</h3>
-                                                <p className="text-sm sm:text-base text-gray-400 font-bold leading-relaxed flex-1 opacity-80">{route.description}</p>
+                                                <h3 className="font-black text-2xl text-brand-charcoal group-hover:text-brand-yellow transition-colors leading-tight mb-3">{routeName}</h3>
+                                                <p className="text-sm sm:text-base text-gray-400 font-bold leading-relaxed flex-1 opacity-80">{routeDesc}</p>
                                             </div>
                                             <div className="mt-auto space-y-6 pt-6 border-t border-gray-50">
                                                 <div className="flex items-center gap-8 text-[11px] font-black uppercase tracking-widest text-brand-charcoal/60">
                                                     <span className="flex items-center gap-2 group-hover:text-brand-yellow transition-colors"><Route className="w-4 h-4 text-brand-yellow" strokeWidth={2} /> {route.distance}</span>
-                                                    <span className="flex items-center gap-2 group-hover:text-brand-yellow transition-colors"><Clock className="w-4 h-4 text-brand-yellow" strokeWidth={2} /> {route.duration}</span>
+                                                    <span className="flex items-center gap-2 group-hover:text-brand-yellow transition-colors"><Clock className="w-4 h-4 text-brand-yellow" strokeWidth={2} /> {durationLabel}</span>
                                                 </div>
                                                 <div className="flex flex-wrap gap-2">
                                                     {route.highlights.map((h, j) => (
-                                                        <Badge key={j} variant="secondary" className="text-[9px] font-black uppercase tracking-widest bg-gray-50 text-gray-400 hover:bg-brand-yellow hover:text-brand-black transition-all px-3 py-1.5 rounded-full border-0">{h}</Badge>
+                                                        <Badge key={j} variant="secondary" className="text-[9px] font-black uppercase tracking-widest bg-gray-50 text-gray-400 hover:bg-brand-yellow hover:text-brand-black transition-all px-3 py-1.5 rounded-full border-0">
+                                                            {t(h, language)}
+                                                        </Badge>
                                                     ))}
                                                 </div>
                                             </div>
@@ -103,8 +119,18 @@ export default function RoutesPage() {
                 </div>
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
                     <motion.div {...fadeUp} className="text-center mb-16 space-y-6">
-                        <h2 className="font-tan text-[1.8rem] xs:text-[2rem] sm:text-5xl mb-6 tracking-tight leading-[1.38] text-[#203253]">Explora el <span className="text-brand-yellow [-webkit-text-stroke:1px_#203253]">mapa ciclista</span></h2>
-                        <p className="text-xl sm:text-2xl text-[#203253]/65 font-medium max-w-2xl mx-auto leading-relaxed">Muy pronto: Un mapa interactivo con todas las rutas recomendadas, puntos de interes, talleres aliados y paradas de descanso en Cochabamba.</p>
+                        <h2 className="font-tan text-[1.8rem] xs:text-[2rem] sm:text-5xl mb-6 tracking-tight leading-[1.38] text-[#203253]">
+                            {language === 'es' ? (
+                                <>Explora el <span className="text-brand-yellow [-webkit-text-stroke:1px_#203253]">mapa ciclista</span></>
+                            ) : (
+                                <>Explore the <span className="text-brand-yellow [-webkit-text-stroke:1px_#203253]">cycling map</span></>
+                            )}
+                        </h2>
+                        <p className="text-xl sm:text-2xl text-[#203253]/65 font-medium max-w-2xl mx-auto leading-relaxed">
+                            {language === 'es'
+                                ? 'Muy pronto: Un mapa interactivo con todas las rutas recomendadas, puntos de interés, talleres aliados y paradas de descanso en Cochabamba.'
+                                : 'Coming soon: An interactive map featuring all recommended routes, points of interest, partner workshops, and rest stops across Cochabamba.'}
+                        </p>
                     </motion.div>
                     <div className="max-w-5xl mx-auto">
                         <motion.div
@@ -130,7 +156,9 @@ export default function RoutesPage() {
                                     <MapPin className="w-12 h-12 text-[#203253]" strokeWidth={1.5} />
                                 </motion.div>
                                 <div>
-                                    <h3 className="font-tangkiwood text-3xl sm:text-4xl text-[#203253] transition-colors italic">Proximamente</h3>
+                                    <h3 className="font-tangkiwood text-3xl sm:text-4xl text-[#203253] transition-colors italic">
+                                        {language === 'es' ? 'Próximamente' : 'Coming Soon'}
+                                    </h3>
                                     <div className="w-20 h-2 bg-brand-yellow mx-auto rounded-full mt-4 opacity-80" />
                                 </div>
                             </div>
@@ -147,20 +175,26 @@ export default function RoutesPage() {
                 <div className="max-w-4xl mx-auto px-4 text-center space-y-12 relative z-10">
                     <motion.div {...fadeUp} className="space-y-8">
                         <h2 className="font-tan text-[2rem] xs:text-[2.4rem] sm:text-5xl lg:text-6xl text-[#203253] tracking-tight leading-[1.65]">
-                            Listo para <span className="text-white drop-shadow-md">explorar</span>?
+                            {language === 'es' ? (
+                                <>¿Listo para <span className="text-white drop-shadow-md">explorar</span>?</>
+                            ) : (
+                                <>Ready to <span className="text-white drop-shadow-md">explore</span>?</>
+                            )}
                         </h2>
                         <p className="text-xl sm:text-3xl font-bold text-[#203253]/75 max-w-2xl mx-auto leading-relaxed italic">
-                            Alquila una bicicleta Premium y descubre los mejores rincones a tu propio ritmo.
+                            {language === 'es'
+                                ? 'Alquila una bicicleta Premium y descubre los mejores rincones a tu propio ritmo.'
+                                : 'Rent a premium bicycle and discover the best corners of Cochabamba at your own pace.'}
                         </p>
                         <div className="flex flex-col sm:flex-row gap-6 justify-center pt-8">
                             <a href="/rentals" className="w-full sm:w-auto">
                                 <Button className="h-20 px-12 rounded-full bg-white text-[#203253] hover:bg-brand-cyan hover:text-white font-black text-xl shadow-[0_18px_34px_rgba(120,87,0,0.16)] hover:-translate-y-2 transition-all w-full border-0">
-                                    Alquilar una bici
+                                    {language === 'es' ? 'Alquilar una bici' : 'Rent a bike'}
                                 </Button>
                             </a>
                             <a href="https://wa.me/59177860277" target="_blank" rel="noopener noreferrer" className="w-full sm:w-auto">
                                 <Button variant="outline" className="h-20 px-12 rounded-full bg-brand-cyan/15 border-white/70 text-[#203253] hover:bg-white hover:border-white hover:text-[#203253] font-black text-xl backdrop-blur-md shadow-lg hover:-translate-y-2 transition-all w-full border-2">
-                                    Consultar WhatsApp
+                                    {language === 'es' ? 'Consultar WhatsApp' : 'Ask via WhatsApp'}
                                 </Button>
                             </a>
                         </div>

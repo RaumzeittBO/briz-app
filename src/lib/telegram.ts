@@ -1,4 +1,3 @@
-// Build: 2026-06-28T23:28 — forced fresh build to pick up new VITE_TELEGRAM_CHAT_ID
 const escapeHTML = (text: string = ''): string => {
     return text
         .replace(/&/g, '&amp;')
@@ -6,34 +5,43 @@ const escapeHTML = (text: string = ''): string => {
         .replace(/>/g, '&gt;');
 };
 
+export interface TelegramNotificationItem {
+    selectedWheelSize?: string;
+    productNameSnapshot?: string;
+    productName?: string;
+    quantity: number;
+    total: number;
+    deliveryService?: boolean;
+    pickupService?: boolean;
+    notes?: string;
+}
+
+export interface TelegramCustomerSummary {
+    name?: string;
+    phone?: string;
+    ci?: string;
+}
+
 /**
  * Sends a Telegram notification for a new rental reservation.
- * Automatically handles supergroup migrations (migrate_to_chat_id).
+ * Supports a server-side webhook proxy (VITE_TELEGRAM_WEBHOOK_URL) when configured,
+ * and falls back to the Telegram Bot API with supergroup migration support.
+ * Never logs token fragments or chat IDs to the browser console.
  */
 export const sendTelegramNotification = async (
     reservationCode: string,
-    items: any[],
+    items: TelegramNotificationItem[],
     finalTotal: number,
-    customer: any,
+    customer: TelegramCustomerSummary | null | undefined,
     paymentMethod: string,
     date: string,
     pickupTime: string,
     duration: string | number,
     mapsLink?: string
 ) => {
+    const webhookUrl = import.meta.env.VITE_TELEGRAM_WEBHOOK_URL;
     const token = import.meta.env.VITE_TELEGRAM_BOT_TOKEN;
     const chatId = import.meta.env.VITE_TELEGRAM_CHAT_ID;
-
-    // DIAGNOSTIC: Log the actual values embedded in this build to detect stale cache
-    console.log(`[Telegram] Valores en build: token=${token ? token.slice(0,8)+'...' : 'VACIO'}, chatId=${chatId || 'VACIO'}`);
-
-    if (!token || !chatId) {
-        console.error(
-            `[Telegram] VARIABLES DE ENTORNO FALTANTES. Token: ${!!token}, ChatId: ${!!chatId}. ` +
-            `Configura VITE_TELEGRAM_BOT_TOKEN y VITE_TELEGRAM_CHAT_ID en el entorno de produccion.`
-        );
-        return;
-    }
 
     const formattedDate = new Date(`${date}T12:00:00`).toLocaleDateString('es-BO', { dateStyle: 'long' });
 
@@ -60,7 +68,7 @@ export const sendTelegramNotification = async (
     });
     message += `\n\u{1F4C5} <b>Fecha de Retiro:</b> ${formattedDate}\n`;
     message += `\u{23F0} <b>Hora:</b> ${pickupTime}\n`;
-    message += `\u{23F1} <b>Duraci\u00f3n:</b> ${duration} hora(s)\n`;
+    message += `\u{23F1} <b>Duraci\u00f3n:</b> ${duration}\n`;
     message += `\u{1F4B3} <b>M\u00e9todo de Pago:</b> ${paymentMethod}\n`;
     message += `\u{1F4B0} <b>Total a pagar:</b> <b>Bs. ${finalTotal}</b>\n\n`;
 
@@ -75,7 +83,30 @@ export const sendTelegramNotification = async (
         }
     }
 
-    const sendToChat = async (targetChatId: string): Promise<any> => {
+    // 1. Prefer secure server-side webhook proxy if configured
+    if (webhookUrl) {
+        try {
+            const res = await fetch(webhookUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    reservationCode,
+                    message,
+                    parse_mode: 'HTML',
+                    disable_web_page_preview: true
+                })
+            });
+            if (res.ok) return;
+        } catch {
+            // Fall through to direct Bot API if webhook fails and credentials are present
+        }
+    }
+
+    if (!token || !chatId) {
+        return;
+    }
+
+    const sendToChat = async (targetChatId: string) => {
         const response = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -89,39 +120,19 @@ export const sendTelegramNotification = async (
         return response.json();
     };
 
-    console.log(`[Telegram] Enviando notificacion para ${reservationCode} al chat ${chatId}...`);
-
     try {
         let result = await sendToChat(chatId);
 
         // Handle Telegram supergroup migration automatically
         if (!result.ok && result.parameters?.migrate_to_chat_id) {
             const newChatId = String(result.parameters.migrate_to_chat_id);
-            console.warn(
-                `[Telegram] El grupo fue migrado a supergrupo. Nuevo chat_id: ${newChatId}. ` +
-                `IMPORTANTE: Actualiza VITE_TELEGRAM_CHAT_ID en el entorno de produccion a: ${newChatId}`
-            );
             result = await sendToChat(newChatId);
         }
 
         if (!result.ok) {
-            if (result.error_code === 403) {
-                console.error(
-                    `[Telegram] ERROR 403 - El bot no tiene permiso para enviar mensajes. ` +
-                    `Asegurate de que @briz_alquileres_bot sea administrador del grupo con permiso de Publicar mensajes.`
-                );
-            } else if (result.error_code === 400 && result.description?.includes('chat not found')) {
-                console.error(
-                    `[Telegram] ERROR 400 - Chat ID incorrecto (${chatId}). El grupo pudo haber sido migrado. ` +
-                    `Verifica y actualiza VITE_TELEGRAM_CHAT_ID en el entorno de produccion.`
-                );
-            } else {
-                console.error(`[Telegram] Error ${result.error_code}:`, result.description);
-            }
-        } else {
-            console.log(`[Telegram] Notificacion enviada. Message ID: ${result?.result?.message_id}`);
+            console.warn(`[Telegram] No se pudo entregar la notificación (${result.error_code || 'error'}).`);
         }
-    } catch (error) {
-        console.error("[Telegram] Error de red:", error);
+    } catch {
+        console.warn('[Telegram] Error de red al enviar notificación.');
     }
 };

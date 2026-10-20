@@ -3,6 +3,7 @@ import { motion, useScroll, useTransform, useSpring, useMotionValue } from 'fram
 import { Bike, Sparkles, Heart, ArrowRight } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useLanguage } from '@/context/LanguageContext';
+import { getLocalizedArtwork } from '@/lib/artworkRegistry';
 
 // Crinkled Translucent Washi Tape Sticker Component
 function WashiTape({ className }: { className: string }) {
@@ -93,9 +94,10 @@ interface TiltCardProps {
     mobileSrc: string;
     alt: string;
     idx: number;
+    language: 'es' | 'en';
 }
 
-function TiltCard({ webSrc, mobileSrc, alt, idx }: TiltCardProps) {
+function TiltCard({ webSrc, mobileSrc, alt, idx, language }: TiltCardProps) {
     const cardRef = useRef<HTMLDivElement>(null);
     const x = useMotionValue(0);
     const y = useMotionValue(0);
@@ -198,7 +200,7 @@ function TiltCard({ webSrc, mobileSrc, alt, idx }: TiltCardProps) {
                             <Bike className="w-5 h-5" strokeWidth={2.3} />
                         </div>
                         <Link to="/contact" className="absolute -bottom-7 sm:-bottom-9 -right-4 sm:-right-5 bg-brand-pink border-3 border-brand-black rounded-xl p-2.5 shadow-[4px_4px_0_rgba(0,0,0,1)] text-white z-20 rotate-[6deg] hover:scale-105 transition-transform flex items-center gap-1.5 font-cocon text-xs font-black uppercase">
-                            <span>Conocer</span>
+                            <span>{language === 'es' ? 'Conocer' : 'Explore'}</span>
                             <ArrowRight className="w-4 h-4" strokeWidth={2.5} />
                         </Link>
                     </>
@@ -231,7 +233,7 @@ function TiltCard({ webSrc, mobileSrc, alt, idx }: TiltCardProps) {
 }
 
 // Bicycle Tire Track Scroll Connector Component
-function BikeTreadConnector() {
+function BikeTreadConnector({ language }: { language: 'es' | 'en' }) {
     const containerRef = useRef<HTMLDivElement>(null);
     const { scrollYProgress } = useScroll({
         target: containerRef,
@@ -256,10 +258,10 @@ function BikeTreadConnector() {
             <div className="absolute inset-y-0 w-12 flex justify-center overflow-visible">
                 {/* Arrow Doodles pointing down */}
                 <div className="absolute left-[-6rem] top-1/4 hidden md:block text-[#203253]/35 font-gochi text-base rotate-[-8deg] pointer-events-none">
-                    👉 Sigue la ruta
+                    👉 {language === 'es' ? 'Sigue la ruta' : 'Follow the route'}
                 </div>
                 <div className="absolute right-[-8rem] top-1/2 hidden md:block text-[#203253]/35 font-gochi text-base rotate-[12deg] pointer-events-none">
-                    Pedalea hacia abajo 👇
+                    {language === 'es' ? 'Pedalea hacia abajo' : 'Pedal down'} 👇
                 </div>
 
                 {/* Vertical SVG containing the tire tread pattern */}
@@ -306,8 +308,9 @@ function BikeTreadConnector() {
 
 export default function AboutPage() {
     const { language } = useLanguage();
-    const assetBaseWeb = language === 'es' ? '/Conocenos-web' : '/Conocenos-web/Ingles';
-    const assetBaseCel = language === 'es' ? '/Conocenos-celular' : '/Conocenos-celular/Ingles';
+    const slide1 = getLocalizedArtwork('about_slide_1', language);
+    const slide2 = getLocalizedArtwork('about_slide_2', language);
+    const slide3 = getLocalizedArtwork('about_slide_3', language);
 
     return (
         <div className="pt-20 min-h-screen bg-[#FFFDF3] relative overflow-hidden flex flex-col">
@@ -336,7 +339,9 @@ export default function AboutPage() {
                     transition={{ delay: 0.18 }}
                     className="font-gochi text-lg sm:text-2xl text-brand-black/70 max-w-[500px]"
                 >
-                    Felicidad y bienestar integral sobre dos ruedas.
+                    {language === 'es'
+                        ? 'Felicidad y bienestar integral sobre dos ruedas.'
+                        : 'Happiness and holistic well-being on two wheels.'}
                 </motion.p>
             </header>
 
@@ -344,32 +349,35 @@ export default function AboutPage() {
             <main className="mx-auto max-w-[1600px] w-full flex-1 flex flex-col items-center py-6 relative z-10">
                 {/* SECTION 1 */}
                 <TiltCard 
-                    webSrc={`${assetBaseWeb}/1.webp?v=2`}
-                    mobileSrc={`${assetBaseCel}/1.webp?v=2`}
-                    alt="Conócenos Briz Parte 1"
+                    webSrc={slide1.webSrc}
+                    mobileSrc={slide1.mobileSrc}
+                    alt={slide1.alt}
                     idx={0}
+                    language={language}
                 />
 
                 {/* TRACK CONNECTOR 1 -> 2 */}
-                <BikeTreadConnector />
+                <BikeTreadConnector language={language} />
 
                 {/* SECTION 2 */}
                 <TiltCard 
-                    webSrc={`${assetBaseWeb}/2.webp?v=2`}
-                    mobileSrc={`${assetBaseCel}/2.webp?v=2`}
-                    alt="Conócenos Briz Parte 2"
+                    webSrc={slide2.webSrc}
+                    mobileSrc={slide2.mobileSrc}
+                    alt={slide2.alt}
                     idx={1}
+                    language={language}
                 />
 
                 {/* TRACK CONNECTOR 2 -> 3 */}
-                <BikeTreadConnector />
+                <BikeTreadConnector language={language} />
 
                 {/* SECTION 3 */}
                 <TiltCard 
-                    webSrc={`${assetBaseWeb}/3.webp?v=2`}
-                    mobileSrc={`${assetBaseCel}/3.webp?v=2`}
-                    alt="Conócenos Briz Parte 3"
+                    webSrc={slide3.webSrc}
+                    mobileSrc={slide3.mobileSrc}
+                    alt={slide3.alt}
                     idx={2}
+                    language={language}
                 />
             </main>
 
@@ -390,10 +398,16 @@ export default function AboutPage() {
                     className="max-w-[620px] flex flex-col items-center space-y-6"
                 >
                     <h2 className="font-tan text-[1.45rem] sm:text-3xl text-white uppercase leading-[1.38] tracking-normal">
-                        ¿Listo para vivir la <span className="text-brand-yellow">experiencia</span>?
+                        {language === 'es' ? (
+                            <>¿Listo para vivir la <span className="text-brand-yellow">experiencia</span>?</>
+                        ) : (
+                            <>Ready to live the <span className="text-brand-yellow">experience</span>?</>
+                        )}
                     </h2>
                     <p className="font-cocon text-base sm:text-xl text-white/84 leading-relaxed max-w-[500px]">
-                        Te invitamos a visitarnos, conocer nuestras rutas o alquilar una de nuestras bicicletas personalizadas.
+                        {language === 'es'
+                            ? 'Te invitamos a visitarnos, conocer nuestras rutas o alquilar una de nuestras bicicletas personalizadas.'
+                            : 'Come visit us, explore our cycling routes, or rent one of our custom-fitted bicycles.'}
                     </p>
                     <div className="pt-4 flex flex-col sm:flex-row gap-4 w-full sm:w-auto items-center justify-center">
                         <Link to="/contact" className="w-full sm:w-auto">
@@ -402,7 +416,7 @@ export default function AboutPage() {
                                 whileTap={{ scale: 0.95 }}
                                 className="w-full sm:w-auto px-10 py-5 bg-brand-yellow text-brand-black border-3 border-brand-black font-cocon font-black text-sm uppercase tracking-wider rounded-full shadow-[5px_5px_0px_rgba(0,0,0,1)] hover:shadow-[2px_2px_0px_rgba(0,0,0,1)] transition-all cursor-pointer flex items-center justify-center gap-3"
                             >
-                                <span>Contáctanos</span>
+                                <span>{language === 'es' ? 'Contáctanos' : 'Contact Us'}</span>
                                 <ArrowRight className="w-4 h-4" strokeWidth={2.5} />
                             </motion.button>
                         </Link>
@@ -412,7 +426,7 @@ export default function AboutPage() {
                                 whileTap={{ scale: 0.95 }}
                                 className="w-full sm:w-auto px-10 py-5 bg-[#FFFDF3] text-brand-black border-3 border-brand-black font-cocon font-black text-sm uppercase tracking-wider rounded-full shadow-[5px_5px_0px_rgba(0,0,0,1)] hover:shadow-[2px_2px_0px_rgba(0,0,0,1)] transition-all cursor-pointer flex items-center justify-center gap-3"
                             >
-                                <span>Alquilar Bicicleta</span>
+                                <span>{language === 'es' ? 'Alquilar Bicicleta' : 'Rent a Bike'}</span>
                                 <Bike className="w-4 h-4" strokeWidth={2.5} />
                             </motion.button>
                         </Link>

@@ -10,6 +10,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useStore } from '@/context/StoreContext';
+import { useLanguage } from '@/context/LanguageContext';
 
 interface CustomerAuthModalProps {
     isOpen: boolean;
@@ -102,7 +103,8 @@ const COUNTRIES_LIST = [
 ];
 
 export default function CustomerAuthModal({ isOpen, onClose, onSuccess }: CustomerAuthModalProps) {
-    const { loginCustomer, registerCustomer, customers, updateCustomer } = useStore();
+    const { loginCustomer, registerCustomer, updateCustomer, verifyCustomerRecovery } = useStore();
+    const { language } = useLanguage();
     
     // Auth Mode: 'login' | 'register' | 'forgot' | 'reset'
     const [mode, setMode] = useState<'login' | 'register' | 'forgot' | 'reset'>('login');
@@ -363,22 +365,23 @@ export default function CustomerAuthModal({ isOpen, onClose, onSuccess }: Custom
         }
     };
 
-    const handleVerifyRecovery = (e: React.FormEvent) => {
+    const handleVerifyRecovery = async (e: React.FormEvent) => {
         e.preventDefault();
         setError(null);
         setSuccessMessage(null);
-        
-        const cleanSearchPhone = recoveryPhone.replace(/\D/g, '').slice(-8);
-        const match = customers.find(c => 
-            c.email?.toLowerCase().trim() === recoveryEmail.toLowerCase().trim() && 
-            c.phone?.replace(/\D/g, '').slice(-8) === cleanSearchPhone
-        );
-
-        if (match) {
-            setMatchedCustomerId(match.id);
-            setMode('reset');
-        } else {
-            setError("No se encontró ningún cliente con ese correo y número de WhatsApp registrados.");
+        setLoading(true);
+        try {
+            const matchedId = await verifyCustomerRecovery(recoveryEmail, recoveryPhone);
+            if (matchedId) {
+                setMatchedCustomerId(matchedId);
+                setMode('reset');
+            } else {
+                setError("No se encontró ningún cliente con ese correo y número de WhatsApp registrados.");
+            }
+        } catch {
+            setError("No se pudo verificar la cuenta en este momento.");
+        } finally {
+            setLoading(false);
         }
     };
 
@@ -445,22 +448,22 @@ export default function CustomerAuthModal({ isOpen, onClose, onSuccess }: Custom
                     <img src="/logoamarillo.png" alt="Briz logo" className="h-20 w-auto object-contain mb-3" />
                     <DialogTitle className="text-lg sm:text-xl md:text-2xl font-tangkiwood uppercase tracking-wide text-brand-charcoal text-center px-4 w-full break-words">
                         {mode === 'login' 
-                            ? 'INICIAR SESIÓN' 
+                            ? (language === 'es' ? 'INICIAR SESIÓN' : 'SIGN IN') 
                             : mode === 'register' 
-                            ? 'REGÍSTRATE EN BRIZ' 
+                            ? (language === 'es' ? 'REGÍSTRATE EN BRIZ' : 'REGISTER AT BRIZ') 
                             : mode === 'forgot'
-                            ? 'RECUPERAR CONTRASEÑA'
-                            : 'RESTABLECER CONTRASEÑA'
+                            ? (language === 'es' ? 'RECUPERAR CONTRASEÑA' : 'RECOVER PASSWORD')
+                            : (language === 'es' ? 'RESTABLECER CONTRASEÑA' : 'RESET PASSWORD')
                         }
                     </DialogTitle>
                     <p className="text-[11px] font-maiandra text-brand-charcoal/60 uppercase tracking-widest mt-1">
                         {mode === 'login' 
-                            ? 'Ingresa para rentar tu bicicleta' 
+                            ? (language === 'es' ? 'Ingresa para rentar tu bicicleta' : 'Sign in to rent your bicycle') 
                             : mode === 'register'
-                            ? 'Sigue los pasos y regístrate en nuestro sistema'
+                            ? (language === 'es' ? 'Sigue los pasos y regístrate en nuestro sistema' : 'Follow the steps to create your account')
                             : mode === 'forgot'
-                            ? 'Ingresa tus datos para validar tu perfil'
-                            : 'Establece tu nueva contraseña de acceso'
+                            ? (language === 'es' ? 'Ingresa tus datos para validar tu perfil' : 'Enter your details to verify your profile')
+                            : (language === 'es' ? 'Establece tu nueva contraseña de acceso' : 'Set your new account password')
                         }
                     </p>
                 </div>
@@ -496,7 +499,7 @@ export default function CustomerAuthModal({ isOpen, onClose, onSuccess }: Custom
                     {mode === 'login' ? (
                         <form onSubmit={handleLoginSubmit} className="space-y-5">
                             <div className="space-y-2">
-                                <Label className="text-[10px] text-brand-charcoal/60 font-bold uppercase tracking-widest font-maiandra">Correo Electrónico</Label>
+                                <Label className="text-[10px] text-brand-charcoal/60 font-bold uppercase tracking-widest font-maiandra">{language === 'es' ? 'Correo Electrónico' : 'Email Address'}</Label>
                                 <div className="relative">
                                     <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-brand-charcoal/30" />
                                     <Input 
@@ -511,7 +514,7 @@ export default function CustomerAuthModal({ isOpen, onClose, onSuccess }: Custom
                             </div>
 
                             <div className="space-y-2">
-                                <Label className="text-[10px] text-brand-charcoal/60 font-bold uppercase tracking-widest font-maiandra">Contraseña</Label>
+                                <Label className="text-[10px] text-brand-charcoal/60 font-bold uppercase tracking-widest font-maiandra">{language === 'es' ? 'Contraseña' : 'Password'}</Label>
                                 <div className="relative">
                                     <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-brand-charcoal/30" />
                                     <Input 
@@ -533,14 +536,14 @@ export default function CustomerAuthModal({ isOpen, onClose, onSuccess }: Custom
                                         onCheckedChange={(v) => setRemember(Boolean(v))}
                                         className="border-brand-charcoal/20 data-[state=checked]:bg-brand-yellow data-[state=checked]:border-brand-yellow data-[state=checked]:text-brand-black"
                                     />
-                                    <Label htmlFor="remember" className="cursor-pointer">Recordar usuario</Label>
+                                    <Label htmlFor="remember" className="cursor-pointer">{language === 'es' ? 'Recordar usuario' : 'Remember me'}</Label>
                                 </div>
                                 <button 
                                     type="button" 
                                     onClick={() => { setMode('forgot'); setError(null); setSuccessMessage(null); }}
                                     className="text-brand-yellow hover:underline font-bold"
                                 >
-                                    ¿Olvidaste tu contraseña?
+                                    {language === 'es' ? '¿Olvidaste tu contraseña?' : 'Forgot your password?'}
                                 </button>
                             </div>
 
@@ -549,17 +552,17 @@ export default function CustomerAuthModal({ isOpen, onClose, onSuccess }: Custom
                                 disabled={loading}
                                 className="w-full bg-brand-yellow text-brand-black hover:bg-brand-yellow/90 font-black rounded-xl h-12 uppercase text-xs tracking-widest transition-all mt-4 font-sans shadow-lg shadow-brand-yellow/10 cursor-pointer"
                             >
-                                {loading ? 'Iniciando sesión...' : 'INICIAR SESIÓN'}
+                                {loading ? (language === 'es' ? 'Iniciando sesión...' : 'Signing in...') : (language === 'es' ? 'INICIAR SESIÓN' : 'SIGN IN')}
                             </Button>
 
                             <div className="text-center pt-3 border-t border-brand-charcoal/5 mt-4">
-                                <p className="text-xs text-red-600 font-semibold font-maiandra">¿No tienes una cuenta aún?</p>
+                                <p className="text-xs text-red-600 font-semibold font-maiandra">{language === 'es' ? '¿No tienes una cuenta aún?' : 'Don’t have an account yet?'}</p>
                                 <Button 
                                     type="button" 
                                     onClick={toggleMode} 
                                     className="mt-2 bg-brand-orange hover:bg-brand-orange/90 text-white rounded-xl h-11 text-xs font-black uppercase tracking-widest px-6 w-full sm:w-auto font-sans transition-all border border-transparent cursor-pointer shadow-lg shadow-brand-orange/10"
                                 >
-                                    USUARIO NUEVO / REGISTRARSE
+                                    {language === 'es' ? 'USUARIO NUEVO / REGISTRARSE' : 'NEW USER / REGISTER'}
                                 </Button>
                             </div>
                         </form>
@@ -568,7 +571,7 @@ export default function CustomerAuthModal({ isOpen, onClose, onSuccess }: Custom
                             
                             {/* CAMERA SELFIE STEP */}
                             <div className="space-y-3 bg-brand-yellow/5 p-5 rounded-2xl border border-brand-yellow/10 flex flex-col items-center">
-                                <Label className="text-sm font-black uppercase tracking-wide text-brand-charcoal font-tangkiwood">1. Autofoto o Sube tu Foto</Label>
+                                <Label className="text-sm font-black uppercase tracking-wide text-brand-charcoal font-tangkiwood">{language === 'es' ? '1. Autofoto o Sube tu Foto' : '1. Selfie or Upload Your Photo'}</Label>
                                 
                                 <div className="relative w-48 h-48 bg-white border border-brand-charcoal/10 rounded-full overflow-hidden flex items-center justify-center shadow-inner">
                                     {capturedSelfie ? (
@@ -588,7 +591,7 @@ export default function CustomerAuthModal({ isOpen, onClose, onSuccess }: Custom
                                                 <div className="flex flex-col items-center justify-center p-4 text-center">
                                                     <Camera className="w-8 h-8 text-brand-charcoal/30 mb-1" />
                                                     <span className="text-[10px] font-bold text-brand-charcoal/50 uppercase tracking-wider font-maiandra">
-                                                        Autofoto o Sube tu Foto
+                                                        {language === 'es' ? 'Autofoto o Sube tu Foto' : 'Selfie or Upload Photo'}
                                                     </span>
                                                 </div>
                                             )}
@@ -603,7 +606,7 @@ export default function CustomerAuthModal({ isOpen, onClose, onSuccess }: Custom
                                     {!cameraActive && !capturedSelfie && (
                                         <div className="flex flex-col sm:flex-row gap-2">
                                             <Button type="button" onClick={startCamera} size="sm" className="bg-brand-yellow text-brand-black hover:bg-brand-yellow/85 font-black text-[10px] px-4 py-2 rounded-lg font-sans cursor-pointer">
-                                                <Camera className="w-3.5 h-3.5 mr-1" /> Autofoto (Cámara)
+                                                <Camera className="w-3.5 h-3.5 mr-1" /> {language === 'es' ? 'Autofoto (Cámara)' : 'Selfie (Camera)'}
                                             </Button>
                                             <Button 
                                                 type="button" 
@@ -611,7 +614,7 @@ export default function CustomerAuthModal({ isOpen, onClose, onSuccess }: Custom
                                                 size="sm" 
                                                 className="bg-brand-charcoal hover:bg-brand-yellow hover:text-brand-black text-brand-yellow font-black text-[10px] px-4 py-2 rounded-lg font-sans cursor-pointer border border-transparent"
                                             >
-                                                <Upload className="w-3.5 h-3.5 mr-1" /> Sube tu Foto
+                                                <Upload className="w-3.5 h-3.5 mr-1" /> {language === 'es' ? 'Sube tu Foto' : 'Upload Photo'}
                                             </Button>
                                             <input 
                                                 type="file"
@@ -638,11 +641,11 @@ export default function CustomerAuthModal({ isOpen, onClose, onSuccess }: Custom
 
                             {/* ID DOCUMENT STEP */}
                             <div className="space-y-3 bg-brand-yellow/5 p-5 rounded-2xl border border-brand-yellow/10">
-                                <Label className="text-sm font-black uppercase tracking-wide text-brand-charcoal font-tangkiwood">2. Documento de Identificación (C.I., D.N.I. o Pasaporte)</Label>
+                                <Label className="text-sm font-black uppercase tracking-wide text-brand-charcoal font-tangkiwood">{language === 'es' ? '2. Documento de Identificación (C.I., D.N.I. o Pasaporte)' : '2. ID Document (National ID or Passport)'}</Label>
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                     {/* ANVERSO */}
                                     <div className="space-y-1.5">
-                                        <span className="text-[9px] text-brand-charcoal/50 uppercase font-maiandra block">Lado Anverso (Frontal):</span>
+                                        <span className="text-[9px] text-brand-charcoal/50 uppercase font-maiandra block">{language === 'es' ? 'Lado Anverso (Frontal):' : 'Front Side:'}</span>
                                         <div 
                                             onClick={() => docAnversoInputRef.current?.click()}
                                             className="border-2 border-dashed border-brand-charcoal/10 hover:border-brand-yellow bg-white rounded-xl p-4 text-center cursor-pointer transition-all flex flex-col items-center justify-center group h-28"
@@ -654,7 +657,7 @@ export default function CustomerAuthModal({ isOpen, onClose, onSuccess }: Custom
                                                 </div>
                                             ) : (
                                                 <>
-                                                    <div className="text-[10px] font-bold text-brand-charcoal/60 font-maiandra">Subir Anverso</div>
+                                                    <div className="text-[10px] font-bold text-brand-charcoal/60 font-maiandra">{language === 'es' ? 'Subir Anverso' : 'Upload Front Side'}</div>
                                                     <div className="text-[8px] text-brand-charcoal/40 uppercase mt-0.5 font-maiandra">Imagen o PDF</div>
                                                 </>
                                             )}
@@ -670,7 +673,7 @@ export default function CustomerAuthModal({ isOpen, onClose, onSuccess }: Custom
 
                                     {/* REVERSO */}
                                     <div className="space-y-1.5">
-                                        <span className="text-[9px] text-brand-charcoal/50 uppercase font-maiandra block">Lado Reverso (Atrás):</span>
+                                        <span className="text-[9px] text-brand-charcoal/50 uppercase font-maiandra block">{language === 'es' ? 'Lado Reverso (Atrás):' : 'Back Side:'}</span>
                                         <div 
                                             onClick={() => docReversoInputRef.current?.click()}
                                             className="border-2 border-dashed border-brand-charcoal/10 hover:border-brand-yellow bg-white rounded-xl p-4 text-center cursor-pointer transition-all flex flex-col items-center justify-center group h-28"
@@ -682,7 +685,7 @@ export default function CustomerAuthModal({ isOpen, onClose, onSuccess }: Custom
                                                 </div>
                                             ) : (
                                                 <>
-                                                    <div className="text-[10px] font-bold text-brand-charcoal/60 font-maiandra">Subir Reverso</div>
+                                                    <div className="text-[10px] font-bold text-brand-charcoal/60 font-maiandra">{language === 'es' ? 'Subir Reverso' : 'Upload Back Side'}</div>
                                                     <div className="text-[8px] text-brand-charcoal/40 uppercase mt-0.5 font-maiandra">Imagen o PDF</div>
                                                 </>
                                             )}
@@ -700,18 +703,18 @@ export default function CustomerAuthModal({ isOpen, onClose, onSuccess }: Custom
 
                             {/* ACCOUNT DATA FORM */}
                             <div className="space-y-4">
-                                <Label className="text-sm font-black uppercase tracking-wide text-brand-charcoal font-tangkiwood">3. Datos Personales y de Cuenta</Label>
+                                <Label className="text-sm font-black uppercase tracking-wide text-brand-charcoal font-tangkiwood">{language === 'es' ? '3. Datos Personales y de Cuenta' : '3. Personal & Account Details'}</Label>
                                 
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                     <div className="space-y-2">
-                                        <Label className="text-[10px] text-brand-charcoal/60 font-bold uppercase tracking-widest font-maiandra">Nombre Completo</Label>
+                                        <Label className="text-[10px] text-brand-charcoal/60 font-bold uppercase tracking-widest font-maiandra">{language === 'es' ? 'Nombre Completo' : 'Full Name'}</Label>
                                         <div className="relative">
                                             <User className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-brand-charcoal/30" />
                                             <Input required value={name} onChange={e=>setName(e.target.value)} placeholder="Juan Pérez" className="pl-12 bg-white border border-brand-charcoal/15 h-12 text-sm text-brand-black font-bold rounded-xl focus-visible:ring-brand-yellow focus-visible:border-brand-yellow font-sans shadow-sm" />
                                         </div>
                                     </div>
                                     <div className="space-y-2">
-                                        <Label className="text-[10px] text-brand-charcoal/60 font-bold uppercase tracking-widest font-maiandra">Número de WhatsApp</Label>
+                                        <Label className="text-[10px] text-brand-charcoal/60 font-bold uppercase tracking-widest font-maiandra">{language === 'es' ? 'Número de WhatsApp' : 'WhatsApp Number'}</Label>
                                         <div className="relative flex items-center">
                                             <select 
                                                 value={countryPrefix} 
@@ -731,14 +734,14 @@ export default function CustomerAuthModal({ isOpen, onClose, onSuccess }: Custom
 
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                     <div className="space-y-2">
-                                        <Label className="text-[10px] text-brand-charcoal/60 font-bold uppercase tracking-widest font-maiandra">CI / Pasaporte / Documento</Label>
+                                        <Label className="text-[10px] text-brand-charcoal/60 font-bold uppercase tracking-widest font-maiandra">{language === 'es' ? 'CI / Pasaporte / Documento' : 'ID / Passport Number'}</Label>
                                         <div className="relative">
                                             <ShieldCheck className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-brand-charcoal/30" />
                                             <Input required value={ci} onChange={e=>setCi(e.target.value)} placeholder="1234567 LP" className="pl-12 bg-white border border-brand-charcoal/15 h-12 text-sm text-brand-black font-bold rounded-xl focus-visible:ring-brand-yellow focus-visible:border-brand-yellow font-sans shadow-sm" />
                                         </div>
                                     </div>
                                     <div className="space-y-2">
-                                        <Label className="text-[10px] text-brand-charcoal/60 font-bold uppercase tracking-widest font-maiandra">Correo Electrónico</Label>
+                                        <Label className="text-[10px] text-brand-charcoal/60 font-bold uppercase tracking-widest font-maiandra">{language === 'es' ? 'Correo Electrónico' : 'Email Address'}</Label>
                                         <div className="relative">
                                             <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-brand-charcoal/30" />
                                             <Input required type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="cliente@briz.com" className="pl-12 bg-white border border-brand-charcoal/15 h-12 text-sm text-brand-black font-bold rounded-xl focus-visible:ring-brand-yellow focus-visible:border-brand-yellow font-sans shadow-sm" />
@@ -748,7 +751,7 @@ export default function CustomerAuthModal({ isOpen, onClose, onSuccess }: Custom
 
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                     <div className="space-y-2">
-                                        <Label className="text-[10px] text-brand-charcoal/60 font-bold uppercase tracking-widest font-maiandra">Nacionalidad</Label>
+                                        <Label className="text-[10px] text-brand-charcoal/60 font-bold uppercase tracking-widest font-maiandra">{language === 'es' ? 'Nacionalidad' : 'Nationality'}</Label>
                                         <div className="relative">
                                             <Globe className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-brand-charcoal/30 z-10" />
                                             <select 
@@ -771,7 +774,7 @@ export default function CustomerAuthModal({ isOpen, onClose, onSuccess }: Custom
                                     
                                     {nationality.toLowerCase() === 'bolivia' && (
                                         <div className="space-y-2">
-                                            <Label className="text-[10px] text-brand-charcoal/60 font-bold uppercase tracking-widest font-maiandra">Departamento</Label>
+                                            <Label className="text-[10px] text-brand-charcoal/60 font-bold uppercase tracking-widest font-maiandra">{language === 'es' ? 'Departamento' : 'Department / State'}</Label>
                                             <div className="relative">
                                                 <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-brand-charcoal/30 z-10" />
                                                 <select 
@@ -791,14 +794,14 @@ export default function CustomerAuthModal({ isOpen, onClose, onSuccess }: Custom
 
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                     <div className="space-y-2">
-                                        <Label className="text-[10px] text-brand-charcoal/60 font-bold uppercase tracking-widest font-maiandra">Contraseña</Label>
+                                        <Label className="text-[10px] text-brand-charcoal/60 font-bold uppercase tracking-widest font-maiandra">{language === 'es' ? 'Contraseña' : 'Password'}</Label>
                                         <div className="relative">
                                             <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-brand-charcoal/30" />
                                             <Input required type="password" value={password} onChange={e=>setPassword(e.target.value)} placeholder="Min. 6 caracteres" className="pl-12 bg-white border border-brand-charcoal/15 h-12 text-sm text-brand-black font-bold rounded-xl focus-visible:ring-brand-yellow focus-visible:border-brand-yellow font-sans shadow-sm" />
                                         </div>
                                     </div>
                                     <div className="space-y-2">
-                                        <Label className="text-[10px] text-brand-charcoal/60 font-bold uppercase tracking-widest font-maiandra">Confirmar Contraseña</Label>
+                                        <Label className="text-[10px] text-brand-charcoal/60 font-bold uppercase tracking-widest font-maiandra">{language === 'es' ? 'Confirmar Contraseña' : 'Confirm Password'}</Label>
                                         <div className="relative">
                                             <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-brand-charcoal/30" />
                                             <Input required type="password" value={confirmPassword} onChange={e=>setConfirmPassword(e.target.value)} placeholder="Repite tu contraseña" className="pl-12 bg-white border border-brand-charcoal/15 h-12 text-sm text-brand-black font-bold rounded-xl focus-visible:ring-brand-yellow focus-visible:border-brand-yellow font-sans shadow-sm" />
@@ -807,7 +810,7 @@ export default function CustomerAuthModal({ isOpen, onClose, onSuccess }: Custom
                                 </div>
 
                                 <div className="space-y-2">
-                                    <Label className="text-[10px] text-brand-charcoal/60 font-bold uppercase tracking-widest font-maiandra">¿Cómo nos conociste?</Label>
+                                    <Label className="text-[10px] text-brand-charcoal/60 font-bold uppercase tracking-widest font-maiandra">{language === 'es' ? '¿Cómo nos conociste?' : 'How did you hear about us?'}</Label>
                                     <div className="relative">
                                         <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-brand-charcoal/30 z-10" />
                                         <select 
@@ -829,17 +832,17 @@ export default function CustomerAuthModal({ isOpen, onClose, onSuccess }: Custom
                                 disabled={loading}
                                 className="w-full bg-brand-yellow text-brand-black hover:bg-brand-yellow/90 font-black rounded-xl h-12 uppercase text-xs tracking-widest transition-all mt-4 font-sans shadow-lg shadow-brand-yellow/10 cursor-pointer"
                             >
-                                {loading ? 'Creando cuenta y subiendo archivos...' : 'CREAR MI CUENTA'}
+                                {loading ? (language === 'es' ? 'Creando cuenta y subiendo archivos...' : 'Creating account & uploading files...') : (language === 'es' ? 'CREAR MI CUENTA' : 'CREATE MY ACCOUNT')}
                             </Button>
 
                             <div className="text-center pt-3 border-t border-brand-charcoal/5">
-                                <p className="text-xs text-brand-charcoal/40 font-medium font-maiandra">¿Ya estás registrado?</p>
+                                <p className="text-xs text-brand-charcoal/40 font-medium font-maiandra">{language === 'es' ? '¿Ya estás registrado?' : 'Already have an account?'}</p>
                                 <Button 
                                     type="button" 
                                     onClick={toggleMode} 
                                     className="mt-2 bg-brand-charcoal/5 hover:bg-brand-yellow hover:text-brand-black text-brand-charcoal rounded-xl h-11 text-xs font-black uppercase tracking-widest px-6 w-full sm:w-auto font-sans transition-all border border-transparent cursor-pointer"
                                 >
-                                    VOLVER A INICIAR SESIÓN
+                                    {language === 'es' ? 'VOLVER A INICIAR SESIÓN' : 'BACK TO SIGN IN'}
                                 </Button>
                             </div>
                         </form>
@@ -849,7 +852,7 @@ export default function CustomerAuthModal({ isOpen, onClose, onSuccess }: Custom
                                 Ingresa el correo electrónico y el número de WhatsApp vinculados a tu cuenta para verificar tu perfil.
                             </p>
                             <div className="space-y-2">
-                                <Label className="text-[10px] text-brand-charcoal/60 font-bold uppercase tracking-widest font-maiandra">Correo Electrónico</Label>
+                                <Label className="text-[10px] text-brand-charcoal/60 font-bold uppercase tracking-widest font-maiandra">{language === 'es' ? 'Correo Electrónico' : 'Email Address'}</Label>
                                 <div className="relative">
                                     <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-brand-charcoal/30" />
                                     <Input 
@@ -890,7 +893,7 @@ export default function CustomerAuthModal({ isOpen, onClose, onSuccess }: Custom
                                 type="submit" 
                                 className="w-full bg-brand-yellow text-brand-black hover:bg-brand-yellow/90 font-black rounded-xl h-12 uppercase text-xs tracking-widest transition-all mt-4 font-sans shadow-lg cursor-pointer"
                             >
-                                VERIFICAR DATOS
+                                {language === 'es' ? 'VERIFICAR DATOS' : 'VERIFY DETAILS'}
                             </Button>
                             <div className="text-center pt-3 border-t border-brand-charcoal/5 mt-4">
                                 <Button 
@@ -898,7 +901,7 @@ export default function CustomerAuthModal({ isOpen, onClose, onSuccess }: Custom
                                     onClick={() => setMode('login')} 
                                     className="bg-brand-charcoal/5 hover:bg-brand-yellow hover:text-brand-black text-brand-charcoal rounded-xl h-11 text-xs font-black uppercase tracking-widest px-6 w-full sm:w-auto font-sans transition-all border border-transparent cursor-pointer"
                                 >
-                                    VOLVER AL LOGIN
+                                    {language === 'es' ? 'VOLVER AL LOGIN' : 'BACK TO SIGN IN'}
                                 </Button>
                             </div>
                         </form>
@@ -908,7 +911,7 @@ export default function CustomerAuthModal({ isOpen, onClose, onSuccess }: Custom
                                 Datos verificados con éxito. Ingresa tu nueva contraseña a continuación.
                             </p>
                             <div className="space-y-2">
-                                <Label className="text-[10px] text-brand-charcoal/60 font-bold uppercase tracking-widest font-maiandra">Nueva Contraseña</Label>
+                                <Label className="text-[10px] text-brand-charcoal/60 font-bold uppercase tracking-widest font-maiandra">{language === 'es' ? 'Nueva Contraseña' : 'New Password'}</Label>
                                 <div className="relative">
                                     <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-brand-charcoal/30" />
                                     <Input 
@@ -922,7 +925,7 @@ export default function CustomerAuthModal({ isOpen, onClose, onSuccess }: Custom
                                 </div>
                             </div>
                             <div className="space-y-2">
-                                <Label className="text-[10px] text-brand-charcoal/60 font-bold uppercase tracking-widest font-maiandra">Confirmar Nueva Contraseña</Label>
+                                <Label className="text-[10px] text-brand-charcoal/60 font-bold uppercase tracking-widest font-maiandra">{language === 'es' ? 'Confirmar Nueva Contraseña' : 'Confirm New Password'}</Label>
                                 <div className="relative">
                                     <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-brand-charcoal/30" />
                                     <Input 
@@ -940,7 +943,7 @@ export default function CustomerAuthModal({ isOpen, onClose, onSuccess }: Custom
                                 disabled={loading}
                                 className="w-full bg-brand-yellow text-brand-black hover:bg-brand-yellow/90 font-black rounded-xl h-12 uppercase text-xs tracking-widest transition-all mt-4 font-sans shadow-lg cursor-pointer"
                             >
-                                {loading ? 'Restableciendo...' : 'CAMBIAR CONTRASEÑA'}
+                                {loading ? (language === 'es' ? 'Restableciendo...' : 'Resetting...') : (language === 'es' ? 'CAMBIAR CONTRASEÑA' : 'CHANGE PASSWORD')}
                             </Button>
                         </form>
                     )}

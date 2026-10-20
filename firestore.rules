@@ -6,20 +6,25 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    // Active administrator verification:
+    // Checks that the authenticated user is not disabled in adminUsers/{uid}.
     function isAdmin() {
-      return signedIn();
+      return signedIn() && (
+        !exists(/databases/$(database)/documents/adminUsers/$(request.auth.uid)) ||
+        get(/databases/$(database)/documents/adminUsers/$(request.auth.uid)).data.active != false
+      );
     }
 
     match /adminUsers/{adminUserId} {
-      allow read: if isAdmin();
-      allow create: if isAdmin();
-      allow update: if isAdmin();
+      allow read: if signedIn();
+      allow create, update: if isAdmin();
       allow delete: if false;
     }
 
     match /settings/{settingId} {
       allow read: if settingId != 'admin_security' || isAdmin();
-      allow write: if isAdmin();
+      // rental_counter is incremented transactionally when creating a reservation
+      allow write: if isAdmin() || settingId == 'rental_counter';
     }
 
     match /inventory/{itemId} {
@@ -44,26 +49,32 @@ service cloud.firestore {
 
     match /rentals/{rentalId} {
       allow read: if true;
-      allow create: if true;
+      allow create: if request.resource.data.customerName is string
+                    && request.resource.data.productId is string
+                    && request.resource.data.quantity is number
+                    && request.resource.data.quantity > 0
+                    && request.resource.data.total is number
+                    && request.resource.data.total >= 0;
       allow update, delete: if isAdmin();
     }
 
     match /customers/{customerId} {
       allow read: if true;
-      allow create: if true;
-      allow update: if true;
+      allow create: if request.resource.data.name is string;
+      allow update: if request.resource.data.name is string;
       allow delete: if isAdmin();
     }
 
     match /sales/{saleId} {
-      allow read: if true;
-      allow create: if true;
+      allow read: if isAdmin();
+      allow create: if request.resource.data.total is number
+                    && request.resource.data.total >= 0;
       allow update, delete: if isAdmin();
     }
 
     match /serviceOrders/{serviceOrderId} {
-      allow read: if true;
-      allow create: if true;
+      allow read: if isAdmin();
+      allow create: if request.resource.data.customer is string;
       allow update, delete: if isAdmin();
     }
 
@@ -73,6 +84,11 @@ service cloud.firestore {
       allow read: if true;
       allow create: if request.resource.data.status == 'pending';
       allow update, delete: if isAdmin();
+    }
+
+    // Default deny for any unknown collection
+    match /{document=**} {
+      allow read, write: if false;
     }
   }
 }

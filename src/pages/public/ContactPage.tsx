@@ -11,84 +11,108 @@ import { useLanguage } from '@/context/LanguageContext';
 
 const fadeUp = { initial: { opacity: 0, y: 30 }, whileInView: { opacity: 1, y: 0 }, viewport: { once: true }, transition: { duration: 0.6 } };
 
-const customFaqs = [
-    {
-        question: "¿Cómo puedo alquilar una bicicleta?",
-        answer: (
-            <div className="space-y-3 font-sans">
-                <p className="text-gray-500 font-bold text-base sm:text-lg leading-relaxed opacity-90">
-                    Sigue estos sencillos pasos:
-                </p>
-                <ol className="list-decimal pl-5 space-y-2 text-gray-500 font-bold text-sm sm:text-base leading-relaxed opacity-80">
-                    <li>Elige el modelo de tu preferencia. (Revisa nuestra sección de alquiler para ver modelos y tarifas).</li>
-                    <li>Regístrate en nuestro sistema de usuarios y si ya estás registrad@ completa solamente el registro de tu alquiler.</li>
-                    <li>Elige el método de pago.</li>
-                    <li>Recoge tu bici de nuestras instalaciones habilitadas o si solicitaste servicio de transporte, aguarda tu pedido.</li>
-                </ol>
-            </div>
-        )
-    },
-    {
-        question: "¿Por qué debo comprar una bici urbana de procedencia japonesa a medio uso?",
-        answer: (
-            <div className="space-y-4 font-sans">
-                <ul className="list-disc pl-5 space-y-2 text-gray-500 font-bold text-sm sm:text-base leading-relaxed opacity-80">
-                    <li>Ingeniería hecha para durar.</li>
-                    <li>Pedaleo suave y eficiente.</li>
-                    <li>Repuestos accesibles.</li>
-                    <li>Menor mantenimiento.</li>
-                    <li>Más ahorro a largo plazo.</li>
-                </ul>
-                <div className="pt-2">
-                    <Link to="/shop">
-                        <Button size="sm" className="bg-brand-yellow text-brand-black hover:bg-brand-yellow-light rounded-full font-black text-xs px-6 h-11 shadow-md border-0 transition-transform active:scale-95">
-                            REVISA NUESTRO CATÁLOGO
-                        </Button>
-                    </Link>
-                </div>
-            </div>
-        )
-    },
-    {
-        question: "Quiero comprar una bicicleta personalizada. ¿Cómo puedo hacerlo?",
-        answer: (
-            <div className="space-y-4 font-sans">
-                <ul className="list-disc pl-5 space-y-2 text-gray-500 font-bold text-sm sm:text-base leading-relaxed opacity-80">
-                    <li>Elige el tipo de cuadro.</li>
-                    <li>Elige tu paleta de colores favorita.</li>
-                    <li>Elige tus accesorios complementarios favoritos (canasta, luces, alforja y otros).</li>
-                    <li>Paga el 70% del presupuesto total y el otro 30% al momento de la entrega de tu bici.</li>
-                    <li>Tiempo de entrega: de 4 a 10 días hábiles. Dependerá de la orden de solicitudes.</li>
-                </ul>
-                <div className="pt-2">
-                    <Button size="sm" className="bg-gray-200 text-gray-400 cursor-not-allowed rounded-full font-black text-xs px-6 h-11 border-0" disabled>
-                        PERSONALIZA TU BICI (Funcionalidad futura)
-                    </Button>
-                </div>
-            </div>
-        )
-    },
-    {
-        question: "Quiero vender mi bici a medio uso. ¿Cuál es el procedimiento?",
-        answer: (
-            <div className="space-y-4 font-sans">
-                <p className="text-gray-500 font-bold text-base sm:text-lg leading-relaxed opacity-80">
-                    Envíanos una foto, un vídeo y el precio de tu bici a nuestra línea de atención al cliente:
-                </p>
-                <div className="pt-1">
-                    <a href="https://wa.me/59177860277" target="_blank" rel="noopener noreferrer">
-                        <Button size="sm" className="bg-green-500 hover:bg-green-600 text-white rounded-full font-black text-sm px-6 h-12 shadow-md flex items-center gap-2 border-0 transition-all hover:scale-105 active:scale-95">
-                            <MessageCircle className="w-5 h-5 text-white" /> +591 77860277
-                        </Button>
-                    </a>
-                </div>
-            </div>
-        )
-    }
-];
-
 export default function ContactPage() {
     const { language } = useLanguage();
+
+    const customFaqs = [
+        {
+            question: language === 'es' ? '¿Cómo puedo alquilar una bicicleta?' : 'How can I rent a bicycle?',
+            answer: (
+                <div className="space-y-3 font-sans">
+                    <p className="text-gray-500 font-bold text-base sm:text-lg leading-relaxed opacity-90">
+                        {language === 'es' ? 'Sigue estos sencillos pasos:' : 'Follow these simple steps:'}
+                    </p>
+                    <ol className="list-decimal pl-5 space-y-2 text-gray-500 font-bold text-sm sm:text-base leading-relaxed opacity-80">
+                        <li>
+                            {language === 'es'
+                                ? 'Elige el modelo de tu preferencia. (Revisa nuestra sección de alquiler para ver modelos y tarifas).'
+                                : 'Choose your preferred bicycle model and rental duration in our Rentals catalog.'}
+                        </li>
+                        <li>
+                            {language === 'es'
+                                ? 'Regístrate en nuestro sistema de usuarios y si ya estás registrad@ completa solamente el registro de tu alquiler.'
+                                : 'Sign in or create your customer profile in seconds to link your reservation.'}
+                        </li>
+                        <li>
+                            {language === 'es'
+                                ? 'Elige el método de pago.'
+                                : 'Select your preferred payment method (QR, Bank Transfer, or Cash at store).'}
+                        </li>
+                        <li>
+                            {language === 'es'
+                                ? 'Recoge tu bici de nuestras instalaciones habilitadas o si solicitaste servicio de transporte, aguarda tu pedido.'
+                                : 'Pick up your bike at our store or wait at your chosen address if you requested home delivery.'}
+                        </li>
+                    </ol>
+                </div>
+            )
+        },
+        {
+            question: language === 'es'
+                ? '¿Por qué debo comprar una bici urbana de procedencia japonesa a medio uso?'
+                : 'Why should I buy a refurbished Japanese urban bicycle?',
+            answer: (
+                <div className="space-y-4 font-sans">
+                    <ul className="list-disc pl-5 space-y-2 text-gray-500 font-bold text-sm sm:text-base leading-relaxed opacity-80">
+                        <li>{language === 'es' ? 'Ingeniería hecha para durar.' : 'Japanese engineering built to last.'}</li>
+                        <li>{language === 'es' ? 'Pedaleo suave y eficiente.' : 'Smooth, comfortable, and efficient pedaling.'}</li>
+                        <li>{language === 'es' ? 'Repuestos accesibles.' : 'Accessible and affordable spare parts.'}</li>
+                        <li>{language === 'es' ? 'Menor mantenimiento.' : 'Low maintenance requirements.'}</li>
+                        <li>{language === 'es' ? 'Más ahorro a largo plazo.' : 'Greater long-term savings and reliability.'}</li>
+                    </ul>
+                    <div className="pt-2">
+                        <Link to="/shop">
+                            <Button size="sm" className="bg-brand-yellow text-brand-black hover:bg-brand-yellow-light rounded-full font-black text-xs px-6 h-11 shadow-md border-0 transition-transform active:scale-95">
+                                {language === 'es' ? 'REVISA NUESTRO CATÁLOGO' : 'BROWSE OUR SHOP CATALOG'}
+                            </Button>
+                        </Link>
+                    </div>
+                </div>
+            )
+        },
+        {
+            question: language === 'es'
+                ? 'Quiero comprar una bicicleta personalizada. ¿Cómo puedo hacerlo?'
+                : 'I want to buy a custom-built bicycle. How does it work?',
+            answer: (
+                <div className="space-y-4 font-sans">
+                    <ul className="list-disc pl-5 space-y-2 text-gray-500 font-bold text-sm sm:text-base leading-relaxed opacity-80">
+                        <li>{language === 'es' ? 'Elige el tipo de cuadro.' : 'Choose your frame style.'}</li>
+                        <li>{language === 'es' ? 'Elige tu paleta de colores favorita.' : 'Pick your favorite color palette.'}</li>
+                        <li>{language === 'es' ? 'Elige tus accesorios complementarios favoritos (canasta, luces, alforja y otros).' : 'Select your favorite accessories (basket, lights, racks, child seats, and more).'}</li>
+                        <li>{language === 'es' ? 'Paga el 70% del presupuesto total y el otro 30% al momento de la entrega de tu bici.' : 'Pay 70% upfront to start customization and the remaining 30% upon delivery.'}</li>
+                        <li>{language === 'es' ? 'Tiempo de entrega: de 4 a 10 días hábiles. Dependerá de la orden de solicitudes.' : 'Estimated delivery time: 4 to 10 business days depending on workshop queue.'}</li>
+                    </ul>
+                    <div className="pt-2">
+                        <Button size="sm" className="bg-gray-200 text-gray-400 cursor-not-allowed rounded-full font-black text-xs px-6 h-11 border-0" disabled>
+                            {language === 'es' ? 'PERSONALIZA TU BICI (Funcionalidad futura)' : 'CUSTOMIZE YOUR BIKE (Coming Soon)'}
+                        </Button>
+                    </div>
+                </div>
+            )
+        },
+        {
+            question: language === 'es'
+                ? 'Quiero vender mi bici a medio uso. ¿Cuál es el procedimiento?'
+                : 'I want to sell my pre-owned bicycle. What is the process?',
+            answer: (
+                <div className="space-y-4 font-sans">
+                    <p className="text-gray-500 font-bold text-base sm:text-lg leading-relaxed opacity-80">
+                        {language === 'es'
+                            ? 'Envíanos una foto, un vídeo y el precio de tu bici a nuestra línea de atención al cliente:'
+                            : 'Send us photos, a short video, and your asking price via our WhatsApp customer support line:'}
+                    </p>
+                    <div className="pt-1">
+                        <a href="https://wa.me/59177860277" target="_blank" rel="noopener noreferrer">
+                            <Button size="sm" className="bg-green-500 hover:bg-green-600 text-white rounded-full font-black text-sm px-6 h-12 shadow-md flex items-center gap-2 border-0 transition-all hover:scale-105 active:scale-95">
+                                <MessageCircle className="w-5 h-5 text-white" /> +591 77860277
+                            </Button>
+                        </a>
+                    </div>
+                </div>
+            )
+        }
+    ];
 
     return (
         <div className="pt-[80px] lg:pt-[120px]">
@@ -112,7 +136,11 @@ export default function ContactPage() {
                             )}
                         </h2>
                         <div className="w-24 h-2 bg-brand-yellow mx-auto rounded-full shadow-sm" />
-                        <p className="mx-auto max-w-2xl pt-2 font-cocon text-base font-bold text-gray-500 sm:pt-4 sm:text-lg">Resolvemos tus dudas más comunes de forma rápida.</p>
+                        <p className="mx-auto max-w-2xl pt-2 font-cocon text-base font-bold text-gray-500 sm:pt-4 sm:text-lg">
+                            {language === 'es'
+                                ? 'Resolvemos tus dudas más comunes de forma rápida.'
+                                : 'Quick answers to our most common questions.'}
+                        </p>
                     </motion.div>
                     <Accordion type="single" collapsible className="space-y-5">
                         {customFaqs.map((faq, i) => (
@@ -143,42 +171,64 @@ export default function ContactPage() {
                                 <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-brand-yellow via-brand-pink to-brand-charcoal" />
                                 <CardContent className="p-8 sm:p-12">
                                     <div className="mb-10 space-y-3">
-                                        <h2 className="text-3xl sm:text-5xl font-tan text-brand-black tracking-tight leading-none break-words">Envíanos un mensaje</h2>
-                                        <p className="text-brand-charcoal font-cocon font-bold text-[15px] sm:text-lg leading-relaxed">Nos pondremos en contacto contigo lo antes posible.</p>
+                                        <h2 className="text-3xl sm:text-5xl font-tan text-brand-black tracking-tight leading-none break-words">
+                                            {language === 'es' ? 'Envíanos un mensaje' : 'Send us a message'}
+                                        </h2>
+                                        <p className="text-brand-charcoal font-cocon font-bold text-[15px] sm:text-lg leading-relaxed">
+                                            {language === 'es'
+                                                ? 'Nos pondremos en contacto contigo lo antes posible.'
+                                                : 'We will get back to you as soon as possible.'}
+                                        </p>
                                     </div>
-                                    <form onSubmit={(e) => { e.preventDefault(); alert('¡Mensaje enviado! (Demo)'); }} className="space-y-6">
+                                    <form
+                                        onSubmit={(e) => {
+                                            e.preventDefault();
+                                            alert(language === 'es' ? '¡Mensaje enviado! Nos comunicaremos contigo pronto.' : 'Message sent! We will contact you soon.');
+                                        }}
+                                        className="space-y-6"
+                                    >
                                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                                             <div className="space-y-2">
-                                                <Label className="text-brand-charcoal/40 font-black text-[10px] uppercase tracking-widest ml-1">Nombre Completo</Label>
-                                                <Input placeholder="Tu nombre" required className="h-14 rounded-2xl bg-gray-50/50 border-gray-100 focus-visible:ring-brand-yellow/20 focus-visible:border-brand-yellow transition-all font-bold" />
+                                                <Label className="text-brand-charcoal/40 font-black text-[10px] uppercase tracking-widest ml-1">
+                                                    {language === 'es' ? 'Nombre Completo' : 'Full Name'}
+                                                </Label>
+                                                <Input placeholder={language === 'es' ? 'Tu nombre' : 'Your name'} required className="h-14 rounded-2xl bg-gray-50/50 border-gray-100 focus-visible:ring-brand-yellow/20 focus-visible:border-brand-yellow transition-all font-bold" />
                                             </div>
                                             <div className="space-y-2">
-                                                <Label className="text-brand-charcoal/40 font-black text-[10px] uppercase tracking-widest ml-1">Teléfono / WhatsApp</Label>
+                                                <Label className="text-brand-charcoal/40 font-black text-[10px] uppercase tracking-widest ml-1">
+                                                    {language === 'es' ? 'Teléfono / WhatsApp' : 'Phone / WhatsApp'}
+                                                </Label>
                                                 <Input placeholder="+591 7..." required className="h-14 rounded-2xl bg-gray-50/50 border-gray-100 focus-visible:ring-brand-yellow/20 focus-visible:border-brand-yellow transition-all font-bold" />
                                             </div>
                                         </div>
                                         <div className="space-y-2">
-                                            <Label className="text-brand-charcoal/40 font-black text-[10px] uppercase tracking-widest ml-1">Correo Electrónico</Label>
-                                            <Input type="email" placeholder="tu@email.com" className="h-14 rounded-2xl bg-gray-50/50 border-gray-100 focus-visible:ring-brand-yellow/20 focus-visible:border-brand-yellow transition-all font-bold" />
+                                            <Label className="text-brand-charcoal/40 font-black text-[10px] uppercase tracking-widest ml-1">
+                                                {language === 'es' ? 'Correo Electrónico' : 'Email Address'}
+                                            </Label>
+                                            <Input type="email" placeholder={language === 'es' ? 'tu@email.com' : 'you@email.com'} className="h-14 rounded-2xl bg-gray-50/50 border-gray-100 focus-visible:ring-brand-yellow/20 focus-visible:border-brand-yellow transition-all font-bold" />
                                         </div>
                                         <div className="space-y-2">
-                                            <Label className="text-brand-charcoal/40 font-black text-[10px] uppercase tracking-widest ml-1">Asunto de consulta</Label>
+                                            <Label className="text-brand-charcoal/40 font-black text-[10px] uppercase tracking-widest ml-1">
+                                                {language === 'es' ? 'Asunto de consulta' : 'Inquiry Subject'}
+                                            </Label>
                                             <select className="w-full h-14 rounded-2xl border border-gray-100 bg-gray-50/50 px-4 text-sm font-bold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-yellow/20 focus-visible:border-brand-yellow transition-all appearance-none cursor-pointer">
-                                                <option>Consulta general</option>
-                                                <option>Alquiler de bici</option>
-                                                <option>Compra de producto</option>
-                                                <option>Servicio técnico</option>
-                                                <option>Sugerencia</option>
-                                                <option>Otro</option>
+                                                <option>{language === 'es' ? 'Consulta general' : 'General Inquiry'}</option>
+                                                <option>{language === 'es' ? 'Alquiler de bici' : 'Bicycle Rental'}</option>
+                                                <option>{language === 'es' ? 'Compra de producto' : 'Product Purchase'}</option>
+                                                <option>{language === 'es' ? 'Servicio técnico' : 'Repair & Maintenance'}</option>
+                                                <option>{language === 'es' ? 'Sugerencia' : 'Suggestion'}</option>
+                                                <option>{language === 'es' ? 'Otro' : 'Other'}</option>
                                             </select>
                                         </div>
                                         <div className="space-y-2">
-                                            <Label className="text-brand-charcoal/40 font-black text-[10px] uppercase tracking-widest ml-1">Tu Mensaje</Label>
-                                            <Textarea placeholder="¿En qué podemos ayudarte?" rows={5} required className="rounded-2xl bg-gray-50/50 border-gray-100 focus-visible:ring-brand-yellow/20 focus-visible:border-brand-yellow transition-all resize-none p-4 font-medium" />
+                                            <Label className="text-brand-charcoal/40 font-black text-[10px] uppercase tracking-widest ml-1">
+                                                {language === 'es' ? 'Tu Mensaje' : 'Your Message'}
+                                            </Label>
+                                            <Textarea placeholder={language === 'es' ? '¿En qué podemos ayudarte?' : 'How can we help you?'} rows={5} required className="rounded-2xl bg-gray-50/50 border-gray-100 focus-visible:ring-brand-yellow/20 focus-visible:border-brand-yellow transition-all resize-none p-4 font-medium" />
                                         </div>
                                         <div className="pt-4">
                                             <Button type="submit" variant="primary" size="lg" className="w-full h-16 font-black text-[15px] sm:text-xl shadow-[0_6px_24px_rgba(250,14,149,0.4)] hover:shadow-[0_10px_32px_rgba(250,14,149,0.55)] flex items-center justify-center gap-2 px-2">
-                                                <Send className="w-5 h-5 sm:w-6 sm:h-6" strokeWidth={2.5} /> ENVIAR MENSAJE
+                                                <Send className="w-5 h-5 sm:w-6 sm:h-6" strokeWidth={2.5} /> {language === 'es' ? 'ENVIAR MENSAJE' : 'SEND MESSAGE'}
                                             </Button>
                                         </div>
                                     </form>
@@ -197,8 +247,12 @@ export default function ContactPage() {
                                             <MessageCircle className="w-8 h-8 sm:w-12 sm:h-12 text-white" strokeWidth={1.5} />
                                         </div>
                                         <div className="min-w-0">
-                                            <h3 className="font-black text-lg sm:text-3xl text-brand-charcoal group-hover:text-green-600 transition-colors truncate">WhatsApp Directo</h3>
-                                            <p className="text-[10px] sm:text-base text-gray-400 font-bold uppercase tracking-widest mt-0.5 sm:mt-1">Respuesta inmediata</p>
+                                            <h3 className="font-black text-lg sm:text-3xl text-brand-charcoal group-hover:text-green-600 transition-colors truncate">
+                                                {language === 'es' ? 'WhatsApp Directo' : 'Direct WhatsApp'}
+                                            </h3>
+                                            <p className="text-[10px] sm:text-base text-gray-400 font-bold uppercase tracking-widest mt-0.5 sm:mt-1">
+                                                {language === 'es' ? 'Respuesta inmediata' : 'Immediate response'}
+                                            </p>
                                             <p className="text-green-600 font-black text-base sm:text-xl mt-2 sm:mt-3 tracking-tighter">+591 77860277</p>
                                         </div>
                                     </CardContent>
@@ -209,10 +263,38 @@ export default function ContactPage() {
                             <Card className="rounded-[2.5rem] border-0 shadow-[0_20px_50px_rgba(0,0,0,0.04)] bg-white overflow-hidden">
                                 <CardContent className="p-8 sm:p-10 space-y-8">
                                     {[
-                                        { icon: MapPin, title: 'Dirección', color: 'brand-yellow', content: <a href="https://maps.app.goo.gl/tgqw7ZK51Y68Q7L7A?g_st=iwb" target="_blank" rel="noopener noreferrer" className="text-[13px] sm:text-lg font-black text-brand-charcoal hover:text-brand-yellow transition-colors block leading-tight">Cochabamba, Bolivia <span className="text-brand-yellow text-[9px] sm:text-xs mt-2 sm:mt-0 sm:ml-2 font-black uppercase tracking-widest bg-brand-yellow/10 px-3 py-1 rounded-full inline-block">Ver Mapa</span></a> },
-                                        { icon: Phone, title: 'Teléfono', color: 'brand-cyan', content: <p className="text-[13px] sm:text-lg font-black text-brand-charcoal">+591 77860277</p> },
+                                        {
+                                            icon: MapPin,
+                                            title: language === 'es' ? 'Dirección' : 'Location',
+                                            color: 'brand-yellow',
+                                            content: (
+                                                <a href="https://maps.app.goo.gl/tgqw7ZK51Y68Q7L7A?g_st=iwb" target="_blank" rel="noopener noreferrer" className="text-[13px] sm:text-lg font-black text-brand-charcoal hover:text-brand-yellow transition-colors block leading-tight">
+                                                    Cochabamba, Bolivia{' '}
+                                                    <span className="text-brand-yellow text-[9px] sm:text-xs mt-2 sm:mt-0 sm:ml-2 font-black uppercase tracking-widest bg-brand-yellow/10 px-3 py-1 rounded-full inline-block">
+                                                        {language === 'es' ? 'Ver Mapa' : 'View Map'}
+                                                    </span>
+                                                </a>
+                                            )
+                                        },
+                                        { icon: Phone, title: language === 'es' ? 'Teléfono' : 'Phone', color: 'brand-cyan', content: <p className="text-[13px] sm:text-lg font-black text-brand-charcoal">+591 77860277</p> },
                                         { icon: Mail, title: 'Email', color: 'brand-pink', content: <p className="text-[13px] sm:text-lg font-black text-brand-charcoal break-all">brizbolivia@gmail.com</p> },
-                                        { icon: Clock, title: 'Horario', color: 'brand-charcoal', content: <div className="text-[13px] sm:text-lg font-black text-brand-charcoal space-y-1"><p>Lunes a Sábado: <span className="text-brand-yellow block sm:inline">8:00 - 19:00</span></p><p>Domingo: <span className="text-brand-yellow block sm:inline">9:00 - 14:00</span></p></div> }
+                                        {
+                                            icon: Clock,
+                                            title: language === 'es' ? 'Horario' : 'Opening Hours',
+                                            color: 'brand-charcoal',
+                                            content: (
+                                                <div className="text-[13px] sm:text-lg font-black text-brand-charcoal space-y-1">
+                                                    <p>
+                                                        {language === 'es' ? 'Lunes a Sábado:' : 'Monday to Saturday:'}{' '}
+                                                        <span className="text-brand-yellow block sm:inline">8:00 - 19:00</span>
+                                                    </p>
+                                                    <p>
+                                                        {language === 'es' ? 'Domingo:' : 'Sunday:'}{' '}
+                                                        <span className="text-brand-yellow block sm:inline">9:00 - 14:00</span>
+                                                    </p>
+                                                </div>
+                                            )
+                                        }
                                     ].map((info, i) => (
                                         <div key={i} className="flex items-start gap-4 sm:gap-6 group pb-8 border-b border-gray-50 last:border-0 last:pb-0">
                                             <div className={`w-10 h-10 sm:w-14 sm:h-14 rounded-xl sm:rounded-2xl bg-${info.color}/5 group-hover:bg-${info.color}/10 flex items-center justify-center flex-shrink-0 transition-all duration-300 group-hover:scale-110`}>
@@ -233,7 +315,9 @@ export default function ContactPage() {
                                 <CardContent className="p-8 sm:p-10 relative z-10 flex flex-col sm:flex-row items-center justify-between gap-8">
                                     <div className="text-center sm:text-left">
                                         <h4 className="font-black text-2xl mb-1">Briz Community</h4>
-                                        <p className="text-white/50 font-bold text-sm uppercase tracking-widest uppercase">Síguenos en redes</p>
+                                        <p className="text-white/50 font-bold text-sm uppercase tracking-widest">
+                                            {language === 'es' ? 'Síguenos en redes' : 'Follow us on social media'}
+                                        </p>
                                     </div>
                                     <div className="flex gap-4">
                                         <a href="https://www.facebook.com/Briz.Bolivia" target="_blank" rel="noopener noreferrer">

@@ -6,6 +6,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { useStore } from '@/context/StoreContext';
 import { FileUploader } from '@/components/ui/file-uploader';
 import type { Rental } from '@/context/StoreContext';
+import { toBoliviaDateString } from '@/lib/dateUtils';
 import { 
   Trash2, 
   CalendarClock, 
@@ -29,7 +30,9 @@ import {
   Minus,
   Plus,
   ShoppingBag,
-  Users
+  Users,
+  Bike,
+  RotateCcw
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { generateAdminReplyWhatsAppLink } from '@/lib/whatsapp';
@@ -42,6 +45,8 @@ const statusLabels: Record<string, string> = {
   'Pendiente': 'Pendiente',
   'confirmed': 'Confirmado',
   'Confirmado': 'Confirmado',
+  'delivered': 'Entregado (En Uso)',
+  'Entregado': 'Entregado (En Uso)',
   'cancelled': 'Cancelado',
   'Cancelado': 'Cancelado',
   'expired': 'Expirado',
@@ -54,6 +59,8 @@ const statusColors: Record<string, string> = {
   'Pendiente': 'bg-yellow-500/10 text-yellow-500 border-yellow-500/20',
   'confirmed': 'bg-green-500/10 text-green-400 border-green-500/20',
   'Confirmado': 'bg-green-500/10 text-green-400 border-green-500/20',
+  'delivered': 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30',
+  'Entregado': 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30',
   'cancelled': 'bg-red-500/10 text-red-400 border-red-500/20',
   'Cancelado': 'bg-red-500/10 text-red-400 border-red-500/20',
   'expired': 'bg-zinc-500/10 text-zinc-400 border-white/5',
@@ -91,6 +98,11 @@ export interface GroupedRental {
   pickupService?: boolean;
   mapsLink?: string;
   notes?: string;
+  deliveredAt?: string;
+  returnedAt?: string;
+  damagedOnReturn?: boolean;
+  returnConditionNotes?: string;
+  lateFee?: number;
   items: Rental[];
   total: number;
 }
@@ -160,6 +172,11 @@ const getGroupedRentals = (rentalsList: Rental[]): GroupedRental[] => {
         pickupService: r.pickupService,
         mapsLink: r.mapsLink,
         notes: r.notes,
+        deliveredAt: r.deliveredAt,
+        returnedAt: r.returnedAt,
+        damagedOnReturn: r.damagedOnReturn,
+        returnConditionNotes: r.returnConditionNotes,
+        lateFee: r.lateFee,
         items: [],
         total: 0
       };
@@ -170,6 +187,13 @@ const getGroupedRentals = (rentalsList: Rental[]): GroupedRental[] => {
     if (r.deliveryService) groups[code].deliveryService = true;
     if (r.pickupService) groups[code].pickupService = true;
     if (r.mapsLink) groups[code].mapsLink = r.mapsLink;
+    if (r.deliveredAt) groups[code].deliveredAt = r.deliveredAt;
+    if (r.returnedAt) groups[code].returnedAt = r.returnedAt;
+    if (r.damagedOnReturn) groups[code].damagedOnReturn = true;
+    if (r.returnConditionNotes) groups[code].returnConditionNotes = r.returnConditionNotes;
+    if (r.lateFee && (!groups[code].lateFee || r.lateFee > groups[code].lateFee!)) {
+      groups[code].lateFee = r.lateFee;
+    }
     if (r.notes && !groups[code].notes?.includes(r.notes)) {
       groups[code].notes = groups[code].notes ? `${groups[code].notes} | ${r.notes}` : r.notes;
     }
@@ -184,14 +208,14 @@ const getGroupedRentals = (rentalsList: Rental[]): GroupedRental[] => {
 };
 
 const getReturnDateTime = (dateStr: string, pickupTimeStr: string, durationStr: string): Date => {
-  const [year, month, day] = dateStr.split('-').map(Number);
-  const [hours, minutes] = pickupTimeStr.split(':').map(Number);
-  const startDate = new Date(year, month - 1, day, hours, minutes, 0, 0);
+  const [year, month, day] = (dateStr || '2026-01-01').split('-').map(Number);
+  const [hours, minutes] = (pickupTimeStr || '09:00').split(':').map(Number);
+  const startDate = new Date(year, month - 1, day, hours || 9, minutes || 0, 0, 0);
   
   let durationHours = 24;
-  const norm = durationStr.toLowerCase();
-  if (norm.includes('semana')) durationHours = 24 * 7;
-  else if (norm.includes('mes')) durationHours = 24 * 30;
+  const norm = (durationStr || '').toLowerCase();
+  if (norm.includes('semana') || norm.includes('week')) durationHours = 24 * 7;
+  else if (norm.includes('mes') || norm.includes('month')) durationHours = 24 * 30;
   else {
     const match = norm.match(/\d+/);
     if (match) durationHours = Number(match[0]);
@@ -204,8 +228,12 @@ const getReturnDateTime = (dateStr: string, pickupTimeStr: string, durationStr: 
 const isPastDue = (group: GroupedRental): boolean => {
   const firstItem = group.items[0];
   if (!firstItem) return false;
-  const isConfirmed = group.status === 'confirmed' || group.status === 'Confirmado';
-  if (!isConfirmed) return false;
+  const isActive =
+    group.status === 'confirmed' ||
+    group.status === 'Confirmado' ||
+    group.status === 'delivered' ||
+    group.status === 'Entregado';
+  if (!isActive) return false;
   
   const returnDate = getReturnDateTime(firstItem.date, firstItem.pickupTime, firstItem.duration);
   return returnDate.getTime() < Date.now();
@@ -260,9 +288,12 @@ function ReservationAge({ createdAt }: { createdAt?: string }) {
 export default function AdminRentalsPage() {
   const { 
     rentals, 
-    confirmRental, 
-    cancelRental, 
-    returnRental, 
+    confirmRental,
+    confirmRentalGroup,
+    deliverRentalGroup,
+    cancelRentalGroup,
+    returnRentalGroup,
+    deleteRentalGroup,
     deleteRental, 
     updateRental,
     updateRentalPaymentStatus, 
@@ -283,12 +314,18 @@ export default function AdminRentalsPage() {
   const [editForm, setEditForm] = useState<RentalEditForm | null>(null);
   const [searchProductQuery, setSearchProductQuery] = useState('');
 
+  // Return modal state (for damaged units / condition notes / late fees)
+  const [returnModalGroup, setReturnModalGroup] = useState<GroupedRental | null>(null);
+  const [returnDamaged, setReturnDamaged] = useState(false);
+  const [returnNotes, setReturnNotes] = useState('');
+  const [returnLateFee, setReturnLateFee] = useState<string>('');
+
   // Manual Rental Wizard States
   const [newRentalModalOpen, setNewRentalModalOpen] = useState(false);
   const [newRentalStep, setNewRentalStep] = useState(1);
   const [newRentalCart, setNewRentalCart] = useState<any[]>([]);
   const [newRentalForm, setNewRentalForm] = useState({
-      date: new Date().toISOString().split('T')[0],
+      date: toBoliviaDateString(),
       pickupTime: new Date().toTimeString().slice(0, 5),
       duration: '1 hora',
       deliveryService: false,
@@ -367,28 +404,27 @@ export default function AdminRentalsPage() {
     prevPendingCountRef.current = currentCount;
   }, [currentPendingGroups, soundEnabled]);
 
-  const now = new Date();
-  const todayStr = now.toISOString().split('T')[0];
+  const todayStr = toBoliviaDateString();
 
   const stats = {
     pendingToday: groupedRentals.filter(g => 
       (g.status === 'pending' || g.status === 'Pendiente') && 
-      (g.createdAt?.startsWith(todayStr) || g.createdDate?.startsWith(todayStr))
+      (toBoliviaDateString(g.createdAt || g.createdDate || '') === todayStr || g.items[0]?.date === todayStr)
     ).length,
     
     confirmedToday: groupedRentals.filter(g => 
-      (g.status === 'confirmed' || g.status === 'Confirmado') && 
-      (g.updatedAt?.startsWith(todayStr) || g.createdAt?.startsWith(todayStr))
+      (g.status === 'confirmed' || g.status === 'Confirmado' || g.status === 'delivered' || g.status === 'Entregado') && 
+      (toBoliviaDateString(g.updatedAt || g.createdAt || '') === todayStr || g.items[0]?.date === todayStr)
     ).length,
 
     paidToday: groupedRentals.filter(g => 
       g.paymentStatus === 'paid' && 
-      (g.updatedAt?.startsWith(todayStr) || g.createdAt?.startsWith(todayStr))
+      (toBoliviaDateString(g.updatedAt || g.createdAt || '') === todayStr || g.items[0]?.date === todayStr)
     ).length,
 
     expiredToday: groupedRentals.filter(g => 
       (g.status === 'expired') && 
-      (g.updatedAt?.startsWith(todayStr) || g.createdAt?.startsWith(todayStr))
+      (toBoliviaDateString(g.updatedAt || g.createdAt || '') === todayStr)
     ).length
   };
 
@@ -398,6 +434,8 @@ export default function AdminRentalsPage() {
         if (filter !== 'all') {
           if (filter === 'pending') return g.status === 'pending' || g.status === 'Pendiente';
           if (filter === 'confirmed') return g.status === 'confirmed' || g.status === 'Confirmado';
+          if (filter === 'delivered') return g.status === 'delivered' || g.status === 'Entregado';
+          if (filter === 'returned') return g.status === 'returned' || g.status === 'Devuelto';
           if (filter === 'cancelled') return g.status === 'cancelled' || g.status === 'Cancelado';
           if (filter === 'expired') return g.status === 'expired';
           return g.status === filter;
@@ -417,16 +455,13 @@ export default function AdminRentalsPage() {
   }, [groupedRentals, filter, search]);
 
   const handleConfirmGroup = async (group: GroupedRental) => {
-    let allOk = true;
-    for (const item of group.items) {
-      const ok = await confirmRental(item.id, 'admin');
-      if (!ok) {
-        allOk = false;
-        alert(`Error: ¡No hay stock suficiente para confirmar ${item.quantity}x ${item.productName}!`);
-        break;
-      }
+    const ids = group.items.map(item => item.id);
+    const result = await confirmRentalGroup(ids, 'admin');
+    if (!result.ok) {
+      alert(`Error al confirmar la reserva:\n${result.error || 'No hay stock disponible para todos los componentes.'}`);
+      return;
     }
-    if (allOk && selected?.id === group.id) {
+    if (selected?.id === group.id) {
       setSelected(prev => {
         if (!prev || prev.id !== group.id) return prev;
         return {
@@ -438,21 +473,54 @@ export default function AdminRentalsPage() {
     }
   };
 
-  const handleCancelGroup = async (group: GroupedRental) => {
-    if (!confirm('¿Seguro que deseas cancelar esta reserva de alquiler? El stock se restaurará.')) return;
-    for (const item of group.items) {
-      await cancelRental(item.id, 'admin');
+  const handleDeliverGroup = async (group: GroupedRental) => {
+    const ids = group.items.map(item => item.id);
+    await deliverRentalGroup(ids, 'admin');
+    if (selected?.id === group.id) {
+      setSelected(prev => {
+        if (!prev || prev.id !== group.id) return prev;
+        return {
+          ...prev,
+          status: 'delivered',
+          deliveredAt: new Date().toISOString(),
+          items: prev.items.map(item => ({ ...item, status: 'delivered' }))
+        };
+      });
     }
+  };
+
+  const handleCancelGroup = async (group: GroupedRental) => {
+    if (!confirm('¿Seguro que deseas cancelar esta reserva de alquiler? Si estaba confirmada, el stock se restaurará automáticamente.')) return;
+    const ids = group.items.map(item => item.id);
+    await cancelRentalGroup(ids, 'admin');
     if (selected?.id === group.id) setSelected(null);
   };
 
-  const handleReturnGroup = async (group: GroupedRental) => {
-    if (!confirm('¿Seguro que deseas marcar este alquiler como devuelto? El stock de las bicicletas se restaurará.')) return;
-    for (const item of group.items) {
-      await returnRental(item.id, 'admin');
-    }
-    alert('¡El alquiler ha sido marcado como devuelto y el stock se ha actualizado!');
-    if (selected?.id === group.id) setSelected(null);
+  const openReturnDialog = (group: GroupedRental) => {
+    setReturnModalGroup(group);
+    setReturnDamaged(false);
+    setReturnNotes('');
+    setReturnLateFee('');
+  };
+
+  const handleConfirmReturnGroup = async () => {
+    if (!returnModalGroup) return;
+    const ids = returnModalGroup.items.map(item => item.id);
+    const lateFeeNum = Number(returnLateFee) > 0 ? Number(returnLateFee) : 0;
+
+    await returnRentalGroup(ids, 'admin', {
+      damagedUnits: returnDamaged ? 1 : 0,
+      conditionNotes: returnNotes.trim() || undefined,
+      lateFee: lateFeeNum > 0 ? lateFeeNum : undefined,
+    });
+
+    setReturnModalGroup(null);
+    if (selected?.id === returnModalGroup.id) setSelected(null);
+    alert(
+      returnDamaged
+        ? 'Devolución registrada. Las unidades dañadas quedaron apartadas en Mantenimiento/Taller y los demás accesorios fueron liberados.'
+        : '¡Devolución registrada con éxito! Todas las bicicletas y accesorios volvieron al stock disponible.'
+    );
   };
 
   const handleExpireGroup = async (group: GroupedRental) => {
@@ -479,10 +547,31 @@ export default function AdminRentalsPage() {
     }
   };
 
-  const handleDeleteGroup = (group: GroupedRental) => {
+  const handleDeleteGroup = async (group: GroupedRental) => {
     if (!confirm('¿Eliminar definitivamente este registro de la base de datos? Esta acción es irreversible.')) return;
-    group.items.forEach(item => deleteRental(item.id));
+    const ids = group.items.map(item => item.id);
+    await deleteRentalGroup(ids);
     if (selected?.id === group.id) setSelected(null);
+  };
+
+  const recalcEditItemPrice = (productType: 'single' | 'combo', productId: string, durationStr: string, qty: number, fallbackTotal: number) => {
+    if (productId.startsWith('srv_')) return fallbackTotal;
+    const computed = calculatePrice(productType, productId, durationStr, qty);
+    return computed > 0 ? computed : fallbackTotal;
+  };
+
+  const handleEditDurationChange = (newDuration: string) => {
+    setEditForm(prev => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        duration: newDuration,
+        items: prev.items.map(item => ({
+          ...item,
+          total: recalcEditItemPrice(item.productType, item.productId, newDuration, item.quantity, item.total)
+        }))
+      };
+    });
   };
 
   const updateEditItem = (id: string, updates: Partial<RentalEditItem>) => {
@@ -490,7 +579,14 @@ export default function AdminRentalsPage() {
       if (!prev) return prev;
       return {
         ...prev,
-        items: prev.items.map(item => item.id === id ? { ...item, ...updates } : item)
+        items: prev.items.map(item => {
+          if (item.id !== id) return item;
+          const next = { ...item, ...updates };
+          if (updates.quantity !== undefined && updates.total === undefined) {
+            next.total = recalcEditItemPrice(next.productType, next.productId, prev.duration, next.quantity, next.total);
+          }
+          return next;
+        })
       };
     });
   };
@@ -516,13 +612,29 @@ export default function AdminRentalsPage() {
       }
     }
 
+    const wasConfirmed =
+      selected.status === 'confirmed' ||
+      selected.status === 'Confirmado' ||
+      selected.status === 'delivered' ||
+      selected.status === 'Entregado';
+
     // 2. Process updates and new additions
     for (const item of editForm.items) {
       if (item.isNew) {
-        // Add new item to Firestore
         const newId = 'rental_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7);
         const newDocRef = doc(db, 'rentals', newId);
-        const cleanData = {
+        const comboObj = item.productType === 'combo' ? combos.find(c => c.id === item.productId) : undefined;
+        const componentSelections = comboObj
+          ? comboObj.components.map(comp => {
+              const inv = inventory.find(i => i.id === comp.inventoryItemId);
+              return {
+                inventoryItemId: comp.inventoryItemId,
+                wheelSize: inv?.hasWheelSizes ? (item.selectedWheelSize || inv.wheelSizes?.[0]?.size || '') : undefined
+              };
+            })
+          : [];
+
+        const cleanData: Rental = {
           id: newId,
           reservationCode: selected.reservationCode || selected.id,
           customerName: selected.customerName,
@@ -533,6 +645,7 @@ export default function AdminRentalsPage() {
           productNameSnapshot: item.productName,
           productType: item.productType,
           selectedWheelSize: item.selectedWheelSize || '',
+          componentSelections,
           quantity: item.quantity,
           total: item.total,
           date: editForm.date,
@@ -540,7 +653,7 @@ export default function AdminRentalsPage() {
           duration: editForm.duration,
           paymentMethod: selected.paymentMethod,
           paymentStatus: selected.paymentStatus,
-          status: selected.status,
+          status: wasConfirmed ? 'pending' : selected.status,
           deliveryService: editForm.deliveryService,
           pickupService: editForm.pickupService,
           mapsLink: editForm.mapsLink,
@@ -551,43 +664,15 @@ export default function AdminRentalsPage() {
         };
         await setDoc(newDocRef, cleanData);
 
-        // If order is confirmed, subtract stock
-        if (selected.status === 'confirmed' || selected.status === 'Confirmado') {
-          if (item.productType === 'single') {
-            const invItem = inventory.find(inv => inv.id === item.productId);
-            if (invItem) {
-              const updated = { ...invItem };
-              if (updated.hasWheelSizes && updated.wheelSizes) {
-                updated.wheelSizes = updated.wheelSizes.map(w => 
-                  w.size === item.selectedWheelSize ? { ...w, stock: Math.max(0, w.stock - item.quantity) } : w
-                );
-              } else {
-                updated.stock = Math.max(0, (updated.stock ?? 0) - item.quantity);
-              }
-              await setDoc(doc(db, 'inventory', item.productId), updated);
-            }
-          } else {
-            const combo = combos.find(c => c.id === item.productId);
-            if (combo) {
-              for (const comp of combo.components) {
-                const invItem = inventory.find(inv => inv.id === comp.inventoryItemId);
-                if (invItem) {
-                  const updated = { ...invItem };
-                  if (updated.stock !== undefined) {
-                    updated.stock = Math.max(0, updated.stock - comp.quantity * item.quantity);
-                    await setDoc(doc(db, 'inventory', comp.inventoryItemId), updated);
-                  }
-                }
-              }
-            }
-          }
+        if (wasConfirmed) {
+          await confirmRental(newId, 'admin (nuevo item en pedido)');
         }
       } else {
-        // Update existing item
         await updateRental(item.id, {
           date: editForm.date,
           pickupTime: editForm.pickupTime,
           duration: editForm.duration,
+          selectedWheelSize: item.selectedWheelSize,
           deliveryService: editForm.deliveryService,
           pickupService: editForm.pickupService,
           mapsLink: editForm.mapsLink,
@@ -599,7 +684,7 @@ export default function AdminRentalsPage() {
     }
 
     setEditingOrder(false);
-    setSelected(null); // Close the dialog to let the list reload from Firestore snapshot
+    setSelected(null);
   };
 
   const formatDateTime = (isoString?: string) => {
@@ -643,7 +728,7 @@ export default function AdminRentalsPage() {
   };
 
   const wizardBikesAndCombos = useMemo(() => {
-    const bList = inventory.filter(i => i.itemType === 'bike' && (!i.availableForSale || i.availableForRental));
+    const bList = inventory.filter(i => (i.itemType === 'bike' || i.itemType === 'accessory') && (!i.availableForSale || i.availableForRental));
     const cList = combos.filter(c => !c.availableForSale || c.availableForRental);
     
     const combined = [
@@ -678,7 +763,7 @@ export default function AdminRentalsPage() {
       }
     }
 
-    let componentSelections: any[] = [];
+    const componentSelections: any[] = [];
     if (isCombo && product.components) {
       product.components.forEach((comp: any) => {
         const inventoryItem = inventory.find(inv => inv.id === comp.inventoryItemId);
@@ -688,6 +773,10 @@ export default function AdminRentalsPage() {
           componentSelections.push({
             inventoryItemId: comp.inventoryItemId,
             wheelSize: compSize
+          });
+        } else {
+          componentSelections.push({
+            inventoryItemId: comp.inventoryItemId
           });
         }
       });
@@ -800,85 +889,24 @@ export default function AdminRentalsPage() {
         paymentStatus: newRentalForm.paymentStatus === 'paid' ? 'paid' : 'unpaid'
       });
       const sharedCode = createdFirst.reservationCode;
+      const createdIds: string[] = [createdFirst.id];
 
       const batch = writeBatch(db);
-
-      if (newRentalForm.status === 'confirmed') {
-        const invCopy = JSON.parse(JSON.stringify(inventory));
-        
-        const updateStock = (itemId: string, qty: number, wsSize?: string) => {
-          if (itemId.startsWith('srv_')) return true;
-          const itemIdx = invCopy.findIndex((i: any) => i.id === itemId);
-          if (itemIdx < 0) return false;
-          const item = invCopy[itemIdx];
-          if (item.hasWheelSizes && item.wheelSizes) {
-            const wsIdx = item.wheelSizes.findIndex((w: any) => w.size === wsSize);
-            if (wsIdx < 0) return false;
-            item.wheelSizes[wsIdx].stock = Math.max(0, item.wheelSizes[wsIdx].stock - qty);
-          } else {
-            item.stock = Math.max(0, (item.stock ?? 0) - qty);
-          }
-          batch.update(doc(db, 'inventory', itemId), { 
-            stock: item.stock !== undefined ? item.stock : null,
-            wheelSizes: item.wheelSizes || null
-          });
-          return true;
+      for (let i = 1; i < payloads.length; i++) {
+        const item = payloads[i];
+        const newId = 'rental_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7) + '_' + i;
+        createdIds.push(newId);
+        const fullItem = {
+          ...item,
+          id: newId,
+          reservationCode: sharedCode,
+          paymentStatus: newRentalForm.paymentStatus,
+          status: 'pending',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          createdDate: new Date().toISOString()
         };
-
-        newRentalCart.forEach(item => {
-          const isCombo = item.product.components !== undefined;
-          if (!isCombo) {
-            updateStock(item.product.id, item.quantity, item.selectedWheelSize);
-          } else {
-            item.product.components.forEach((comp: any) => {
-              const selection = item.componentSelections?.find((cs: any) => cs.inventoryItemId === comp.inventoryItemId);
-              updateStock(comp.inventoryItemId, comp.quantity * item.quantity, selection?.wheelSize);
-            });
-          }
-        });
-
-        batch.update(doc(db, 'rentals', createdFirst.id), {
-          status: 'confirmed',
-          paymentStatus: newRentalForm.paymentStatus,
-          updatedAt: new Date().toISOString()
-        });
-
-        for (let i = 1; i < payloads.length; i++) {
-          const item = payloads[i];
-          const newId = 'rental_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7);
-          const fullItem = {
-            ...item,
-            id: newId,
-            reservationCode: sharedCode,
-            paymentStatus: newRentalForm.paymentStatus,
-            status: 'confirmed',
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-            createdDate: new Date().toISOString()
-          };
-          batch.set(doc(db, 'rentals', newId), fullItem);
-        }
-      } else {
-        batch.update(doc(db, 'rentals', createdFirst.id), {
-          paymentStatus: newRentalForm.paymentStatus,
-          updatedAt: new Date().toISOString()
-        });
-
-        for (let i = 1; i < payloads.length; i++) {
-          const item = payloads[i];
-          const newId = 'rental_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7);
-          const fullItem = {
-            ...item,
-            id: newId,
-            reservationCode: sharedCode,
-            paymentStatus: newRentalForm.paymentStatus,
-            status: 'pending',
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-            createdDate: new Date().toISOString()
-          };
-          batch.set(doc(db, 'rentals', newId), fullItem);
-        }
+        batch.set(doc(db, 'rentals', newId), fullItem);
       }
 
       if (newRentalCustomerMode === 'existing') {
@@ -890,6 +918,16 @@ export default function AdminRentalsPage() {
       }
 
       await batch.commit();
+
+      if (newRentalForm.status === 'confirmed') {
+        const confirmRes = await confirmRentalGroup(createdIds, 'admin (manual)');
+        if (!confirmRes.ok) {
+          alert(`Alquiler creado como PENDIENTE (${sharedCode}), pero no pudo confirmarse automáticamente:\n${confirmRes.error}`);
+          setNewRentalModalOpen(false);
+          return;
+        }
+      }
+
       alert(`Alquiler manual creado con éxito. Código: ${sharedCode}`);
       setNewRentalModalOpen(false);
     } catch (error) {
@@ -907,7 +945,7 @@ export default function AdminRentalsPage() {
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30" />
               <Input
-                placeholder="Buscar bicicleta o combo por nombre..."
+                placeholder="Buscar bicicleta, combo o accesorio..."
                 value={wizardSearch}
                 onChange={e => setWizardSearch(e.target.value)}
                 className="pl-9 bg-black/35 border-white/10 h-10 rounded-xl text-xs font-bold text-white focus-visible:ring-brand-yellow"
@@ -1075,7 +1113,7 @@ export default function AdminRentalsPage() {
                           )}
                           {item.componentSelections && item.componentSelections.length > 0 && (
                             <div className="flex gap-1 flex-wrap mt-0.5">
-                              {item.componentSelections.map((cs: any) => {
+                              {item.componentSelections.filter((cs: any) => cs.wheelSize).map((cs: any) => {
                                 const subItem = inventory.find(i => i.id === cs.inventoryItemId);
                                 return (
                                   <Badge key={cs.inventoryItemId} className="bg-white/10 text-white/80 text-[8px] font-bold rounded px-1 py-0 border-0">
@@ -1615,7 +1653,7 @@ export default function AdminRentalsPage() {
                     )}
                     {item.componentSelections && item.componentSelections.length > 0 && (
                       <p className="text-[9px] text-white/30">
-                        {item.componentSelections.map((cs: any) => `Aro ${cs.wheelSize}`).join(', ')}
+                        {item.componentSelections.filter((cs: any) => cs.wheelSize).map((cs: any) => `Aro ${cs.wheelSize}`).join(', ')}
                       </p>
                     )}
                   </div>
@@ -1661,7 +1699,7 @@ export default function AdminRentalsPage() {
             </div>
             Alquileres
           </h1>
-          <p className="text-white/40 text-sm font-medium">Control operativo y confirmación rápida de alquileres</p>
+          <p className="text-white/40 text-sm font-medium">Control operativo, entrega y devolución de alquileres</p>
         </div>
         <div className="flex items-center gap-3 w-full sm:w-auto">
           <Button
@@ -1683,7 +1721,7 @@ export default function AdminRentalsPage() {
               setNewRentalCart([]);
               setNewRentalStep(1);
               setNewRentalForm({
-                date: new Date().toISOString().split('T')[0],
+                date: toBoliviaDateString(),
                 pickupTime: new Date().toTimeString().slice(0, 5),
                 duration: '1 hora',
                 deliveryService: false,
@@ -1733,7 +1771,7 @@ export default function AdminRentalsPage() {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {[
           { label: 'Pendientes hoy', value: stats.pendingToday, color: 'text-yellow-400 bg-yellow-500/10 border-yellow-500/20' },
-          { label: 'Confirmados hoy', value: stats.confirmedToday, color: 'text-green-400 bg-green-500/10 border-green-500/20' },
+          { label: 'Activos hoy', value: stats.confirmedToday, color: 'text-green-400 bg-green-500/10 border-green-500/20' },
           { label: 'Pagados hoy', value: stats.paidToday, color: 'text-blue-400 bg-blue-500/10 border-blue-500/20' },
           { label: 'Expirados hoy', value: stats.expiredToday, color: 'text-zinc-400 bg-zinc-500/10 border-white/5' },
         ].map((s, i) => (
@@ -1922,6 +1960,8 @@ export default function AdminRentalsPage() {
             { l: 'Todos', v: 'all' },
             { l: 'Pendientes', v: 'pending' },
             { l: 'Confirmados', v: 'confirmed' },
+            { l: 'Entregados (En Uso)', v: 'delivered' },
+            { l: 'Devueltos', v: 'returned' },
             { l: 'Cancelados', v: 'cancelled' },
             { l: 'Expirados', v: 'expired' }
           ].map(f => (
@@ -1960,15 +2000,20 @@ export default function AdminRentalsPage() {
                       {g.reservationCode || `ID: ${g.id.slice(-8)}`}
                     </span>
                     <p className="text-white font-black text-sm">{g.customerName}</p>
-                    <Badge className={`${statusColors[g.status]} rounded-full px-2 py-0.5 text-[9px] font-black uppercase border`}>
-                      {statusLabels[g.status]}
+                    <Badge className={`${statusColors[g.status] || 'bg-white/10 text-white'} rounded-full px-2 py-0.5 text-[9px] font-black uppercase border`}>
+                      {statusLabels[g.status] || g.status}
                     </Badge>
                     <Badge className={`${paymentStatusColors[g.paymentStatus || 'unpaid']} rounded-full px-1.5 py-0.2 text-[8px] font-bold uppercase`}>
                       {paymentStatusLabels[g.paymentStatus || 'unpaid']}
                     </Badge>
                     {isPastDue(g) && (
                       <Badge className="bg-red-500/20 text-red-400 border-red-500/30 rounded-full px-2 py-0.5 text-[9px] font-black uppercase border animate-pulse">
-                        ⚠️ Devolución Pendiente
+                        ⚠️ Devolución Vencida
+                      </Badge>
+                    )}
+                    {g.damagedOnReturn && (
+                      <Badge className="bg-amber-500/20 text-amber-400 border-amber-500/30 rounded-full px-2 py-0.5 text-[9px] font-black uppercase border">
+                        🔧 Con daño reportado
                       </Badge>
                     )}
                   </div>
@@ -1992,7 +2037,27 @@ export default function AdminRentalsPage() {
                 </div>
 
                 {/* Actions bar */}
-                <div className="flex gap-1.5 shrink-0 w-full sm:w-auto justify-end">
+                <div className="flex gap-1.5 shrink-0 w-full sm:w-auto justify-end items-center">
+                  {(g.status === 'confirmed' || g.status === 'Confirmado') && (
+                    <Button
+                      size="sm"
+                      onClick={() => handleDeliverGroup(g)}
+                      className="h-9 px-3 rounded-xl bg-emerald-600/20 text-emerald-300 hover:bg-emerald-600 hover:text-white text-[10px] font-black uppercase border border-emerald-500/30"
+                      title="Marcar bicicleta como entregada físicamente al cliente"
+                    >
+                      <Bike className="w-3.5 h-3.5 mr-1" /> Entregar
+                    </Button>
+                  )}
+                  {(g.status === 'confirmed' || g.status === 'Confirmado' || g.status === 'delivered' || g.status === 'Entregado') && (
+                    <Button
+                      size="sm"
+                      onClick={() => openReturnDialog(g)}
+                      className="h-9 px-3 rounded-xl bg-blue-600/20 text-blue-300 hover:bg-blue-600 hover:text-white text-[10px] font-black uppercase border border-blue-500/30"
+                      title="Registrar devolución y liberar stock"
+                    >
+                      <RotateCcw className="w-3.5 h-3.5 mr-1" /> Devolver
+                    </Button>
+                  )}
                   <Button 
                     variant="ghost" 
                     size="icon" 
@@ -2016,6 +2081,86 @@ export default function AdminRentalsPage() {
         </div>
       </div>
 
+      {/* RETURN MODAL (WITH OPTIONAL DAMAGE / MAINTENANCE / LATE FEE) */}
+      <Dialog open={!!returnModalGroup} onOpenChange={v => { if (!v) setReturnModalGroup(null); }}>
+        <DialogContent className="max-w-md bg-brand-charcoal border border-white/10 text-white rounded-3xl p-6 font-sans">
+          {returnModalGroup && (
+            <div className="space-y-4">
+              <DialogHeader>
+                <DialogTitle className="text-lg font-black flex items-center gap-2 text-white">
+                  <RotateCcw className="w-5 h-5 text-brand-yellow" />
+                  Registrar Devolución ({returnModalGroup.reservationCode || returnModalGroup.id.slice(-6)})
+                </DialogTitle>
+              </DialogHeader>
+
+              <div className="bg-black/30 p-3.5 rounded-2xl border border-white/5 text-xs space-y-1.5">
+                <p className="text-white/50 font-bold uppercase text-[9px]">Cliente: {returnModalGroup.customerName}</p>
+                {returnModalGroup.items.map((item, idx) => (
+                  <p key={idx} className="text-white font-black">
+                    • {item.quantity}x {item.productName} {item.selectedWheelSize ? `(Aro ${item.selectedWheelSize})` : ''}
+                  </p>
+                ))}
+              </div>
+
+              <label className="flex items-start gap-3 p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/25 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={returnDamaged}
+                  onChange={e => setReturnDamaged(e.target.checked)}
+                  className="mt-0.5 rounded border-amber-500/40 bg-black/40 text-amber-500 focus:ring-0"
+                />
+                <div className="text-xs">
+                  <p className="font-black text-amber-300 uppercase">¿Bicicleta devuelta con daño / requiere mantenimiento?</p>
+                  <p className="text-[11px] text-amber-200/70 mt-0.5">
+                    Si activas esta opción, la bicicleta pasará a <strong>Stock en Mantenimiento/Taller</strong> (no volverá al stock público disponible hasta ser reparada), pero los accesorios sanos sí se liberarán.
+                  </p>
+                </div>
+              </label>
+
+              <div className="space-y-1">
+                <label className="text-[10px] text-white/40 font-bold uppercase">Recargo por Retraso / Penalización (Bs.) — Opcional</label>
+                <Input
+                  type="number"
+                  min={0}
+                  placeholder="0"
+                  value={returnLateFee}
+                  onChange={e => setReturnLateFee(e.target.value)}
+                  className="bg-black/40 border-white/10 h-10 text-sm font-black text-brand-yellow rounded-xl"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[10px] text-white/40 font-bold uppercase">Observaciones de recepción / Estado físico</label>
+                <textarea
+                  placeholder="Ej. Todo entregado en buen estado / Freno trasero requiere ajuste..."
+                  value={returnNotes}
+                  onChange={e => setReturnNotes(e.target.value)}
+                  className="w-full bg-black/40 border border-white/10 rounded-xl p-3 h-20 text-xs font-bold text-white outline-none focus:border-brand-yellow resize-none"
+                />
+              </div>
+
+              <div className="flex gap-2 pt-2">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={() => setReturnModalGroup(null)}
+                  className="flex-1 h-11 rounded-xl border border-white/10 text-white/60 hover:text-white font-bold text-xs uppercase"
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  type="button"
+                  onClick={handleConfirmReturnGroup}
+                  className="flex-1 h-11 rounded-xl bg-brand-yellow hover:bg-brand-yellow-light text-brand-black font-black text-xs uppercase"
+                >
+                  Confirmar Devolución
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
       {/* RESERVATION DETAIL MODAL */}
       <Dialog open={!!selected} onOpenChange={v => { if (!v) setSelected(null); }}>
         <DialogContent className="max-w-4xl w-[95vw] max-h-[90vh] overflow-y-auto bg-brand-charcoal border border-white/10 text-white p-0 rounded-3xl">
@@ -2031,8 +2176,8 @@ export default function AdminRentalsPage() {
                   </p>
                 </div>
                 <div className="flex flex-col items-end gap-1">
-                  <Badge className={`${statusColors[selected.status]} px-3 py-1 text-xs font-black uppercase rounded-full border`}>
-                    {statusLabels[selected.status]}
+                  <Badge className={`${statusColors[selected.status] || 'bg-white/10 text-white'} px-3 py-1 text-xs font-black uppercase rounded-full border`}>
+                    {statusLabels[selected.status] || selected.status}
                   </Badge>
                   <Badge className={`${paymentStatusColors[selected.paymentStatus || 'unpaid']} text-[9px] px-2 py-0.5 rounded-lg border-0`}>
                     {paymentStatusLabels[selected.paymentStatus || 'unpaid']}
@@ -2321,10 +2466,19 @@ export default function AdminRentalsPage() {
                     </div>
                   )}
 
+                  {selected.returnConditionNotes && (
+                    <div className="bg-amber-500/10 p-4 rounded-2xl border border-amber-500/20">
+                      <p className="text-[9px] text-amber-400 font-bold uppercase mb-1">Reporte de Devolución</p>
+                      <p className="text-amber-200/80 text-xs">{selected.returnConditionNotes}</p>
+                    </div>
+                  )}
+
                   {/* Timestamps & Audit logs */}
                   <div className="bg-black/20 p-3 rounded-xl border border-white/5 text-[9px] text-white/30 space-y-1 font-mono">
                     <p>Creado: {formatDateTime(selected.createdAt)}</p>
                     <p>Actualizado: {formatDateTime(selected.updatedAt)}</p>
+                    {selected.deliveredAt && <p className="text-emerald-400/70">Entregado: {formatDateTime(selected.deliveredAt)}</p>}
+                    {selected.returnedAt && <p className="text-blue-400/70">Devuelto: {formatDateTime(selected.returnedAt)}</p>}
                     {selected.lastUpdatedBy && (
                       <p className="text-brand-yellow/60">Modificado por última vez por: {selected.lastUpdatedBy}</p>
                     )}
@@ -2339,7 +2493,7 @@ export default function AdminRentalsPage() {
                         🚨 Plazo de Alquiler Vencido
                       </p>
                       <p className="font-medium text-[11px] text-red-300/80 leading-normal">
-                        El tiempo programado de este alquiler ha terminado. Recibe las bicicletas e ítems, y haz clic en el botón **"Marcar como Devuelto"** abajo para reintegrar los productos al stock del inventario.
+                        El tiempo programado de este alquiler ha terminado. Recibe las bicicletas e ítems y haz clic en **"Registrar Devolución"** abajo para reintegrar los productos al stock.
                       </p>
                     </div>
                   )}
@@ -2373,7 +2527,7 @@ export default function AdminRentalsPage() {
                           <p className="text-[9px] text-white/35 font-bold uppercase mb-1">Duración</p>
                           <select
                             value={editForm.duration}
-                            onChange={e => setEditForm(prev => prev ? { ...prev, duration: e.target.value } : prev)}
+                            onChange={e => handleEditDurationChange(e.target.value)}
                             className="h-10 w-full rounded-xl border border-white/10 bg-black/35 px-2 text-xs font-bold text-white outline-none"
                           >
                             {['1 hora', '2 horas', '3 horas', '4 horas', '8 horas', '24 horas', '1 semana', '1 mes'].map(value => (
@@ -2437,7 +2591,7 @@ export default function AdminRentalsPage() {
                                   type="number"
                                   min="0"
                                   value={editable.total}
-                                  onChange={e => updateEditItem(editable.id, { total: Number(e.target.value) || 0 })}
+                                  onChange={e => updateEditItem(editable.id, { total: Math.max(0, Number(e.target.value) || 0) })}
                                   className="h-9 w-16 rounded-lg bg-black/35 border-white/10 text-white text-xs font-bold"
                                 />
                               </div>
@@ -2636,6 +2790,11 @@ export default function AdminRentalsPage() {
                   <div className="bg-brand-yellow text-brand-black p-5 rounded-2xl text-center shadow-lg">
                     <p className="text-[10px] font-black uppercase tracking-wider mb-1">Monto Total Estimado</p>
                     <p className="text-4xl font-black">Bs. {selected.total}</p>
+                    {selected.lateFee && selected.lateFee > 0 ? (
+                      <p className="text-[10px] font-black uppercase mt-1 text-red-900">
+                        (Incluye Bs. {selected.lateFee} de recargo por retraso)
+                      </p>
+                    ) : null}
                   </div>
 
                   {/* Action buttons inside Modal */}
@@ -2646,6 +2805,15 @@ export default function AdminRentalsPage() {
                         onClick={() => { handleConfirmGroup(selected); setSelected(null); }}
                       >
                         Confirmar Reserva
+                      </Button>
+                    )}
+
+                    {(selected.status === 'confirmed' || selected.status === 'Confirmado') && (
+                      <Button 
+                        className="flex-1 h-11 bg-emerald-600 hover:bg-emerald-700 text-white font-black rounded-xl text-xs uppercase cursor-pointer" 
+                        onClick={() => { handleDeliverGroup(selected); }}
+                      >
+                        Marcar como Entregado
                       </Button>
                     )}
 
@@ -2667,12 +2835,12 @@ export default function AdminRentalsPage() {
                       </Button>
                     )}
 
-                    {(selected.status === 'confirmed' || selected.status === 'Confirmado') && (
+                    {(selected.status === 'confirmed' || selected.status === 'Confirmado' || selected.status === 'delivered' || selected.status === 'Entregado') && (
                       <Button 
                         className="flex-1 h-11 bg-blue-500 hover:bg-blue-600 text-white font-black rounded-xl text-xs uppercase cursor-pointer" 
-                        onClick={() => { handleReturnGroup(selected); setSelected(null); }}
+                        onClick={() => { openReturnDialog(selected); }}
                       >
-                        Marcar como Devuelto
+                        Registrar Devolución
                       </Button>
                     )}
 

@@ -5,15 +5,17 @@ import {
     signOut,
     type User
 } from 'firebase/auth';
-import { doc, getDoc } from 'firebase/firestore';
-import { auth } from '../lib/firebase';
-import { db } from '../lib/firebase';
+import { collection, doc, getDoc, getDocs, query, setDoc, where } from 'firebase/firestore';
+import { auth, db } from '../lib/firebase';
 
-interface AdminProfile {
+export type AdminRole = 'admin' | 'manager' | 'mechanic' | 'viewer';
+
+export interface AdminProfile {
     uid: string;
     email: string;
     name?: string;
-    role: 'admin';
+    role: AdminRole;
+    store?: string;
     active: boolean;
 }
 
@@ -30,6 +32,8 @@ interface AuthContextType {
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
+
+const ALLOWED_ROLES: AdminRole[] = ['admin', 'manager', 'mechanic', 'viewer'];
 
 export function AuthProvider({ children }: { children: ReactNode }) {
     const [user, setUser] = useState<User | null>(null);
@@ -49,37 +53,79 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                     const adminRef = doc(db, 'adminUsers', currentUser.uid);
                     const snap = await getDoc(adminRef);
                     if (snap.exists()) {
-                        const data = snap.data() as AdminProfile;
+                        const data = snap.data() as Partial<AdminProfile>;
+                        const normalizedRole: AdminRole = ALLOWED_ROLES.includes(data.role as AdminRole)
+                            ? (data.role as AdminRole)
+                            : 'admin';
                         setAdminProfile({
                             uid: currentUser.uid,
                             email: data.email || currentUser.email || '',
-                            name: data.name,
-                            role: data.role || 'admin',
+                            name: data.name || currentUser.displayName || 'Administrador',
+                            role: normalizedRole,
+                            store: data.store || 'all',
                             active: data.active !== false
                         });
+                    } else if (currentUser.email) {
+                        // Look up by email in case the admin was pre-registered from SettingsPage with a custom ID
+                        const emailLower = currentUser.email.toLowerCase().trim();
+                        const qEmail = query(collection(db, 'adminUsers'), where('email', '==', emailLower));
+                        const emailSnap = await getDocs(qEmail);
+
+                        if (!emailSnap.empty) {
+                            const matchedDoc = emailSnap.docs[0];
+                            const data = matchedDoc.data() as Partial<AdminProfile>;
+                            const normalizedRole: AdminRole = ALLOWED_ROLES.includes(data.role as AdminRole)
+                                ? (data.role as AdminRole)
+                                : 'admin';
+                            const profile: AdminProfile = {
+                                uid: currentUser.uid,
+                                email: data.email || emailLower,
+                                name: data.name || currentUser.displayName || 'Administrador',
+                                role: normalizedRole,
+                                store: data.store || 'all',
+                                active: data.active !== false
+                            };
+                            setAdminProfile(profile);
+                            // Mirror under adminUsers/{uid} so Firestore security rules can verify by UID
+                            if (profile.active) {
+                                await setDoc(adminRef, {
+                                    ...data,
+                                    uid: currentUser.uid,
+                                    email: profile.email,
+                                    role: profile.role,
+                                    active: profile.active
+                                }, { merge: true }).catch(() => undefined);
+                            }
+                        } else {
+                            // Safe initial owner bootstrap: only grant admin if adminUsers collection is completely empty
+                            const allAdminsSnap = await getDocs(collection(db, 'adminUsers'));
+                            if (allAdminsSnap.empty) {
+                                const bootstrapProfile: AdminProfile = {
+                                    uid: currentUser.uid,
+                                    email: emailLower,
+                                    name: currentUser.displayName || 'Administrador Principal',
+                                    role: 'admin',
+                                    store: 'all',
+                                    active: true
+                                };
+                                await setDoc(adminRef, {
+                                    ...bootstrapProfile,
+                                    createdAt: new Date().toISOString()
+                                }, { merge: true }).catch(() => undefined);
+                                setAdminProfile(bootstrapProfile);
+                            } else {
+                                console.warn('Usuario autenticado sin registro en adminUsers:', currentUser.email);
+                                setAdminProfile(null);
+                            }
+                        }
                     } else {
-                        setAdminProfile({
-                            uid: currentUser.uid,
-                            email: currentUser.email || '',
-                            name: currentUser.displayName || 'Administrador',
-                            role: 'admin',
-                            active: true
-                        });
+                        setAdminProfile(null);
                     }
                 }
             } catch (error) {
                 console.error('No se pudo verificar el rol admin:', error);
-                if (currentUser) {
-                    setAdminProfile({
-                        uid: currentUser.uid,
-                        email: currentUser.email || '',
-                        name: currentUser.displayName || 'Administrador',
-                        role: 'admin',
-                        active: true
-                    });
-                } else {
-                    setAdminProfile(null);
-                }
+                // Deny by default on error instead of granting blind admin access
+                setAdminProfile(null);
             } finally {
                 setIsLoading(false);
             }
@@ -107,17 +153,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         sessionStorage.removeItem('briz_edit_mode');
     };
 
-    const isAdmin = !!user && !!adminProfile && adminProfile.active !== false && adminProfile.role === 'admin';
+    const isAdmin = !!user && !!adminProfile && adminProfile.active !== false && ALLOWED_ROLES.includes(adminProfile.role);
 
     return (
-        <AuthContext.Provider value={{ 
+        <AuthContext.Provider value={{
             user,
             adminProfile,
             isAuthenticated: isAdmin,
             isAdmin,
-            isEditMode, 
-            setEditMode, 
-            login, 
+            isEditMode,
+            setEditMode,
+            login,
             logout,
             isLoading
         }}>
