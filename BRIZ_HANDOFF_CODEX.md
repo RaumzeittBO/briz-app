@@ -1,5 +1,14 @@
 # BRIZ (`briz.com.bo`) — DOCUMENTO DE HANDOFF TÉCNICO PARA CODEX
 
+## Estado verificado por Codex — 2026-10-20
+
+- Commit base confirmado: `e7b4d5de8af5b09b2b69b0cf0d019acef07532ce` en `briz/stabilization-review-20261020`.
+- Rama de trabajo: `codex/briz-critical-stabilization-20261020`.
+- Cambios locales: endurecimiento inicial de reglas, eliminación del alta automática del primer admin, propagación de errores de reserva/contador y apagado de envío Telegram desde navegador. El estado de pruebas y archivos se registra al final de `BRIZ_MASTER_ROADMAP.md`.
+- **Bloqueo de compatibilidad:** no desplegar las nuevas reglas hasta implementar una Cloud Function/API confiable para crear grupos de alquiler con precios y disponibilidad calculados en servidor; migrar clientes a Firebase Auth con un camino de recuperación de cuentas existentes; y leer disponibilidad pública desde `rentals_busy_slots` sanitizado. La web actual no cumple aún esos caminos.
+- La notificación Telegram está temporalmente desactivada. Falta una Function que use secretos protegidos y un outbox/idempotencia para evitar duplicados. Rotar en BotFather los tokens que pudieron exponerse antes de reactivar.
+- El contador efectivamente usado en el código base es `settings/rental_counter`; referencias a `counters/rentals_YYYY` son desactualizadas.
+
 > **Propósito:** Permitir que **Codex** (o cualquier ingeniero/agente subsecuente) continúe el trabajo sobre `g:\ProjectBriz` con contexto total, sin depender del historial de chat de Gemini y sin repetir ni destruir avances ya probados.
 
 ---

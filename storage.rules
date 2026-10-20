@@ -2,6 +2,13 @@ rules_version = '2';
 
 service firebase.storage {
   match /b/{bucket}/o {
+    function isAdmin() {
+      return request.auth != null
+        && firestore.exists(/databases/(default)/documents/adminUsers/$(request.auth.uid))
+        && firestore.get(/databases/(default)/documents/adminUsers/$(request.auth.uid)).data.active != false
+        && firestore.get(/databases/(default)/documents/adminUsers/$(request.auth.uid)).data.role in ['admin', 'manager', 'mechanic', 'viewer'];
+    }
+
     function isValidUpload() {
       return request.resource != null
         && request.resource.size < 10 * 1024 * 1024
@@ -12,18 +19,17 @@ service firebase.storage {
     }
 
     match /customers/{allPaths=**} {
-      allow read: if true;
-      allow write: if isValidUpload();
+      allow read, write: if isAdmin();
     }
 
     match /rentals/{allPaths=**} {
-      allow read: if true;
-      allow write: if isValidUpload();
+      allow read: if isAdmin();
+      allow write: if isAdmin() && isValidUpload();
     }
 
     match /{allPaths=**} {
-      allow read: if true;
-      allow write: if request.auth != null && isValidUpload();
+      allow read: if !allPaths.matches('customers/.*') && !allPaths.matches('rentals/.*');
+      allow write: if isAdmin() && isValidUpload();
     }
   }
 }

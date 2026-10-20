@@ -1212,10 +1212,10 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
                 return next;
             });
             return `${yearPrefix}${String(nextSeq).padStart(4, '0')}`;
-        } catch {
-            // Offline or restricted counter fallback
-            const fallbackSeq = localMaxSeq + 1;
-            return `${yearPrefix}${String(fallbackSeq).padStart(4, '0')}`;
+        } catch (error) {
+            // A reservation code must never be guessed from local state: doing
+            // so can collide with another browser or a concurrent checkout.
+            throw new Error('No se pudo reservar un código único. Intente nuevamente cuando haya conexión.', { cause: error });
         }
     };
 
@@ -1256,6 +1256,7 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
             await setDoc(doc(db, 'rentals', id), cleanData);
         } catch (err) {
             console.error('Firestore addRental error:', err);
+            throw err;
         }
 
         return newRental;

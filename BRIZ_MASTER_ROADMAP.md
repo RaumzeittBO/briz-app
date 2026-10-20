@@ -4,6 +4,15 @@
 > **ESTADO GENERAL DEL PROYECTO:** En estabilización avanzada — Motor de alquileres, stock transaccional, seguridad PBKDF2, traducción pública integral, registro de artes en inglés y correcciones móviles en ejecución y validación.  
 > **DOCUMENTO COMPLEMENTARIO OBLIGATORIO:** Ver [`BRIZ_HANDOFF_CODEX.md`](./BRIZ_HANDOFF_CODEX.md) y [`BRIZ_ARTES_EN_INGLES.md`](./BRIZ_ARTES_EN_INGLES.md).
 
+## Continuación Codex — 2026-10-20
+
+- Base comprobada: `e7b4d5de8af5b09b2b69b0cf0d019acef07532ce`, rama `briz/stabilization-review-20261020`.
+- Rama de trabajo: `codex/briz-critical-stabilization-20261020`.
+- Cambios en curso: reglas ahora requieren registro activo con rol válido para admin; lectura/escritura pública de clientes y alquileres se cerró; `rentals_busy_slots` es la colección pública prevista para disponibilidad; se quitó el bootstrap del primer administrador en el navegador; errores de escritura de `addRental` y de contador ya se propagan; se retiraron las credenciales Telegram `VITE_*` del módulo web.
+- **No desplegar estas reglas todavía.** El checkout de navegador aún depende de escrituras directas, el login de clientes aún valida hashes descargados, y el lector público aún consulta `rentals`. El cierre de reglas expone estos bloqueos de forma segura, pero el flujo necesita Functions con Admin SDK para crear reservas transaccionalmente, Firebase Auth para cuentas existentes y una proyección sanitizada para disponibilidad. Telegram queda pausado hasta añadir Functions con secretos. No hay migración de cuentas implementada todavía.
+- Contador real observado en el cliente: `settings/rental_counter`; documentación histórica que menciona `counters/rentals_YYYY` es incorrecta para este commit. La escritura al contador también debe moverse al endpoint de reservas antes de habilitar las reglas cerradas.
+- Pruebas solicitadas: suite core aprobada (16/16); `tsc --noEmit` aprobado; build y lint en ejecución al actualizar esta nota; Emulator y flujos E2E aún no configurados/ejecutados.
+
 ---
 
 ## HANDOFF — LEER PRIMERO
