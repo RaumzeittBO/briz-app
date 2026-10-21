@@ -33,6 +33,10 @@ assert.throws(
   /forbidden outside Vercel Production/i,
 );
 assert.throws(
+  () => resolveFirebaseRuntimeConfig({ ...production, VITE_FIREBASE_ENVIRONMENT: 'staging' }, 'development', 'production'),
+  /forbidden outside Vercel Production/i,
+);
+assert.throws(
   () => resolveFirebaseRuntimeConfig({ ...production, VITE_FIREBASE_PROJECT_ID: 'briz-staging' }, 'production', 'production'),
   /must use Firebase project briz-4ef3a/i,
 );
@@ -47,4 +51,4 @@ const stagingRuntime = resolveFirebaseRuntimeConfig({
 }, 'preview', 'production');
 assert.equal(stagingRuntime.config.projectId, 'briz-staging');
 
-console.log('Firebase runtime configuration: 7 checks passed.');
+console.log('Firebase runtime configuration: 9 checks passed.');
