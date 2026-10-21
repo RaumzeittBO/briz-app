@@ -2076,7 +2076,7 @@ export default function AdminRentalsPage() {
                 <p>Reembolsado <strong>Bs. {refundedTotal.toFixed(2)}</strong></p><p>Corregido <strong>Bs. {correctedTotal.toFixed(2)}</strong></p>
                 <p>Efectivo neto <strong>Bs. {(grossReceipts - refundedTotal).toFixed(2)}</strong></p>
                 <p>Ingreso neto reconocido <strong>Bs. {(grossReceipts - refundedTotal - correctedTotal).toFixed(2)}</strong></p>
-                <p>Pendiente <strong>Bs. {Math.max(0, group.total - grossReceipts + correctedTotal).toFixed(2)}</strong></p>
+                <p>Pendiente <strong>Bs. {Math.max(0, group.total - grossReceipts).toFixed(2)}</strong></p>
               </div>
               <label className="block text-xs font-bold">Tipo<select className="mt-1 w-full rounded-lg bg-black/40 border border-white/10 p-2" value={paymentType} onChange={e => setPaymentType(e.target.value as typeof paymentType)}><option value="receipt">Registrar cobro</option><option value="refund">Registrar reembolso</option><option value="correction">Corregir cobro (sin salida de caja)</option></select></label>
               <label className="block text-xs font-bold">Importe (Bs.)<Input type="number" min="0.01" step="0.01" value={paymentAmount} onChange={e => setPaymentAmount(e.target.value)} className="mt-1 bg-black/40" /></label>

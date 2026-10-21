@@ -85,11 +85,9 @@ export function summarizeRentalMoney(
     const groupMovements = movements.filter(movement => String(movement.reservationCode || '') === groupId);
 
     let allReceipts = 0;
-    let allCorrections = 0;
     for (const movement of groupMovements) {
       const amount = Math.max(0, Number(movement.amount) || 0);
       if (movement.type === 'receipt') allReceipts += amount;
-      if (movement.type === 'correction') allCorrections += amount;
       if (movement.type === 'receipt' && inDateRange(movement.actualAt)) collected += amount;
       if (movement.type === 'receipt' && movement.legacy && !day(movement.actualAt) && includeUndatedLegacyPayments) collectedDateUnknown += amount;
       if (movement.type === 'refund' && inDateRange(movement.actualAt)) refunded += amount;
@@ -112,8 +110,8 @@ export function summarizeRentalMoney(
 
     if (isEffective && isInRentalRange) {
       contracted += groupTotal;
-      // Refunds are cash outflows; they do not recreate contractual debt.
-      pending += Math.max(0, groupTotal - allReceipts + allCorrections);
+      // Refunds and accounting corrections do not recreate contractual debt.
+      pending += Math.max(0, groupTotal - allReceipts);
     }
   }
 

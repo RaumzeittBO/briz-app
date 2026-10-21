@@ -1106,7 +1106,7 @@ export const recordRentalPaymentMovement = onCall(callable(), async (request) =>
             availableForReference = Math.round((Number(reference.amount) - (correctionByReference.get(referenceMovementId) || 0) - (refundByReference.get(referenceMovementId) || 0)) * 100) / 100;
             if (amount > availableForReference) throw new HttpsError('failed-precondition', `El importe supera el disponible para esta referencia (Bs. ${Math.max(0, availableForReference)}).`);
         }
-        if (type === 'receipt' && amount > Math.max(0, groupTotal - grossReceipts + totalCorrections)) {
+        if (type === 'receipt' && amount > Math.max(0, groupTotal - grossReceipts)) {
             throw new HttpsError('failed-precondition', 'El abono supera el saldo contractual pendiente.');
         }
         const now = new Date().toISOString();
@@ -1127,10 +1127,13 @@ export const recordRentalPaymentMovement = onCall(callable(), async (request) =>
             refunds: refunds.reduce((sum, entry) => sum + Number(entry.amount || 0), 0),
             corrections: totalCorrections,
         };
-        const recognizedAfter = afterAmounts.receipts - afterAmounts.corrections;
-        const paymentStatus = type === 'refund'
-            ? String(rows.find((row) => row.paymentStatus)?.paymentStatus || 'unpaid')
-            : recognizedAfter + 0.001 >= groupTotal ? 'paid' : 'unpaid';
+        // Corrections are accounting-only: they neither create contractual debt
+        // nor reverse a payment status. Only a newly received receipt can move
+        // a group to paid; refunds/corrections preserve the current projection.
+        const currentPaymentStatus = String(rows.find((row) => row.paymentStatus)?.paymentStatus || 'unpaid');
+        const paymentStatus = type === 'receipt'
+            ? afterAmounts.receipts + 0.001 >= groupTotal ? 'paid' : currentPaymentStatus
+            : currentPaymentStatus;
         legacyToCreate.forEach(({ ref, data }) => tx.create(ref, data));
         tx.create(movementRef, movement);
         rows.forEach((row, index) => tx.update(rentalSnaps[index].ref, {

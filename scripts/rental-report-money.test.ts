@@ -42,7 +42,8 @@ const movements = [
   { id: 'lpz-1', reservationCode: 'ledger-lpz', store: 'La Paz', type: 'receipt' as const, amount: 80, actualAt: '2026-10-21T13:00:00-04:00' },
 ];
 const cbbaLedgerDay = summarizeRentalMoney(filterRentalMoneyByStore(ledgerRows, 'Cochabamba'), '2026-10-22', '2026-10-22', false, filterRentalMoneyByStore(movements, 'Cochabamba'));
-assert.deepEqual(cbbaLedgerDay, { contracted: 100, collected: 60, refunded: 25, corrected: 5, netCash: 35, netRecognized: 30, pending: 5, collectedDateUnknown: 0 });
+assert.deepEqual(cbbaLedgerDay, { contracted: 100, collected: 60, refunded: 25, corrected: 5, netCash: 35, netRecognized: 30, pending: 0, collectedDateUnknown: 0 });
+assert.equal(cbbaLedgerDay.pending, 0, 'A non-cash correction never increases contractual debt, even when recognized net is lower than cash net.');
 const lpzLedgerDay = summarizeRentalMoney(filterRentalMoneyByStore(ledgerRows, 'La Paz'), '2026-10-22', '2026-10-22', false, filterRentalMoneyByStore(movements, 'La Paz'));
 assert.deepEqual(lpzLedgerDay, { contracted: 80, collected: 0, refunded: 0, corrected: 0, netCash: 0, netRecognized: 0, pending: 0, collectedDateUnknown: 0 });
 const cbbaAdvanceDay = summarizeRentalMoney(filterRentalMoneyByStore(ledgerRows, 'Cochabamba'), '2026-10-21', '2026-10-21', false, filterRentalMoneyByStore(movements, 'Cochabamba'));
