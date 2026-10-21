@@ -17,7 +17,10 @@ export interface RentalMoneySummary {
   collected: number;
   refunded: number;
   corrected: number;
-  netCollected: number;
+  /** Cash actually retained: receipts minus explicitly recorded cash refunds. */
+  netCash: number;
+  /** Recognized rental income after non-cash accounting corrections. */
+  netRecognized: number;
   pending: number;
   collectedDateUnknown: number;
 }
@@ -114,6 +117,7 @@ export function summarizeRentalMoney(
     }
   }
 
-  const netCollected = collected - refunded - corrected;
-  return { contracted, collected, refunded, corrected, netCollected, pending, collectedDateUnknown };
+  const netCash = collected - refunded;
+  const netRecognized = netCash - corrected;
+  return { contracted, collected, refunded, corrected, netCash, netRecognized, pending, collectedDateUnknown };
 }

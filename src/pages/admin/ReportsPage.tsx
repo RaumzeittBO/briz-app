@@ -169,7 +169,7 @@ export default function ReportsPage() {
     () => periodServices.reduce((sum, so) => sum + (Number(so.costEstimate ?? (so as any).price) || 0), 0),
     [periodServices]
   );
-  const totalConsolidatedIncome = rentalMoney.netCollected + rentalMoney.collectedDateUnknown + salesIncome + serviceIncome;
+  const totalConsolidatedIncome = rentalMoney.netRecognized + rentalMoney.collectedDateUnknown + salesIncome + serviceIncome;
 
   // 5, 6, 7, 8: Bike rankings (most rented, least/zero rented, revenue per bike, hours/days rented)
   const bikePerformance = useMemo(() => {
@@ -380,10 +380,12 @@ export default function ReportsPage() {
     lines.push('');
     lines.push([esc('RESUMEN FINANCIERO'), esc('Monto (Bs.)')].join(','));
     lines.push([esc('Alquileres contratados por fecha de alquiler'), esc(rentalGrossIncome)].join(','));
+    lines.push([esc('Ingreso neto reconocido integral (alquileres + tienda + taller)'), esc(totalConsolidatedIncome)].join(','));
     lines.push([esc('Cobrado con fecha de pago verificable'), esc(rentalPaidIncome)].join(','));
     lines.push([esc('Reembolsos registrados'), esc(rentalMoney.refunded)].join(','));
     lines.push([esc('Correcciones contables (sin salida de caja)'), esc(rentalMoney.corrected)].join(','));
-    lines.push([esc('Cobro neto de alquileres'), esc(rentalMoney.netCollected)].join(','));
+    lines.push([esc('Efectivo neto de alquileres (cobros - reembolsos)'), esc(rentalMoney.netCash)].join(','));
+    lines.push([esc('Ingreso neto reconocido de alquileres (efectivo neto - correcciones)'), esc(rentalMoney.netRecognized)].join(','));
     lines.push([esc('Cobros históricos sin fecha verificable'), esc(rentalMoney.collectedDateUnknown)].join(','));
     lines.push([esc('Alquileres Pendientes de Cobro'), esc(rentalPendingPaymentIncome)].join(','));
     lines.push([esc('Ventas y servicios del período'), esc(salesIncome + serviceIncome)].join(','));
@@ -534,12 +536,12 @@ export default function ReportsPage() {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <Card className="bg-[#1A1A1A] border-white/5 rounded-2xl p-5">
           <div className="flex items-center justify-between mb-2">
-            <p className="text-[10px] font-black uppercase text-white/40 tracking-widest">Ingresos cobrados / completados</p>
+            <p className="text-[10px] font-black uppercase text-white/40 tracking-widest">Ingreso neto reconocido integral</p>
             <DollarSign className="w-4 h-4 text-brand-yellow" />
           </div>
           <p className="text-3xl font-black text-brand-yellow">Bs. {totalConsolidatedIncome}</p>
           <p className="text-[11px] text-white/40 font-bold mt-1">
-            Cobro neto de alquileres (abonos − correcciones − reembolsos) + ventas y servicios
+            Ingreso neto reconocido (alquileres − correcciones contables) + ventas y servicios
           </p>
         </Card>
 
@@ -558,7 +560,8 @@ export default function ReportsPage() {
           <div className="mt-1 flex flex-wrap gap-x-2 text-[10px] font-bold text-white/55">
             <span>Reembolsado: Bs. {rentalMoney.refunded}</span>
             <span>Corrección: Bs. {rentalMoney.corrected}</span>
-            <span className="text-white">Neto: Bs. {rentalMoney.netCollected}</span>
+            <span className="text-white">Efectivo neto: Bs. {rentalMoney.netCash}</span>
+            <span className="text-white">Ingreso reconocido: Bs. {rentalMoney.netRecognized}</span>
           </div>
           {rentalMoney.collectedDateUnknown > 0 && (
             <p className="mt-2 text-xs text-amber-300">Bs. {rentalMoney.collectedDateUnknown} figuran pagados en registros históricos sin fecha de cobro verificable; se muestran solo en “Todo el historial”.</p>

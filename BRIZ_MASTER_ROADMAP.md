@@ -1,5 +1,16 @@
 # BRIZ (`briz.com.bo`) — MASTER ROADMAP & ENGINEERING LOG
 
+## Auditoría de métricas de Caja y preparación de PR #1 — 2026-10-21
+
+- Métricas con nombres inequívocos: **cobros brutos** por fecha real del movimiento, **reembolsos reales** por su fecha, **efectivo neto = cobros − reembolsos**, **correcciones contables no monetarias**, **ingreso neto reconocido = efectivo neto − correcciones** y **pendiente contractual = contratado − cobros + correcciones**. Los reembolsos no recrean deuda. Contratado/pendiente permanecen en fecha programada; movimientos en su `actualAt`; filtro de sede se aplica a ambos conjuntos.
+- Dashboard, Reportes, Caja y CSV distinguen efectivo neto de ingreso neto reconocido; Dashboard/Reportes usan ingreso neto reconocido integral (incluye tienda/taller) y la exportación incluye ese total, mientras que Caja presenta por separado los dos netos de alquiler. Los registros históricos `paid` anteriores a la creación del ledger se usan como recibo legado una sola vez; una proyección posterior del ledger no se vuelve a sumar como pago histórico.
+- Caso histórico pendiente de conciliación: si un documento conserva `amountPaid/paidAt` pero su estado actual ya es `unpaid`/`pending_review`, no se registra automáticamente como efectivo legacy. No se infiere si fue un cobro, una corrección o un reembolso; debe revisarse en el bloque de conciliación antes de importar o reconocerlo.
+- Regresión de aritmética conocida en Emulator/reportes: dos abonos 40+60 = bruto 100; reembolso 25 => efectivo neto 75; corrección contable 5 => ingreso reconocido 70; pendiente contractual 5; corrección no reduce el efectivo. Incluye dos sedes, adelanto, fecha de devolución, y fila legacy paid, sin importar datos reales.
+- Vercel Preview terminó correctamente: GitHub PR #1 muestra `Vercel=SUCCESS` y `Vercel Preview Comments=SUCCESS`. Continúa **bloqueado** confirmar qué Firebase usa: `briz-web` está bajo `gfabrigtrf-7085s-projects`, cuya configuración no es visible con el acceso actual (403). No probar con escrituras. El propietario debe habilitar lectura del proyecto/env o verificar `projectId`/bucket/entorno y demostrar un backend de staging con datos aislados; nunca compartir secretos.
+- PR #1 sigue Draft, abierta, no fusionada. GitHub indica head `db88147`, base `0140452`, MERGEABLE/no conflictos al revisar. No hay `.github/workflows` en el cambio; el Preview se dispara automáticamente por PR y el disparador de producción de Vercel para `main` no se pudo inspeccionar. Firebase Rules/Functions no se despliegan con este build de frontend y requieren release separado/compatible. Merge sigue bloqueado por aprobación manual Owner de UI y semántica, Firebase Preview aislado, publicación en `main` conocida y respaldo restaurable/rollback ensayado.
+- Validación de este cierre: `npm run test:firebase` pasó con Rules + Auth/Firestore/Functions/Storage Emulator (incluye dos abonos 40+60, reembolso25, corrección5, legacy paid sin doble conteo y retry idempotente); `npm run test:reports` pasó; `npm run test:reconcile` pasó con 8 fixtures/22 hallazgos; motor 16/16; `npx tsc --noEmit` y `npm run build` pasaron. ESLint dirigido devuelve 31 errores preexistentes `no-explicit-any` en `AdminRentalsPage`, `DashboardPage`, `ReportsPage`; helper, scripts y Functions no agregan errores. Web build avisa `/noise.png` no resuelto y chunk JS 1.97 MB. Node local 24 frente al runtime Functions 22: no es matriz de runtime validada.
+- Siguiente acción ejecutable: propietario recorre [`BRIZ_ADMIN_MANUAL_VALIDATION.md`](./BRIZ_ADMIN_MANUAL_VALIDATION.md) con Emulator, aprueba cifras semánticas y valida viewport escritorio/390px; en paralelo habilita lectura/configuración de Preview con proyecto de staging aislado. No cambiar PR de Draft ni empezar nuevas fases hasta resolver estos gates.
+
 ## Cierre de caja auditable y reportes por sede — 2026-10-21 (publicado; revisión manual pendiente)
 
 - La métrica monetaria ahora restringe contratos y movimientos por la sede elegida; contratos/pendientes usan fecha programada y recibos/reembolsos/correcciones usan su fecha real. Contratado, pendiente, cobrado bruto, reembolsado, correcciones no monetarias y neto se informan por separado.
@@ -7,9 +18,9 @@
 - Se retiró la callable heredada que mutaba `paymentStatus` sin movimiento de caja. Se detectó y corrigió un defecto de inicialización: una proyección `paid` creada por el ledger podía ser reinterpretada como pago legacy, duplicando importes; los recibos legacy solo se sembrarán cuando el grupo no tenga ledger.
 - Los controles Admin presentan movimiento de caja en pedidos pagados o pendientes; bloqueo por grupo conserva carga/reintento. Validación visual sigue pendiente del propietario por restricción de navegación a localhost; no se declara como realizada.
 - Emulator `demo-briz-security`: `npm run test:firebase` pasó (rules, Auth/Firestore/Functions/Storage, Bs. 100 en abonos 40+60 concurrentes/idempotentes, corrección, reembolso Bs. 25, sobre-reembolso, QR no confirmado, ciclo de stock); `npm run test:reports`, `npm run test:reconcile` (8 fixtures/22 hallazgos), motor (16/16), TypeScript y builds web/Functions pasan. Build conserva aviso `/noise.png` y bundle ~1.97 MB. ESLint dirigido reporta 38 errores preexistentes en Admin/contexto, principalmente `no-explicit-any`, además reglas Fast Refresh; archivos helper/Functions/scripts seleccionados sin errores.
-- No se hizo deploy a producción, merge, migración ni escritura productiva. El PR sí activó automáticamente un check/deployment de **preview** de Vercel (`Vercel is deploying your app`), distinto de producción. El proyecto pertenece a un equipo Vercel fuera del alcance del conector y de la CLI de pachaxbo; no se pudieron comprobar sus variables/env ni aliases. Esta incertidumbre mantiene bloqueado el merge.
+- No se hizo deploy a producción, merge, migración ni escritura productiva. **Estado histórico de la primera consulta:** el check del Preview aparecía pendiente. **Actualización 2026-10-21:** GitHub confirma ahora que el deployment/check de Vercel terminó SUCCESS; su entorno Firebase y comportamiento funcional siguen sin comprobarse por falta de acceso al proyecto/team. La incertidumbre mantiene bloqueado el merge.
 - Próxima acción: completar revisión manual del checklist con Emulator, aprobar semántica comercial de correcciones y obtener verificación de integración/deploy antes de considerar merge.
-- Publicación: `HEAD`/remoto `9ce840997ee3e51ec10a0cdbef9e711cc56308a5`; commit funcional `5abcd1f2c1bb21258c0edaef832b4f3388fcb5cb`. `origin/main`: `0140452678d23e6e352dcaacd353bfe7342912f5`. `git merge-tree` no encontró conflictos. PR draft #1: [BRIZ: cierre de caja auditable y estabilización de alquileres](https://github.com/RaumzeittBO/briz-app/pull/1), abierto por `pachaxbo-commits`, no fusionado. Su check de Vercel reporta `Vercel Preview Comments` passed y `Vercel is deploying your app` pendiente. Team `gfabrigtrf-7085s-projects` devuelve 403 al conector y “scope does not exist” a la CLI autenticada de pachaxbo; no hay acceso a inspeccionar env/deployment. No se infiere que el preview use o no Firebase productivo.
+- Publicación histórica en esa consulta: `HEAD`/remoto `9ce840997ee3e51ec10a0cdbef9e711cc56308a5`; el estado actualizado y SHAs nuevos están en la auditoría de Caja al inicio. `origin/main`: `0140452678d23e6e352dcaacd353bfe7342912f5`. La PR draft #1 no se fusionó. Su check pasó posteriormente a `SUCCESS`. Team `gfabrigtrf-7085s-projects` devuelve 403 al conector y “scope does not exist” a la CLI autenticada de pachaxbo; env/deployment aún no son visibles.
 
 ### Estado de módulos de este cierre
 
@@ -25,15 +36,16 @@
 
 ### Fases futuras — siguen pendientes
 
-1. Revisión visual manual de caja, alquileres, inventario y reportes en escritorio/móvil (360–430 px).
-2. Conciliación/migración de históricos con respaldo autorizado y dry-run.
-3. Preparación de Firebase Blaze, App Check, secretos y Telegram (sin activarlos aún).
-4. Revisión integral restante del panel Admin.
-5. Traducción natural e integral ES/EN y diez artes pendientes en inglés.
-6. Responsive de todas las páginas y categorías/eventos en alquiler móvil.
-7. Gestor Admin de imágenes Home (después de cerrar alquileres críticos).
-8. Limpieza ESLint y optimización.
-9. Despliegue coordinado solo después de verificación y autorización.
+1. Conciliación/migración histórica ficticia/protegida: backup, dry-run, reversibilidad y criterios de parada.
+2. Preparación de Firebase Blaze, App Check, secretos y Telegram (solo evaluación/configuración en staging; activación requiere autorización).
+3. Revisión integral restante del panel Admin.
+4. Traducción natural e integral ES/EN.
+5. Incorporar diez artes pendientes en inglés.
+6. Responsive de todas las páginas (incluye las pruebas manuales Admin 360–430 px).
+7. Corregir categorías/eventos en alquileres móvil si persiste.
+8. Gestor Admin de imágenes Home, después de cerrar alquileres críticos.
+9. Limpieza de errores ESLint y optimización.
+10. Despliegue coordinado tras comprobar migración/compatibilidad y con autorización expresa.
 
 ## Incidencia crítica de alquileres y cobros — 2026-10-21
 

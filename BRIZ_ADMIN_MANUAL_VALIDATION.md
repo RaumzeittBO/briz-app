@@ -2,17 +2,32 @@
 
 ## Casos nuevos tras la incidencia de cobros/confirmación (2026-10-21)
 
+### Caja — importes de control para aprobación del propietario
+
+Usar únicamente un grupo ficticio del Emulator con total contractual **Bs. 100**, sede identificada y fechas conocidas. Registra recibos de **Bs. 40** y **Bs. 60** en sus fechas reales. Después registra un reembolso ficticio real de **Bs. 25** contra el primer recibo y una corrección contable ficticia no monetaria de **Bs. 5** contra el segundo, con motivo y confirmación explícita. Las vistas de caja/reportes/CSV deben coincidir:
+
+| Indicador | Valor esperado | Significado |
+|---|---:|---|
+| Cobros brutos recibidos | Bs. 100 | 40 + 60, conserva ambos movimientos |
+| Reembolsos reales registrados | Bs. 25 | Salida de caja explícita |
+| Efectivo neto | Bs. 75 | 100 − 25; la corrección no lo cambia |
+| Corrección contable no monetaria | Bs. 5 | Ajuste con referencia/motivo; no es dinero pagado |
+| Ingreso neto reconocido | Bs. 70 | 75 − 5 |
+| Saldo contractual pendiente | Bs. 5 | 100 − 100 + 5; el reembolso no vuelve a crear deuda |
+
+La corrección y su efecto son una propuesta conservadora que debe aprobar el propietario antes del uso productivo. Tras recargar, bruto/reembolso/corrección/historial deben persistir y no duplicarse. Verifica la misma sede y ventana de fechas en Dashboard, Reportes, Caja y CSV; un anticipo se reporta por fecha de pago, el contratado por fecha del alquiler. La sede distinta no debe recibir estas cifras.
+
 La corrección de UI no se marcó como validación visual: el navegador automatizado bloquea localhost y esa restricción no se evadió. Tras abrir manualmente la app del Emulator, revisar estos controles en desktop y 360/390/430 px:
 
 1. Abrir una reserva pendiente en el detalle y pulsar **Confirmar Reserva**. El modal debe permanecer visible con **Confirmando…** hasta respuesta; al éxito se cierra y la lista actualiza sin segunda pulsación. Probar error de stock: mostrar error y conservar modal/reserva pendiente.
 2. Pulsar confirmar en la tarjeta; mientras carga el botón queda deshabilitado. Repetir doble clic en **Crear Alquiler**; una clave de sesión debe producir un solo código/documento. No refrescar/limpiar storage hasta finalizar.
-3. En Caja registrar un anticipo de **Bs. 40** y luego el saldo de **Bs. 60** para un pedido de Bs. 100. El segundo cobro no debe aumentar el total contratado. QR/transferencia requieren marcar recibido. Un mismo envío/reintento no debe crear dos movimientos.
-4. Sobre ese ejemplo, registrar un reembolso explícito de **Bs. 20** referido al primer cobro: se muestra en su propia fecha; no borra el cobro original ni recrea deuda contractual. Un reembolso mayor al remanente del cobro se rechaza. Una corrección requiere referencia y motivo; se registra separada del efectivo y no afirma que salió dinero.
+3. En Caja registrar un anticipo de **Bs. 40** y luego **Bs. 60** para un pedido de Bs. 100. El segundo cobro no debe aumentar lo contratado. QR/transferencia requieren marcar recibido. Un mismo envío/reintento no debe crear dos movimientos.
+4. Sobre ese ejemplo, registrar reembolso real de **Bs. 25** referido al primer cobro y corrección contable no monetaria de **Bs. 5** referida al segundo. Resultado: cobrado bruto 100; reembolsos 25; efectivo neto 75; correcciones 5; ingreso neto reconocido 70; pendiente contractual 5. Un reembolso mayor al remanente del cobro se rechaza. La corrección exige motivo y confirmación, y no afirma salida de dinero.
 5. Entregar y devolver. Confirmar que los cobros e historial persisten; una devolución impaga no se cuenta como cobro. Registrar un pago después de devolver y verificar que se conserva el estado devuelto.
 6. En retorno, probar cantidades dañadas y sanas: la suma dañada no supera las unidades entregadas, stock sano vuelve a disponible, dañadas a mantenimiento y no aparece un cargo automático.
 7. Probar confirmación/edición/cancelación/devolución/pago y que la lista refleje el resultado al terminar, sin repetir pulsaciones. Contrastar inventario y Reportes con combos y accesorio individual; no sumar unidades de combo como una segunda línea monetaria.
 
-Un cobro ya guardado se mantiene en el historial tras cancelación o devolución. El reporte resta reembolsos y correcciones en sus fechas reales, pero no elimina movimientos originales. `Cobrado` es el bruto recibido, `Reembolsado` es salida de caja explícita, `Corregido` es ajuste no monetario y `Neto` es la vista reconocida. El pendiente contractual descuenta recibos y suma correcciones; un reembolso no reabre la deuda. El propietario debe revisar y aprobar esta semántica contable en la prueba manual antes de uso productivo.
+Un cobro ya guardado se mantiene en el historial tras cancelación o devolución. `Efectivo neto` resta solo reembolsos reales; `Ingreso neto reconocido` resta además correcciones no monetarias. Los movimientos aparecen por su fecha real y los contratos por fecha programada. El pendiente contractual descuenta recibos y suma correcciones; un reembolso no reabre la deuda. El propietario debe revisar y aprobar esta semántica contable en la prueba manual antes de uso productivo.
 
 ## Recorrido corto del propietario: reserva → inventario → reportes
 
@@ -28,7 +43,7 @@ No cambiar `paymentStatus` a `unpaid` para simular reembolso ni corrección. Usa
 
 Las pruebas automatizadas contra `demo-briz-security` cubren estas invariantes backend/reporting; no reemplazan los pasos visuales listados aquí.
 
-**Estado:** el 2026-10-21 se iniciaron Auth, Firestore, Functions y Storage Emulator, se sembró la cuenta/catálogo ficticios y Vite quedó iniciado en `http://127.0.0.1:5173/`. El navegador automatizado bloqueó el acceso al `localhost` por política de URL; no se repitió el acceso ni se declara como visualmente probado. Los procesos siguen disponibles para completar el recorrido manual. Las suites de Emulator cubren lógica y permisos del backend, pero no sustituyen esta lista.
+**Estado:** el 2026-10-21 se inició Auth, Firestore, Functions y Storage Emulator, se sembró la cuenta/catálogo ficticios y Vite informó `http://127.0.0.1:5173/`. El navegador automatizado bloqueó localhost; no se intentó eludirlo ni se declara esta lista como visualmente probada. Para una nueva sesión, iniciar los procesos siguiendo los comandos inferiores. Las suites Emulator cubren lógica y permisos backend, pero no sustituyen esta lista.
 
 ## Preparar un entorno exclusivamente ficticio
 

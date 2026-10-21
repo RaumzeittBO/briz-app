@@ -86,7 +86,7 @@ export default function DashboardPage() {
   const rentalsToday = rentalsTodayList.filter(r => !r.productId.startsWith('srv_')).length;
   const salesToday = salesTodayList.length;
   const incomeToday =
-    summarizeRentalMoney(rentals, todayStr, todayStr).collected +
+    summarizeRentalMoney(rentals, todayStr, todayStr, false, rentalPaymentMovements).netRecognized +
     salesTodayList.reduce((s, v) => s + (Number(v.total) || 0), 0) +
     servicesTodayList.reduce((s, so) => s + (Number(so.costEstimate ?? (so as any).price) || 0), 0);
 
@@ -105,7 +105,7 @@ export default function DashboardPage() {
   const rentalsWeek = rentalsWeekList.filter(r => !r.productId.startsWith('srv_')).length;
   const salesWeek = salesWeekList.length;
   const incomeWeek =
-    summarizeRentalMoney(rentals, weekAgoStr, todayStr, false, rentalPaymentMovements).netCollected +
+    summarizeRentalMoney(rentals, weekAgoStr, todayStr, false, rentalPaymentMovements).netRecognized +
     salesWeekList.reduce((s, v) => s + (Number(v.total) || 0), 0) +
     servicesWeekList.reduce((s, so) => s + (Number(so.costEstimate ?? (so as any).price) || 0), 0);
 
@@ -124,7 +124,7 @@ export default function DashboardPage() {
   const rentalsMonth = rentalsMonthList.filter(r => !r.productId.startsWith('srv_')).length;
   const salesMonth = salesMonthList.length;
   const incomeMonth =
-    summarizeRentalMoney(rentals, monthAgoStr, todayStr, false, rentalPaymentMovements).netCollected +
+    summarizeRentalMoney(rentals, monthAgoStr, todayStr, false, rentalPaymentMovements).netRecognized +
     salesMonthList.reduce((s, v) => s + (Number(v.total) || 0), 0) +
     servicesMonthList.reduce((s, so) => s + (Number(so.costEstimate ?? (so as any).price) || 0), 0);
 
@@ -169,11 +169,11 @@ export default function DashboardPage() {
       const dayMovements = rentalPaymentMovements.filter(movement => movement.actualAt && toBoliviaDateString(movement.actualAt) === ds);
       const ledgerGroups = new Set(rentalPaymentMovements.map(movement => movement.reservationCode));
       const legacyReceipts = rentals.filter(r => !ledgerGroups.has(r.reservationCode || r.id) && r.paymentStatus === 'paid' && r.paidAt && toBoliviaDateString(r.paidAt) === ds);
-      const cashNet = dayMovements.reduce((sum, movement) => sum + (movement.type === 'receipt' ? Number(movement.amount) || 0 : movement.type === 'refund' ? -(Number(movement.amount) || 0) : 0), 0);
+      const recognizedNet = dayMovements.reduce((sum, movement) => sum + (movement.type === 'receipt' ? Number(movement.amount) || 0 : movement.type === 'refund' || movement.type === 'correction' ? -(Number(movement.amount) || 0) : 0), 0);
       days.push({
         name: label,
         alquileres: dayRentals.filter(r => !r.productId.startsWith('srv_')).length,
-        ingresos: cashNet + legacyReceipts.reduce((sum, r) => sum + Math.max(0, Number(r.amountPaid) || Number(r.total) || 0), 0)
+        ingresos: recognizedNet + legacyReceipts.reduce((sum, r) => sum + Math.max(0, Number(r.amountPaid) || Number(r.total) || 0), 0)
       });
     }
     return days;
@@ -232,7 +232,7 @@ export default function DashboardPage() {
               <div className="grid grid-cols-3 gap-2 text-center">
                 <div><p className="text-xl font-black text-brand-charcoal">{p.r}</p><p className="text-[9px] text-brand-charcoal/45 font-bold uppercase">Alquileres</p></div>
                 <div><p className="text-xl font-black text-brand-charcoal">{p.s}</p><p className="text-[9px] text-brand-charcoal/45 font-bold uppercase">Ventas</p></div>
-                <div><p className="text-xl font-black text-brand-charcoal">Bs.{p.i}</p><p className="text-[9px] text-brand-charcoal/45 font-bold uppercase">Ingresos</p></div>
+                <div><p className="text-xl font-black text-brand-charcoal">Bs.{p.i}</p><p className="text-[9px] text-brand-charcoal/45 font-bold uppercase">Ingreso neto reconocido</p></div>
               </div>
             </CardContent>
           </Card>

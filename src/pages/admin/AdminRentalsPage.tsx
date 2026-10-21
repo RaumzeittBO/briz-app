@@ -2074,7 +2074,8 @@ export default function AdminRentalsPage() {
               <div className="grid grid-cols-2 gap-2 rounded-xl border border-white/10 bg-black/30 p-3 text-xs">
                 <p>Contratado <strong>Bs. {group.total.toFixed(2)}</strong></p><p>Cobrado <strong>Bs. {grossReceipts.toFixed(2)}</strong></p>
                 <p>Reembolsado <strong>Bs. {refundedTotal.toFixed(2)}</strong></p><p>Corregido <strong>Bs. {correctedTotal.toFixed(2)}</strong></p>
-                <p>Neto reconocido <strong>Bs. {(grossReceipts - refundedTotal - correctedTotal).toFixed(2)}</strong></p>
+                <p>Efectivo neto <strong>Bs. {(grossReceipts - refundedTotal).toFixed(2)}</strong></p>
+                <p>Ingreso neto reconocido <strong>Bs. {(grossReceipts - refundedTotal - correctedTotal).toFixed(2)}</strong></p>
                 <p>Pendiente <strong>Bs. {Math.max(0, group.total - grossReceipts + correctedTotal).toFixed(2)}</strong></p>
               </div>
               <label className="block text-xs font-bold">Tipo<select className="mt-1 w-full rounded-lg bg-black/40 border border-white/10 p-2" value={paymentType} onChange={e => setPaymentType(e.target.value as typeof paymentType)}><option value="receipt">Registrar cobro</option><option value="refund">Registrar reembolso</option><option value="correction">Corregir cobro (sin salida de caja)</option></select></label>

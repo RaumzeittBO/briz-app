@@ -409,14 +409,40 @@ try {
     await call(userB.functions, 'recordRentalPaymentMovement', { rentalIds: [exactLedgerDoc.id], type: 'receipt', amount: 60, method: 'QR', confirmedReceived: true, actualAt: new Date().toISOString(), idempotencyKey: `partial60_${crypto.randomUUID()}` });
     const firstReceiptId = partialCalls[0].movementId;
     await call(userB.functions, 'recordRentalPaymentMovement', { rentalIds: [exactLedgerDoc.id], type: 'refund', amount: 25, method: 'Efectivo', actualAt: new Date().toISOString(), idempotencyKey: `refund25_${crypto.randomUUID()}`, referenceMovementId: firstReceiptId, reason: 'Reembolso de ejemplo', confirmed: true });
+    const receiptsBeforeCorrection = await adminDb.collection('rentalPaymentMovements').where('reservationCode', '==', exactLedgerCode).get();
+    const secondReceiptId = receiptsBeforeCorrection.docs.find(doc => doc.get('type') === 'receipt' && doc.id !== firstReceiptId)!.id;
+    await call(userB.functions, 'recordRentalPaymentMovement', { rentalIds: [exactLedgerDoc.id], type: 'correction', amount: 5, method: 'Efectivo', actualAt: new Date().toISOString(), idempotencyKey: `correction5_${crypto.randomUUID()}`, referenceMovementId: secondReceiptId, reason: 'Corrección no monetaria de ejemplo', confirmed: true });
     const exactLedgerMovements = await adminDb.collection('rentalPaymentMovements').where('reservationCode', '==', exactLedgerCode).get();
     const exactReceipts = exactLedgerMovements.docs.filter(doc => doc.get('type') === 'receipt');
     assert.equal(exactReceipts.length, 2);
     assert.equal(exactReceipts.reduce((sum, doc) => sum + Number(doc.get('amount')), 0), 100, 'Two partial receipts total exactly Bs. 100.');
     assert.equal(exactLedgerMovements.docs.filter(doc => doc.get('type') === 'refund').reduce((sum, doc) => sum + Number(doc.get('amount')), 0), 25);
-    assert.equal((await adminDb.collection('rentals').doc(exactLedgerDoc.id).get()).get('paymentStatus'), 'paid', 'A refund does not recreate contractual debt.');
+    assert.equal(exactLedgerMovements.docs.filter(doc => doc.get('type') === 'correction').reduce((sum, doc) => sum + Number(doc.get('amount')), 0), 5);
+    assert.equal(100 - 25, 75, 'Cash net is gross receipts less actual refunds; non-cash corrections do not reduce it.');
+    assert.equal(100 - 25 - 5, 70, 'Recognized net income additionally deducts accounting corrections.');
+    assert.equal(100 - 100 + 5, 5, 'Contractual balance includes corrections but not refunds.');
+    assert.equal((await adminDb.collection('rentals').doc(exactLedgerDoc.id).get()).get('paymentStatus'), 'unpaid', 'A refund does not change the Bs. 5 contractual balance left by the correction.');
     await assert.rejects(() => call(userB.functions, 'recordRentalPaymentMovement', { rentalIds: [exactLedgerDoc.id], type: 'receipt', amount: 1, method: 'QR', actualAt: new Date().toISOString(), idempotencyKey: `unconfirmed_${crypto.randomUUID()}` }), 'Unconfirmed QR receipts must fail.');
     await assert.rejects(() => call(userB.functions, 'recordRentalPaymentMovement', { rentalIds: [exactLedgerDoc.id], type: 'refund', amount: 16, method: 'Efectivo', actualAt: new Date().toISOString(), idempotencyKey: `overpartial_${crypto.randomUUID()}`, referenceMovementId: firstReceiptId, reason: 'Excede disponible', confirmed: true }), 'Refund cannot exceed the remaining referenced receipt amount.');
+
+    const legacyPaidCode = `LEGACY-PAID-${crypto.randomUUID()}`;
+    const legacyPaidRental = await adminDb.collection('rentals').add({
+        reservationCode: legacyPaidCode, store: 'shop-b', total: 100, amountPaid: 100, paymentStatus: 'paid',
+        paidAt: new Date().toISOString(), status: 'returned', productId: 'bike-emulator', quantity: 1, auditLog: [],
+    });
+    const legacyCorrectionKey = `legacy_correction_${crypto.randomUUID()}`;
+    const legacyReceiptId = `legacy_${legacyPaidRental.id}`;
+    const legacyCorrectionInput = {
+        rentalIds: [legacyPaidRental.id], type: 'correction', amount: 5, method: 'Efectivo', actualAt: new Date().toISOString(),
+        idempotencyKey: legacyCorrectionKey, referenceMovementId: legacyReceiptId, reason: 'Ajuste histórico ficticio', confirmed: true,
+    };
+    await call(userB.functions, 'recordRentalPaymentMovement', legacyCorrectionInput);
+    const legacyCorrectionRetry = await call<{ duplicate: boolean }>(userB.functions, 'recordRentalPaymentMovement', legacyCorrectionInput);
+    assert.equal(legacyCorrectionRetry.duplicate, true);
+    const legacyLedger = await adminDb.collection('rentalPaymentMovements').where('reservationCode', '==', legacyPaidCode).get();
+    assert.equal(legacyLedger.docs.filter(doc => doc.get('type') === 'receipt').length, 1, 'A pre-ledger paid rental seeds exactly one historical receipt.');
+    assert.equal(legacyLedger.docs.find(doc => doc.get('type') === 'receipt')?.get('amount'), 100);
+    assert.equal(legacyLedger.docs.filter(doc => doc.get('type') === 'correction').length, 1, 'Retrying the correction cannot duplicate ledger entries.');
     await assert.rejects(() => call(userB.functions, 'adminRentalAction', { action: 'payment', rentalIds: managerCycle.rentalIds, paymentStatus: 'paid' }));
     const confirmedCancel = await call<{ rentalIds: string[] }>(userB.functions, 'createRentalGroup', managerBooking(17));
     await call(userB.functions, 'adminRentalAction', { action: 'confirm', rentalIds: confirmedCancel.rentalIds });
