@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { initializeApp, getApp, getApps } from 'firebase/app';
-import { createUserWithEmailAndPassword, getAuth, sendPasswordResetEmail, signOut as signOutSecondary } from 'firebase/auth';
-import { collection, doc, onSnapshot, serverTimestamp, setDoc, updateDoc, deleteDoc } from 'firebase/firestore';
+import { connectAuthEmulator, createUserWithEmailAndPassword, getAuth, sendPasswordResetEmail, signOut as signOutSecondary, type Auth } from 'firebase/auth';
+import { collection, doc, onSnapshot, serverTimestamp, setDoc } from 'firebase/firestore';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -9,7 +9,8 @@ import { Label } from '@/components/ui/label';
 import { Save, Bell, Shield, Globe, CreditCard, Upload, Check, UserPlus, KeyRound, Mail, Users, Trash2 } from 'lucide-react';
 import { useStore } from '@/context/StoreContext';
 import { useAuth } from '@/context/AuthContext';
-import { auth, db, firebaseConfig } from '@/lib/firebase';
+import { auth, db, firebaseConfig, isFirebaseEmulatorEnabled } from '@/lib/firebase';
+import { provisionAdminUser } from '@/lib/backend';
 
 interface AdminUserRecord {
     uid: string;
@@ -22,10 +23,11 @@ interface AdminUserRecord {
 }
 
 const LOCAL_ADMIN_DIRECTORY_KEY = 'briz_admin_directory';
+const connectedSecondaryAuth = new WeakSet<Auth>();
 
 export default function SettingsPage() {
     const { rentalSettings, updateRentalSettings } = useStore();
-    const { user } = useAuth();
+    const { user, isAdmin } = useAuth();
     
     const [admins, setAdmins] = useState<AdminUserRecord[]>([]);
     const [localAdmins, setLocalAdmins] = useState<AdminUserRecord[]>(() => {
@@ -64,6 +66,7 @@ export default function SettingsPage() {
     }, [rentalSettings]);
 
     useEffect(() => {
+        if (!isAdmin) return;
         const unsubAdmins = onSnapshot(collection(db, 'adminUsers'), (snap) => {
             setAdmins(snap.docs.map(item => ({ uid: item.id, ...(item.data() as Omit<AdminUserRecord, 'uid'>), source: 'firestore' })));
         }, (error) => {
@@ -79,7 +82,7 @@ export default function SettingsPage() {
             unsubAdmins();
             unsubSecurity();
         };
-    }, []);
+    }, [isAdmin]);
 
     const saveLocalAdmins = (nextAdmins: AdminUserRecord[]) => {
         setLocalAdmins(nextAdmins);
@@ -104,7 +107,12 @@ export default function SettingsPage() {
         const secondaryApp = getApps().some(app => app.name === 'briz-admin-creator')
             ? getApp('briz-admin-creator')
             : initializeApp(firebaseConfig, 'briz-admin-creator');
-        return getAuth(secondaryApp);
+        const secondaryAuth = getAuth(secondaryApp);
+        if (isFirebaseEmulatorEnabled && !connectedSecondaryAuth.has(secondaryAuth)) {
+            connectAuthEmulator(secondaryAuth, 'http://127.0.0.1:9099', { disableWarnings: true });
+            connectedSecondaryAuth.add(secondaryAuth);
+        }
+        return secondaryAuth;
     };
 
     const handleUnlockAdmins = (e: React.FormEvent) => {
@@ -151,15 +159,7 @@ export default function SettingsPage() {
                 role: 'admin',
                 active: true
             };
-            try {
-                await setDoc(doc(db, 'adminUsers', createdAdmin.uid), {
-                    ...createdAdmin,
-                    createdAt: serverTimestamp(),
-                    createdBy: user?.email || 'admin'
-                });
-            } catch (roleError) {
-                console.warn('Admin creado en Auth, pero el rol todavia no se pudo guardar:', roleError);
-            }
+            await provisionAdminUser({ uid: createdAdmin.uid, role: 'admin', name: createdAdmin.name, active: true });
             rememberAdminLocally(createdAdmin);
             await signOutSecondary(secondaryAuth);
             setAdminName('');
@@ -202,11 +202,7 @@ export default function SettingsPage() {
             return;
         }
         try {
-            await updateDoc(doc(db, 'adminUsers', admin.uid), {
-                active: !admin.active,
-                updatedAt: serverTimestamp(),
-                updatedBy: user?.email || 'admin'
-            });
+            await provisionAdminUser({ uid: admin.uid, role: admin.role, name: admin.name, active: !admin.active });
         } catch (error) {
             console.warn('No se pudo actualizar adminUsers, usando lista local:', error);
             rememberAdminLocally({ ...admin, active: !admin.active });
@@ -222,7 +218,7 @@ export default function SettingsPage() {
         if (window.confirm(`¿Estás seguro de que deseas eliminar al administrador ${admin.name || admin.email}?`)) {
             try {
                 if (admin.source !== 'local' && !admin.uid.startsWith('local-')) {
-                    await deleteDoc(doc(db, 'adminUsers', admin.uid));
+                    await provisionAdminUser({ uid: admin.uid, role: admin.role, name: admin.name, active: false });
                 }
                 const cleanLocal = localAdmins.filter(item => item.email.toLowerCase().trim() !== admin.email.toLowerCase().trim());
                 saveLocalAdmins(cleanLocal);

@@ -6,6 +6,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { useStore } from '@/context/StoreContext';
 import { FileUploader } from '@/components/ui/file-uploader';
 import type { Rental } from '@/context/StoreContext';
+import { toBoliviaDateString } from '@/lib/dateUtils';
 import { 
   Trash2, 
   CalendarClock, 
@@ -29,12 +30,13 @@ import {
   Minus,
   Plus,
   ShoppingBag,
-  Users
+  Users,
+  Bike,
+  RotateCcw
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { generateAdminReplyWhatsAppLink } from '@/lib/whatsapp';
-import { db } from '@/lib/firebase';
-import { doc, setDoc, writeBatch } from 'firebase/firestore';
+import { runAdminRentalAction, updateRentalGroup } from '@/lib/backend';
 
 // Mappers for Spanish Translation
 const statusLabels: Record<string, string> = {
@@ -42,6 +44,8 @@ const statusLabels: Record<string, string> = {
   'Pendiente': 'Pendiente',
   'confirmed': 'Confirmado',
   'Confirmado': 'Confirmado',
+  'delivered': 'Entregado (En Uso)',
+  'Entregado': 'Entregado (En Uso)',
   'cancelled': 'Cancelado',
   'Cancelado': 'Cancelado',
   'expired': 'Expirado',
@@ -54,6 +58,8 @@ const statusColors: Record<string, string> = {
   'Pendiente': 'bg-yellow-500/10 text-yellow-500 border-yellow-500/20',
   'confirmed': 'bg-green-500/10 text-green-400 border-green-500/20',
   'Confirmado': 'bg-green-500/10 text-green-400 border-green-500/20',
+  'delivered': 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30',
+  'Entregado': 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30',
   'cancelled': 'bg-red-500/10 text-red-400 border-red-500/20',
   'Cancelado': 'bg-red-500/10 text-red-400 border-red-500/20',
   'expired': 'bg-zinc-500/10 text-zinc-400 border-white/5',
@@ -91,6 +97,11 @@ export interface GroupedRental {
   pickupService?: boolean;
   mapsLink?: string;
   notes?: string;
+  deliveredAt?: string;
+  returnedAt?: string;
+  damagedOnReturn?: boolean;
+  returnConditionNotes?: string;
+  lateFee?: number;
   items: Rental[];
   total: number;
 }
@@ -160,6 +171,11 @@ const getGroupedRentals = (rentalsList: Rental[]): GroupedRental[] => {
         pickupService: r.pickupService,
         mapsLink: r.mapsLink,
         notes: r.notes,
+        deliveredAt: r.deliveredAt,
+        returnedAt: r.returnedAt,
+        damagedOnReturn: r.damagedOnReturn,
+        returnConditionNotes: r.returnConditionNotes,
+        lateFee: r.lateFee,
         items: [],
         total: 0
       };
@@ -170,6 +186,13 @@ const getGroupedRentals = (rentalsList: Rental[]): GroupedRental[] => {
     if (r.deliveryService) groups[code].deliveryService = true;
     if (r.pickupService) groups[code].pickupService = true;
     if (r.mapsLink) groups[code].mapsLink = r.mapsLink;
+    if (r.deliveredAt) groups[code].deliveredAt = r.deliveredAt;
+    if (r.returnedAt) groups[code].returnedAt = r.returnedAt;
+    if (r.damagedOnReturn) groups[code].damagedOnReturn = true;
+    if (r.returnConditionNotes) groups[code].returnConditionNotes = r.returnConditionNotes;
+    if (r.lateFee && (!groups[code].lateFee || r.lateFee > groups[code].lateFee!)) {
+      groups[code].lateFee = r.lateFee;
+    }
     if (r.notes && !groups[code].notes?.includes(r.notes)) {
       groups[code].notes = groups[code].notes ? `${groups[code].notes} | ${r.notes}` : r.notes;
     }
@@ -184,14 +207,14 @@ const getGroupedRentals = (rentalsList: Rental[]): GroupedRental[] => {
 };
 
 const getReturnDateTime = (dateStr: string, pickupTimeStr: string, durationStr: string): Date => {
-  const [year, month, day] = dateStr.split('-').map(Number);
-  const [hours, minutes] = pickupTimeStr.split(':').map(Number);
-  const startDate = new Date(year, month - 1, day, hours, minutes, 0, 0);
+  const [year, month, day] = (dateStr || '2026-01-01').split('-').map(Number);
+  const [hours, minutes] = (pickupTimeStr || '09:00').split(':').map(Number);
+  const startDate = new Date(year, month - 1, day, hours || 9, minutes || 0, 0, 0);
   
   let durationHours = 24;
-  const norm = durationStr.toLowerCase();
-  if (norm.includes('semana')) durationHours = 24 * 7;
-  else if (norm.includes('mes')) durationHours = 24 * 30;
+  const norm = (durationStr || '').toLowerCase();
+  if (norm.includes('semana') || norm.includes('week')) durationHours = 24 * 7;
+  else if (norm.includes('mes') || norm.includes('month')) durationHours = 24 * 30;
   else {
     const match = norm.match(/\d+/);
     if (match) durationHours = Number(match[0]);
@@ -204,8 +227,12 @@ const getReturnDateTime = (dateStr: string, pickupTimeStr: string, durationStr: 
 const isPastDue = (group: GroupedRental): boolean => {
   const firstItem = group.items[0];
   if (!firstItem) return false;
-  const isConfirmed = group.status === 'confirmed' || group.status === 'Confirmado';
-  if (!isConfirmed) return false;
+  const isActive =
+    group.status === 'confirmed' ||
+    group.status === 'Confirmado' ||
+    group.status === 'delivered' ||
+    group.status === 'Entregado';
+  if (!isActive) return false;
   
   const returnDate = getReturnDateTime(firstItem.date, firstItem.pickupTime, firstItem.duration);
   return returnDate.getTime() < Date.now();
@@ -260,18 +287,13 @@ function ReservationAge({ createdAt }: { createdAt?: string }) {
 export default function AdminRentalsPage() {
   const { 
     rentals, 
-    confirmRental, 
-    cancelRental, 
-    returnRental, 
-    deleteRental, 
-    updateRental,
-    updateRentalPaymentStatus, 
-    markRentalExpired, 
     inventory,
     combos,
     customers,
     calculatePrice,
-    addRental,
+    createRentalGroup,
+    rentalPaymentMovements,
+    recordRentalPaymentMovement,
     bikeCategories
   } = useStore();
 
@@ -283,12 +305,29 @@ export default function AdminRentalsPage() {
   const [editForm, setEditForm] = useState<RentalEditForm | null>(null);
   const [searchProductQuery, setSearchProductQuery] = useState('');
 
+  // Return modal state (for damaged units / condition notes / late fees)
+  const [returnModalGroup, setReturnModalGroup] = useState<GroupedRental | null>(null);
+  const [returnDamagedUnits, setReturnDamagedUnits] = useState(0);
+  const [returnNotes, setReturnNotes] = useState('');
+  const [paymentModalGroup, setPaymentModalGroup] = useState<GroupedRental | null>(null);
+  const [paymentType, setPaymentType] = useState<'receipt' | 'refund' | 'correction'>('receipt');
+  const [paymentAmount, setPaymentAmount] = useState('');
+  const [paymentMethod, setPaymentMethod] = useState<'Efectivo' | 'QR' | 'Transferencia'>('Efectivo');
+  const [paymentReference, setPaymentReference] = useState('');
+  const [paymentReason, setPaymentReason] = useState('');
+  const [paymentConfirmed, setPaymentConfirmed] = useState(false);
+  const paymentIdempotencyKeyRef = useRef('');
+  const actionLockRef = useRef(new Set<string>());
+  const [busyActionByGroup, setBusyActionByGroup] = useState<Record<string, string>>({});
+
   // Manual Rental Wizard States
   const [newRentalModalOpen, setNewRentalModalOpen] = useState(false);
+  const manualCreateLockRef = useRef(false);
+  const [creatingManualRental, setCreatingManualRental] = useState(false);
   const [newRentalStep, setNewRentalStep] = useState(1);
   const [newRentalCart, setNewRentalCart] = useState<any[]>([]);
   const [newRentalForm, setNewRentalForm] = useState({
-      date: new Date().toISOString().split('T')[0],
+      date: toBoliviaDateString(),
       pickupTime: new Date().toTimeString().slice(0, 5),
       duration: '1 hora',
       deliveryService: false,
@@ -367,28 +406,27 @@ export default function AdminRentalsPage() {
     prevPendingCountRef.current = currentCount;
   }, [currentPendingGroups, soundEnabled]);
 
-  const now = new Date();
-  const todayStr = now.toISOString().split('T')[0];
+  const todayStr = toBoliviaDateString();
 
   const stats = {
     pendingToday: groupedRentals.filter(g => 
       (g.status === 'pending' || g.status === 'Pendiente') && 
-      (g.createdAt?.startsWith(todayStr) || g.createdDate?.startsWith(todayStr))
+      (toBoliviaDateString(g.createdAt || g.createdDate || '') === todayStr || g.items[0]?.date === todayStr)
     ).length,
     
     confirmedToday: groupedRentals.filter(g => 
-      (g.status === 'confirmed' || g.status === 'Confirmado') && 
-      (g.updatedAt?.startsWith(todayStr) || g.createdAt?.startsWith(todayStr))
+      (g.status === 'confirmed' || g.status === 'Confirmado' || g.status === 'delivered' || g.status === 'Entregado') && 
+      (toBoliviaDateString(g.updatedAt || g.createdAt || '') === todayStr || g.items[0]?.date === todayStr)
     ).length,
 
     paidToday: groupedRentals.filter(g => 
       g.paymentStatus === 'paid' && 
-      (g.updatedAt?.startsWith(todayStr) || g.createdAt?.startsWith(todayStr))
+      (toBoliviaDateString(g.updatedAt || g.createdAt || '') === todayStr || g.items[0]?.date === todayStr)
     ).length,
 
     expiredToday: groupedRentals.filter(g => 
       (g.status === 'expired') && 
-      (g.updatedAt?.startsWith(todayStr) || g.createdAt?.startsWith(todayStr))
+      (toBoliviaDateString(g.updatedAt || g.createdAt || '') === todayStr)
     ).length
   };
 
@@ -398,6 +436,8 @@ export default function AdminRentalsPage() {
         if (filter !== 'all') {
           if (filter === 'pending') return g.status === 'pending' || g.status === 'Pendiente';
           if (filter === 'confirmed') return g.status === 'confirmed' || g.status === 'Confirmado';
+          if (filter === 'delivered') return g.status === 'delivered' || g.status === 'Entregado';
+          if (filter === 'returned') return g.status === 'returned' || g.status === 'Devuelto';
           if (filter === 'cancelled') return g.status === 'cancelled' || g.status === 'Cancelado';
           if (filter === 'expired') return g.status === 'expired';
           return g.status === filter;
@@ -416,73 +456,152 @@ export default function AdminRentalsPage() {
       .sort((a, b) => new Date(b.createdAt || b.createdDate || '').getTime() - new Date(a.createdAt || a.createdDate || '').getTime());
   }, [groupedRentals, filter, search]);
 
-  const handleConfirmGroup = async (group: GroupedRental) => {
-    let allOk = true;
-    for (const item of group.items) {
-      const ok = await confirmRental(item.id, 'admin');
-      if (!ok) {
-        allOk = false;
-        alert(`Error: ¡No hay stock suficiente para confirmar ${item.quantity}x ${item.productName}!`);
-        break;
-      }
-    }
-    if (allOk && selected?.id === group.id) {
-      setSelected(prev => {
-        if (!prev || prev.id !== group.id) return prev;
-        return {
-          ...prev,
-          status: 'confirmed',
-          items: prev.items.map(item => ({ ...item, status: 'confirmed' }))
-        };
+  const runExclusiveAction = async (groupId: string, action: string, operation: () => Promise<void>) => {
+    if (actionLockRef.current.has(groupId)) return false;
+    actionLockRef.current.add(groupId);
+    setBusyActionByGroup(current => ({ ...current, [groupId]: action }));
+    try { await operation(); return true; }
+    finally {
+      actionLockRef.current.delete(groupId);
+      setBusyActionByGroup(current => {
+        const next = { ...current };
+        delete next[groupId];
+        return next;
       });
     }
   };
 
-  const handleCancelGroup = async (group: GroupedRental) => {
-    if (!confirm('¿Seguro que deseas cancelar esta reserva de alquiler? El stock se restaurará.')) return;
-    for (const item of group.items) {
-      await cancelRental(item.id, 'admin');
+  const handleConfirmGroup = async (group: GroupedRental) => {
+    const ids = group.items.map(item => item.id);
+    try {
+      const completed = await runExclusiveAction(group.id, 'confirm', async () => {
+        await runAdminRentalAction('confirm', ids);
+        if (selected?.id === group.id) setSelected(prev => prev?.id === group.id ? {
+          ...prev, status: 'confirmed', items: prev.items.map(item => ({ ...item, status: 'confirmed' }))
+        } : prev);
+      });
+      return completed;
+    } catch (error) {
+      alert(`Error al confirmar la reserva:\n${error instanceof Error ? error.message : 'No hay stock disponible para todos los componentes.'}`);
+      return false;
     }
-    if (selected?.id === group.id) setSelected(null);
   };
 
-  const handleReturnGroup = async (group: GroupedRental) => {
-    if (!confirm('¿Seguro que deseas marcar este alquiler como devuelto? El stock de las bicicletas se restaurará.')) return;
-    for (const item of group.items) {
-      await returnRental(item.id, 'admin');
-    }
-    alert('¡El alquiler ha sido marcado como devuelto y el stock se ha actualizado!');
-    if (selected?.id === group.id) setSelected(null);
+  const handleDeliverGroup = async (group: GroupedRental) => {
+    const ids = group.items.map(item => item.id);
+    try {
+      const completed = await runExclusiveAction(group.id, 'deliver', async () => { await runAdminRentalAction('deliver', ids); });
+      if (!completed) return false;
+      if (selected?.id === group.id) setSelected(prev => prev?.id === group.id ? ({ ...prev, status: 'delivered', deliveredAt: new Date().toISOString(), items: prev.items.map(item => ({ ...item, status: 'delivered' })) }) : prev);
+      return true;
+    } catch (error) { alert(`Error al entregar la reserva:\n${error instanceof Error ? error.message : 'Intenta nuevamente.'}`); return false; }
+  };
+
+  const handleCancelGroup = async (group: GroupedRental) => {
+    if (!confirm('¿Seguro que deseas cancelar esta reserva de alquiler? Si estaba confirmada, el stock se restaurará automáticamente.')) return;
+    const ids = group.items.map(item => item.id);
+    try {
+      const completed = await runExclusiveAction(group.id, 'cancel', async () => { await runAdminRentalAction('cancel', ids); });
+      if (!completed) return false;
+      if (selected?.id === group.id) setSelected(null);
+      return true;
+    } catch (error) { alert(`Error al cancelar la reserva:\n${error instanceof Error ? error.message : 'Intenta nuevamente.'}`); return false; }
+  };
+
+  const openReturnDialog = (group: GroupedRental) => {
+    setReturnModalGroup(group);
+    setReturnDamagedUnits(0);
+    setReturnNotes('');
+  };
+
+  const handleConfirmReturnGroup = async () => {
+    if (!returnModalGroup) return;
+    const ids = returnModalGroup.items.map(item => item.id);
+    try {
+      const completed = await runExclusiveAction(returnModalGroup.id, 'return', async () => { await runAdminRentalAction('return', ids, { damagedUnits: returnDamagedUnits, conditionNotes: returnNotes.trim() || undefined }); });
+      if (!completed) return false;
+    } catch (error) { alert(`Error al registrar la devolución:\n${error instanceof Error ? error.message : 'Intenta nuevamente.'}`); return false; }
+
+    setReturnModalGroup(null);
+    if (selected?.id === returnModalGroup.id) setSelected(null);
+    alert(
+      returnDamagedUnits > 0
+        ? 'Devolución registrada. Las unidades dañadas quedaron apartadas en Mantenimiento/Taller y los demás accesorios fueron liberados.'
+        : '¡Devolución registrada con éxito! Todas las bicicletas y accesorios volvieron al stock disponible.'
+    );
+    return true;
   };
 
   const handleExpireGroup = async (group: GroupedRental) => {
     if (!confirm('¿Marcar esta reserva como expirada?')) return;
-    for (const item of group.items) {
-      await markRentalExpired(item.id, 'admin');
-    }
-    if (selected?.id === group.id) setSelected(null);
+    try {
+      const completed = await runExclusiveAction(group.id, 'expire', async () => { await runAdminRentalAction('expire', group.items.map(item => item.id)); });
+      if (!completed) return false;
+      if (selected?.id === group.id) setSelected(null);
+      return true;
+    } catch (error) { alert(`Error al expirar la reserva:\n${error instanceof Error ? error.message : 'Intenta nuevamente.'}`); return false; }
   };
 
-  const handleMarkPaidGroup = async (group: GroupedRental, methodText: string) => {
-    for (const item of group.items) {
-      await updateRentalPaymentStatus(item.id, 'paid', `admin (${methodText})`);
-    }
-    if (selected?.id === group.id) {
-      setSelected(prev => {
-        if (!prev || prev.id !== group.id) return prev;
-        return {
-          ...prev,
-          paymentStatus: 'paid',
-          items: prev.items.map(item => ({ ...item, paymentStatus: 'paid' }))
-        };
+  const openPaymentDialog = (group: GroupedRental, type: 'receipt' | 'refund' | 'correction' = 'receipt') => {
+    setPaymentModalGroup(group);
+    setPaymentType(type);
+    setPaymentAmount(type === 'receipt' ? '' : '');
+    setPaymentMethod('Efectivo');
+    setPaymentReference('');
+    setPaymentReason('');
+    setPaymentConfirmed(false);
+    paymentIdempotencyKeyRef.current = crypto.randomUUID().replaceAll('-', '');
+  };
+
+  const handleRecordPaymentMovement = async () => {
+    if (!paymentModalGroup) return;
+    const group = paymentModalGroup;
+    try {
+      const completed = await runExclusiveAction(group.id, 'payment', async () => {
+        await recordRentalPaymentMovement({
+          rentalIds: group.items.map(item => item.id), type: paymentType, amount: Number(paymentAmount), method: paymentMethod,
+          actualAt: new Date().toISOString(), idempotencyKey: paymentIdempotencyKeyRef.current,
+          ...(paymentReference ? { referenceMovementId: paymentReference } : {}), ...(paymentReason.trim() ? { reason: paymentReason.trim() } : {}),
+          ...(paymentType === 'receipt' && paymentMethod !== 'Efectivo' ? { confirmedReceived: paymentConfirmed } : {}),
+          ...(paymentType !== 'receipt' ? { confirmed: paymentConfirmed } : {}),
+        });
       });
+      if (!completed) return;
+      setPaymentModalGroup(null);
+    } catch (error) {
+      alert(`Error al registrar el movimiento: ${error instanceof Error ? error.message : 'Intenta nuevamente.'}`);
     }
   };
 
-  const handleDeleteGroup = (group: GroupedRental) => {
-    if (!confirm('¿Eliminar definitivamente este registro de la base de datos? Esta acción es irreversible.')) return;
-    group.items.forEach(item => deleteRental(item.id));
-    if (selected?.id === group.id) setSelected(null);
+  const handleDeleteGroup = async (group: GroupedRental) => {
+    if (!confirm('¿Cancelar este alquiler? El registro y su historial de pagos se conservarán.')) return;
+    const ids = group.items.map(item => item.id);
+    try {
+      const completed = await runExclusiveAction(group.id, 'cancel', async () => { await runAdminRentalAction('cancel', ids); });
+      if (!completed) return false;
+      if (selected?.id === group.id) setSelected(null);
+      return true;
+    } catch (error) { alert(`Error al cancelar la reserva:\n${error instanceof Error ? error.message : 'Intenta nuevamente.'}`); return false; }
+  };
+
+  const recalcEditItemPrice = (productType: 'single' | 'combo', productId: string, durationStr: string, qty: number, fallbackTotal: number) => {
+    if (productId.startsWith('srv_')) return fallbackTotal;
+    const computed = calculatePrice(productType, productId, durationStr, qty);
+    return computed > 0 ? computed : fallbackTotal;
+  };
+
+  const handleEditDurationChange = (newDuration: string) => {
+    setEditForm(prev => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        duration: newDuration,
+        items: prev.items.map(item => ({
+          ...item,
+          total: recalcEditItemPrice(item.productType, item.productId, newDuration, item.quantity, item.total)
+        }))
+      };
+    });
   };
 
   const updateEditItem = (id: string, updates: Partial<RentalEditItem>) => {
@@ -490,7 +609,14 @@ export default function AdminRentalsPage() {
       if (!prev) return prev;
       return {
         ...prev,
-        items: prev.items.map(item => item.id === id ? { ...item, ...updates } : item)
+        items: prev.items.map(item => {
+          if (item.id !== id) return item;
+          const next = { ...item, ...updates };
+          if (updates.quantity !== undefined && updates.total === undefined) {
+            next.total = recalcEditItemPrice(next.productType, next.productId, prev.duration, next.quantity, next.total);
+          }
+          return next;
+        })
       };
     });
   };
@@ -507,99 +633,21 @@ export default function AdminRentalsPage() {
 
   const handleSaveEditedGroup = async () => {
     if (!selected || !editForm) return;
-
-    // 1. Identify deleted items: items in selected.items that are no longer in editForm.items
-    const editedIds = new Set(editForm.items.map(item => item.id));
-    for (const item of selected.items) {
-      if (!editedIds.has(item.id)) {
-        await deleteRental(item.id);
-      }
-    }
-
-    // 2. Process updates and new additions
-    for (const item of editForm.items) {
-      if (item.isNew) {
-        // Add new item to Firestore
-        const newId = 'rental_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7);
-        const newDocRef = doc(db, 'rentals', newId);
-        const cleanData = {
-          id: newId,
-          reservationCode: selected.reservationCode || selected.id,
-          customerName: selected.customerName,
-          customerPhone: selected.customerPhone,
-          customerCI: selected.customerCI,
-          productId: item.productId,
-          productName: item.productName,
-          productNameSnapshot: item.productName,
-          productType: item.productType,
-          selectedWheelSize: item.selectedWheelSize || '',
-          quantity: item.quantity,
-          total: item.total,
-          date: editForm.date,
-          pickupTime: editForm.pickupTime,
-          duration: editForm.duration,
-          paymentMethod: selected.paymentMethod,
-          paymentStatus: selected.paymentStatus,
-          status: selected.status,
-          deliveryService: editForm.deliveryService,
-          pickupService: editForm.pickupService,
-          mapsLink: editForm.mapsLink,
-          notes: editForm.notes,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-          createdDate: new Date().toISOString()
-        };
-        await setDoc(newDocRef, cleanData);
-
-        // If order is confirmed, subtract stock
-        if (selected.status === 'confirmed' || selected.status === 'Confirmado') {
-          if (item.productType === 'single') {
-            const invItem = inventory.find(inv => inv.id === item.productId);
-            if (invItem) {
-              const updated = { ...invItem };
-              if (updated.hasWheelSizes && updated.wheelSizes) {
-                updated.wheelSizes = updated.wheelSizes.map(w => 
-                  w.size === item.selectedWheelSize ? { ...w, stock: Math.max(0, w.stock - item.quantity) } : w
-                );
-              } else {
-                updated.stock = Math.max(0, (updated.stock ?? 0) - item.quantity);
-              }
-              await setDoc(doc(db, 'inventory', item.productId), updated);
-            }
-          } else {
-            const combo = combos.find(c => c.id === item.productId);
-            if (combo) {
-              for (const comp of combo.components) {
-                const invItem = inventory.find(inv => inv.id === comp.inventoryItemId);
-                if (invItem) {
-                  const updated = { ...invItem };
-                  if (updated.stock !== undefined) {
-                    updated.stock = Math.max(0, updated.stock - comp.quantity * item.quantity);
-                    await setDoc(doc(db, 'inventory', comp.inventoryItemId), updated);
-                  }
-                }
-              }
-            }
-          }
-        }
-      } else {
-        // Update existing item
-        await updateRental(item.id, {
-          date: editForm.date,
-          pickupTime: editForm.pickupTime,
-          duration: editForm.duration,
-          deliveryService: editForm.deliveryService,
-          pickupService: editForm.pickupService,
-          mapsLink: editForm.mapsLink,
-          notes: editForm.notes,
-          quantity: Math.max(1, item.quantity),
-          total: Math.max(0, item.total),
-        }, 'admin (edicion pedido)');
-      }
-    }
+    try {
+    const completed = await runExclusiveAction(selected.id, 'edit', async () => { await updateRentalGroup({
+      reservationCode: selected.reservationCode || selected.id,
+      rentalIds: selected.items.map(item => item.id),
+      date: editForm.date, pickupTime: editForm.pickupTime, duration: editForm.duration,
+      deliveryService: editForm.deliveryService, pickupService: editForm.pickupService,
+      mapsLink: editForm.mapsLink, notes: editForm.notes,
+      items: editForm.items.map(item => ({ id: item.isNew ? '' : item.id, productId: item.productId, productType: item.productType, quantity: Math.max(1, item.quantity), selectedWheelSize: item.selectedWheelSize || '' })),
+    }); });
+    if (!completed) return false;
+    } catch (error) { alert(`Error al guardar los cambios:\n${error instanceof Error ? error.message : 'Intenta nuevamente.'}`); return false; }
 
     setEditingOrder(false);
-    setSelected(null); // Close the dialog to let the list reload from Firestore snapshot
+    setSelected(null);
+    return true;
   };
 
   const formatDateTime = (isoString?: string) => {
@@ -643,7 +691,7 @@ export default function AdminRentalsPage() {
   };
 
   const wizardBikesAndCombos = useMemo(() => {
-    const bList = inventory.filter(i => i.itemType === 'bike' && (!i.availableForSale || i.availableForRental));
+    const bList = inventory.filter(i => (i.itemType === 'bike' || i.itemType === 'accessory') && (!i.availableForSale || i.availableForRental));
     const cList = combos.filter(c => !c.availableForSale || c.availableForRental);
     
     const combined = [
@@ -678,7 +726,7 @@ export default function AdminRentalsPage() {
       }
     }
 
-    let componentSelections: any[] = [];
+    const componentSelections: any[] = [];
     if (isCombo && product.components) {
       product.components.forEach((comp: any) => {
         const inventoryItem = inventory.find(inv => inv.id === comp.inventoryItemId);
@@ -688,6 +736,10 @@ export default function AdminRentalsPage() {
           componentSelections.push({
             inventoryItemId: comp.inventoryItemId,
             wheelSize: compSize
+          });
+        } else {
+          componentSelections.push({
+            inventoryItemId: comp.inventoryItemId
           });
         }
       });
@@ -714,190 +766,84 @@ export default function AdminRentalsPage() {
   };
 
   const handleWizardSubmit = async () => {
+    if (manualCreateLockRef.current) return;
     let finalCustomer: any = null;
-
     if (newRentalCustomerMode === 'existing') {
       finalCustomer = customers.find(c => c.id === newRentalSelectedCustomerId);
-      if (!finalCustomer) {
-        alert('Por favor selecciona un cliente registrado.');
-        return;
-      }
+      if (!finalCustomer) { alert('Por favor selecciona un cliente registrado.'); return; }
     } else {
-      const c = newRentalCustomerData;
-      if (!c.name.trim() || !c.phone.trim() || !c.ci.trim()) {
+      const customer = newRentalCustomerData;
+      if (!customer.name.trim() || !customer.phone.trim() || !customer.ci.trim()) {
         alert('Por favor completa los campos obligatorios del cliente (Nombre, Teléfono, CI).');
         return;
       }
-      const custId = 'cust_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7);
       finalCustomer = {
-        id: custId,
-        name: c.name.trim(),
-        phone: c.phone.trim(),
-        ci: c.ci.trim(),
-        email: c.email.trim(),
-        nacionalidad: c.nacionalidad.trim(),
-        departamento: c.departamento.trim(),
-        comoNosConociste: c.comoNosConociste.trim(),
-        autofotoUrl: c.autofotoUrl,
-        documentoUrl: c.documentoUrl,
-        documentoReversoUrl: c.documentoReversoUrl,
-        rentalsCount: 1,
-        purchasesCount: 0,
-        firstVisit: new Date().toISOString(),
-        lastVisit: new Date().toISOString(),
-        notes: 'Registrado manualmente en alquiler administrativo'
+        name: customer.name.trim(), phone: customer.phone.trim(), ci: customer.ci.trim(),
+        email: customer.email.trim(), nacionalidad: customer.nacionalidad.trim(),
+        departamento: customer.departamento.trim(), comoNosConociste: customer.comoNosConociste.trim(),
       };
-      try {
-        await setDoc(doc(db, 'customers', custId), finalCustomer);
-      } catch (err) {
-        console.error('Error saving customer:', err);
-        alert('Error al guardar el nuevo cliente.');
-        return;
-      }
     }
+    if (newRentalCart.length === 0) { alert('El carrito del alquiler está vacío.'); return; }
 
-    if (newRentalCart.length === 0) {
-      alert('El carrito del alquiler está vacío.');
-      return;
-    }
+    const rentalCartItems = newRentalCart.filter(item => item.product.itemType !== 'accessory');
+    const accessoryCartItems = newRentalCart.filter(item => item.product.itemType === 'accessory');
+    if (rentalCartItems.length === 0) { alert('Agrega al menos una bicicleta o un combo al alquiler.'); return; }
 
-    const payloads: any[] = newRentalCart.map(item => {
-      const isCombo = item.product.components !== undefined;
-      const price = calculatePrice(
-        isCombo ? 'combo' : 'single',
-        item.product.id,
-        newRentalForm.duration,
-        1
-      );
-      return {
-        customerName: finalCustomer.name,
-        customerPhone: finalCustomer.phone,
-        customerCI: finalCustomer.ci,
-        productType: isCombo ? 'combo' : 'single',
-        productId: item.product.id,
-        productName: item.product.name,
-        productNameSnapshot: item.product.name,
-        selectedWheelSize: item.selectedWheelSize || '',
-        componentSelections: item.componentSelections || [],
-        quantity: item.quantity,
-        duration: newRentalForm.duration,
-        date: newRentalForm.date,
-        pickupTime: newRentalForm.pickupTime,
-        total: price * item.quantity,
-        paymentMethod: newRentalForm.paymentMethod,
-        notes: newRentalForm.notes ? `[Manual] ${newRentalForm.notes}` : '[Manual]',
-        deliveryService: newRentalForm.deliveryService,
-        pickupService: newRentalForm.pickupService,
-        mapsLink: newRentalForm.mapsLink || '',
-        source: 'manual'
-      };
-    });
+    const lines = rentalCartItems.map(item => ({
+      productId: item.product.id,
+      productType: (item.product.components !== undefined ? 'combo' : 'single') as 'combo' | 'single',
+      quantity: item.quantity,
+      ...(item.selectedWheelSize ? { wheelSize: item.selectedWheelSize } : {}),
+      ...(item.componentSelections?.length ? { componentSelections: item.componentSelections } : {}),
+    }));
+    const accessories = accessoryCartItems.map(item => ({ itemId: item.product.id, quantity: item.quantity }));
+    const paymentMethod: 'QR' | 'Transferencia' | 'Efectivo' = newRentalForm.paymentMethod.toLowerCase().includes('qr')
+      ? 'QR' : newRentalForm.paymentMethod.toLowerCase().includes('transfer') ? 'Transferencia' : 'Efectivo';
+    const adminCustomer = {
+      ...(newRentalCustomerMode === 'existing' ? { id: finalCustomer.id } : {}),
+      name: finalCustomer.name, phone: finalCustomer.phone, ci: finalCustomer.ci,
+      email: finalCustomer.email || '', nacionalidad: finalCustomer.nacionalidad || '',
+      departamento: finalCustomer.departamento || '', comoNosConociste: finalCustomer.comoNosConociste || '',
+    };
+    const booking = {
+      adminManual: true,
+      adminCustomer,
+      adminNotes: newRentalForm.notes,
+      adminPaymentStatus: newRentalForm.paymentStatus,
+      adminDeliveryService: newRentalForm.deliveryService,
+      adminPickupService: newRentalForm.pickupService,
+      adminMapsLink: newRentalForm.mapsLink,
+      lines,
+      accessories,
+      date: newRentalForm.date,
+      pickupTime: newRentalForm.pickupTime,
+      duration: newRentalForm.duration,
+      paymentMethod,
+    };
 
+    manualCreateLockRef.current = true;
+    setCreatingManualRental(true);
     try {
-      const firstRental = payloads[0];
-      const createdFirst = await addRental({
-        ...firstRental,
-        paymentStatus: newRentalForm.paymentStatus === 'paid' ? 'paid' : 'unpaid'
-      });
-      const sharedCode = createdFirst.reservationCode;
-
-      const batch = writeBatch(db);
-
+      const fingerprint = JSON.stringify(booking);
+      const storageKey = 'briz_admin_checkout_idempotency';
+      const saved = JSON.parse(sessionStorage.getItem(storageKey) || 'null') as { fingerprint?: string; key?: string } | null;
+      const idempotencyKey = saved?.fingerprint === fingerprint && saved.key ? saved.key : `admin_${crypto.randomUUID()}`;
+      sessionStorage.setItem(storageKey, JSON.stringify({ fingerprint, key: idempotencyKey }));
+      const result = await createRentalGroup({ ...booking, idempotencyKey });
       if (newRentalForm.status === 'confirmed') {
-        const invCopy = JSON.parse(JSON.stringify(inventory));
-        
-        const updateStock = (itemId: string, qty: number, wsSize?: string) => {
-          if (itemId.startsWith('srv_')) return true;
-          const itemIdx = invCopy.findIndex((i: any) => i.id === itemId);
-          if (itemIdx < 0) return false;
-          const item = invCopy[itemIdx];
-          if (item.hasWheelSizes && item.wheelSizes) {
-            const wsIdx = item.wheelSizes.findIndex((w: any) => w.size === wsSize);
-            if (wsIdx < 0) return false;
-            item.wheelSizes[wsIdx].stock = Math.max(0, item.wheelSizes[wsIdx].stock - qty);
-          } else {
-            item.stock = Math.max(0, (item.stock ?? 0) - qty);
-          }
-          batch.update(doc(db, 'inventory', itemId), { 
-            stock: item.stock !== undefined ? item.stock : null,
-            wheelSizes: item.wheelSizes || null
-          });
-          return true;
-        };
-
-        newRentalCart.forEach(item => {
-          const isCombo = item.product.components !== undefined;
-          if (!isCombo) {
-            updateStock(item.product.id, item.quantity, item.selectedWheelSize);
-          } else {
-            item.product.components.forEach((comp: any) => {
-              const selection = item.componentSelections?.find((cs: any) => cs.inventoryItemId === comp.inventoryItemId);
-              updateStock(comp.inventoryItemId, comp.quantity * item.quantity, selection?.wheelSize);
-            });
-          }
-        });
-
-        batch.update(doc(db, 'rentals', createdFirst.id), {
-          status: 'confirmed',
-          paymentStatus: newRentalForm.paymentStatus,
-          updatedAt: new Date().toISOString()
-        });
-
-        for (let i = 1; i < payloads.length; i++) {
-          const item = payloads[i];
-          const newId = 'rental_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7);
-          const fullItem = {
-            ...item,
-            id: newId,
-            reservationCode: sharedCode,
-            paymentStatus: newRentalForm.paymentStatus,
-            status: 'confirmed',
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-            createdDate: new Date().toISOString()
-          };
-          batch.set(doc(db, 'rentals', newId), fullItem);
-        }
-      } else {
-        batch.update(doc(db, 'rentals', createdFirst.id), {
-          paymentStatus: newRentalForm.paymentStatus,
-          updatedAt: new Date().toISOString()
-        });
-
-        for (let i = 1; i < payloads.length; i++) {
-          const item = payloads[i];
-          const newId = 'rental_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7);
-          const fullItem = {
-            ...item,
-            id: newId,
-            reservationCode: sharedCode,
-            paymentStatus: newRentalForm.paymentStatus,
-            status: 'pending',
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-            createdDate: new Date().toISOString()
-          };
-          batch.set(doc(db, 'rentals', newId), fullItem);
-        }
+        await runAdminRentalAction('confirm', result.rentalIds);
       }
-
-      if (newRentalCustomerMode === 'existing') {
-        const custRef = doc(db, 'customers', finalCustomer.id);
-        batch.update(custRef, {
-          rentalsCount: (finalCustomer.rentalsCount || 0) + 1,
-          lastVisit: new Date().toISOString()
-        });
-      }
-
-      await batch.commit();
-      alert(`Alquiler manual creado con éxito. Código: ${sharedCode}`);
+      sessionStorage.removeItem(storageKey);
+      alert(`Alquiler manual creado con éxito. Código: ${result.reservationCode}`);
       setNewRentalModalOpen(false);
     } catch (error) {
       console.error('Error creating manual rental:', error);
-      alert('Ocurrió un error al crear el alquiler.');
+      alert(error instanceof Error ? error.message : 'Ocurrió un error al crear el alquiler.');
+    } finally {
+      manualCreateLockRef.current = false;
+      setCreatingManualRental(false);
     }
   };
-
   const renderStep1 = () => {
     return (
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 font-sans text-white h-[60vh] overflow-hidden">
@@ -907,7 +853,7 @@ export default function AdminRentalsPage() {
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30" />
               <Input
-                placeholder="Buscar bicicleta o combo por nombre..."
+                placeholder="Buscar bicicleta, combo o accesorio..."
                 value={wizardSearch}
                 onChange={e => setWizardSearch(e.target.value)}
                 className="pl-9 bg-black/35 border-white/10 h-10 rounded-xl text-xs font-bold text-white focus-visible:ring-brand-yellow"
@@ -1075,7 +1021,7 @@ export default function AdminRentalsPage() {
                           )}
                           {item.componentSelections && item.componentSelections.length > 0 && (
                             <div className="flex gap-1 flex-wrap mt-0.5">
-                              {item.componentSelections.map((cs: any) => {
+                              {item.componentSelections.filter((cs: any) => cs.wheelSize).map((cs: any) => {
                                 const subItem = inventory.find(i => i.id === cs.inventoryItemId);
                                 return (
                                   <Badge key={cs.inventoryItemId} className="bg-white/10 text-white/80 text-[8px] font-bold rounded px-1 py-0 border-0">
@@ -1615,7 +1561,7 @@ export default function AdminRentalsPage() {
                     )}
                     {item.componentSelections && item.componentSelections.length > 0 && (
                       <p className="text-[9px] text-white/30">
-                        {item.componentSelections.map((cs: any) => `Aro ${cs.wheelSize}`).join(', ')}
+                        {item.componentSelections.filter((cs: any) => cs.wheelSize).map((cs: any) => `Aro ${cs.wheelSize}`).join(', ')}
                       </p>
                     )}
                   </div>
@@ -1641,9 +1587,10 @@ export default function AdminRentalsPage() {
           </Button>
           <Button
             onClick={handleWizardSubmit}
+            disabled={creatingManualRental}
             className="flex-1 h-10 bg-brand-yellow hover:bg-brand-yellow-light text-brand-black font-black rounded-xl text-xs uppercase cursor-pointer"
           >
-            <CheckCircle2 className="w-4 h-4 mr-1.5" /> Crear Alquiler
+            <CheckCircle2 className="w-4 h-4 mr-1.5" /> {creatingManualRental ? 'Creando alquiler…' : 'Crear Alquiler'}
           </Button>
         </div>
       </div>
@@ -1661,7 +1608,7 @@ export default function AdminRentalsPage() {
             </div>
             Alquileres
           </h1>
-          <p className="text-white/40 text-sm font-medium">Control operativo y confirmación rápida de alquileres</p>
+          <p className="text-white/40 text-sm font-medium">Control operativo, entrega y devolución de alquileres</p>
         </div>
         <div className="flex items-center gap-3 w-full sm:w-auto">
           <Button
@@ -1683,7 +1630,7 @@ export default function AdminRentalsPage() {
               setNewRentalCart([]);
               setNewRentalStep(1);
               setNewRentalForm({
-                date: new Date().toISOString().split('T')[0],
+                date: toBoliviaDateString(),
                 pickupTime: new Date().toTimeString().slice(0, 5),
                 duration: '1 hora',
                 deliveryService: false,
@@ -1733,7 +1680,7 @@ export default function AdminRentalsPage() {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {[
           { label: 'Pendientes hoy', value: stats.pendingToday, color: 'text-yellow-400 bg-yellow-500/10 border-yellow-500/20' },
-          { label: 'Confirmados hoy', value: stats.confirmedToday, color: 'text-green-400 bg-green-500/10 border-green-500/20' },
+          { label: 'Activos hoy', value: stats.confirmedToday, color: 'text-green-400 bg-green-500/10 border-green-500/20' },
           { label: 'Pagados hoy', value: stats.paidToday, color: 'text-blue-400 bg-blue-500/10 border-blue-500/20' },
           { label: 'Expirados hoy', value: stats.expiredToday, color: 'text-zinc-400 bg-zinc-500/10 border-white/5' },
         ].map((s, i) => (
@@ -1849,29 +1796,21 @@ export default function AdminRentalsPage() {
                     <div className="grid grid-cols-3 gap-2 pt-2 border-t border-white/5">
                       <Button
                         size="sm"
+                        disabled={Boolean(busyActionByGroup[g.id])}
                         onClick={() => handleConfirmGroup(g)}
                         className="bg-green-600 hover:bg-green-700 text-white rounded-full h-11 text-xs font-black uppercase flex items-center justify-center gap-1.5"
                       >
-                        <CheckCircle2 className="w-4 h-4" /> Confirmar
+                        <CheckCircle2 className="w-4 h-4" /> {busyActionByGroup[g.id] === 'confirm' ? 'Confirmando…' : 'Confirmar'}
                       </Button>
 
-                      {g.paymentStatus !== 'paid' ? (
-                        <Button
-                          size="sm"
-                          onClick={() => handleMarkPaidGroup(g, g.paymentMethod)}
-                          className="bg-blue-600 hover:bg-blue-700 text-white rounded-full h-11 text-[11px] font-black uppercase flex items-center justify-center gap-1"
-                        >
-                          <Wallet className="w-3.5 h-3.5" /> Pagado
-                        </Button>
-                      ) : (
-                        <Button
-                          size="sm"
-                          disabled
-                          className="bg-white/5 text-white/30 rounded-full h-11 text-xs font-black uppercase"
-                        >
-                          ✓ Pagado
-                        </Button>
-                      )}
+                      <Button
+                        size="sm"
+                        disabled={Boolean(busyActionByGroup[g.id])}
+                        onClick={() => openPaymentDialog(g)}
+                        className="bg-blue-600 hover:bg-blue-700 text-white rounded-full h-11 text-[11px] font-black uppercase flex items-center justify-center gap-1"
+                      >
+                        <Wallet className="w-3.5 h-3.5" /> Caja
+                      </Button>
 
                       <Button
                         size="sm"
@@ -1886,18 +1825,20 @@ export default function AdminRentalsPage() {
                     <div className="grid grid-cols-2 gap-2">
                       <Button
                         size="sm"
+                        disabled={Boolean(busyActionByGroup[g.id])}
                         onClick={() => handleCancelGroup(g)}
                         className="bg-red-500/10 hover:bg-red-500 hover:text-white text-red-400 rounded-full h-9 text-[10px] font-black uppercase flex items-center justify-center gap-1"
                       >
-                        <Ban className="w-3.5 h-3.5" /> Cancelar
+                        <Ban className="w-3.5 h-3.5" /> {busyActionByGroup[g.id] === 'cancel' ? 'Cancelando…' : 'Cancelar'}
                       </Button>
 
                       <Button
                         size="sm"
+                        disabled={Boolean(busyActionByGroup[g.id])}
                         onClick={() => handleExpireGroup(g)}
                         className="bg-[#2D2D2D] hover:bg-zinc-700 text-zinc-400 hover:text-white rounded-full h-9 text-[10px] font-black uppercase flex items-center justify-center gap-1"
                       >
-                        <Clock className="w-3.5 h-3.5" /> Expirar
+                        <Clock className="w-3.5 h-3.5" /> {busyActionByGroup[g.id] === 'expire' ? 'Expirando…' : 'Expirar'}
                       </Button>
                     </div>
                   </CardContent>
@@ -1922,6 +1863,8 @@ export default function AdminRentalsPage() {
             { l: 'Todos', v: 'all' },
             { l: 'Pendientes', v: 'pending' },
             { l: 'Confirmados', v: 'confirmed' },
+            { l: 'Entregados (En Uso)', v: 'delivered' },
+            { l: 'Devueltos', v: 'returned' },
             { l: 'Cancelados', v: 'cancelled' },
             { l: 'Expirados', v: 'expired' }
           ].map(f => (
@@ -1960,15 +1903,20 @@ export default function AdminRentalsPage() {
                       {g.reservationCode || `ID: ${g.id.slice(-8)}`}
                     </span>
                     <p className="text-white font-black text-sm">{g.customerName}</p>
-                    <Badge className={`${statusColors[g.status]} rounded-full px-2 py-0.5 text-[9px] font-black uppercase border`}>
-                      {statusLabels[g.status]}
+                    <Badge className={`${statusColors[g.status] || 'bg-white/10 text-white'} rounded-full px-2 py-0.5 text-[9px] font-black uppercase border`}>
+                      {statusLabels[g.status] || g.status}
                     </Badge>
                     <Badge className={`${paymentStatusColors[g.paymentStatus || 'unpaid']} rounded-full px-1.5 py-0.2 text-[8px] font-bold uppercase`}>
                       {paymentStatusLabels[g.paymentStatus || 'unpaid']}
                     </Badge>
                     {isPastDue(g) && (
                       <Badge className="bg-red-500/20 text-red-400 border-red-500/30 rounded-full px-2 py-0.5 text-[9px] font-black uppercase border animate-pulse">
-                        ⚠️ Devolución Pendiente
+                        ⚠️ Devolución Vencida
+                      </Badge>
+                    )}
+                    {g.damagedOnReturn && (
+                      <Badge className="bg-amber-500/20 text-amber-400 border-amber-500/30 rounded-full px-2 py-0.5 text-[9px] font-black uppercase border">
+                        🔧 Con daño reportado
                       </Badge>
                     )}
                   </div>
@@ -1992,7 +1940,28 @@ export default function AdminRentalsPage() {
                 </div>
 
                 {/* Actions bar */}
-                <div className="flex gap-1.5 shrink-0 w-full sm:w-auto justify-end">
+                <div className="flex gap-1.5 shrink-0 w-full sm:w-auto justify-end items-center">
+                  {(g.status === 'confirmed' || g.status === 'Confirmado') && (
+                    <Button
+                      size="sm"
+                      disabled={Boolean(busyActionByGroup[g.id])}
+                      onClick={() => handleDeliverGroup(g)}
+                      className="h-9 px-3 rounded-xl bg-emerald-600/20 text-emerald-300 hover:bg-emerald-600 hover:text-white text-[10px] font-black uppercase border border-emerald-500/30"
+                      title="Marcar bicicleta como entregada físicamente al cliente"
+                    >
+                      <Bike className="w-3.5 h-3.5 mr-1" /> Entregar
+                    </Button>
+                  )}
+                  {(g.status === 'delivered' || g.status === 'Entregado') && (
+                    <Button
+                      size="sm"
+                      onClick={() => openReturnDialog(g)}
+                      className="h-9 px-3 rounded-xl bg-blue-600/20 text-blue-300 hover:bg-blue-600 hover:text-white text-[10px] font-black uppercase border border-blue-500/30"
+                      title="Registrar devolución y liberar stock"
+                    >
+                      <RotateCcw className="w-3.5 h-3.5 mr-1" /> Devolver
+                    </Button>
+                  )}
                   <Button 
                     variant="ghost" 
                     size="icon" 
@@ -2001,14 +1970,16 @@ export default function AdminRentalsPage() {
                   >
                     <Info className="w-4 h-4" />
                   </Button>
-                  <Button 
-                    variant="ghost" 
-                    size="icon" 
-                    className="w-9 h-9 rounded-xl bg-white/5 text-red-400/40 hover:bg-red-500 hover:text-white" 
-                    onClick={() => handleDeleteGroup(g)}
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </Button>
+                  {(g.status === 'pending' || g.status === 'Pendiente' || g.status === 'confirmed' || g.status === 'Confirmado') && (
+                    <Button
+                      variant="ghost" size="icon"
+                      className="w-9 h-9 rounded-xl bg-white/5 text-red-400/60 hover:bg-red-500 hover:text-white"
+                      disabled={Boolean(busyActionByGroup[g.id])}
+                      onClick={() => handleDeleteGroup(g)} title="Cancelar y conservar historial"
+                    >
+                      <Ban className="w-4 h-4" />
+                    </Button>
+                  )}
                 </div>
               </div>
             ))
@@ -2016,8 +1987,113 @@ export default function AdminRentalsPage() {
         </div>
       </div>
 
+      {/* RETURN MODAL (WITH OPTIONAL DAMAGE / MAINTENANCE / LATE FEE) */}
+      <Dialog open={!!returnModalGroup} onOpenChange={v => { if (!v && (!returnModalGroup || !busyActionByGroup[returnModalGroup.id])) setReturnModalGroup(null); }}>
+        <DialogContent className="max-w-md bg-brand-charcoal border border-white/10 text-white rounded-3xl p-6 font-sans">
+          {returnModalGroup && (
+            <div className="space-y-4">
+              <DialogHeader>
+                <DialogTitle className="text-lg font-black flex items-center gap-2 text-white">
+                  <RotateCcw className="w-5 h-5 text-brand-yellow" />
+                  Registrar Devolución ({returnModalGroup.reservationCode || returnModalGroup.id.slice(-6)})
+                </DialogTitle>
+              </DialogHeader>
+
+              <div className="bg-black/30 p-3.5 rounded-2xl border border-white/5 text-xs space-y-1.5">
+                <p className="text-white/50 font-bold uppercase text-[9px]">Cliente: {returnModalGroup.customerName}</p>
+                {returnModalGroup.items.map((item, idx) => (
+                  <p key={idx} className="text-white font-black">
+                    • {item.quantity}x {item.productName} {item.selectedWheelSize ? `(Aro ${item.selectedWheelSize})` : ''}
+                  </p>
+                ))}
+              </div>
+
+              <div className="space-y-1 rounded-2xl bg-amber-500/10 border border-amber-500/25 p-3.5">
+                <label className="text-xs font-black text-amber-300 uppercase">Bicicletas dañadas o que requieren mantenimiento</label>
+                <Input
+                  type="number" min={0} step={1} value={returnDamagedUnits}
+                  onChange={e => setReturnDamagedUnits(Math.max(0, Math.floor(Number(e.target.value) || 0)))}
+                  className="mt-2 bg-black/40 border-white/10 h-10 text-sm font-black text-brand-yellow rounded-xl"
+                />
+                <p className="text-[11px] text-amber-200/70 mt-1">Indica la cantidad exacta. Esas unidades irán a mantenimiento y no volverán al stock disponible.</p>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[10px] text-white/40 font-bold uppercase">Observaciones de recepción / Estado físico</label>
+                <textarea
+                  placeholder="Ej. Todo entregado en buen estado / Freno trasero requiere ajuste..."
+                  value={returnNotes}
+                  onChange={e => setReturnNotes(e.target.value)}
+                  className="w-full bg-black/40 border border-white/10 rounded-xl p-3 h-20 text-xs font-bold text-white outline-none focus:border-brand-yellow resize-none"
+                />
+              </div>
+
+              <div className="flex gap-2 pt-2">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  disabled={Boolean(busyActionByGroup[returnModalGroup.id])}
+                  onClick={() => setReturnModalGroup(null)}
+                  className="flex-1 h-11 rounded-xl border border-white/10 text-white/60 hover:text-white font-bold text-xs uppercase"
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  type="button"
+                  disabled={Boolean(busyActionByGroup[returnModalGroup.id])}
+                  onClick={handleConfirmReturnGroup}
+                  className="flex-1 h-11 rounded-xl bg-brand-yellow hover:bg-brand-yellow-light text-brand-black font-black text-xs uppercase"
+                >
+                  {busyActionByGroup[returnModalGroup.id] === 'return' ? 'Registrando…' : 'Confirmar Devolución'}
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Auditable receipt, refund and correction entry. */}
+      <Dialog open={!!paymentModalGroup} onOpenChange={open => { if (!open && (!paymentModalGroup || !busyActionByGroup[paymentModalGroup.id])) setPaymentModalGroup(null); }}>
+        <DialogContent className="max-w-md w-[95vw] bg-brand-charcoal border border-white/10 text-white rounded-3xl p-6">
+          {paymentModalGroup && (() => {
+            const group = paymentModalGroup;
+            const groupMovements = rentalPaymentMovements.filter(m => m.reservationCode === group.reservationCode);
+            const receipts = groupMovements.filter(m => m.type === 'receipt');
+            const refunds = groupMovements.filter(m => m.type === 'refund');
+            const corrections = groupMovements.filter(m => m.type === 'correction');
+            const legacyRows = groupMovements.length === 0 ? group.items.filter(item => item.paymentStatus === 'paid') : [];
+            const grossReceipts = receipts.reduce((sum, m) => sum + (Number(m.amount) || 0), 0) + legacyRows.reduce((sum, item) => sum + (Number(item.amountPaid) || Number(item.total) || 0), 0);
+            const refundedTotal = refunds.reduce((sum, m) => sum + (Number(m.amount) || 0), 0);
+            const correctedTotal = corrections.reduce((sum, m) => sum + (Number(m.amount) || 0), 0);
+            const references = [
+              ...receipts.map(m => ({ id: String(m.movementId || m.id), label: `Cobro ${String(m.movementId || m.id).slice(-8)} · Bs. ${m.amount}` })),
+              ...legacyRows.map(item => ({ id: `legacy_${item.id.replace(/[^A-Za-z0-9_-]/g, '_')}`, label: `Registro histórico · Bs. ${Number(item.amountPaid) || Number(item.total) || 0}` })),
+            ];
+            return <div className="space-y-4">
+              <DialogHeader><DialogTitle className="text-white font-black">Movimiento de caja · {group.reservationCode}</DialogTitle></DialogHeader>
+              <div className="grid grid-cols-2 gap-2 rounded-xl border border-white/10 bg-black/30 p-3 text-xs">
+                <p>Contratado <strong>Bs. {group.total.toFixed(2)}</strong></p><p>Cobrado <strong>Bs. {grossReceipts.toFixed(2)}</strong></p>
+                <p>Reembolsado <strong>Bs. {refundedTotal.toFixed(2)}</strong></p><p>Corregido <strong>Bs. {correctedTotal.toFixed(2)}</strong></p>
+                <p>Efectivo neto <strong>Bs. {(grossReceipts - refundedTotal).toFixed(2)}</strong></p>
+                <p>Ingreso neto reconocido <strong>Bs. {(grossReceipts - refundedTotal - correctedTotal).toFixed(2)}</strong></p>
+                <p>Pendiente <strong>Bs. {Math.max(0, group.total - grossReceipts).toFixed(2)}</strong></p>
+              </div>
+              <label className="block text-xs font-bold">Tipo<select className="mt-1 w-full rounded-lg bg-black/40 border border-white/10 p-2" value={paymentType} onChange={e => setPaymentType(e.target.value as typeof paymentType)}><option value="receipt">Registrar cobro</option><option value="refund">Registrar reembolso</option><option value="correction">Corregir cobro (sin salida de caja)</option></select></label>
+              <label className="block text-xs font-bold">Importe (Bs.)<Input type="number" min="0.01" step="0.01" value={paymentAmount} onChange={e => setPaymentAmount(e.target.value)} className="mt-1 bg-black/40" /></label>
+              <label className="block text-xs font-bold">Método<select className="mt-1 w-full rounded-lg bg-black/40 border border-white/10 p-2" value={paymentMethod} onChange={e => setPaymentMethod(e.target.value as typeof paymentMethod)}><option>Efectivo</option><option>QR</option><option>Transferencia</option></select></label>
+              {paymentType !== 'receipt' && <>
+                <label className="block text-xs font-bold">Cobro de referencia<select className="mt-1 w-full rounded-lg bg-black/40 border border-white/10 p-2" value={paymentReference} onChange={e => setPaymentReference(e.target.value)}><option value="">Seleccionar cobro</option>{references.map(r => <option key={r.id} value={r.id}>{r.label}</option>)}</select></label>
+                <label className="block text-xs font-bold">Motivo<textarea value={paymentReason} onChange={e => setPaymentReason(e.target.value)} className="mt-1 w-full rounded-lg bg-black/40 border border-white/10 p-2" /></label>
+              </>}
+              {((paymentType === 'receipt' && paymentMethod !== 'Efectivo') || paymentType !== 'receipt') && <label className="flex gap-2 items-start text-xs"><input type="checkbox" checked={paymentConfirmed} onChange={e => setPaymentConfirmed(e.target.checked)} />{paymentType === 'receipt' ? 'Confirmo que el pago QR/transferencia fue recibido.' : `Confirmo expresamente este ${paymentType === 'refund' ? 'reembolso' : 'ajuste contable'}.`}</label>}
+              <div className="flex gap-2"><Button variant="ghost" disabled={Boolean(busyActionByGroup[group.id])} onClick={() => setPaymentModalGroup(null)}>Cancelar</Button><Button disabled={Boolean(busyActionByGroup[group.id]) || Number(paymentAmount) <= 0 || ((paymentType !== 'receipt') && (!paymentReference || !paymentReason.trim() || !paymentConfirmed)) || ((paymentType === 'receipt' && paymentMethod !== 'Efectivo') && !paymentConfirmed)} onClick={handleRecordPaymentMovement}>{busyActionByGroup[group.id] === 'payment' ? 'Registrando…' : 'Guardar movimiento'}</Button></div>
+            </div>;
+          })()}
+        </DialogContent>
+      </Dialog>
+
       {/* RESERVATION DETAIL MODAL */}
-      <Dialog open={!!selected} onOpenChange={v => { if (!v) setSelected(null); }}>
+      <Dialog open={!!selected} onOpenChange={v => { if (!v && (!selected || !busyActionByGroup[selected.id])) setSelected(null); }}>
         <DialogContent className="max-w-4xl w-[95vw] max-h-[90vh] overflow-y-auto bg-brand-charcoal border border-white/10 text-white p-0 rounded-3xl">
           {selected && (
             <>
@@ -2031,8 +2107,8 @@ export default function AdminRentalsPage() {
                   </p>
                 </div>
                 <div className="flex flex-col items-end gap-1">
-                  <Badge className={`${statusColors[selected.status]} px-3 py-1 text-xs font-black uppercase rounded-full border`}>
-                    {statusLabels[selected.status]}
+                  <Badge className={`${statusColors[selected.status] || 'bg-white/10 text-white'} px-3 py-1 text-xs font-black uppercase rounded-full border`}>
+                    {statusLabels[selected.status] || selected.status}
                   </Badge>
                   <Badge className={`${paymentStatusColors[selected.paymentStatus || 'unpaid']} text-[9px] px-2 py-0.5 rounded-lg border-0`}>
                     {paymentStatusLabels[selected.paymentStatus || 'unpaid']}
@@ -2321,10 +2397,19 @@ export default function AdminRentalsPage() {
                     </div>
                   )}
 
+                  {selected.returnConditionNotes && (
+                    <div className="bg-amber-500/10 p-4 rounded-2xl border border-amber-500/20">
+                      <p className="text-[9px] text-amber-400 font-bold uppercase mb-1">Reporte de Devolución</p>
+                      <p className="text-amber-200/80 text-xs">{selected.returnConditionNotes}</p>
+                    </div>
+                  )}
+
                   {/* Timestamps & Audit logs */}
                   <div className="bg-black/20 p-3 rounded-xl border border-white/5 text-[9px] text-white/30 space-y-1 font-mono">
                     <p>Creado: {formatDateTime(selected.createdAt)}</p>
                     <p>Actualizado: {formatDateTime(selected.updatedAt)}</p>
+                    {selected.deliveredAt && <p className="text-emerald-400/70">Entregado: {formatDateTime(selected.deliveredAt)}</p>}
+                    {selected.returnedAt && <p className="text-blue-400/70">Devuelto: {formatDateTime(selected.returnedAt)}</p>}
                     {selected.lastUpdatedBy && (
                       <p className="text-brand-yellow/60">Modificado por última vez por: {selected.lastUpdatedBy}</p>
                     )}
@@ -2339,13 +2424,13 @@ export default function AdminRentalsPage() {
                         🚨 Plazo de Alquiler Vencido
                       </p>
                       <p className="font-medium text-[11px] text-red-300/80 leading-normal">
-                        El tiempo programado de este alquiler ha terminado. Recibe las bicicletas e ítems, y haz clic en el botón **"Marcar como Devuelto"** abajo para reintegrar los productos al stock del inventario.
+                        El tiempo programado de este alquiler ha terminado. Recibe las bicicletas e ítems y haz clic en **"Registrar Devolución"** abajo para reintegrar los productos al stock.
                       </p>
                     </div>
                   )}
 
                   {editingOrder && editForm && (
-                    <div className="bg-brand-yellow/10 p-4 rounded-2xl border border-brand-yellow/25 space-y-4">
+                    <fieldset disabled={Boolean(busyActionByGroup[selected.id])} className="bg-brand-yellow/10 p-4 rounded-2xl border border-brand-yellow/25 space-y-4 disabled:opacity-70">
                       <h4 className="text-[10px] text-brand-yellow font-black uppercase tracking-widest flex items-center gap-1">
                         <Edit3 className="w-3.5 h-3.5" /> Editar pedido del cliente
                       </h4>
@@ -2373,7 +2458,7 @@ export default function AdminRentalsPage() {
                           <p className="text-[9px] text-white/35 font-bold uppercase mb-1">Duración</p>
                           <select
                             value={editForm.duration}
-                            onChange={e => setEditForm(prev => prev ? { ...prev, duration: e.target.value } : prev)}
+                            onChange={e => handleEditDurationChange(e.target.value)}
                             className="h-10 w-full rounded-xl border border-white/10 bg-black/35 px-2 text-xs font-bold text-white outline-none"
                           >
                             {['1 hora', '2 horas', '3 horas', '4 horas', '8 horas', '24 horas', '1 semana', '1 mes'].map(value => (
@@ -2437,7 +2522,7 @@ export default function AdminRentalsPage() {
                                   type="number"
                                   min="0"
                                   value={editable.total}
-                                  onChange={e => updateEditItem(editable.id, { total: Number(e.target.value) || 0 })}
+                                  onChange={e => updateEditItem(editable.id, { total: Math.max(0, Number(e.target.value) || 0) })}
                                   className="h-9 w-16 rounded-lg bg-black/35 border-white/10 text-white text-xs font-bold"
                                 />
                               </div>
@@ -2627,15 +2712,20 @@ export default function AdminRentalsPage() {
                         onClick={handleSaveEditedGroup}
                         className="h-11 w-full rounded-xl bg-brand-yellow text-xs font-black uppercase text-brand-black hover:bg-brand-yellow-light cursor-pointer"
                       >
-                        <Save className="mr-2 h-4 w-4" /> Guardar cambios del pedido
+                        <Save className="mr-2 h-4 w-4" /> {busyActionByGroup[selected.id] === 'edit' ? 'Guardando…' : 'Guardar cambios del pedido'}
                       </Button>
-                    </div>
+                    </fieldset>
                   )}
 
                   {/* Total amount header */}
                   <div className="bg-brand-yellow text-brand-black p-5 rounded-2xl text-center shadow-lg">
                     <p className="text-[10px] font-black uppercase tracking-wider mb-1">Monto Total Estimado</p>
                     <p className="text-4xl font-black">Bs. {selected.total}</p>
+                    {selected.lateFee && selected.lateFee > 0 ? (
+                      <p className="text-[10px] font-black uppercase mt-1 text-red-900">
+                        (Incluye Bs. {selected.lateFee} de recargo por retraso)
+                      </p>
+                    ) : null}
                   </div>
 
                   {/* Action buttons inside Modal */}
@@ -2643,41 +2733,55 @@ export default function AdminRentalsPage() {
                     {(selected.status === 'pending' || selected.status === 'Pendiente') && (
                       <Button 
                         className="flex-1 h-11 bg-green-600 hover:bg-green-700 text-white font-black rounded-xl text-xs uppercase cursor-pointer" 
-                        onClick={() => { handleConfirmGroup(selected); setSelected(null); }}
+                        disabled={Boolean(busyActionByGroup[selected.id])}
+                        onClick={async () => { if (await handleConfirmGroup(selected)) setSelected(null); }}
                       >
-                        Confirmar Reserva
+                        {busyActionByGroup[selected.id] === 'confirm' ? 'Confirmando…' : 'Confirmar Reserva'}
                       </Button>
                     )}
 
-                    {selected.paymentStatus !== 'paid' && (
+                    {(selected.status === 'confirmed' || selected.status === 'Confirmado') && (
+                      <Button 
+                        className="flex-1 h-11 bg-emerald-600 hover:bg-emerald-700 text-white font-black rounded-xl text-xs uppercase cursor-pointer" 
+                        disabled={Boolean(busyActionByGroup[selected.id])}
+                        onClick={() => { handleDeliverGroup(selected); }}
+                      >
+                        {busyActionByGroup[selected.id] === 'deliver' ? 'Entregando…' : 'Marcar como Entregado'}
+                      </Button>
+                    )}
+
+                    {(
                       <Button 
                         className="flex-1 h-11 bg-blue-600 hover:bg-blue-700 text-white font-black rounded-xl text-xs uppercase cursor-pointer" 
-                        onClick={() => { handleMarkPaidGroup(selected, selected.paymentMethod); }}
+                        disabled={Boolean(busyActionByGroup[selected.id])}
+                        onClick={() => openPaymentDialog(selected)}
                       >
-                        Registrar Pago
+                        {busyActionByGroup[selected.id] === 'payment' ? 'Registrando…' : 'Caja / Registrar Pago'}
                       </Button>
                     )}
 
                     {(selected.status === 'pending' || selected.status === 'Pendiente' || selected.status === 'confirmed' || selected.status === 'Confirmado') && (
                       <Button 
                         className="flex-1 h-11 bg-red-600 hover:bg-red-700 text-white font-black rounded-xl text-xs uppercase cursor-pointer" 
-                        onClick={() => { handleCancelGroup(selected); setSelected(null); }}
+                        disabled={Boolean(busyActionByGroup[selected.id])}
+                        onClick={() => { handleCancelGroup(selected); }}
                       >
-                        Cancelar Alquiler
+                        {busyActionByGroup[selected.id] === 'cancel' ? 'Cancelando…' : 'Cancelar Alquiler'}
                       </Button>
                     )}
 
-                    {(selected.status === 'confirmed' || selected.status === 'Confirmado') && (
+                    {(selected.status === 'delivered' || selected.status === 'Entregado') && (
                       <Button 
                         className="flex-1 h-11 bg-blue-500 hover:bg-blue-600 text-white font-black rounded-xl text-xs uppercase cursor-pointer" 
-                        onClick={() => { handleReturnGroup(selected); setSelected(null); }}
+                        onClick={() => { openReturnDialog(selected); }}
                       >
-                        Marcar como Devuelto
+                        Registrar Devolución
                       </Button>
                     )}
 
                     <Button 
                       variant="ghost" 
+                      disabled={Boolean(busyActionByGroup[selected.id])}
                       className="w-full h-10 text-white/40 font-bold hover:bg-white/5 hover:text-white rounded-xl text-xs uppercase mt-2 cursor-pointer" 
                       onClick={() => setSelected(null)}
                     >

@@ -12,13 +12,19 @@ import CustomerAuthModal from '@/components/layout/CustomerAuthModal';
 import RentalCheckoutWizard from '@/components/rentals/RentalCheckoutWizard';
 import type { RentalCartItem } from '@/components/rentals/RentalCheckoutWizard';
 import { useLanguage } from '@/context/LanguageContext';
-import { t } from '@/lib/translations';
+import { t, getLocalizedField, type Language } from '@/lib/translations';
 
-
-
+const RENTAL_CART_STORAGE_KEY = 'briz_rental_cart_v1';
 
 type DisplayProduct = {
-  id: string; name: string; description: string; details?: string; imageUrl: string;
+  id: string;
+  name: string;
+  nameEn?: string;
+  description: string;
+  descriptionEn?: string;
+  details?: string;
+  detailsEn?: string;
+  imageUrl: string;
   type: 'single' | 'combo';
   itemType?: 'bike' | 'accessory';
   category?: string;
@@ -29,33 +35,35 @@ type DisplayProduct = {
   comboAvailability?: number;
   components?: { name: string; qty: number; requiresWheelSize: boolean }[];
   pricePerHour: number; priceFrom5thHour: number; pricePerDay: number; pricePerWeek: number; pricePerMonth: number;
+  price1Hour?: number; price2Hours?: number; price3Hours?: number; price4Hours?: number; price8Hours?: number; price24Hours?: number; price1Week?: number; price1Month?: number;
 };
-
-
 
 function productCategories(product: DisplayProduct) {
   const mainCategory = product.category || (product.itemType === 'accessory' ? 'Accesorios' : 'Otros');
   return [mainCategory, ...(product.secondaryCategories || [])];
 }
 
-function getRentalPriceTiers(product: DisplayProduct) {
+function getRentalPriceTiers(product: DisplayProduct, lang: Language) {
+  const p1h = product.price1Hour || product.pricePerHour || 0;
+  const p2h = product.price2Hours && product.price2Hours > 0 ? product.price2Hours : p1h * 2;
+  const pDay = product.price24Hours || product.pricePerDay || 0;
+  const pWeek = product.price1Week || product.pricePerWeek || 0;
+  const pMonth = product.price1Month || product.pricePerMonth || 0;
   return [
-    { label: '1 Hora', value: product.pricePerHour, accent: false },
-    { label: '2 Horas', value: product.pricePerHour * 2, accent: false },
-    { label: 'Dia', value: product.pricePerDay, accent: false },
-    { label: 'Semana', value: product.pricePerWeek, accent: true },
-    { label: 'Mes', value: product.pricePerMonth, accent: true },
+    { label: lang === 'es' ? '1 Hora' : '1 Hour', value: p1h, accent: false },
+    { label: lang === 'es' ? '2 Horas' : '2 Hours', value: p2h, accent: false },
+    { label: lang === 'es' ? 'Día' : 'Day', value: pDay, accent: false },
+    { label: lang === 'es' ? 'Semana' : 'Week', value: pWeek, accent: true },
+    { label: lang === 'es' ? 'Mes' : 'Month', value: pMonth, accent: true },
   ].filter(tier => Number(tier.value) > 0);
 }
 
-
-
-const translateCategory = (cat: string, lang: string) => {
-  return t(cat, lang as any);
+const translateCategory = (cat: string, lang: Language) => {
+  return t(cat, lang);
 };
 
-const translateProductName = (name: string, lang: string) => {
-  return t(name, lang as any);
+const translateProductName = (product: Pick<DisplayProduct, 'name' | 'nameEn'>, lang: Language) => {
+  return getLocalizedField(product.name, product.nameEn, lang);
 };
 
 export default function RentalsPage() {
@@ -86,6 +94,7 @@ export default function RentalsPage() {
       const decodedCat = decodeURIComponent(cat);
       setCategory(decodedCat);
       setExpandedCategory(decodedCat);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     } else {
       setCategory('Todas');
       setExpandedCategory(null);
@@ -115,10 +124,29 @@ export default function RentalsPage() {
     return p.stock ?? 0;
   };
 
-  // Rental Cart state and wizard checkout steps
-  const [rentalCart, setRentalCart] = useState<RentalCartItem[]>([]);
+  // Rental Cart state and wizard checkout steps (persisted across page reloads / language switches)
+  const [rentalCart, setRentalCart] = useState<RentalCartItem[]>(() => {
+    try {
+      const saved = localStorage.getItem(RENTAL_CART_STORAGE_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) return parsed;
+      }
+    } catch {
+      // ignore
+    }
+    return [];
+  });
   const [checkoutStep, setCheckoutStep] = useState<number>(1);
   const [authOpen, setAuthOpen] = useState(false);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(RENTAL_CART_STORAGE_KEY, JSON.stringify(rentalCart));
+    } catch {
+      // ignore
+    }
+  }, [rentalCart]);
 
   // Build display list
   const products = useMemo((): DisplayProduct[] => {
@@ -127,7 +155,14 @@ export default function RentalsPage() {
     // Single inventory items available for rental
     inventory.filter(i => i.active && i.availableForRental).forEach(i => {
       items.push({
-        id: i.id, name: i.name, description: i.description, details: i.details, imageUrl: i.imageUrl,
+        id: i.id,
+        name: i.name,
+        nameEn: i.nameEn,
+        description: i.description,
+        descriptionEn: i.descriptionEn,
+        details: i.details,
+        detailsEn: i.detailsEn,
+        imageUrl: i.imageUrl,
         type: 'single', itemType: i.itemType,
         category: i.category,
         hasWheelSizes: i.hasWheelSizes,
@@ -135,6 +170,9 @@ export default function RentalsPage() {
         stock: i.hasWheelSizes ? undefined : (i.stock ?? 0),
         pricePerHour: i.pricePerHour, priceFrom5thHour: i.priceFrom5thHour,
         pricePerDay: i.pricePerDay, pricePerWeek: i.pricePerWeek, pricePerMonth: i.pricePerMonth,
+        price1Hour: i.price1Hour, price2Hours: i.price2Hours, price3Hours: i.price3Hours,
+        price4Hours: i.price4Hours, price8Hours: i.price8Hours, price24Hours: i.price24Hours,
+        price1Week: i.price1Week, price1Month: i.price1Month,
       });
     });
 
@@ -182,13 +220,23 @@ export default function RentalsPage() {
       }
 
       items.push({
-        id: c.id, name: c.name, description: c.description, details: c.details, imageUrl: c.imageUrl,
+        id: c.id,
+        name: c.name,
+        nameEn: c.nameEn,
+        description: c.description,
+        descriptionEn: c.descriptionEn,
+        details: c.details,
+        detailsEn: c.detailsEn,
+        imageUrl: c.imageUrl,
         type: 'combo', hasWheelSizes: hasWS, wheelSizes: ws,
         category: c.category || 'Bicicletas',
         secondaryCategories: c.secondaryCategories,
         comboAvailability: avail, components: comps,
         pricePerHour: c.pricePerHour, priceFrom5thHour: c.priceFrom5thHour,
         pricePerDay: c.pricePerDay, pricePerWeek: c.pricePerWeek, pricePerMonth: c.pricePerMonth,
+        price1Hour: c.price1Hour, price2Hours: c.price2Hours, price3Hours: c.price3Hours,
+        price4Hours: c.price4Hours, price8Hours: c.price8Hours, price24Hours: c.price24Hours,
+        price1Week: c.price1Week, price1Month: c.price1Month,
       });
     });
 
@@ -206,17 +254,28 @@ export default function RentalsPage() {
     return ['Todas', ...Array.from(productCategorySet).sort(sortCategories)];
   }, [products, events, bikeCategories]);
 
+  const matchesProductSearch = (p: DisplayProduct, query: string): boolean => {
+    if (!query) return true;
+    const q = query.toLowerCase();
+    const enName = getLocalizedField(p.name, p.nameEn, 'en').toLowerCase();
+    const enDesc = getLocalizedField(p.description, p.descriptionEn, 'en').toLowerCase();
+    return (
+      p.name.toLowerCase().includes(q) ||
+      p.description.toLowerCase().includes(q) ||
+      (p.details || '').toLowerCase().includes(q) ||
+      enName.includes(q) ||
+      enDesc.includes(q)
+    );
+  };
+
   const filtered = useMemo(() => {
     return products.filter(p => {
       if (category !== 'Todas') {
         if (!productCategories(p).includes(category)) return false;
       }
-      const q = search.toLowerCase();
-      return p.name.toLowerCase().includes(q) || p.description.toLowerCase().includes(q) || (p.details || '').toLowerCase().includes(q);
+      return matchesProductSearch(p, search);
     });
   }, [products, category, search]);
-
-
 
   const openReservation = (p: DisplayProduct) => {
     setSelected(p);
@@ -246,8 +305,7 @@ export default function RentalsPage() {
     if (!expandedCategory) return [];
     return products.filter(p => {
       if (!productCategories(p).includes(expandedCategory)) return false;
-      const q = search.toLowerCase();
-      return p.name.toLowerCase().includes(q) || p.description.toLowerCase().includes(q) || (p.details || '').toLowerCase().includes(q);
+      return matchesProductSearch(p, search);
     });
   }, [products, expandedCategory, search]);
 
@@ -290,7 +348,7 @@ export default function RentalsPage() {
               <span translate="no">{translateCategory(title, language)}</span>
             </h2>
             <p className="text-[10px] sm:text-xs font-black uppercase text-gray-400 tracking-widest font-maiandra">
-              Desde Bs. {displayMinPrice} / Hora
+              {language === 'es' ? `Desde Bs. ${displayMinPrice} / Hora` : `From Bs. ${displayMinPrice} / Hour`}
             </p>
           </div>
           <button
@@ -298,7 +356,7 @@ export default function RentalsPage() {
             onClick={() => openCategoryView(catKey)}
             className="font-maiandra text-xs sm:text-sm text-gray-500 hover:text-brand-yellow hover:underline transition-all tracking-wide underline"
           >
-            Ver todo
+            {language === 'es' ? 'Ver todo' : 'View all'}
           </button>
         </div>
 
@@ -310,7 +368,7 @@ export default function RentalsPage() {
           >
             {productsList.map((p) => {
               const avail = getAvailableStock(p);
-              const tiers = getRentalPriceTiers(p);
+              const tiers = getRentalPriceTiers(p, language);
               return (
                 <motion.div 
                   key={p.id}
@@ -329,7 +387,7 @@ export default function RentalsPage() {
                       {p.imageUrl ? (
                         <img 
                           src={p.imageUrl} 
-                          alt={p.name} 
+                          alt={translateProductName(p, language)} 
                           className="w-full h-full object-contain p-4" 
                         />
                       ) : (
@@ -341,11 +399,15 @@ export default function RentalsPage() {
                       {/* Availability badge */}
                       {avail <= 0 ? (
                         <Badge className="absolute top-4 right-4 bg-brand-charcoal text-white text-[10px] font-black uppercase border-0">
-                          Agotado
+                          {language === 'es' ? 'Agotado' : 'Out of stock'}
                         </Badge>
                       ) : (
                         <Badge className="absolute top-4 right-4 text-[9px] font-black uppercase px-2 py-1 border-0 bg-brand-yellow text-brand-black">
-                          {p.type === 'combo' ? 'Combo' : p.itemType === 'bike' ? 'Bicicleta' : 'Accesorio'}
+                          {p.type === 'combo'
+                            ? 'Combo'
+                            : p.itemType === 'bike'
+                              ? (language === 'es' ? 'Bicicleta' : 'Bicycle')
+                              : (language === 'es' ? 'Accesorio' : 'Accessory')}
                         </Badge>
                       )}
                     </div>
@@ -354,10 +416,10 @@ export default function RentalsPage() {
                       <div>
                         {/* Title of bike in TAN Tangkiwood */}
                         <h3 className="font-tangkiwood text-lg sm:text-xl text-brand-black leading-tight truncate">
-                          <span translate="no">{translateProductName(p.name, language)}</span>
+                          <span translate="no">{translateProductName(p, language)}</span>
                         </h3>
                         <p className="text-xs font-sans text-gray-400 mt-1 line-clamp-2 leading-relaxed">
-                          {t(p.description, language as any) || t('Disponible para alquiler', language as any)}
+                          {getLocalizedField(p.description, p.descriptionEn, language) || t('Disponible para alquiler', language)}
                         </p>
                       </div>
 
@@ -376,24 +438,6 @@ export default function RentalsPage() {
                           ))}
                         </div>
                       </div>
-                      <div className="hidden">
-                        <div>
-                          <span className="block font-maiandra text-[9px] text-gray-400 uppercase tracking-widest leading-none mb-1">
-                            DESDE
-                          </span>
-                          <span className="font-tan text-xl text-brand-black leading-none">
-                            Bs. {p.pricePerHour}
-                          </span>
-                          <span className="font-maiandra text-[10px] text-gray-500 font-bold ml-1">
-                            / Hora
-                          </span>
-                        </div>
-                        <div className="text-right">
-                          <span className="font-tangkiwood text-sm text-brand-black font-semibold">
-                            Día: Bs. {p.pricePerDay}
-                          </span>
-                        </div>
-                      </div>
                     </CardContent>
                   </Card>
                 </motion.div>
@@ -405,7 +449,7 @@ export default function RentalsPage() {
           <button 
             onClick={() => scrollRight(catKey)}
             className="absolute right-2 top-1/2 -translate-y-1/2 z-10 bg-white/90 hover:bg-white text-brand-black shadow-lg rounded-full w-11 h-11 flex items-center justify-center border border-gray-200 transition-transform active:scale-95 opacity-0 group-hover/slider:opacity-100 pointer-events-none group-hover/slider:pointer-events-auto duration-300"
-            aria-label="Deslizar a la derecha"
+            aria-label={language === 'es' ? 'Deslizar a la derecha' : 'Scroll right'}
           >
             <ChevronRight className="w-6 h-6 text-brand-black" strokeWidth={2.5} />
           </button>
@@ -413,6 +457,14 @@ export default function RentalsPage() {
       </div>
     );
   };
+
+  // Show the Special Events overview ONLY when viewing 'Todas' (with no active search/expanded category) OR when 'Eventos' is explicitly selected
+  const shouldShowEventsOverview =
+    !selectedEvent &&
+    !expandedCategory &&
+    (events || []).length > 0 &&
+    category === 'Todas' &&
+    !search.trim();
 
   return (
     <div className="pt-[64px] lg:pt-[86px] bg-[#FFFDF3] min-h-screen">
@@ -442,8 +494,11 @@ export default function RentalsPage() {
       {currentCustomer && (
         <div className="w-full bg-brand-yellow/10 border-b border-brand-yellow/20 py-3 px-4">
           <p className="text-center text-sm font-black text-brand-black font-maiandra tracking-wide">
-            ¡Gracias <span className="uppercase">{currentCustomer.name.split(' ')[0]}</span>!
-            {' '}Bienvenid@ nuevamente 💛🚲
+            {language === 'es' ? (
+              <>¡Gracias <span className="uppercase">{currentCustomer.name.split(' ')[0]}</span>! Bienvenid@ nuevamente 💛🚲</>
+            ) : (
+              <>Thank you, <span className="uppercase">{currentCustomer.name.split(' ')[0]}</span>! Welcome back 💛🚲</>
+            )}
           </p>
         </div>
       )}
@@ -457,7 +512,7 @@ export default function RentalsPage() {
               <div className="flex items-center bg-white border-2 border-brand-yellow rounded-full px-4 py-1.5 shadow-sm focus-within:ring-2 focus-within:ring-brand-yellow/30 transition-all">
                 <Input 
                   type="text" 
-                  placeholder="Buscar en Briz..." 
+                  placeholder={language === 'es' ? 'Buscar en Briz...' : 'Search in Briz...'} 
                   value={search} 
                   onChange={e => setSearch(e.target.value)}
                   className="border-0 bg-transparent h-10 shadow-none focus-visible:ring-0 focus-visible:ring-offset-0 placeholder:text-gray-400 font-sans font-medium text-base text-brand-black w-full"
@@ -482,8 +537,17 @@ export default function RentalsPage() {
                         : 'bg-white text-gray-500 border-gray-200 hover:border-brand-yellow hover:text-brand-black'
                     }`}
                     onClick={() => {
-                      setExpandedCategory(null);
-                      setCategory(c);
+                      if (c === 'Todas') {
+                        setExpandedCategory(null);
+                        setCategory('Todas');
+                      } else if (c === 'Eventos') {
+                        setExpandedCategory('Eventos');
+                        setCategory('Eventos');
+                      } else {
+                        setExpandedCategory(null);
+                        setCategory(c);
+                      }
+                      window.scrollTo({ top: 0, behavior: 'smooth' });
                     }}
                   >
                     <span translate="no">{translateCategory(c, language)}</span>
@@ -513,22 +577,26 @@ export default function RentalsPage() {
       <section className="py-10 min-h-[50vh] bg-background">
         <div className="max-w-7xl mx-auto px-4">
 
-          {/* ── SPECIAL EVENTS SECTION (always visible at top when not in event view) ── */}
-          {!selectedEvent && !expandedCategory && (events || []).length > 0 && (
+          {/* ── SPECIAL EVENTS SECTION (ONLY shown when category === 'Todas' and not filtering/expanded) ── */}
+          {shouldShowEventsOverview && (
             <div className="mb-12 pb-10 border-b border-gray-100">
               <div className="flex items-end justify-between mb-6">
                 <div className="space-y-1">
                   <h2 className="font-tan text-[0.77rem] xs:text-[0.875rem] sm:text-[1.85rem] sm:leading-[1.22] lg:text-[2.2rem] uppercase tracking-normal text-brand-yellow [-webkit-text-stroke:1px_#000] drop-shadow-[1.2px_1.2px_0_rgba(0,0,0,1)]">
-                    Eventos Especiales
+                    {language === 'es' ? 'Eventos Especiales' : 'Special Events'}
                   </h2>
                   <p className="text-[10px] sm:text-xs font-black uppercase text-gray-400 tracking-widest font-maiandra">
-                    Paquetes para cumpleaños, bodas y eventos corporativos
+                    {language === 'es'
+                      ? 'Paquetes para cumpleaños, bodas y eventos corporativos'
+                      : 'Packages for birthdays, weddings, and corporate events'}
                   </p>
                 </div>
               </div>
               <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
                 {(events || []).map(ev => {
                   const firstImg = ev.subcategories?.[0]?.images?.[0] || ev.images?.[0] || '';
+                  const evName = getLocalizedField(ev.name, ev.nameEn, language);
+                  const evDesc = getLocalizedField(ev.description, ev.descriptionEn, language);
                   return (
                     <motion.div
                       key={ev.id}
@@ -539,7 +607,7 @@ export default function RentalsPage() {
                     >
                       <div className="relative aspect-[16/9] bg-gray-50 overflow-hidden">
                         {firstImg ? (
-                          <img src={firstImg} alt={ev.name} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" />
+                          <img src={firstImg} alt={evName} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" />
                         ) : (
                           <div className="w-full h-full flex items-center justify-center">
                             <ImageIcon className="w-10 h-10 text-gray-200" />
@@ -547,16 +615,18 @@ export default function RentalsPage() {
                         )}
                         <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
                         <div className="absolute bottom-4 left-4 right-4">
-                          <h3 className="font-tan text-white text-xl uppercase drop-shadow-md leading-tight">{ev.name}</h3>
+                          <h3 className="font-tan text-white text-xl uppercase drop-shadow-md leading-tight">{evName}</h3>
                           {ev.price !== undefined && (
-                            <span className="inline-block mt-1 bg-brand-yellow text-brand-black text-[10px] font-black px-2 py-0.5 rounded-md uppercase">Desde Bs. {ev.price}</span>
+                            <span className="inline-block mt-1 bg-brand-yellow text-brand-black text-[10px] font-black px-2 py-0.5 rounded-md uppercase">
+                              {language === 'es' ? `Desde Bs. ${ev.price}` : `From Bs. ${ev.price}`}
+                            </span>
                           )}
                         </div>
                       </div>
                       <div className="p-5 flex items-center justify-between">
-                        <p className="text-xs text-gray-500 font-medium line-clamp-2 flex-1 pr-4">{ev.description}</p>
+                        <p className="text-xs text-gray-500 font-medium line-clamp-2 flex-1 pr-4">{evDesc}</p>
                         <span className="shrink-0 bg-brand-yellow text-brand-black text-[10px] font-black px-3 py-2 rounded-full uppercase tracking-wide group-hover:bg-brand-black group-hover:text-brand-yellow transition-colors">
-                          Ver fotos →
+                          {language === 'es' ? 'Ver fotos →' : 'View photos →'}
                         </span>
                       </div>
                     </motion.div>
@@ -568,7 +638,7 @@ export default function RentalsPage() {
 
           {selectedEvent ? (
             <EventSpecialView event={selectedEvent} onClose={closeCategoryView} language={language} />
-          ) : expandedCategory === 'Eventos' ? (
+          ) : (expandedCategory === 'Eventos' || category === 'Eventos') ? (
             <div className="py-8">
               <div className="mb-7 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
                 <div>
@@ -577,21 +647,26 @@ export default function RentalsPage() {
                     onClick={closeCategoryView}
                     className="mb-3 inline-flex rounded-full border border-brand-yellow/40 bg-white px-4 py-2 text-xs font-black text-brand-black shadow-sm hover:bg-brand-yellow"
                   >
-                    ← Volver a categorías
+                    {language === 'es' ? '← Volver a categorías' : '← Back to categories'}
                   </button>
                   <h1 
                     className="font-tan text-[1.5rem] xs:text-[1.8rem] sm:text-[2.2rem] sm:leading-[1.18] lg:text-[2.6rem] uppercase tracking-normal text-brand-yellow [-webkit-text-stroke:1.1px_#000] drop-shadow-[1.5px_1.5px_0_rgba(0,0,0,1)] whitespace-normal break-words"
                   >
-                    Eventos Especiales
+                    {language === 'es' ? 'Eventos Especiales' : 'Special Events'}
                   </h1>
                   <p className="mt-3.5 sm:mt-2 text-[10px] sm:text-xs font-black uppercase text-gray-400 tracking-widest font-maiandra">
-                    {(events || []).length} {(events || []).length === 1 ? 'evento disponible' : 'eventos disponibles'}
+                    {(events || []).length}{' '}
+                    {language === 'es'
+                      ? ((events || []).length === 1 ? 'evento disponible' : 'eventos disponibles')
+                      : ((events || []).length === 1 ? 'event available' : 'events available')}
                   </p>
                 </div>
               </div>
               <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
                 {(events || []).map(ev => {
                   const firstImg = ev.subcategories?.[0]?.images?.[0] || ev.images?.[0] || '';
+                  const evName = getLocalizedField(ev.name, ev.nameEn, language);
+                  const evDesc = getLocalizedField(ev.description, ev.descriptionEn, language);
                   return (
                     <motion.div
                       key={ev.id}
@@ -602,7 +677,7 @@ export default function RentalsPage() {
                     >
                       <div className="relative aspect-[16/9] bg-gray-50 overflow-hidden">
                         {firstImg ? (
-                          <img src={firstImg} alt={ev.name} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" />
+                          <img src={firstImg} alt={evName} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" />
                         ) : (
                           <div className="w-full h-full flex items-center justify-center">
                             <ImageIcon className="w-10 h-10 text-gray-200" />
@@ -610,16 +685,18 @@ export default function RentalsPage() {
                         )}
                         <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
                         <div className="absolute bottom-4 left-4 right-4">
-                          <h3 className="font-tan text-white text-xl uppercase drop-shadow-md leading-tight">{ev.name}</h3>
+                          <h3 className="font-tan text-white text-xl uppercase drop-shadow-md leading-tight">{evName}</h3>
                           {ev.price !== undefined && (
-                            <span className="inline-block mt-1 bg-brand-yellow text-brand-black text-[10px] font-black px-2 py-0.5 rounded-md uppercase">Desde Bs. {ev.price}</span>
+                            <span className="inline-block mt-1 bg-brand-yellow text-brand-black text-[10px] font-black px-2 py-0.5 rounded-md uppercase">
+                              {language === 'es' ? `Desde Bs. ${ev.price}` : `From Bs. ${ev.price}`}
+                            </span>
                           )}
                         </div>
                       </div>
                       <div className="p-5 flex items-center justify-between">
-                        <p className="text-xs text-gray-500 font-medium line-clamp-2 flex-1 pr-4">{ev.description}</p>
+                        <p className="text-xs text-gray-500 font-medium line-clamp-2 flex-1 pr-4">{evDesc}</p>
                         <span className="shrink-0 bg-brand-yellow text-brand-black text-[10px] font-black px-3 py-2 rounded-full uppercase tracking-wide group-hover:bg-brand-black group-hover:text-brand-yellow transition-colors">
-                          Ver fotos →
+                          {language === 'es' ? 'Ver fotos →' : 'View photos →'}
                         </span>
                       </div>
                     </motion.div>
@@ -636,21 +713,24 @@ export default function RentalsPage() {
                     onClick={closeCategoryView}
                     className="mb-3 inline-flex rounded-full border border-brand-yellow/40 bg-white px-4 py-2 text-xs font-black text-brand-black shadow-sm hover:bg-brand-yellow"
                   >
-                    ← Volver a categorías
+                    {language === 'es' ? '← Volver a categorías' : '← Back to categories'}
                   </button>
                   <h1 
                     className="font-tan text-[1.5rem] xs:text-[1.8rem] sm:text-[2.2rem] sm:leading-[1.18] lg:text-[2.6rem] uppercase tracking-normal text-brand-yellow [-webkit-text-stroke:1.1px_#000] drop-shadow-[1.5px_1.5px_0_rgba(0,0,0,1)] whitespace-normal break-words"
                   >
-                    {expandedCategory}
+                    <span translate="no">{translateCategory(expandedCategory, language)}</span>
                   </h1>
                   <p className="mt-3.5 sm:mt-2 text-[10px] sm:text-xs font-black uppercase text-gray-400 tracking-widest font-maiandra">
-                    {expandedProducts.length} {expandedProducts.length === 1 ? 'producto' : 'productos'} disponibles
+                    {expandedProducts.length}{' '}
+                    {language === 'es'
+                      ? (expandedProducts.length === 1 ? 'producto disponible' : 'productos disponibles')
+                      : (expandedProducts.length === 1 ? 'product available' : 'products available')}
                   </p>
                 </div>
               </div>
               {expandedProducts.length === 0 ? (
                 <div className="rounded-3xl bg-white p-10 text-center text-gray-400 font-medium font-sans shadow-sm">
-                  No hay productos en esta categoría.
+                  {language === 'es' ? 'No hay productos en esta categoría.' : 'No products in this category.'}
                 </div>
               ) : (
                 <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
@@ -665,24 +745,34 @@ export default function RentalsPage() {
                         }}
                       >
                         <div className="relative aspect-[4/3] bg-white overflow-hidden rounded-t-[1.8rem] flex items-center justify-center">
-                          {p.imageUrl ? <img src={p.imageUrl} alt={p.name} className="w-full h-full object-contain p-4" /> : <Bike className="w-12 h-12 text-brand-yellow/30" />}
+                          {p.imageUrl ? <img src={p.imageUrl} alt={translateProductName(p, language)} className="w-full h-full object-contain p-4" /> : <Bike className="w-12 h-12 text-brand-yellow/30" />}
                           <Badge className={`absolute top-4 right-4 text-[9px] font-black uppercase px-2 py-1 border-0 ${avail <= 0 ? 'bg-brand-charcoal text-white' : 'bg-brand-yellow text-brand-black'}`}>
-                            {avail <= 0 ? 'Agotado' : p.type === 'combo' ? 'Combo' : p.itemType === 'bike' ? 'Bicicleta' : 'Accesorio'}
+                            {avail <= 0
+                              ? (language === 'es' ? 'Agotado' : 'Out of stock')
+                              : p.type === 'combo'
+                                ? 'Combo'
+                                : p.itemType === 'bike'
+                                  ? (language === 'es' ? 'Bicicleta' : 'Bicycle')
+                                  : (language === 'es' ? 'Accesorio' : 'Accessory')}
                           </Badge>
                         </div>
                         <CardContent className="p-5 flex-1 flex flex-col justify-between bg-white">
                           <div>
                             <h3 className="font-tangkiwood text-lg sm:text-xl text-brand-black leading-tight">
-                              <span translate="no">{translateProductName(p.name, language)}</span>
+                              <span translate="no">{translateProductName(p, language)}</span>
                             </h3>
                             <p className="text-xs font-sans text-gray-400 mt-1 line-clamp-2 leading-relaxed">
-                              {t(p.description, language as any) || t('Disponible para alquiler', language as any)}
+                              {getLocalizedField(p.description, p.descriptionEn, language) || t('Disponible para alquiler', language)}
                             </p>
                           </div>
                           <div className="pt-4 border-t border-gray-50 mt-4">
-                            <span className="block font-maiandra text-[9px] text-gray-400 uppercase tracking-widest leading-none mb-1">Desde</span>
+                            <span className="block font-maiandra text-[9px] text-gray-400 uppercase tracking-widest leading-none mb-1">
+                              {language === 'es' ? 'Desde' : 'From'}
+                            </span>
                             <span className="font-tan text-xl text-brand-black leading-none">Bs. {p.pricePerHour}</span>
-                            <span className="font-maiandra text-[10px] text-gray-500 font-bold ml-1">/ Hora</span>
+                            <span className="font-maiandra text-[10px] text-gray-500 font-bold ml-1">
+                              / {language === 'es' ? 'Hora' : 'Hour'}
+                            </span>
                           </div>
                         </CardContent>
                       </Card>
@@ -693,7 +783,7 @@ export default function RentalsPage() {
             </div>
           ) : filtered.length === 0 ? (
             <div className="text-center py-20 text-gray-400 font-medium font-sans">
-              No hay productos disponibles para alquiler.
+              {language === 'es' ? 'No hay productos disponibles para alquiler.' : 'No rental products found.'}
             </div>
           ) : (
               categoriesToRender.map(catName => (
@@ -718,7 +808,7 @@ export default function RentalsPage() {
             setCheckoutStep(2);
           }}
           className="fixed bottom-6 right-6 z-50 bg-brand-yellow hover:bg-brand-yellow-light text-brand-black w-16 h-16 rounded-full flex items-center justify-center shadow-2xl hover:scale-105 transition-all cursor-pointer group"
-          title="Ver Carrito de Alquiler"
+          title={language === 'es' ? 'Ver Carrito de Alquiler' : 'View Rental Cart'}
         >
           <div className="relative">
             <ShoppingBag className="w-7 h-7" strokeWidth={2.2} />
@@ -732,7 +822,7 @@ export default function RentalsPage() {
   );
 }
 
-function EventSpecialView({ event, onClose, language }: { event: any; onClose: () => void; language: string }) {
+function EventSpecialView({ event, onClose, language }: { event: any; onClose: () => void; language: Language }) {
     const [activeSubIndex, setActiveSubIndex] = useState(0);
     const [activeIndex, setActiveIndex] = useState(0);
 
@@ -758,10 +848,13 @@ function EventSpecialView({ event, onClose, language }: { event: any; onClose: (
         setActiveIndex((prev) => (prev === currentImages.length - 1 ? 0 : prev + 1));
     };
 
+    const eventName = getLocalizedField(event.name, event.nameEn, language);
+    const eventDesc = getLocalizedField(event.description, event.descriptionEn, language);
+
     const waLink = `https://wa.me/59177860277?text=${encodeURIComponent(
         language === 'es' 
             ? `Hola Briz, deseo consultar sobre el evento especial de alquiler: ${event.name} (Subcategoría: ${hasSubcategories ? subcategories[activeSubIndex]?.name : 'General'})`
-            : `Hello Briz, I want to inquire about the special rental event: ${event.name} (Subcategory: ${hasSubcategories ? subcategories[activeSubIndex]?.name : 'General'})`
+            : `Hello Briz, I want to inquire about the special rental event: ${eventName} (Subcategory: ${hasSubcategories ? subcategories[activeSubIndex]?.name : 'General'})`
     )}`;
 
     return (
@@ -789,7 +882,7 @@ function EventSpecialView({ event, onClose, language }: { event: any; onClose: (
                                         : 'bg-gray-50 text-gray-500 hover:bg-gray-100 hover:text-brand-black'
                                 }`}
                             >
-                                {sub.name}
+                                {t(sub.name, language)}
                             </button>
                         );
                     })}
@@ -838,7 +931,9 @@ function EventSpecialView({ event, onClose, language }: { event: any; onClose: (
                         ) : (
                             <div className="flex flex-col items-center justify-center gap-2 text-gray-300">
                                 <ImageIcon className="w-12 h-12" />
-                                <span className="text-xs font-bold">No hay fotos disponibles</span>
+                                <span className="text-xs font-bold">
+                                    {language === 'es' ? 'No hay fotos disponibles' : 'No photos available'}
+                                </span>
                             </div>
                         )}
                     </div>
@@ -868,7 +963,7 @@ function EventSpecialView({ event, onClose, language }: { event: any; onClose: (
                             {language === 'es' ? 'Paquete Especial Alquiler' : 'Special Rental Package'}
                         </span>
                         <h2 className="font-tan text-2xl sm:text-4xl uppercase leading-tight text-brand-charcoal tracking-wide break-words whitespace-normal">
-                            {event.name}
+                            {eventName}
                         </h2>
                         
                         {event.price !== undefined && (
@@ -885,7 +980,7 @@ function EventSpecialView({ event, onClose, language }: { event: any; onClose: (
                                 {language === 'es' ? 'Detalles del Evento' : 'Event Details'}
                             </h4>
                             <p className="text-gray-600 text-sm sm:text-base font-medium leading-relaxed whitespace-pre-line break-words">
-                                {event.description}
+                                {eventDesc}
                             </p>
                         </div>
                     </div>

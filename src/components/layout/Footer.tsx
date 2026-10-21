@@ -1,24 +1,29 @@
 import { Link } from 'react-router-dom';
 import { Facebook, Instagram, MapPin, MessageCircle } from 'lucide-react';
+import { useLanguage } from '@/context/LanguageContext';
 
 const contactLinks = [
     {
-        label: 'Ubicacion',
+        labelEs: 'Ubicación',
+        labelEn: 'Location',
         href: 'https://maps.app.goo.gl/tgqw7ZK51Y68Q7L7A?g_st=iwb',
         icon: MapPin,
     },
     {
-        label: 'WhatsApp',
+        labelEs: 'WhatsApp',
+        labelEn: 'WhatsApp',
         href: 'https://wa.me/59177860277',
         icon: MessageCircle,
     },
     {
-        label: 'Facebook',
+        labelEs: 'Facebook',
+        labelEn: 'Facebook',
         href: 'https://www.facebook.com/Briz.Bolivia',
         icon: Facebook,
     },
     {
-        label: 'Instagram',
+        labelEs: 'Instagram',
+        labelEn: 'Instagram',
         href: 'https://www.instagram.com/briz.bolivia',
         icon: Instagram,
     },
@@ -33,23 +38,27 @@ function TikTokIcon({ className }: { className?: string }) {
 }
 
 export default function Footer() {
+    const { language } = useLanguage();
     return (
         <footer className="relative mt-auto bg-brand-yellow text-white font-cocon">
             <div className="mx-auto flex min-h-[72px] max-w-[1480px] flex-col items-center justify-between gap-5 px-5 py-4 sm:flex-row sm:px-10 lg:px-12">
                 <div className="flex min-w-0 flex-col items-center gap-3 text-center sm:flex-row sm:gap-8 sm:text-left">
-                    <span className="shrink-0 text-sm font-black text-white sm:text-xl">Contactanos:</span>
+                    <span className="shrink-0 text-sm font-black text-white sm:text-xl">
+                        {language === 'es' ? 'Contáctanos:' : 'Contact us:'}
+                    </span>
 
                     <div className="flex items-center gap-3 sm:gap-5">
                         {contactLinks.map((link) => {
                             const Icon = link.icon;
+                            const label = language === 'es' ? link.labelEs : link.labelEn;
 
                             return (
                                 <a
-                                    key={link.label}
+                                    key={link.labelEs}
                                     href={link.href}
                                     target="_blank"
                                     rel="noopener noreferrer"
-                                    aria-label={link.label}
+                                    aria-label={label}
                                     className="briz-social-icon flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-white/70 bg-white text-brand-black shadow-[0_8px_18px_rgba(0,0,0,0.14)] transition-all duration-300 hover:-translate-y-1 hover:scale-110 hover:bg-white hover:text-brand-yellow sm:h-13 sm:w-13"
                                 >
                                     <Icon className="h-5 w-5 sm:h-7 sm:w-7" strokeWidth={2.5} />
@@ -69,7 +78,7 @@ export default function Footer() {
                     </div>
                 </div>
 
-                <Link to="/" className="flex shrink-0 items-center justify-center" aria-label="BRIZ inicio">
+                <Link to="/" className="flex shrink-0 items-center justify-center" aria-label={language === 'es' ? 'BRIZ inicio' : 'BRIZ home'}>
                     <img
                         src="/logo de briz.png"
                         alt="BRIZ"

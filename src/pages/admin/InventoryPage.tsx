@@ -5,9 +5,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Search, Plus, Edit, Trash2, Image as ImageIcon, Bike, Wrench, Layers, X, Settings, GripVertical } from 'lucide-react';
+import { Search, Plus, Edit, Trash2, Image as ImageIcon, Bike, Wrench, Layers, X, Settings, GripVertical, ShieldCheck, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import { useStore } from '@/context/StoreContext';
 import type { InventoryItem, ComboProduct, WheelSizeEntry, ComboComponent } from '@/context/StoreContext';
+import { getRentalInventoryDemands } from '@/lib/rentalAvailability';
 
 import { FileUploader } from '@/components/ui/file-uploader';
 
@@ -20,10 +21,10 @@ const NON_BIKE_CATEGORIES = new Set(['Accesorios', 'Combinados']);
 
 
 function defaultBike(): InventoryItem {
-  return { id: `inv_${Date.now()}_${Math.random().toString(36).slice(2,7)}`, itemType:'bike', name:'', description:'', imageUrl:'', additionalImageUrls:[], active:true, availableForRental:true, availableForSale:false, hasWheelSizes:true, wheelSizes:[{size:'26',stock:0}], pricePerHour:0, priceFrom5thHour:0, pricePerDay:0, pricePerWeek:0, pricePerMonth:0, price1Hour:0, price2Hours:0, price3Hours:0, price4Hours:0, price8Hours:0, price24Hours:0, price1Week:0, price1Month:0 };
+  return { id: `inv_${Date.now()}_${Math.random().toString(36).slice(2,7)}`, itemType:'bike', name:'', description:'', imageUrl:'', additionalImageUrls:[], active:true, availableForRental:true, availableForSale:false, hasWheelSizes:true, wheelSizes:[{size:'26',stock:0}], maintenanceStock:0, pricePerHour:0, priceFrom5thHour:0, pricePerDay:0, pricePerWeek:0, pricePerMonth:0, price1Hour:0, price2Hours:0, price3Hours:0, price4Hours:0, price8Hours:0, price24Hours:0, price1Week:0, price1Month:0 };
 }
 function defaultAccessory(): InventoryItem {
-  return { id: `inv_${Date.now()}_${Math.random().toString(36).slice(2,7)}`, itemType:'accessory', name:'', description:'', imageUrl:'', additionalImageUrls:[], active:true, availableForRental:true, availableForSale:false, hasWheelSizes:false, stock:0, pricePerHour:0, priceFrom5thHour:0, pricePerDay:0, pricePerWeek:0, pricePerMonth:0, price1Hour:0, price2Hours:0, price3Hours:0, price4Hours:0, price8Hours:0, price24Hours:0, price1Week:0, price1Month:0 };
+  return { id: `inv_${Date.now()}_${Math.random().toString(36).slice(2,7)}`, itemType:'accessory', name:'', description:'', imageUrl:'', additionalImageUrls:[], active:true, availableForRental:true, availableForSale:false, hasWheelSizes:false, stock:0, maintenanceStock:0, addonFlatPrice:0, pricePerHour:0, priceFrom5thHour:0, pricePerDay:0, pricePerWeek:0, pricePerMonth:0, price1Hour:0, price2Hours:0, price3Hours:0, price4Hours:0, price8Hours:0, price24Hours:0, price1Week:0, price1Month:0 };
 }
 function defaultCombo(): ComboProduct {
   return { id: `combo_${Date.now()}_${Math.random().toString(36).slice(2,7)}`, name:'', description:'', imageUrl:'', additionalImageUrls:[], active:true, availableForRental:true, availableForSale:false, components:[], pricePerHour:0, priceFrom5thHour:0, pricePerDay:0, pricePerWeek:0, pricePerMonth:0, price1Hour:0, price2Hours:0, price3Hours:0, price4Hours:0, price8Hours:0, price24Hours:0, price1Week:0, price1Month:0 };
@@ -60,6 +61,24 @@ function PriceFields({ editItem, setEditItem }: any) {
       {editItem.availableForRental && (
         <div className="space-y-3">
           <h4 className="text-xs font-black text-brand-yellow uppercase tracking-widest">Precios de Alquiler (Bs.)</h4>
+          {editItem.itemType === 'accessory' && (
+            <div className="bg-brand-yellow/10 border border-brand-yellow/25 rounded-xl p-3 space-y-1">
+              <Label className="text-[10px] text-brand-yellow font-black uppercase">
+                Tarifa Fija como Extra en Wizard (Bs.) — Opcional
+              </Label>
+              <Input
+                type="number"
+                min={0}
+                placeholder="Ej. 5 o 10 Bs. por alquiler"
+                value={toEditableNumber(editItem.addonFlatPrice)}
+                onChange={e => handlePriceChange('addonFlatPrice', e.target.value)}
+                className="bg-black/40 border-white/10 h-10 font-bold text-brand-yellow rounded-xl"
+              />
+              <p className="text-[9px] text-white/40 font-medium">
+                Si es mayor a 0, este accesorio cobrará este precio fijo en el paso 3 de reserva. Si es 0, usará las tarifas por duración o la tabla estándar.
+              </p>
+            </div>
+          )}
           <div className="grid grid-cols-2 gap-3">
             {fields.map(p => (
               <div key={p.k} className="space-y-1">
@@ -84,6 +103,8 @@ function PriceFields({ editItem, setEditItem }: any) {
 function normalizeInventoryDraft(draft: any) {
   const numericKeys = [
     'stock',
+    'maintenanceStock',
+    'addonFlatPrice',
     'salePrice',
     'pricePerHour',
     'priceFrom5thHour',
@@ -102,18 +123,18 @@ function normalizeInventoryDraft(draft: any) {
 
   const normalized = { ...draft };
   numericKeys.forEach(key => {
-    if (key in normalized) normalized[key] = toStoredNumber(normalized[key], 0);
+    if (key in normalized) normalized[key] = Math.max(0, toStoredNumber(normalized[key], 0));
   });
   if (Array.isArray(normalized.wheelSizes)) {
     normalized.wheelSizes = normalized.wheelSizes.map((ws: WheelSizeEntry) => ({
       ...ws,
-      stock: toStoredNumber((ws as any).stock, 0),
+      stock: Math.max(0, toStoredNumber((ws as any).stock, 0)),
     }));
   }
   if (Array.isArray(normalized.components)) {
     normalized.components = normalized.components.map((component: ComboComponent) => ({
       ...component,
-      quantity: toStoredNumber((component as any).quantity, 1),
+      quantity: Math.max(1, toStoredNumber((component as any).quantity, 1)),
     }));
   }
   return normalized;
@@ -121,7 +142,7 @@ function normalizeInventoryDraft(draft: any) {
 
 export default function InventoryPage() {
   const { 
-    inventory, combos, addInventoryItem, updateInventoryItem, deleteInventoryItem, 
+    inventory, combos, rentals, addInventoryItem, updateInventoryItem, deleteInventoryItem, 
     addCombo, updateCombo, deleteCombo, getComboAvailability, 
     bikeCategories, addBikeCategory, deleteBikeCategory, updateBikeCategory, reorderBikeCategories
   } = useStore();
@@ -144,6 +165,32 @@ export default function InventoryPage() {
   const filteredBikes = bikes.filter(b => b.name.toLowerCase().includes(q));
   const filteredAccessories = accessories.filter(a => a.name.toLowerCase().includes(q));
   const filteredCombos = combos.filter(c => c.name.toLowerCase().includes(q) && (!c.availableForSale || c.availableForRental));
+
+  // Active rental demand calculation for read-only stock reconciliation
+  const activeDemandsByItem = useMemo(() => {
+    const map = new Map<string, { total: number; byWheelSize: Record<string, number>; reservationCodes: string[] }>();
+    const activeRentals = rentals.filter(
+      r => r.status === 'confirmed' || r.status === 'Confirmado' || r.status === 'delivered' || r.status === 'Entregado'
+    );
+
+    for (const r of activeRentals) {
+      const demands = getRentalInventoryDemands(r, inventory, combos);
+      for (const d of demands) {
+        const current = map.get(d.itemId) || { total: 0, byWheelSize: {}, reservationCodes: [] };
+        current.total += d.quantity;
+        if (d.wheelSize) {
+          current.byWheelSize[d.wheelSize] = (current.byWheelSize[d.wheelSize] || 0) + d.quantity;
+        }
+        const code = r.reservationCode || r.id.slice(-6);
+        if (!current.reservationCodes.includes(code)) {
+          current.reservationCodes.push(code);
+        }
+        map.set(d.itemId, current);
+      }
+    }
+    return map;
+  }, [rentals, inventory, combos]);
+
   const availableBikeCategories = useMemo(() => {
     const list = [...bikeCategories];
     inventory.forEach(item => {
@@ -179,6 +226,26 @@ export default function InventoryPage() {
       modal.mode === 'add' ? addInventoryItem(draft) : updateInventoryItem(draft.id, draft);
     }
     setModal({...modal, open:false});
+  };
+
+  const handleReleaseMaintenanceUnit = async (item: InventoryItem, wheelSize?: string) => {
+    const currentMaint = Number(item.maintenanceStock || 0);
+    if (currentMaint <= 0) return;
+
+    const updated: Partial<InventoryItem> = {
+      maintenanceStock: Math.max(0, currentMaint - 1),
+    };
+
+    if (item.hasWheelSizes && item.wheelSizes) {
+      const targetSize = wheelSize || item.wheelSizes[0]?.size;
+      updated.wheelSizes = item.wheelSizes.map(ws =>
+        ws.size === targetSize ? { ...ws, stock: Number(ws.stock || 0) + 1 } : ws
+      );
+    } else {
+      updated.stock = Number(item.stock || 0) + 1;
+    }
+
+    await updateInventoryItem(item.id, updated);
   };
 
   const handleDelete = () => {
@@ -224,37 +291,68 @@ export default function InventoryPage() {
     setEditItem({...editItem, components:c});
   };
 
-  const ItemRow = ({item, type, openEdit, setDeleteConfirm}:{item:InventoryItem; type:'bike'|'accessory'; openEdit:any; setDeleteConfirm:any}) => (
-    <div className="flex items-center gap-4 p-4 bg-white/75 backdrop-blur rounded-2xl border border-brand-yellow/20 hover:border-brand-yellow/60 transition-all shadow-sm">
-      <div className="w-14 h-14 bg-[#FFF9E8] rounded-xl overflow-hidden flex items-center justify-center border border-brand-yellow/20 shrink-0">
-        {item.imageUrl ? <img src={item.imageUrl} alt={item.name} className="w-full h-full object-cover"/> : <ImageIcon className="w-5 h-5 text-brand-charcoal/30"/>}
-      </div>
-      <div className="flex-1 min-w-0">
-        <p className="text-brand-charcoal font-black text-sm truncate">{item.name}</p>
-        <div className="flex flex-wrap gap-1 mt-1">
-          {item.hasWheelSizes && item.wheelSizes ? item.wheelSizes.map(ws=>(
-            <Badge key={ws.size} className="bg-brand-yellow/10 text-brand-yellow border-brand-yellow/20 text-[9px] font-bold rounded-md">Aro {ws.size}: {ws.stock}</Badge>
-          )) : (
-            <span className="text-brand-charcoal font-black text-lg">Stock: {item.stock ?? 0}</span>
+  const ItemRow = ({item, type, openEdit, setDeleteConfirm}:{item:InventoryItem; type:'bike'|'accessory'; openEdit:any; setDeleteConfirm:any}) => {
+    const activeDemand = activeDemandsByItem.get(item.id);
+    const maintCount = Number(item.maintenanceStock || 0);
+    return (
+      <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 bg-white/75 backdrop-blur rounded-2xl border border-brand-yellow/20 hover:border-brand-yellow/60 transition-all shadow-sm">
+        <div className="flex items-center gap-4 flex-1 min-w-0">
+          <div className="w-14 h-14 bg-[#FFF9E8] rounded-xl overflow-hidden flex items-center justify-center border border-brand-yellow/20 shrink-0">
+            {item.imageUrl ? <img src={item.imageUrl} alt={item.name} className="w-full h-full object-cover"/> : <ImageIcon className="w-5 h-5 text-brand-charcoal/30"/>}
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-brand-charcoal font-black text-sm truncate">{item.name}</p>
+            <div className="flex flex-wrap gap-1.5 mt-1 items-center">
+              {item.hasWheelSizes && item.wheelSizes ? item.wheelSizes.map(ws=>(
+                <Badge key={ws.size} className="bg-brand-yellow/15 text-brand-charcoal border-brand-yellow/30 text-[10px] font-black rounded-md">
+                  Aro {ws.size}: {ws.stock} disp.
+                </Badge>
+              )) : (
+                <span className="text-brand-charcoal font-black text-sm">Disponible: {item.stock ?? 0}</span>
+              )}
+              {activeDemand && activeDemand.total > 0 && (
+                <Badge className="bg-blue-500/15 text-blue-700 border-blue-500/30 text-[10px] font-black rounded-md">
+                  En alquiler: {activeDemand.total}
+                </Badge>
+              )}
+              {maintCount > 0 && (
+                <Badge className="bg-amber-500/20 text-amber-800 border-amber-500/40 text-[10px] font-black rounded-md">
+                  En taller/dañado: {maintCount}
+                </Badge>
+              )}
+            </div>
+          </div>
+        </div>
+        <div className="flex items-center justify-between sm:justify-end gap-2 shrink-0">
+          {maintCount > 0 && (
+            <Button
+              type="button"
+              size="sm"
+              onClick={() => handleReleaseMaintenanceUnit(item)}
+              className="h-8 px-2.5 rounded-lg bg-amber-500 text-brand-black hover:bg-amber-400 text-[10px] font-black uppercase"
+              title="Reintegrar 1 unidad reparada al stock disponible"
+            >
+              +1 Reparada
+            </Button>
           )}
+          <Badge className={`shrink-0 rounded-full px-3 py-1 text-[9px] font-black uppercase ${item.active?'bg-green-500/10 text-green-600 border-green-500/20':'bg-red-500/10 text-red-500 border-red-500/20'}`}>
+            {item.active?'Activo':'Inactivo'}
+          </Badge>
+          <div className="flex gap-1 shrink-0">
+            <Button variant="ghost" size="icon" className="w-9 h-9 rounded-xl bg-brand-yellow/15 text-brand-charcoal hover:bg-brand-yellow" onClick={()=>openEdit(item,type)}><Edit className="w-4 h-4"/></Button>
+            <Button variant="ghost" size="icon" className="w-9 h-9 rounded-xl bg-white/5 text-red-400/60 hover:bg-red-500 hover:text-white" onClick={()=>setDeleteConfirm({id:item.id, type, name:item.name})}><Trash2 className="w-4 h-4"/></Button>
+          </div>
         </div>
       </div>
-      <Badge className={`shrink-0 rounded-full px-3 py-1 text-[9px] font-black uppercase ${item.active?'bg-green-500/10 text-green-400 border-green-500/20':'bg-red-500/10 text-red-400 border-red-500/20'}`}>
-        {item.active?'Activo':'Inactivo'}
-      </Badge>
-      <div className="flex gap-1 shrink-0">
-        <Button variant="ghost" size="icon" className="w-9 h-9 rounded-xl bg-brand-yellow/15 text-brand-charcoal hover:bg-brand-yellow" onClick={()=>openEdit(item,type)}><Edit className="w-4 h-4"/></Button>
-        <Button variant="ghost" size="icon" className="w-9 h-9 rounded-xl bg-white/5 text-red-400/60 hover:bg-red-500 hover:text-white" onClick={()=>setDeleteConfirm({id:item.id, type, name:item.name})}><Trash2 className="w-4 h-4"/></Button>
-      </div>
-    </div>
-  );
+    );
+  };
 
   return (
     <div className="space-y-6 pb-20">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-brand-yellow/25 pb-5">
         <div>
           <h1 className="text-3xl font-black text-brand-charcoal tracking-tight">Inventario</h1>
-          <p className="text-brand-charcoal/55 text-sm font-medium">Consulta stock, categoría y disponibilidad de un vistazo.</p>
+          <p className="text-brand-charcoal/55 text-sm font-medium">Consulta stock disponible, unidades en alquiler, taller y productos combinados.</p>
         </div>
         <div className="relative w-full sm:w-72">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-brand-charcoal/35"/>
@@ -272,6 +370,9 @@ export default function InventoryPage() {
           </TabsTrigger>
           <TabsTrigger value="combos" className="rounded-lg px-4 py-2 text-xs font-black text-brand-charcoal/60 data-[state=active]:bg-brand-yellow data-[state=active]:text-brand-black flex items-center gap-2">
             <Layers className="w-4 h-4"/> Combinados ({combos.length})
+          </TabsTrigger>
+          <TabsTrigger value="audit" className="rounded-lg px-4 py-2 text-xs font-black text-brand-charcoal/60 data-[state=active]:bg-brand-yellow data-[state=active]:text-brand-black flex items-center gap-2">
+            <ShieldCheck className="w-4 h-4"/> Conciliación de Stock
           </TabsTrigger>
         </TabsList>
 
@@ -304,33 +405,132 @@ export default function InventoryPage() {
           {filteredCombos.length===0 ? <p className="text-center py-16 text-white/20 font-bold text-sm">No hay productos combinados</p> : filteredCombos.map(c=>{
             const avail = getComboAvailability(c.id);
             return (
-              <div key={c.id} className="flex items-center gap-4 p-4 bg-white/[0.02] rounded-2xl border border-white/5 hover:border-white/10 transition-all">
-                <div className="w-14 h-14 bg-black/40 rounded-xl overflow-hidden flex items-center justify-center border border-white/10 shrink-0">
-                  {c.imageUrl ? <img src={c.imageUrl} alt={c.name} className="w-full h-full object-cover"/> : <Layers className="w-5 h-5 text-white/20"/>}
+              <div key={c.id} className="flex items-center gap-4 p-4 bg-white/75 backdrop-blur rounded-2xl border border-brand-yellow/20 hover:border-brand-yellow/60 transition-all shadow-sm">
+                <div className="w-14 h-14 bg-[#FFF9E8] rounded-xl overflow-hidden flex items-center justify-center border border-brand-yellow/20 shrink-0">
+                  {c.imageUrl ? <img src={c.imageUrl} alt={c.name} className="w-full h-full object-cover"/> : <Layers className="w-5 h-5 text-brand-charcoal/30"/>}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-white font-black text-sm truncate">{c.name}</p>
+                  <p className="text-brand-charcoal font-black text-sm truncate">{c.name}</p>
                   <div className="flex flex-wrap gap-1 mt-1">
                     {c.components.map((comp,i)=>{
                       const item = inventory.find(inv=>inv.id===comp.inventoryItemId);
-                      return <Badge key={i} className="bg-white/5 text-white/50 text-[9px] font-bold border-0 rounded-md">{comp.quantity}x {item?.name||'?'}</Badge>;
+                      return <Badge key={i} className="bg-brand-charcoal/10 text-brand-charcoal text-[9px] font-bold border-0 rounded-md">{comp.quantity}x {item?.name||'?'}</Badge>;
                     })}
                   </div>
                 </div>
                 <div className="text-center shrink-0">
-                  <p className="text-brand-yellow font-black text-lg">{avail}</p>
-                  <p className="text-[9px] text-white/30 font-bold uppercase">disponible</p>
+                  <p className="text-brand-charcoal font-black text-lg">{avail}</p>
+                  <p className="text-[9px] text-brand-charcoal/50 font-bold uppercase">disponible</p>
                 </div>
-                <Badge className={`shrink-0 rounded-full px-3 py-1 text-[9px] font-black uppercase ${c.active?'bg-green-500/10 text-green-400 border-green-500/20':'bg-red-500/10 text-red-400 border-red-500/20'}`}>
+                <Badge className={`shrink-0 rounded-full px-3 py-1 text-[9px] font-black uppercase ${c.active?'bg-green-500/10 text-green-600 border-green-500/20':'bg-red-500/10 text-red-500 border-red-500/20'}`}>
                   {c.active?'Activo':'Inactivo'}
                 </Badge>
                 <div className="flex gap-1 shrink-0">
-                  <Button variant="ghost" size="icon" className="w-9 h-9 rounded-xl bg-white/5 text-white/50 hover:bg-brand-yellow hover:text-brand-black" onClick={()=>openEdit(c,'combo')}><Edit className="w-4 h-4"/></Button>
+                  <Button variant="ghost" size="icon" className="w-9 h-9 rounded-xl bg-brand-yellow/15 text-brand-charcoal hover:bg-brand-yellow" onClick={()=>openEdit(c,'combo')}><Edit className="w-4 h-4"/></Button>
                   <Button variant="ghost" size="icon" className="w-9 h-9 rounded-xl bg-white/5 text-red-400/60 hover:bg-red-500 hover:text-white" onClick={()=>setDeleteConfirm({id:c.id, type:'combo', name:c.name})}><Trash2 className="w-4 h-4"/></Button>
                 </div>
               </div>
             );
           })}
+        </TabsContent>
+
+        {/* STOCK RECONCILIATION / AUDIT (READ-ONLY) */}
+        <TabsContent value="audit" className="space-y-4">
+          <div className="bg-white/80 backdrop-blur border border-brand-yellow/30 rounded-2xl p-5 space-y-2">
+            <div className="flex items-center gap-2 text-brand-charcoal font-black text-base">
+              <ShieldCheck className="w-5 h-5 text-brand-yellow" />
+              Diagnóstico de Conciliación de Stock en Tiempo Real (Solo Lectura)
+            </div>
+            <p className="text-xs text-brand-charcoal/70 font-medium">
+              Esta herramienta compara el stock disponible actual con las unidades retenidas en alquileres activos (<code className="font-mono font-bold">Confirmado</code> / <code className="font-mono font-bold">Entregado</code>) y unidades en mantenimiento, calculando el patrimonio físico total estimado sin alterar ningún dato.
+            </p>
+          </div>
+
+          <div className="bg-white/85 backdrop-blur border border-brand-yellow/25 rounded-2xl overflow-hidden shadow-sm">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse text-xs">
+                <thead>
+                  <tr className="border-b border-brand-yellow/20 bg-brand-yellow/10 text-brand-charcoal font-black uppercase text-[10px]">
+                    <th className="p-3.5">Producto</th>
+                    <th className="p-3.5">Tipo</th>
+                    <th className="p-3.5 text-center">Disponible en Tienda</th>
+                    <th className="p-3.5 text-center">En Alquiler Activo</th>
+                    <th className="p-3.5 text-center">En Taller / Dañado</th>
+                    <th className="p-3.5 text-center">Flota Física Total</th>
+                    <th className="p-3.5">Reservas Activas</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100 font-medium text-brand-charcoal">
+                  {[...bikes, ...accessories].map(item => {
+                    const avail = item.hasWheelSizes && item.wheelSizes
+                      ? item.wheelSizes.reduce((s, w) => s + Number(w.stock || 0), 0)
+                      : Number(item.stock ?? 0);
+                    const active = activeDemandsByItem.get(item.id);
+                    const inRental = active?.total || 0;
+                    const inMaint = Number(item.maintenanceStock || 0);
+                    const totalFleet = avail + inRental + inMaint;
+                    const hasNegative = avail < 0 || (item.wheelSizes || []).some(w => w.stock < 0);
+
+                    return (
+                      <tr key={item.id} className="hover:bg-brand-yellow/5">
+                        <td className="p-3.5 font-black">
+                          <div>{item.name}</div>
+                          {item.hasWheelSizes && item.wheelSizes && (
+                            <div className="flex flex-wrap gap-1 mt-1">
+                              {item.wheelSizes.map(ws => {
+                                const rentedWs = active?.byWheelSize[ws.size] || 0;
+                                return (
+                                  <span key={ws.size} className="text-[10px] bg-gray-100 px-1.5 py-0.5 rounded font-bold text-gray-600">
+                                    Aro {ws.size}: {ws.stock} disp.{rentedWs > 0 ? ` (+${rentedWs} alq.)` : ''}
+                                  </span>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </td>
+                        <td className="p-3.5 uppercase text-[10px] font-bold text-gray-500">
+                          {item.itemType === 'bike' ? 'Bicicleta' : 'Accesorio'}
+                        </td>
+                        <td className="p-3.5 text-center font-black text-sm">
+                          {hasNegative ? (
+                            <span className="text-red-600 flex items-center justify-center gap-1">
+                              <AlertTriangle className="w-3.5 h-3.5" /> {avail}
+                            </span>
+                          ) : (
+                            <span className="text-emerald-700">{avail}</span>
+                          )}
+                        </td>
+                        <td className="p-3.5 text-center font-black text-blue-600 text-sm">
+                          {inRental}
+                        </td>
+                        <td className="p-3.5 text-center font-black text-amber-600 text-sm">
+                          {inMaint}
+                        </td>
+                        <td className="p-3.5 text-center font-black text-brand-charcoal text-sm">
+                          {totalFleet}
+                        </td>
+                        <td className="p-3.5">
+                          {active && active.reservationCodes.length > 0 ? (
+                            <div className="flex flex-wrap gap-1">
+                              {active.reservationCodes.map(code => (
+                                <span key={code} className="font-mono text-[10px] bg-blue-50 text-blue-700 border border-blue-200 px-1.5 py-0.5 rounded font-bold">
+                                  {code}
+                                </span>
+                              ))}
+                            </div>
+                          ) : (
+                            <span className="text-gray-400 text-[11px] flex items-center gap-1">
+                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" /> Sin retenciones
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
         </TabsContent>
       </Tabs>
 
@@ -521,14 +721,36 @@ export default function InventoryPage() {
                           </div>
                         ))}
                       </div>
+                      <div className="pt-2 border-t border-white/10">
+                        <Label className="text-[10px] text-amber-400 font-bold uppercase tracking-wider">Unidades en Mantenimiento / Taller</Label>
+                        <Input
+                          type="number"
+                          min={0}
+                          value={toEditableNumber(editItem.maintenanceStock)}
+                          onChange={e=>setEditItem({...editItem,maintenanceStock:e.target.value === '' ? '' : Number(e.target.value)})}
+                          className="bg-black/40 border-white/10 h-10 font-black text-amber-400 rounded-xl mt-1"
+                        />
+                      </div>
                     </div>
                   )}
 
                   {/* ACCESSORY: Simple stock */}
                   {modal.type === 'accessory' && (
-                    <div className="bg-white/5 p-4 rounded-xl border border-white/5">
-                      <Label className="text-[10px] text-white/40 font-bold uppercase tracking-wider">Stock Disponible</Label>
-                      <Input type="number" min={0} value={toEditableNumber(editItem.stock)} onChange={e=>setEditItem({...editItem,stock:e.target.value === '' ? '' : Number(e.target.value)})} className="bg-black/40 border-white/10 h-16 font-black text-4xl text-brand-yellow text-center rounded-xl mt-2"/>
+                    <div className="bg-white/5 p-4 rounded-xl border border-white/5 space-y-3">
+                      <div>
+                        <Label className="text-[10px] text-white/40 font-bold uppercase tracking-wider">Stock Disponible</Label>
+                        <Input type="number" min={0} value={toEditableNumber(editItem.stock)} onChange={e=>setEditItem({...editItem,stock:e.target.value === '' ? '' : Number(e.target.value)})} className="bg-black/40 border-white/10 h-16 font-black text-4xl text-brand-yellow text-center rounded-xl mt-2"/>
+                      </div>
+                      <div>
+                        <Label className="text-[10px] text-amber-400 font-bold uppercase tracking-wider">Unidades en Mantenimiento / Dañadas</Label>
+                        <Input
+                          type="number"
+                          min={0}
+                          value={toEditableNumber(editItem.maintenanceStock)}
+                          onChange={e=>setEditItem({...editItem,maintenanceStock:e.target.value === '' ? '' : Number(e.target.value)})}
+                          className="bg-black/40 border-white/10 h-10 font-black text-amber-400 rounded-xl mt-1"
+                        />
+                      </div>
                     </div>
                   )}
 

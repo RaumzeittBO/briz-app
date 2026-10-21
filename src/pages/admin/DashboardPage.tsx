@@ -1,16 +1,21 @@
 import { useMemo } from 'react';
-import { LayoutDashboard, Bike, Users, AlertTriangle, CalendarCheck, Package, TrendingUp, RotateCcw } from 'lucide-react';
+import { LayoutDashboard, Bike, Users, AlertTriangle, CalendarCheck, Package, TrendingUp } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
 import { useStore } from '@/context/StoreContext';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
+import { toBoliviaDateString, addDaysToDateString } from '@/lib/dateUtils';
+import { summarizeRentalMoney } from '@/lib/rentalReportMoney';
 
 const statusColors: Record<string, string> = {
   'Pendiente': 'bg-yellow-500/15 text-yellow-500 border-0',
   'pending': 'bg-yellow-500/15 text-yellow-500 border-0',
   'Confirmado': 'bg-green-500/15 text-green-400 border-0',
   'confirmed': 'bg-green-500/15 text-green-400 border-0',
+  'Entregado': 'bg-emerald-500/15 text-emerald-300 border-0',
+  'delivered': 'bg-emerald-500/15 text-emerald-300 border-0',
+  'Devuelto': 'bg-blue-500/15 text-blue-400 border-0',
+  'returned': 'bg-blue-500/15 text-blue-400 border-0',
   'Cancelado': 'bg-red-500/15 text-red-400 border-0',
   'cancelled': 'bg-red-500/15 text-red-400 border-0',
   'expired': 'bg-zinc-500/15 text-zinc-400 border-0',
@@ -19,39 +24,109 @@ const statusColors: Record<string, string> = {
 const statusTranslations: Record<string, string> = {
   'pending': 'Pendiente',
   'confirmed': 'Confirmado',
+  'delivered': 'Entregado',
+  'returned': 'Devuelto',
   'cancelled': 'Cancelado',
   'expired': 'Expirado',
   'Pendiente': 'Pendiente',
   'Confirmado': 'Confirmado',
+  'Entregado': 'Entregado',
+  'Devuelto': 'Devuelto',
   'Cancelado': 'Cancelado',
 };
 
+const isEffectiveRentalStatus = (status?: string) =>
+  status === 'Confirmado' ||
+  status === 'confirmed' ||
+  status === 'Entregado' ||
+  status === 'delivered' ||
+  status === 'Devuelto' ||
+  status === 'returned';
+
 export default function DashboardPage() {
-  const { inventory, combos, rentals, sales, customers, resetAllData } = useStore();
+  const { inventory, combos, rentals, rentalPaymentMovements, sales, serviceOrders, customers } = useStore();
 
-  const now = new Date();
-  const todayStr = now.toISOString().split('T')[0];
-  const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-  const monthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+  const todayStr = toBoliviaDateString();
+  const weekAgoStr = addDaysToDateString(todayStr, -6);
+  const monthAgoStr = addDaysToDateString(todayStr, -29);
 
-  const confirmedRentals = rentals.filter(r => r.status === 'Confirmado' || r.status === 'confirmed');
-  const completedSales = sales.filter(s => s.status === 'Completado');
+  // Include confirmed, delivered AND returned rentals so completed rentals never disappear from revenue
+  const effectiveRentals = useMemo(
+    () => rentals.filter(r => isEffectiveRentalStatus(r.status)),
+    [rentals]
+  );
+  const completedSales = useMemo(
+    () => sales.filter(s => s.status === 'Completado'),
+    [sales]
+  );
+  const completedServices = useMemo(
+    () => (serviceOrders || []).filter(so => so.status === 'Entregado' || so.status === 'Listo' || (so.status as string) === 'Terminado'),
+    [serviceOrders]
+  );
 
-  // Time-based stats
-  const rentalsToday = confirmedRentals.filter(r => (r.createdAt || r.createdDate || '').startsWith(todayStr)).length;
-  const salesToday = completedSales.filter(s => s.date?.startsWith(todayStr)).length;
-  const incomeToday = confirmedRentals.filter(r => (r.createdAt || r.createdDate || '').startsWith(todayStr)).reduce((s, r) => s + r.total, 0)
-    + completedSales.filter(s => s.date?.startsWith(todayStr)).reduce((s, v) => s + v.total, 0);
+  const getRentalBoliviaDate = (r: any) =>
+    r.date && /^\d{4}-\d{2}-\d{2}$/.test(r.date)
+      ? r.date
+      : toBoliviaDateString(r.createdAt || r.createdDate || new Date());
 
-  const rentalsWeek = confirmedRentals.filter(r => new Date(r.createdAt || r.createdDate || '') >= weekAgo).length;
-  const salesWeek = completedSales.filter(s => new Date(s.date) >= weekAgo).length;
-  const incomeWeek = confirmedRentals.filter(r => new Date(r.createdAt || r.createdDate || '') >= weekAgo).reduce((s, r) => s + r.total, 0)
-    + completedSales.filter(s => new Date(s.date) >= weekAgo).reduce((s, v) => s + v.total, 0);
+  const getSaleBoliviaDate = (s: any) =>
+    s.date && /^\d{4}-\d{2}-\d{2}$/.test(s.date)
+      ? s.date
+      : toBoliviaDateString(s.date || new Date());
 
-  const rentalsMonth = confirmedRentals.filter(r => new Date(r.createdAt || r.createdDate || '') >= monthAgo).length;
-  const salesMonth = completedSales.filter(s => new Date(s.date) >= monthAgo).length;
-  const incomeMonth = confirmedRentals.filter(r => new Date(r.createdAt || r.createdDate || '') >= monthAgo).reduce((s, r) => s + r.total, 0)
-    + completedSales.filter(s => new Date(s.date) >= monthAgo).reduce((s, v) => s + v.total, 0);
+  const getServiceBoliviaDate = (so: any) =>
+    so.date && /^\d{4}-\d{2}-\d{2}$/.test(so.date)
+      ? so.date
+      : toBoliviaDateString(so.date || new Date());
+
+  // Time-based stats (Bolivia UTC-4)
+  const rentalsTodayList = effectiveRentals.filter(r => getRentalBoliviaDate(r) === todayStr);
+  const salesTodayList = completedSales.filter(s => getSaleBoliviaDate(s) === todayStr);
+  const servicesTodayList = completedServices.filter(so => getServiceBoliviaDate(so) === todayStr);
+  const rentalsToday = rentalsTodayList.filter(r => !r.productId.startsWith('srv_')).length;
+  const salesToday = salesTodayList.length;
+  const incomeToday =
+    summarizeRentalMoney(rentals, todayStr, todayStr, false, rentalPaymentMovements).netRecognized +
+    salesTodayList.reduce((s, v) => s + (Number(v.total) || 0), 0) +
+    servicesTodayList.reduce((s, so) => s + (Number(so.costEstimate ?? (so as any).price) || 0), 0);
+
+  const rentalsWeekList = effectiveRentals.filter(r => {
+    const d = getRentalBoliviaDate(r);
+    return d >= weekAgoStr && d <= todayStr;
+  });
+  const salesWeekList = completedSales.filter(s => {
+    const d = getSaleBoliviaDate(s);
+    return d >= weekAgoStr && d <= todayStr;
+  });
+  const servicesWeekList = completedServices.filter(so => {
+    const d = getServiceBoliviaDate(so);
+    return d >= weekAgoStr && d <= todayStr;
+  });
+  const rentalsWeek = rentalsWeekList.filter(r => !r.productId.startsWith('srv_')).length;
+  const salesWeek = salesWeekList.length;
+  const incomeWeek =
+    summarizeRentalMoney(rentals, weekAgoStr, todayStr, false, rentalPaymentMovements).netRecognized +
+    salesWeekList.reduce((s, v) => s + (Number(v.total) || 0), 0) +
+    servicesWeekList.reduce((s, so) => s + (Number(so.costEstimate ?? (so as any).price) || 0), 0);
+
+  const rentalsMonthList = effectiveRentals.filter(r => {
+    const d = getRentalBoliviaDate(r);
+    return d >= monthAgoStr && d <= todayStr;
+  });
+  const salesMonthList = completedSales.filter(s => {
+    const d = getSaleBoliviaDate(s);
+    return d >= monthAgoStr && d <= todayStr;
+  });
+  const servicesMonthList = completedServices.filter(so => {
+    const d = getServiceBoliviaDate(so);
+    return d >= monthAgoStr && d <= todayStr;
+  });
+  const rentalsMonth = rentalsMonthList.filter(r => !r.productId.startsWith('srv_')).length;
+  const salesMonth = salesMonthList.length;
+  const incomeMonth =
+    summarizeRentalMoney(rentals, monthAgoStr, todayStr, false, rentalPaymentMovements).netRecognized +
+    salesMonthList.reduce((s, v) => s + (Number(v.total) || 0), 0) +
+    servicesMonthList.reduce((s, so) => s + (Number(so.costEstimate ?? (so as any).price) || 0), 0);
 
   // Low stock items
   const lowStockItems = inventory.filter(i => {
@@ -59,46 +134,60 @@ export default function DashboardPage() {
     return (i.stock ?? 0) > 0 && (i.stock ?? 0) < 5;
   });
 
-  // Most rented products
+  // Most rented products (excluding transport services)
   const productRentCount = useMemo(() => {
     const counts: Record<string, { name: string; count: number }> = {};
-    confirmedRentals.forEach(r => {
+    effectiveRentals.forEach(r => {
+      if (r.productId.startsWith('srv_')) return;
       if (!counts[r.productName]) counts[r.productName] = { name: r.productName, count: 0 };
       counts[r.productName].count += r.quantity;
     });
     return Object.values(counts).sort((a, b) => b.count - a.count).slice(0, 5);
-  }, [confirmedRentals]);
+  }, [effectiveRentals]);
 
   const topCustomers = useMemo(() => {
     const counts: Record<string, { name: string; rentals: number; spent: number }> = {};
-    confirmedRentals.forEach(rental => {
+    effectiveRentals.forEach(rental => {
       const key = rental.customerCI || rental.customerPhone || rental.customerName;
       if (!counts[key]) counts[key] = { name: rental.customerName, rentals: 0, spent: 0 };
-      counts[key].rentals += rental.quantity;
-      counts[key].spent += rental.total;
+      if (!rental.productId.startsWith('srv_')) {
+        counts[key].rentals += rental.quantity;
+      }
+      counts[key].spent += Number(rental.total) || 0;
     });
     return Object.values(counts).sort((a, b) => b.rentals - a.rentals || b.spent - a.spent).slice(0, 5);
-  }, [confirmedRentals]);
+  }, [effectiveRentals]);
 
-  // Recent rentals chart (last 7 days)
+  // Recent rentals chart (last 7 days in Bolivia time)
   const chartData = useMemo(() => {
     const days: { name: string; alquileres: number; ingresos: number }[] = [];
     for (let i = 6; i >= 0; i--) {
-      const d = new Date(now.getTime() - i * 24 * 60 * 60 * 1000);
-      const ds = d.toISOString().split('T')[0];
-      const label = d.toLocaleDateString('es', { weekday: 'short' });
-      const dayRentals = confirmedRentals.filter(r => (r.createdAt || r.createdDate || '').startsWith(ds));
-      days.push({ name: label, alquileres: dayRentals.length, ingresos: dayRentals.reduce((s, r) => s + r.total, 0) });
+      const ds = addDaysToDateString(todayStr, -i);
+      const [y, m, d] = ds.split('-').map(Number);
+      const label = new Date(y, m - 1, d).toLocaleDateString('es', { weekday: 'short' });
+      const dayRentals = effectiveRentals.filter(r => (r.date && /^\d{4}-\d{2}-\d{2}$/.test(r.date) ? r.date : toBoliviaDateString(r.createdAt || r.createdDate || new Date())) === ds);
+      const dayMovements = rentalPaymentMovements.filter(movement => movement.actualAt && toBoliviaDateString(movement.actualAt) === ds);
+      const ledgerGroups = new Set(rentalPaymentMovements.map(movement => movement.reservationCode));
+      const legacyReceipts = rentals.filter(r => !ledgerGroups.has(r.reservationCode || r.id) && r.paymentStatus === 'paid' && r.paidAt && toBoliviaDateString(r.paidAt) === ds);
+      const recognizedNet = dayMovements.reduce((sum, movement) => sum + (movement.type === 'receipt' ? Number(movement.amount) || 0 : movement.type === 'refund' || movement.type === 'correction' ? -(Number(movement.amount) || 0) : 0), 0);
+      days.push({
+        name: label,
+        alquileres: dayRentals.filter(r => !r.productId.startsWith('srv_')).length,
+        ingresos: recognizedNet + legacyReceipts.reduce((sum, r) => sum + Math.max(0, Number(r.amountPaid) || Number(r.total) || 0), 0)
+      });
     }
     return days;
-  }, [confirmedRentals]);
+  }, [effectiveRentals, rentals, rentalPaymentMovements, todayStr]);
 
   const hasData = rentals.length > 0 || sales.length > 0;
-  const recentRentals = [...rentals].sort((a, b) => new Date(b.createdAt || b.createdDate || '').getTime() - new Date(a.createdAt || a.createdDate || '').getTime()).slice(0, 5);
+  const recentRentals = [...rentals]
+    .filter(r => !r.productId.startsWith('srv_'))
+    .sort((a, b) => new Date(b.createdAt || b.createdDate || '').getTime() - new Date(a.createdAt || a.createdDate || '').getTime())
+    .slice(0, 5);
 
   const stats = [
     { label: 'Pendientes', value: rentals.filter(r => r.status === 'Pendiente' || r.status === 'pending').length, icon: CalendarCheck, color: 'text-yellow-400 bg-yellow-400/10' },
-    { label: 'Confirmados', value: confirmedRentals.length, icon: Bike, color: 'text-green-400 bg-green-400/10' },
+    { label: 'Efectivos / Históricos', value: effectiveRentals.filter(r => !r.productId.startsWith('srv_')).length, icon: Bike, color: 'text-green-400 bg-green-400/10' },
     { label: 'Productos', value: inventory.length + combos.length, icon: Package, color: 'text-blue-400 bg-blue-400/10' },
     { label: 'Clientes', value: customers.length, icon: Users, color: 'text-teal-400 bg-teal-400/10' },
   ];
@@ -111,12 +200,8 @@ export default function DashboardPage() {
             <div className="p-2 bg-brand-yellow/25 rounded-xl"><LayoutDashboard className="w-6 h-6 text-brand-yellow-vibrant"/></div>
             Resumen
           </h1>
-          <p className="text-brand-charcoal/55 text-sm font-medium">Lo importante de Tienda, alquileres y clientes en un vistazo.</p>
+          <p className="text-brand-charcoal/55 text-sm font-medium">Lo importante de Tienda, alquileres, taller y clientes en un vistazo (Hora Bolivia UTC-4).</p>
         </div>
-        <Button variant="ghost" size="sm" className="text-red-400/40 hover:text-red-400 hover:bg-red-400/10 rounded-lg text-[10px] font-bold uppercase"
-          onClick={() => { if (confirm('¿Resetear TODOS los datos?')) resetAllData(); }}>
-          <RotateCcw className="w-3 h-3 mr-1"/> Reset
-        </Button>
       </div>
 
       {/* KPI Cards */}
@@ -138,8 +223,8 @@ export default function DashboardPage() {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {[
           { period: 'Hoy', r: rentalsToday, s: salesToday, i: incomeToday },
-          { period: 'Semana', r: rentalsWeek, s: salesWeek, i: incomeWeek },
-          { period: 'Mes', r: rentalsMonth, s: salesMonth, i: incomeMonth },
+          { period: 'Últimos 7 días', r: rentalsWeek, s: salesWeek, i: incomeWeek },
+          { period: 'Últimos 30 días', r: rentalsMonth, s: salesMonth, i: incomeMonth },
         ].map((p, idx) => (
           <Card key={idx} className="bg-white/70 backdrop-blur border-brand-yellow/20 rounded-2xl shadow-sm">
             <CardContent className="p-5 space-y-3">
@@ -147,7 +232,7 @@ export default function DashboardPage() {
               <div className="grid grid-cols-3 gap-2 text-center">
                 <div><p className="text-xl font-black text-brand-charcoal">{p.r}</p><p className="text-[9px] text-brand-charcoal/45 font-bold uppercase">Alquileres</p></div>
                 <div><p className="text-xl font-black text-brand-charcoal">{p.s}</p><p className="text-[9px] text-brand-charcoal/45 font-bold uppercase">Ventas</p></div>
-                <div><p className="text-xl font-black text-brand-yellow">Bs.{p.i}</p><p className="text-[9px] text-white/30 font-bold uppercase">Ingresos</p></div>
+                <div><p className="text-xl font-black text-brand-charcoal">Bs.{p.i}</p><p className="text-[9px] text-brand-charcoal/45 font-bold uppercase">Ingreso neto reconocido</p></div>
               </div>
             </CardContent>
           </Card>
@@ -244,7 +329,7 @@ export default function DashboardPage() {
         </CardHeader>
         <CardContent className="pt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
           {topCustomers.length > 0 ? topCustomers.map((customer, index) => (
-            <div key={customer.name} className="rounded-xl bg-[#FFF9E8] border border-brand-yellow/15 p-4">
+            <div key={`${customer.name}-${index}`} className="rounded-xl bg-[#FFF9E8] border border-brand-yellow/15 p-4">
               <p className="text-[10px] font-black text-brand-cyan uppercase tracking-widest">Top {index + 1}</p>
               <p className="mt-2 font-black text-brand-charcoal truncate">{customer.name}</p>
               <p className="mt-1 text-xs font-bold text-brand-charcoal/55">{customer.rentals} alquiler{customer.rentals === 1 ? '' : 'es'} · Bs. {customer.spent}</p>

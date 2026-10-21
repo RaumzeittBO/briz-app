@@ -28,6 +28,7 @@ import {
 
 import { useLanguage } from '@/context/LanguageContext';
 import { useCart } from '@/context/CartContext';
+import { getLocalizedArtwork } from '@/lib/artworkRegistry';
 
 const assetBase = '/menu-principal-web';
 const designStorageKey = 'briz-home-design-editor-v4';
@@ -929,6 +930,7 @@ function ServicesBackgroundDecorations() {
 }
 
 function ServiceStrip() {
+    const { language } = useLanguage();
     const servicesCardRef = useRef<HTMLDivElement>(null);
     const sx = useMotionValue(0);
     const sy = useMotionValue(0);
@@ -965,7 +967,7 @@ function ServiceStrip() {
                     <EditableLayer id="servicesTitle" className="mb-5 flex items-center gap-3 sm:mb-7">
                         <span className="font-tan text-3xl leading-none text-brand-yellow drop-shadow-[2px_2px_0_rgba(255,255,255,0.9)] sm:text-4xl">&gt;&gt;</span>
                         <h2 className="font-tan text-[1.2rem] xs:text-[1.35rem] uppercase leading-[1.45] text-[#15243A] drop-shadow-[2px_2px_0_rgba(255,255,255,0.95)] sm:text-2xl lg:text-3xl">
-                            Nuestros servicios:
+                            {language === 'es' ? 'Nuestros servicios:' : 'Our Services:'}
                         </h2>
                     </EditableLayer>
 
@@ -994,7 +996,7 @@ function ServiceStrip() {
                                             className="font-tangkiwood text-3xl leading-none drop-shadow-[2px_2px_0_rgba(255,255,255,0.95)] transition duration-200 group-hover:translate-x-1 sm:text-4xl"
                                             style={{ color: service.color }}
                                         >
-                                            {service.label}
+                                            {language === 'es' ? service.label : (service.label === 'Alquiler' ? 'Rentals' : service.label === 'Tienda' ? 'Shop' : service.label === 'Mecánica' ? 'Mechanics' : service.label === 'Comunidad' ? 'Community' : service.label)}
                                         </span>
                                         <ArrowRight className="ml-auto h-5 w-5 text-brand-black/35 opacity-0 transition duration-200 group-hover:translate-x-1 group-hover:opacity-100" />
                                     </Link>
@@ -1030,7 +1032,7 @@ function ServiceStrip() {
                         <div className="w-full h-auto overflow-hidden rounded-[1.65rem] relative">
                             <div className="pointer-events-none absolute inset-0 bg-gradient-to-tr from-transparent via-white/5 to-white/10 z-10 mix-blend-overlay" />
                             <img 
-                                src="/menu-principal-web/1.webp" 
+                                src={language === "en" ? "/menu-principal-web/Ingles/1.png" : "/menu-principal-web/1.webp"} 
                                 alt="Servicios Briz PC"
                                 className="w-full h-auto block border-b-2 border-brand-black"
                                 loading="lazy"
@@ -1044,6 +1046,7 @@ function ServiceStrip() {
 }
 
 function MobileServicesCardSection() {
+    const { language } = useLanguage();
     const cardRef = useRef<HTMLDivElement>(null);
     const cardScrollRef = useRef<HTMLDivElement>(null);
     const { scrollYProgress } = useScroll({
@@ -1077,7 +1080,7 @@ function MobileServicesCardSection() {
                         <div className="w-full h-full overflow-hidden rounded-[1.25rem] relative aspect-[10/17.5]">
                             <div className="pointer-events-none absolute inset-0 bg-gradient-to-tr from-transparent via-white/5 to-white/10 z-10 mix-blend-overlay" />
                             <img 
-                                src="/menu-principal-celular/1.webp" 
+                                src={language === "en" ? "/menu-principal-celular/Ingles/1.png" : "/menu-principal-celular/1.webp"} 
                                 alt="Servicios Briz Celular"
                                 className="w-full h-auto block border-b-2 border-brand-black"
                                 loading="lazy"
@@ -1154,8 +1157,8 @@ function AnimatedArtworkSection({ desktopSrc, mobileSrc, alt, tone }: { desktopS
 }
 function WhyChooseBrizSection() {
     const { language } = useLanguage();
-    const desktopSrc = language === 'es' ? '/menu-principal-web/3.webp' : '/menu-principal-web/Ingles/3.png';
-    const mobileSrc = language === 'es' ? '/menu-principal-celular/3.webp' : '/menu-principal-celular/Ingles/3.png';
+    const { webSrc: desktopSrc, mobileSrc } = getLocalizedArtwork('home_bento_3_shop', language);
+
     return <AnimatedArtworkSection desktopSrc={desktopSrc} mobileSrc={mobileSrc} alt="Por qué elegir Briz y nuestro propósito" tone="green" />;
     return (
         <section className="relative isolate overflow-hidden scroll-mt-28 bg-[#50C879] pt-24 sm:pt-28 lg:pt-[112px]">
@@ -1346,8 +1349,8 @@ function WhyChooseBrizSection() {
 
 function BrandSection() {
     const { language } = useLanguage();
-    const desktopSrc = language === 'es' ? '/menu-principal-web/4.webp' : '/menu-principal-web/Ingles/4.png';
-    const mobileSrc = language === 'es' ? '/menu-principal-celular/4.webp' : '/menu-principal-celular/Ingles/4.png';
+    const { webSrc: desktopSrc, mobileSrc } = getLocalizedArtwork('home_bento_4_routes', language);
+
     return <AnimatedArtworkSection desktopSrc={desktopSrc} mobileSrc={mobileSrc} alt="La marca Briz" tone="cream" />;
     return (
         <section className="relative isolate overflow-hidden bg-[#FFD957] pt-20 lg:pt-24">
@@ -1570,6 +1573,7 @@ function RouteLine({ className = '' }: { className?: string }) {
 }
 
 function CommunityReviewsCarousel() {
+    const { language } = useLanguage();
     const { items, createItem } = useCommunity();
     const { currentCustomer } = useStore();
     const [authOpen, setAuthOpen] = useState(false);
@@ -1626,14 +1630,14 @@ function CommunityReviewsCarousel() {
             {/* Header with Title and Buttons */}
             <div className="mb-3 flex flex-col items-center justify-between gap-2 px-4 text-center sm:flex-row sm:px-5 sm:text-left">
                 <span className="flex items-center gap-2 font-cocon text-xs font-black uppercase tracking-wider text-white">
-                    <MessageCircleHeart className="h-4 w-4 text-brand-pink" />Opiniones
+                    <MessageCircleHeart className="h-4 w-4 text-brand-pink" />{language === 'es' ? 'Opiniones' : 'Reviews'}
                 </span>
                 <div className="flex gap-2">
                     <button onClick={() => setAllReviewsOpen(true)} className="rounded-full bg-white/10 px-3 py-1.5 text-xs font-black text-white border border-white/10 transition hover:bg-white hover:text-brand-black cursor-pointer">
-                        Ver todas las opiniones
+                        {language === 'es' ? 'Ver todas las opiniones' : 'View all reviews'}
                     </button>
                     <button onClick={openReview} className="rounded-full bg-brand-yellow px-3 py-1.5 text-xs font-black text-brand-black transition hover:bg-white cursor-pointer font-cocon">
-                        Deja tu opinión
+                        {language === 'es' ? 'Deja tu opinión' : 'Leave a review'}
                     </button>
                 </div>
             </div>
@@ -1699,11 +1703,11 @@ function CommunityReviewsCarousel() {
         <Dialog open={reviewOpen} onOpenChange={setReviewOpen}>
             <DialogContent className="max-w-md rounded-[1.75rem] bg-[#FFFDF3] p-0 border-0 overflow-hidden">
                 <DialogHeader className="rounded-t-[1.75rem] bg-brand-yellow px-7 py-6">
-                    <DialogTitle className="font-tan text-3xl uppercase text-brand-black">Tu opinión cuenta</DialogTitle>
-                    <p className="text-sm font-bold text-brand-charcoal/65">La revisaremos antes de publicarla.</p>
+                    <DialogTitle className="font-tan text-3xl uppercase text-brand-black">{language === 'es' ? 'Tu opinión cuenta' : 'Your review matters'}</DialogTitle>
+                    <p className="text-sm font-bold text-brand-charcoal/65">{language === 'es' ? 'La revisaremos antes de publicarla.' : 'We will review it before publishing.'}</p>
                 </DialogHeader>
                 <form onSubmit={submitReview} className="p-7">
-                    <p className="text-xs font-black uppercase tracking-widest text-brand-charcoal/50">¿Cómo fue tu experiencia?</p>
+                    <p className="text-xs font-black uppercase tracking-widest text-brand-charcoal/50">{language === 'es' ? '¿Cómo fue tu experiencia?' : 'How was your experience?'}</p>
                     <div className="mt-2 flex gap-1">
                         {[1, 2, 3, 4, 5].map(star => (
                             <button type="button" key={star} onClick={() => setRating(star)} className={star <= rating ? 'text-brand-yellow' : 'text-brand-charcoal/20'} aria-label={`${star} estrellas`}>
@@ -1723,7 +1727,7 @@ function CommunityReviewsCarousel() {
                 <DialogHeader className="border-b border-gray-150 pb-4 mb-4">
                     <DialogTitle className="text-3xl font-tan text-brand-black uppercase flex items-center gap-2">
                         <MessageCircleHeart className="h-7 w-7 text-brand-pink" />
-                        Todas las Opiniones ({visibleReviews.length})
+                        {language === 'es' ? 'Todas las Opiniones' : 'All Reviews'} ({visibleReviews.length})
                     </DialogTitle>
                 </DialogHeader>
 
@@ -1759,6 +1763,7 @@ function CommunityReviewsCarousel() {
 }
 
 function CommunitySection() {
+    const { language } = useLanguage();
     return (
         <section className="relative isolate overflow-hidden bg-[#62C5B0] px-4 py-14 sm:px-6 sm:py-24 lg:px-8 lg:py-32">
             {/* Subtle grain texture overlay */}
@@ -1819,7 +1824,7 @@ function CommunitySection() {
                         className="w-full max-w-full font-tan text-[1.75rem] uppercase leading-[1.65] tracking-[-0.04em] sm:text-5xl sm:tracking-normal lg:text-[5.2rem] xl:text-[6.2rem]"
                         style={{ WebkitTextStroke: '2px #FFD200', color: '#063D47', textShadow: '4px 4px 0px rgba(6,61,71,0.28)' }}
                     >
-                        Comunidad
+                        { language === 'es' ? 'Comunidad' : 'Community' }
                     </motion.h2>
 
                     <motion.p
@@ -1829,7 +1834,9 @@ function CommunitySection() {
                         transition={{ duration: 0.6, delay: 0.12, ease: 'easeOut' }}
                         className="max-w-[42rem] px-1 font-cocon text-base font-bold leading-relaxed text-[#063D47] sm:text-xl lg:text-2xl"
                     >
-                        Te invitamos a ser parte de una comunidad que celebra la vida en movimiento, que se enamora de cada pedaleada y que inspira cambio.
+                        {language === 'es'
+                            ? 'Te invitamos a ser parte de una comunidad que celebra la vida en movimiento, que se enamora de cada pedaleada y que inspira cambio.'
+                            : 'We invite you to be part of a community that celebrates life in motion, falls in love with every ride, and inspires positive change.'}
                     </motion.p>
 
                     <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.55, delay: 0.18 }} className="min-w-0 w-full max-w-full">
@@ -1849,7 +1856,7 @@ function CommunitySection() {
                                 whileTap={{ scale: 0.94 }}
                                 className="group inline-flex items-center gap-3 px-10 py-5 bg-brand-yellow text-brand-black border-3 border-brand-black rounded-full font-cocon font-black text-base uppercase tracking-wider shadow-[6px_6px_0px_rgba(0,0,0,1)] hover:shadow-[2px_2px_0px_rgba(0,0,0,1)] transition-all cursor-pointer"
                             >
-                                <span>Ir a comunidad</span>
+                                <span>{language === 'es' ? 'Ir a comunidad' : 'Explore Community'}</span>
                                 <ArrowRight className="w-5 h-5 shrink-0 transition-transform group-hover:translate-x-1" strokeWidth={2.5} />
                             </motion.button>
                         </Link>
@@ -1867,7 +1874,7 @@ function CommunitySection() {
                     >
                         {/* Writable tape tape-sticker effect */}
                         <div className="absolute -top-4 left-1/3 -translate-x-1/2 w-28 h-8 sm:w-36 sm:h-9 bg-[#FFFDF3]/88 border-x-2 border-dashed border-brand-black/20 backdrop-blur-sm shadow-sm rotate-[-6deg] z-20 flex items-center justify-center">
-                            <span className="font-maiandra text-[9px] sm:text-[10px] text-brand-black/50 uppercase tracking-widest font-black">Comunidad Briz</span>
+                            <span className="font-maiandra text-[9px] sm:text-[10px] text-brand-black/50 uppercase tracking-widest font-black">{language === 'es' ? 'Comunidad Briz' : 'Briz Community'}</span>
                         </div>
 
                         {/* Interactive Polaroid Image */}
@@ -1916,7 +1923,7 @@ function CommunitySection() {
                             className="font-gochi text-xl sm:text-2xl text-white font-bold"
                             style={{ textShadow: '2px 2px 0px rgba(6,61,71,0.7)' }}
                         >
-                            ¡Pedalear nos hace libres!
+                            {language === 'es' ? '¡Pedalear nos hace libres!' : 'Cycling sets us free!'}
                         </motion.p>
                     </div>
                 </div>
@@ -1926,6 +1933,7 @@ function CommunitySection() {
 }
 
 function FinalInspirationalSection() {
+    const { language } = useLanguage();
     return (
         <section className="relative isolate overflow-hidden bg-[#0C4E40] py-20 sm:py-28 lg:py-32 px-4 sm:px-6 lg:px-8">
             {/* Subtle paper texture overlay */}
@@ -2003,19 +2011,19 @@ function FinalInspirationalSection() {
                                 className="font-tan text-3xl sm:text-5xl lg:text-6xl font-black uppercase leading-[1.5] tracking-wide text-brand-orange text-center w-full"
                                 style={{ textShadow: '1px 1px 2px rgba(0,0,0,0.15)' }}
                             >
-                                Pedalea.
+                                {language === 'es' ? 'Pedalea.' : 'Ride.'}
                             </h3>
                             <h3 
                                 className="font-tan text-3xl sm:text-5xl lg:text-6xl font-black uppercase leading-[1.5] tracking-wide text-brand-pink text-center w-full"
                                 style={{ textShadow: '1px 1px 2px rgba(0,0,0,0.15)' }}
                             >
-                                Conecta.
+                                {language === 'es' ? 'Conecta.' : 'Connect.'}
                             </h3>
                             <h3 
                                 className="font-tan text-3xl sm:text-5xl lg:text-6xl font-black uppercase leading-[1.5] tracking-wide text-brand-yellow text-center w-full"
                                 style={{ textShadow: '1px 1px 2px rgba(0,0,0,0.15)' }}
                             >
-                                Inspira.
+                                {language === 'es' ? 'Inspira.' : 'Inspire.'}
                             </h3>
                         </div>
                     </motion.div>
@@ -2028,7 +2036,9 @@ function FinalInspirationalSection() {
                         transition={{ duration: 0.6, delay: 0.15, ease: 'easeOut' }}
                         className="font-cocon text-[#FFFDF3]/95 text-center text-base sm:text-lg lg:text-xl max-w-[540px] mx-auto mt-6 leading-relaxed"
                     >
-                        Experiencias personalizadas que fusionan la ingeniería creativa y dinámica con el espíritu de la bicicultura y el compromiso con el planeta.
+                        {language === 'es'
+                            ? 'Experiencias personalizadas que fusionan la ingeniería creativa y dinámica con el espíritu de la bicicultura y el compromiso con el planeta.'
+                            : 'Tailored experiences that blend creative engineering with cycling culture and a commitment to the planet.'}
                     </motion.p>
                 </div>
 
@@ -2107,6 +2117,7 @@ export function StatsStrip() {
 }
 
 function CTABanner({ embedded = false }: { embedded?: boolean }) {
+    const { language } = useLanguage();
     return (
         <section className={`${embedded ? 'bg-transparent px-4 pb-0 pt-6 sm:px-6 sm:pt-8 lg:px-8' : 'bg-[#FFFDF3] px-4 pb-16 pt-4 sm:px-6 lg:px-8'}`}>
             <motion.div
@@ -2115,13 +2126,13 @@ function CTABanner({ embedded = false }: { embedded?: boolean }) {
             >
                 <LeafStem className="absolute -bottom-8 left-0 h-32 w-20 opacity-45" />
                 <div className="relative z-10">
-                    <h2 className="font-tan text-[1.38rem] xs:text-[1.5rem] leading-[1.45] text-brand-black sm:text-2xl">Tu aventura comienza aquí</h2>
-                    <p className="mt-2 font-cocon text-sm text-brand-black/68 sm:text-base">Reserva en minutos y comienza a pedalear.</p>
+                    <h2 className="font-tan text-[1.38rem] xs:text-[1.5rem] leading-[1.45] text-brand-black sm:text-2xl">{language === 'es' ? 'Tu aventura comienza aquí' : 'Your adventure starts here'}</h2>
+                    <p className="mt-2 font-cocon text-sm text-brand-black/68 sm:text-base">{language === 'es' ? 'Reserva en minutos y comienza a pedalear.' : 'Book in minutes and start riding.'}</p>
                     <Link
                         to="/rentals"
                         className="group mt-5 inline-flex min-h-12 items-center gap-3 rounded-xl bg-[#07122B] px-6 font-cocon text-sm font-bold text-white transition hover:-translate-y-0.5 hover:scale-[1.03]"
                     >
-                        Reservar ahora
+                        {language === 'es' ? 'Reservar ahora' : 'Book now'}
                         <ArrowRight className="h-4 w-4 transition group-hover:translate-x-1" />
                     </Link>
                 </div>

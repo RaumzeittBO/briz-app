@@ -1,16 +1,31 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
-import { 
-    collection, 
-    doc, 
-    setDoc, 
-    updateDoc, 
-    deleteDoc, 
-    onSnapshot, 
-    query, 
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import {
+    collection,
+    doc,
+    setDoc,
+    updateDoc,
+    deleteDoc,
+    getDoc,
+    onSnapshot,
+    query,
     orderBy,
-    writeBatch
+    where,
+    writeBatch,
 } from 'firebase/firestore';
-import { db, storage } from '../lib/firebase';
+import {
+    browserLocalPersistence,
+    browserSessionPersistence,
+    createUserWithEmailAndPassword,
+    onAuthStateChanged,
+    sendEmailVerification,
+    sendPasswordResetEmail,
+    setPersistence,
+    signInWithEmailAndPassword,
+    signOut,
+} from 'firebase/auth';
+import { auth, db, storage } from '../lib/firebase';
+import { runAdminRentalAction, updateRentalGroup, recordRentalPaymentMovement as recordRentalPaymentBackend, type RecordRentalPaymentMovementInput } from '../lib/backend';
+import type { RentalPaymentMovement } from '../lib/rentalReportMoney';
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { cyclingRoutes as DEFAULT_ROUTES, type CyclingRoute } from '../data/mockData';
 import {
@@ -19,6 +34,13 @@ import {
     RENTAL_SEED_INVENTORY,
 } from '../data/rentalSeedData';
 import { SHOP_SEED_CATEGORIES } from '../data/shopSeedData';
+import { beginCustomerRegistration, createCustomerProfile as createCustomerProfileBackend, getMyRentals as getMyRentalsBackend, getAdminCustomers as getAdminCustomersBackend, createRentalGroup as createRentalGroupBackend, createServiceOrder as createServiceOrderBackend, type ReservationGroupInput } from '../lib/backend';
+import { calculateProductRentalPrice } from '../lib/rentalPricing';
+import {
+    getAvailableStockForInterval as calcItemStockForInterval,
+    getComboAvailabilityForInterval as calcComboAvailForInterval,
+} from '../lib/rentalAvailability';
+
 export type { CyclingRoute };
 
 // ===========================
@@ -28,15 +50,20 @@ export type { CyclingRoute };
 export interface WheelSizeEntry {
     size: string;
     stock: number;
+    maintenanceStock?: number;
 }
 
 export interface InventoryItem {
     id: string;
     itemType: 'bike' | 'accessory';
     name: string;
+    nameEn?: string;
     category?: string;
+    store?: string;
     description: string;
+    descriptionEn?: string;
     details?: string;
+    detailsEn?: string;
     imageUrl: string;
     active: boolean;
 
@@ -49,6 +76,7 @@ export interface InventoryItem {
 
     // Accessories with simple stock
     stock?: number;
+    maintenanceStock?: number;
 
     // Pricing
     pricePerHour: number;
@@ -57,6 +85,7 @@ export interface InventoryItem {
     pricePerWeek: number;
     pricePerMonth: number;
     salePrice?: number;
+    addonFlatPrice?: number;
 
     // Pricing tiers
     price1Hour?: number;
@@ -79,10 +108,14 @@ export interface ComboComponent {
 export interface ComboProduct {
     id: string;
     name: string;
+    nameEn?: string;
     category?: string;
     secondaryCategories?: string[];
+    store?: string;
     description: string;
+    descriptionEn?: string;
     details?: string;
+    detailsEn?: string;
     imageUrl: string;
     active: boolean;
     availableForRental: boolean;
@@ -128,6 +161,11 @@ export interface Rental {
     customerName: string;
     customerPhone: string;
     customerCI: string;
+    customerEmail?: string;
+    customerAddress?: string;
+    autofotoUrl?: string;
+    documentoUrl?: string;
+    documentoReversoUrl?: string;
 
     productType: 'single' | 'combo';
     productId: string;
@@ -141,14 +179,35 @@ export interface Rental {
     duration: string;
     date: string;
     pickupTime: string;
+    endTime?: string;
     total: number;
+    amountPaid?: number;
+    /** Payment timestamp recorded at the time of payment; absent on legacy records. */
+    paidAt?: string;
+    lateFee?: number;
+    extensionFee?: number;
     paymentMethod: string;
     paymentStatus: 'unpaid' | 'pending_review' | 'paid';
     notes: string;
 
-    status: 'pending' | 'confirmed' | 'cancelled' | 'expired' | 'returned' | 'Pendiente' | 'Confirmado' | 'Cancelado' | 'Devuelto';
+    status:
+        | 'pending'
+        | 'confirmed'
+        | 'delivered'
+        | 'cancelled'
+        | 'expired'
+        | 'returned'
+        | 'Pendiente'
+        | 'Confirmado'
+        | 'Entregado'
+        | 'Cancelado'
+        | 'Devuelto';
     createdAt: string;
     updatedAt: string;
+    deliveredAt?: string;
+    returnedAt?: string;
+    damagedOnReturn?: boolean;
+    returnConditionNotes?: string;
     lastUpdatedBy?: string;
     paymentProofUrl?: string;
 
@@ -158,6 +217,16 @@ export interface Rental {
     deliveryService?: boolean;
     pickupService?: boolean;
     source?: 'web' | 'manual';
+    store?: string;
+}
+
+export interface SaleItem {
+    id?: string;
+    name: string;
+    price: number;
+    quantity: number;
+    wheelSize?: string;
+    image?: string;
 }
 
 export interface Sale {
@@ -165,12 +234,13 @@ export interface Sale {
     customerName: string;
     customerPhone: string;
     customerCI: string;
-    items: { id?: string; name: string; price: number; quantity: number; image?: string }[];
+    items: SaleItem[];
     total: number;
     status: 'Pendiente' | 'Completado' | 'Cancelado';
     paymentMethod: string;
     notes?: string;
     source?: string;
+    store?: string;
     date: string;
 }
 
@@ -194,6 +264,7 @@ export interface Customer {
     autofotoUrl?: string;
     documentoUrl?: string;
     documentoReversoUrl?: string;
+    store?: string;
 }
 
 export interface ServiceOrder {
@@ -202,12 +273,13 @@ export interface ServiceOrder {
     phone: string;
     bikeType: string;
     issue: string;
-    status: 'Recibido' | 'En revisiÃ³n' | 'En reparaciÃ³n' | 'Listo' | 'Entregado';
+    status: 'Recibido' | 'En revisión' | 'En reparación' | 'Listo' | 'Entregado' | 'En revisiÃ³n' | 'En reparaciÃ³n';
     estimatedDelivery: string;
     costEstimate: number;
     notes: string;
     bikeImageUrl?: string;
     date: string;
+    store?: string;
 }
 
 export interface EventSubcategory {
@@ -218,10 +290,19 @@ export interface EventSubcategory {
 export interface EventItem {
     id: string;
     name: string;
+    nameEn?: string;
     description: string;
+    descriptionEn?: string;
     subcategories: EventSubcategory[];
     price?: number;
     images?: string[];
+}
+
+export interface ReturnRentalOptions {
+    damagedUnits?: number;
+    conditionNotes?: string;
+    lateFee?: number;
+    actor?: string;
 }
 
 const LOCAL_ROUTES_KEY = 'briz_local_routes';
@@ -235,9 +316,11 @@ function mergeRoutes(remoteRoutes: CyclingRoute[], localRoutes: CyclingRoute[]) 
 }
 
 interface StoreContextType {
+    adminStoreScope: string;
     inventory: InventoryItem[];
     combos: ComboProduct[];
     rentals: Rental[];
+    rentalPaymentMovements: RentalPaymentMovement[];
     sales: Sale[];
     customers: Customer[];
     serviceOrders: ServiceOrder[];
@@ -281,14 +364,18 @@ interface StoreContextType {
     updateCombo: (id: string, combo: Partial<ComboProduct>) => Promise<void>;
     deleteCombo: (id: string) => Promise<void>;
 
-    // Rental CRUD
-    addRental: (rental: Omit<Rental, 'id' | 'reservationCode' | 'status' | 'createdAt' | 'updatedAt' | 'paymentStatus'>) => Promise<Rental>;
+    // Rental CRUD & Group Atomic Operations
     confirmRental: (id: string, actor?: string) => Promise<boolean>;
+    confirmRentalGroup: (ids: string[], actor?: string) => Promise<{ ok: boolean; error?: string }>;
+    deliverRentalGroup: (ids: string[], actor?: string) => Promise<void>;
     cancelRental: (id: string, actor?: string) => Promise<void>;
-    returnRental: (id: string, actor?: string) => Promise<void>;
+    cancelRentalGroup: (ids: string[], actor?: string) => Promise<void>;
+    returnRental: (id: string, actor?: string, options?: ReturnRentalOptions) => Promise<void>;
+    returnRentalGroup: (ids: string[], actor?: string, options?: ReturnRentalOptions) => Promise<void>;
     deleteRental: (id: string) => Promise<void>;
+    deleteRentalGroup: (ids: string[]) => Promise<void>;
     updateRental: (id: string, updates: Partial<Rental>, actor?: string) => Promise<void>;
-    updateRentalPaymentStatus: (id: string, paymentStatus: Rental['paymentStatus'], actor?: string) => Promise<void>;
+    recordRentalPaymentMovement: (input: RecordRentalPaymentMovementInput) => Promise<{ movementId: string; duplicate: boolean }>;
     markRentalExpired: (id: string, actor?: string) => Promise<void>;
 
     // Sale CRUD
@@ -300,6 +387,9 @@ interface StoreContextType {
     addOrUpdateCustomer: (c: { name: string; phone: string; ci: string }, isPurchase: boolean) => Promise<void>;
     updateCustomer: (id: string, c: Partial<Customer>) => Promise<void>;
     deleteCustomer: (id: string) => Promise<void>;
+    verifyCustomerRecovery: (email: string) => Promise<boolean>;
+    getMyRentalHistory: () => Promise<Rental[]>;
+    createRentalGroup: (input: ReservationGroupInput) => Promise<{ reservationCode: string; rentalIds: string[]; total: number; duplicate: boolean }>;
 
     // Service Order CRUD
     addServiceOrder: (so: Omit<ServiceOrder, 'id' | 'date'>) => Promise<void>;
@@ -308,7 +398,25 @@ interface StoreContextType {
 
     // Helpers
     getItemStock: (itemId: string, wheelSize?: string) => number;
-    getComboAvailability: (comboId: string) => number;
+    getComboAvailability: (comboId: string, wheelSize?: string) => number;
+    getAvailableStockForInterval: (
+        itemId: string,
+        wheelSize?: string,
+        date?: string,
+        pickupTime?: string,
+        duration?: string | number,
+        excludeReservationCode?: string,
+        includePendingReservations?: boolean
+    ) => number;
+    getComboAvailabilityForInterval: (
+        comboId: string,
+        wheelSize?: string,
+        date?: string,
+        pickupTime?: string,
+        duration?: string | number,
+        excludeReservationCode?: string,
+        includePendingReservations?: boolean
+    ) => number;
     calculatePrice: (productType: 'single' | 'combo', productId: string, duration: string, quantity: number) => number;
 
     resetAllData: () => Promise<void>;
@@ -329,6 +437,26 @@ interface StoreContextType {
 }
 
 export const StoreContext = createContext<StoreContextType | null>(null);
+
+function customerFromPublicProfile(profile: {
+    id: string; email: string; name: string; phone: string; ci: string;
+    nacionalidad?: string; departamento?: string; comoNosConociste?: string;
+    rentalsCount?: number; purchasesCount?: number;
+}): Customer {
+    return {
+        id: profile.id, email: profile.email, name: profile.name, phone: profile.phone, ci: profile.ci,
+        nacionalidad: profile.nacionalidad, departamento: profile.departamento,
+        comoNosConociste: profile.comoNosConociste,
+        rentalsCount: Number(profile.rentalsCount) || 0,
+        purchasesCount: Number(profile.purchasesCount) || 0,
+        firstVisit: '', lastVisit: '', notes: '',
+    };
+}
+
+function fileExtension(file: File): string {
+    const extension = file.name.split('.').pop()?.toLowerCase() || (file.type === 'application/pdf' ? 'pdf' : 'jpg');
+    return /^[a-z0-9]{1,8}$/.test(extension) ? extension : 'jpg';
+}
 
 export const useStore = () => {
     const context = useContext(StoreContext);
@@ -362,6 +490,7 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
     const [inventory, setInventory] = useState<InventoryItem[]>([]);
     const [combos, setCombos] = useState<ComboProduct[]>([]);
     const [rentals, setRentals] = useState<Rental[]>([]);
+    const [rentalPaymentMovements, setRentalPaymentMovements] = useState<RentalPaymentMovement[]>([]);
     const [sales, setSales] = useState<Sale[]>([]);
     const [customers, setCustomers] = useState<Customer[]>([]);
     const [serviceOrders, setServiceOrders] = useState<ServiceOrder[]>([]);
@@ -372,6 +501,8 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
     const [shopCategories, setShopCategories] = useState<string[]>([]);
     const [adminNavigationLinks, setAdminNavigationLinks] = useState<any[]>([]);
     const [isLoaded, setIsLoaded] = useState(false);
+    const [isAdminSession, setIsAdminSession] = useState(false);
+    const [adminStoreScope, setAdminStoreScope] = useState<string>('all');
 
     const [rentalSettings, setRentalSettings] = useState<RentalSettings>(() => safeJSON<RentalSettings>(LOCAL_RENTAL_SETTINGS_KEY, {
         bankName: 'Banco Nacional de Bolivia (BNB)',
@@ -383,6 +514,54 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
 
     // Customer Session state
     const [currentCustomer, setCurrentCustomer] = useState<Customer | null>(null);
+
+    // Only active, explicitly registered staff can subscribe to private collections.
+    useEffect(() => {
+        const unsubAuth = onAuthStateChanged(auth, async (fbUser) => {
+            setIsAdminSession(false);
+            setAdminStoreScope('all');
+            setCurrentCustomer(null);
+            localStorage.removeItem('briz_logged_customer');
+            if (!fbUser) return;
+            try {
+                const adminSnapshot = await getDoc(doc(db, 'adminUsers', fbUser.uid));
+                const adminData = adminSnapshot.exists() ? adminSnapshot.data() : null;
+                const allowedRole = ['admin', 'manager', 'mechanic', 'viewer'].includes(String(adminData?.role));
+                if (adminData?.active === true && allowedRole) {
+                    setIsAdminSession(true);
+                    setAdminStoreScope(String(adminData.store || 'all'));
+                }
+            } catch {
+                // Customer accounts are not allowed to read admin authorization records.
+            }
+            if (fbUser.emailVerified) {
+                try {
+                    const profileSnap = await getDoc(doc(db, 'customerProfiles', fbUser.uid));
+                    if (profileSnap.exists()) {
+                        const profile = profileSnap.data();
+                        setCurrentCustomer({
+                            id: fbUser.uid,
+                            name: String(profile.name || ''),
+                            phone: String(profile.phone || ''),
+                            ci: String(profile.ci || ''),
+                            email: String(profile.email || fbUser.email || ''),
+                            nacionalidad: String(profile.nacionalidad || ''),
+                            departamento: String(profile.departamento || ''),
+                            comoNosConociste: String(profile.comoNosConociste || ''),
+                            rentalsCount: Number(profile.rentalsCount) || 0,
+                            purchasesCount: Number(profile.purchasesCount) || 0,
+                            firstVisit: '',
+                            lastVisit: '',
+                            notes: '',
+                        });
+                    }
+                } catch {
+                    // A verified account with an incomplete registration remains signed in without a profile.
+                }
+            }
+        });
+        return unsubAuth;
+    }, []);
 
     useEffect(() => {
         const refreshLocalRoutes = () => {
@@ -424,58 +603,19 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
         }
     };
 
-    const seedDefaultRoutes = async () => {
-        try {
-            const batch = writeBatch(db);
-            DEFAULT_ROUTES.forEach(route => {
-                batch.set(doc(db, 'routes', route.id), {
-                    ...route,
-                    mapUrl: 'https://maps.google.com'
-                });
-            });
-            await batch.commit();
-        } catch (e) {
-            console.error('Failed to seed default routes:', e);
-        }
-    };
-
-    // Load saved session
-    useEffect(() => {
-        const saved = localStorage.getItem('briz_logged_customer');
-        if (saved) {
-            try {
-                setCurrentCustomer(JSON.parse(saved));
-            } catch (e) {
-                console.error('Failed to parse saved customer session:', e);
-            }
-        }
-    }, []);
-
-    // ---- Real-time Sync ----
+    // ---- Real-time Sync (Public Catalog & Settings) ----
     useEffect(() => {
         const unsubInv = onSnapshot(query(collection(db, 'inventory')), (snap) => {
-            setInventory(snap.docs.map(doc => ({ ...doc.data() } as InventoryItem)));
+            setInventory(snap.docs.map(d => ({ ...d.data() } as InventoryItem)));
             if (snap.empty) {
                 seedDefaultInventory();
             }
         });
         const unsubCombos = onSnapshot(query(collection(db, 'combos')), (snap) => {
-            setCombos(snap.docs.map(doc => ({ ...doc.data() } as ComboProduct)));
+            setCombos(snap.docs.map(d => ({ ...d.data() } as ComboProduct)));
             if (snap.empty) {
                 seedDefaultCombos();
             }
-        });
-        const unsubRentals = onSnapshot(query(collection(db, 'rentals'), orderBy('createdDate', 'desc')), (snap) => {
-            setRentals(snap.docs.map(doc => ({ ...doc.data() } as Rental)));
-        });
-        const unsubSales = onSnapshot(query(collection(db, 'sales'), orderBy('date', 'desc')), (snap) => {
-            setSales(snap.docs.map(doc => ({ ...doc.data() } as Sale)));
-        });
-        const unsubCustomers = onSnapshot(query(collection(db, 'customers')), (snap) => {
-            setCustomers(snap.docs.map(doc => ({ ...doc.data() } as Customer)));
-        });
-        const unsubSO = onSnapshot(query(collection(db, 'serviceOrders'), orderBy('date', 'desc')), (snap) => {
-            setServiceOrders(snap.docs.map(doc => ({ ...doc.data() } as ServiceOrder)));
         });
         const unsubSettings = onSnapshot(doc(db, 'settings', 'rental_settings'), (snap) => {
             if (snap.exists()) {
@@ -484,26 +624,23 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
                 localStorage.setItem(LOCAL_RENTAL_SETTINGS_KEY, JSON.stringify(remoteSettings));
             }
         }, (error) => {
-            console.error("Error fetching rental settings:", error);
+            console.error('Error fetching rental settings:', error);
         });
         const unsubRoutes = onSnapshot(query(collection(db, 'routes')), (snap) => {
-            setRoutes(snap.docs.map(doc => ({ ...doc.data() } as CyclingRoute)));
-            if (snap.empty) {
-                seedDefaultRoutes();
-            }
+            setRoutes(snap.empty ? DEFAULT_ROUTES : snap.docs.map(d => ({ ...d.data() } as CyclingRoute)));
         }, (error) => {
-            console.error("Error fetching routes:", error);
+            console.error('Error fetching routes:', error);
         });
         const unsubBikeCats = onSnapshot(doc(db, 'settings', 'bike_categories'), (snap) => {
             if (snap.exists()) {
                 setBikeCategories(snap.data().categories || []);
             } else {
                 const defaults = RENTAL_SEED_CATEGORIES;
-                setDoc(doc(db, 'settings', 'bike_categories'), { categories: defaults });
+                setDoc(doc(db, 'settings', 'bike_categories'), { categories: defaults }).catch(() => undefined);
                 setBikeCategories(defaults);
             }
         }, (error) => {
-            console.error("Error fetching bike categories:", error);
+            console.error('Error fetching bike categories:', error);
         });
 
         const unsubShopCats = onSnapshot(doc(db, 'settings', 'shop_categories'), (snap) => {
@@ -511,60 +648,158 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
                 const cats = snap.data().categories || [];
                 if (cats.includes('Bicicletas') && cats.includes('Indumentaria') && !cats.includes('Bicicletas plegables')) {
                     const defaults = SHOP_SEED_CATEGORIES;
-                    setDoc(doc(db, 'settings', 'shop_categories'), { categories: defaults });
+                    setDoc(doc(db, 'settings', 'shop_categories'), { categories: defaults }).catch(() => undefined);
                     setShopCategories(defaults);
                 } else {
                     setShopCategories(cats);
                 }
             } else {
                 const defaults = SHOP_SEED_CATEGORIES;
-                setDoc(doc(db, 'settings', 'shop_categories'), { categories: defaults });
+                setDoc(doc(db, 'settings', 'shop_categories'), { categories: defaults }).catch(() => undefined);
                 setShopCategories(defaults);
             }
         }, (error) => {
-            console.error("Error fetching shop categories:", error);
+            console.error('Error fetching shop categories:', error);
         });
 
         const unsubAdminNav = onSnapshot(doc(db, 'settings', 'admin_navigation'), (snap) => {
             if (snap.exists()) {
                 setAdminNavigationLinks(snap.data().links || DEFAULT_ADMIN_LINKS);
             } else {
-                setDoc(doc(db, 'settings', 'admin_navigation'), { links: DEFAULT_ADMIN_LINKS });
+                setDoc(doc(db, 'settings', 'admin_navigation'), { links: DEFAULT_ADMIN_LINKS }).catch(() => undefined);
                 setAdminNavigationLinks(DEFAULT_ADMIN_LINKS);
             }
         }, (error) => {
-            console.error("Error fetching admin navigation links:", error);
+            console.error('Error fetching admin navigation links:', error);
         });
 
         const unsubEvents = onSnapshot(query(collection(db, 'events')), (snap) => {
-            setEvents(snap.docs.map(doc => ({ ...doc.data() } as EventItem)));
+            setEvents(snap.docs.map(d => ({ ...d.data() } as EventItem)));
         }, (error) => {
-            console.error("Error fetching events:", error);
+            console.error('Error fetching events:', error);
         });
 
         setIsLoaded(true);
         return () => {
-            unsubInv(); unsubCombos(); unsubRentals(); unsubSales(); unsubCustomers(); unsubSO(); unsubSettings(); unsubRoutes(); unsubBikeCats(); unsubShopCats(); unsubAdminNav(); unsubEvents();
+            unsubInv();
+            unsubCombos();
+            unsubSettings();
+            unsubRoutes();
+            unsubBikeCats();
+            unsubShopCats();
+            unsubAdminNav();
+            unsubEvents();
         };
     }, []);
 
-    // ---- One-time Migration from LocalStorage ----
+    // ---- Real-time Sync (public sanitized slots and scoped admin collections) ----
     useEffect(() => {
-        const migrate = async () => {
-            const hasMigrated = localStorage.getItem('briz_migrated_v1');
-            if (hasMigrated === 'true') return;
-
-            const localInv = safeJSON<InventoryItem[]>('briz_inventory', []);
-            if (localInv.length > 0) {
-                const batch = writeBatch(db);
-                localInv.forEach(item => {
-                    batch.set(doc(db, 'inventory', item.id), item);
+        const rentalsRef = collection(db, 'rentals');
+        const publicSlotsRef = collection(db, 'rentals_busy_slots');
+        const rentalQuery = isAdminSession
+            ? (adminStoreScope === 'all'
+                ? query(rentalsRef, orderBy('createdDate', 'desc'))
+                : query(rentalsRef, where('store', '==', adminStoreScope), orderBy('createdDate', 'desc')))
+            : null;
+        const unsubRentals = onSnapshot(
+            rentalQuery || publicSlotsRef,
+            (snap) => {
+                if (isAdminSession) {
+                    setRentals(snap.docs.map(d => ({ ...d.data(), id: d.id } as Rental)));
+                    return;
+                }
+                const publicRentals = snap.docs.map((d) => {
+                    const slot = d.data();
+                    const start = new Date(Number(slot.startMs));
+                    const end = new Date(Number(slot.endMs));
+                    const date = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/La_Paz' }).format(start);
+                    const timeParts = new Intl.DateTimeFormat('en-GB', { timeZone: 'America/La_Paz', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts(start);
+                    const endParts = new Intl.DateTimeFormat('en-GB', { timeZone: 'America/La_Paz', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts(end);
+                    const pickupTime = `${timeParts.find(p => p.type === 'hour')?.value || '00'}:${timeParts.find(p => p.type === 'minute')?.value || '00'}`;
+                    const endTime = `${endParts.find(p => p.type === 'hour')?.value || '00'}:${endParts.find(p => p.type === 'minute')?.value || '00'}`;
+                    const durationHours = Math.max(1, Math.round((Number(slot.endMs) - Number(slot.startMs)) / 3_600_000));
+                    const item = inventory.find(candidate => candidate.id === slot.itemId);
+                    return {
+                        id: d.id,
+                        reservationCode: `public_${d.id}`,
+                        customerName: 'Reservado', customerPhone: '', customerCI: '',
+                        productType: 'single' as const,
+                        productId: String(slot.itemId || ''),
+                        productName: item?.name || 'Reservado',
+                        quantity: Number(slot.quantity) || 0,
+                        selectedWheelSize: String(slot.wheelSize || ''),
+                        duration: `${durationHours} horas`, date, pickupTime, endTime,
+                        startTimestamp: Number(slot.startMs), endTimestamp: Number(slot.endMs),
+                        total: 0, paymentMethod: '', paymentStatus: 'unpaid' as const,
+                        notes: '', status: String(slot.status || 'pending') as Rental['status'],
+                        createdAt: '', updatedAt: '',
+                    } as Rental;
                 });
-                await batch.commit();
-            }
-            localStorage.setItem('briz_migrated_v1', 'true');
+                setRentals(publicRentals);
+            },
+            () => setRentals([])
+        );
+
+        let unsubPaymentMovements: (() => void) | undefined;
+        if (isAdminSession) {
+            const movementQuery = adminStoreScope === 'all'
+                ? query(collection(db, 'rentalPaymentMovements'))
+                : query(collection(db, 'rentalPaymentMovements'), where('store', '==', adminStoreScope));
+            unsubPaymentMovements = onSnapshot(
+                movementQuery,
+                (snap) => setRentalPaymentMovements(snap.docs.map(d => ({ ...d.data(), id: d.id }) as RentalPaymentMovement)),
+                (err) => { console.error('Error fetching rental payment movements:', err); setRentalPaymentMovements([]); }
+            );
+        } else {
+            setRentalPaymentMovements([]);
+        }
+
+        let unsubSales: (() => void) | undefined;
+        let customerLoadCancelled = false;
+        let unsubSO: (() => void) | undefined;
+
+        if (isAdminSession) {
+            const salesQuery = adminStoreScope === 'all'
+                ? query(collection(db, 'sales'), orderBy('date', 'desc'))
+                : query(collection(db, 'sales'), where('store', '==', adminStoreScope), orderBy('date', 'desc'));
+            const serviceOrdersQuery = adminStoreScope === 'all'
+                ? query(collection(db, 'serviceOrders'), orderBy('date', 'desc'))
+                : query(collection(db, 'serviceOrders'), where('store', '==', adminStoreScope), orderBy('date', 'desc'));
+            unsubSales = onSnapshot(
+                salesQuery,
+                (snap) => setSales(snap.docs.map(d => ({ ...d.data() } as Sale))),
+                (err) => console.error('Error fetching sales:', err)
+            );
+            getAdminCustomersBackend()
+                .then((records) => { if (!customerLoadCancelled) setCustomers(records as unknown as Customer[]); })
+                .catch((err) => console.error('Error fetching sanitized customers:', err));
+            unsubSO = onSnapshot(
+                serviceOrdersQuery,
+                (snap) => setServiceOrders(snap.docs.map(d => ({ ...d.data() } as ServiceOrder))),
+                (err) => console.error('Error fetching service orders:', err)
+            );
+        } else {
+            setSales([]);
+            setCustomers([]);
+            setServiceOrders([]);
+        }
+
+        return () => {
+            unsubRentals();
+            if (unsubPaymentMovements) unsubPaymentMovements();
+            if (unsubSales) unsubSales();
+            customerLoadCancelled = true;
+            if (unsubSO) unsubSO();
         };
-        if (isLoaded) migrate();
+    }, [isAdminSession, adminStoreScope, inventory]);
+
+    // ---- Legacy localStorage data detection (never auto-write to Firestore) ----
+    useEffect(() => {
+        if (!isLoaded || localStorage.getItem('briz_migrated_v1') === 'true') return;
+        const hasLegacyInventory = safeJSON<InventoryItem[]>('briz_inventory', []).length > 0;
+        if (hasLegacyInventory) {
+            console.warn('Se encontraron datos locales antiguos de inventario; no se sincronizaron automáticamente. Requieren conciliación y migración autorizada.');
+        }
     }, [isLoaded]);
 
     const generateId = (prefix: string) => `${prefix}_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
@@ -574,91 +809,101 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
         const item = inventory.find(i => i.id === itemId);
         if (!item) return 0;
         if (item.hasWheelSizes && item.wheelSizes) {
-            if (!wheelSize) return item.wheelSizes.reduce((sum, ws) => sum + (ws.stock || 0), 0);
-            return item.wheelSizes.find(w => w.size === wheelSize)?.stock ?? 0;
+            if (!wheelSize) return item.wheelSizes.reduce((sum, ws) => sum + Math.max(0, ws.stock || 0), 0);
+            return Math.max(0, item.wheelSizes.find(w => w.size === wheelSize)?.stock ?? 0);
         }
-        return item.stock ?? 0;
+        return Math.max(0, item.stock ?? 0);
     };
 
-    const getComboAvailability = (comboId: string): number => {
+    const getComboAvailability = (comboId: string, wheelSize?: string): number => {
         const combo = combos.find(c => c.id === comboId);
         if (!combo || combo.components.length === 0) return 0;
         let minAvail = Infinity;
         for (const comp of combo.components) {
             const item = inventory.find(i => i.id === comp.inventoryItemId);
             if (!item) return 0;
-            const itemStock = getItemStock(item.id);
-            const possible = Math.floor(itemStock / comp.quantity);
+            const ws = (comp.requiresWheelSize || item.hasWheelSizes) ? wheelSize : undefined;
+            const itemStock = getItemStock(item.id, ws);
+            const possible = Math.floor(itemStock / Math.max(1, comp.quantity));
             minAvail = Math.min(minAvail, possible);
         }
-        return minAvail === Infinity ? 0 : minAvail;
+        return minAvail === Infinity ? 0 : Math.max(0, minAvail);
     };
 
-    // PRICE CALCULATOR
+    const getAvailableStockForInterval = (
+        itemId: string,
+        wheelSize?: string,
+        date?: string,
+        pickupTime?: string,
+        duration?: string | number,
+        excludeReservationCode?: string,
+    includePendingReservations: boolean = true
+    ): number => {
+        return calcItemStockForInterval({
+            inventory,
+            combos,
+            rentals,
+            itemId,
+            wheelSize,
+            date,
+            pickupTime,
+            duration,
+            excludeReservationCode,
+            includePendingReservations
+        });
+    };
+
+    const getComboAvailabilityForInterval = (
+        comboId: string,
+        wheelSize?: string,
+        date?: string,
+        pickupTime?: string,
+        duration?: string | number,
+        excludeReservationCode?: string,
+        includePendingReservations: boolean = true
+    ): number => {
+        return calcComboAvailForInterval({
+            inventory,
+            combos,
+            rentals,
+            comboId,
+            wheelSize,
+            date,
+            pickupTime,
+            duration,
+            excludeReservationCode,
+            includePendingReservations
+        });
+    };
+
+    // CENTRALIZED PRICE CALCULATOR
     const calculatePrice = (productType: 'single' | 'combo', productId: string, duration: string, quantity: number): number => {
-        let pricing = productType === 'single' ? inventory.find(i => i.id === productId) : combos.find(c => c.id === productId);
-        if (!pricing) return 0;
-        let base = 0;
-        const d = duration.toLowerCase().trim();
-
-        // 8-tier pricing fields with default fallback values
-        const p1h = (pricing as any).price1Hour || 0;
-        const p2h = (pricing as any).price2Hours || 0;
-        const p3h = (pricing as any).price3Hours || 0;
-        const p4h = (pricing as any).price4Hours || 0;
-        const p8h = (pricing as any).price8Hours || 0;
-        const p24h = (pricing as any).price24Hours || 0;
-        const p1w = (pricing as any).price1Week || 0;
-        const p1m = (pricing as any).price1Month || 0;
-
-        if (d === '1 hora') {
-            base = p1h > 0 ? p1h : pricing.pricePerHour;
-        } else if (d === '2 horas') {
-            base = p2h > 0 ? p2h : (pricing.pricePerHour * 2);
-        } else if (d === '3 horas') {
-            base = p3h > 0 ? p3h : (pricing.pricePerHour * 3);
-        } else if (d === '4 horas' || d === 'medio dÃ­a') {
-            base = p4h > 0 ? p4h : (pricing.pricePerHour * 4);
-        } else if (d === '8 horas') {
-            base = p8h > 0 ? p8h : ((p4h > 0 ? p4h : pricing.pricePerHour * 4) + 4 * (pricing.priceFrom5thHour || 0));
-        } else if (d === '24 horas' || d === '1 dÃ­a' || d === 'dÃ­a completo') {
-            base = p24h > 0 ? p24h : pricing.pricePerDay;
-        } else if (d === '1 semana') {
-            base = p1w > 0 ? p1w : pricing.pricePerWeek;
-        } else if (d === '1 mes') {
-            base = p1m > 0 ? p1m : pricing.pricePerMonth;
-        } else {
-            const match = d.match(/(\d+)\s*hora/);
-            if (match) {
-                const hrs = parseInt(match[1], 10);
-                if (hrs === 1) base = p1h > 0 ? p1h : pricing.pricePerHour;
-                else if (hrs === 2) base = p2h > 0 ? p2h : pricing.pricePerHour * 2;
-                else if (hrs === 3) base = p3h > 0 ? p3h : pricing.pricePerHour * 3;
-                else if (hrs === 4) base = p4h > 0 ? p4h : pricing.pricePerHour * 4;
-                else if (hrs === 8) base = p8h > 0 ? p8h : ((p4h > 0 ? p4h : pricing.pricePerHour * 4) + 4 * (pricing.priceFrom5thHour || 0));
-                else {
-                    base = hrs <= 4 
-                        ? (pricing.pricePerHour * hrs) 
-                        : ((p4h > 0 ? p4h : pricing.pricePerHour * 4) + (hrs - 4) * (pricing.priceFrom5thHour || 0));
-                }
-            }
-        }
-        return base * quantity;
+        const pricing = productType === 'single'
+            ? inventory.find(i => i.id === productId)
+            : combos.find(c => c.id === productId);
+        return calculateProductRentalPrice(pricing, duration, quantity);
     };
 
-    // CUSTOMER AUTH ACTIONS
+    // Customer passwords are handled only by Firebase Authentication.
     const loginCustomer = async (email: string, password: string, remember: boolean): Promise<Customer | null> => {
-        const cust = customers.find(c => c.email?.toLowerCase().trim() === email.toLowerCase().trim() && c.password === password);
-        if (cust) {
-            setCurrentCustomer(cust);
-            if (remember) {
-                localStorage.setItem('briz_logged_customer', JSON.stringify(cust));
-            } else {
-                localStorage.removeItem('briz_logged_customer');
-            }
-            return cust;
+        await setPersistence(auth, remember ? browserLocalPersistence : browserSessionPersistence);
+        const credential = await signInWithEmailAndPassword(auth, email.trim().toLowerCase(), password);
+        if (!credential.user.emailVerified) {
+            await signOut(auth);
+            throw new Error('Verifica tu correo electrónico con el enlace que te enviamos antes de iniciar sesión.');
         }
-        return null;
+        const profile = await createCustomerProfileBackend();
+        const customer = customerFromPublicProfile(profile);
+        setCurrentCustomer(customer);
+        return customer;
+    };
+
+    const verifyCustomerRecovery = async (email: string): Promise<boolean> => {
+        const cleanEmail = email.toLowerCase().trim();
+        if (!cleanEmail) return false;
+        // Firebase applies abuse controls and does not reveal whether an address has an account.
+        await sendPasswordResetEmail(auth, cleanEmail).catch(() => undefined);
+        return true;
     };
 
     const registerCustomer = async (
@@ -668,126 +913,69 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
         docFileReverso: File | null,
         remember: boolean
     ): Promise<Customer> => {
-        const emailExists = customers.some(c => c.email?.toLowerCase().trim() === customerData.email?.toLowerCase().trim());
-        if (emailExists) {
-            throw new Error('El correo electrónico ya está registrado.');
-        }
-
-        const id = generateId('cust');
-        let autofotoUrl = '';
-        let documentoUrl = '';
-        let documentoReversoUrl = '';
-
-        // Helper to prevent Firebase Storage uploads from hanging indefinitely (timeout in 6 seconds)
-        const uploadWithTimeout = async (ref: any, blobOrFile: Blob | File): Promise<any> => {
-            return Promise.race([
-                uploadBytes(ref, blobOrFile),
-                new Promise((_, reject) => 
-                    setTimeout(() => reject(new Error('Firebase Storage upload timeout')), 6000)
-                )
-            ]);
-        };
-
-        if (selfieBlob) {
-            try {
-                const pathRef = storageRef(storage, `customers/selfies/${id}_selfie.jpg`);
-                const result = await uploadWithTimeout(pathRef, selfieBlob);
-                autofotoUrl = await getDownloadURL(result.ref);
-            } catch (err) {
-                console.error("Error uploading selfie, using base64 fallback:", err);
-                try {
-                    const base64 = await new Promise<string>((resolve, reject) => {
-                        const reader = new FileReader();
-                        reader.onloadend = () => resolve(reader.result as string);
-                        reader.onerror = reject;
-                        reader.readAsDataURL(selfieBlob);
-                    });
-                    if (base64.length < 650000) {
-                        autofotoUrl = base64;
-                    }
-                } catch (fallbackErr) {
-                    console.error("Error creating base64 fallback for selfie:", fallbackErr);
-                }
+        const cleanEmail = customerData.email?.trim().toLowerCase() || '';
+        if (!cleanEmail || !customerData.password) throw new Error('El correo y la contraseña son obligatorios.');
+        if (!selfieBlob || !docFileAnverso || !docFileReverso) throw new Error('Adjunta la foto y ambos lados del documento.');
+        const id = `cust_pending_${Date.now()}`;
+        let authCreated = false;
+        try {
+            await setPersistence(auth, remember ? browserLocalPersistence : browserSessionPersistence);
+            const credential = await createUserWithEmailAndPassword(auth, cleanEmail, customerData.password);
+            authCreated = true;
+            const uid = credential.user.uid;
+            const files = [
+                { name: 'selfie.jpg', blob: selfieBlob, contentType: selfieBlob.type || 'image/jpeg' },
+                { name: `document-front.${fileExtension(docFileAnverso)}`, blob: docFileAnverso, contentType: docFileAnverso.type || 'application/octet-stream' },
+                { name: `document-back.${fileExtension(docFileReverso)}`, blob: docFileReverso, contentType: docFileReverso.type || 'application/octet-stream' },
+            ];
+            const privatePaths: Record<string, string> = {};
+            for (const file of files) {
+                const path = `customerUploads/${uid}/${file.name}`;
+                await uploadBytes(storageRef(storage, path), file.blob, { contentType: file.contentType });
+                if (file.name === 'selfie.jpg') privatePaths.autofotoPath = path;
+                else if (file.name.startsWith('document-front.')) privatePaths.documentoPath = path;
+                else privatePaths.documentoReversoPath = path;
             }
+            await beginCustomerRegistration({
+                name: customerData.name,
+                phone: customerData.phone,
+                ci: customerData.ci,
+                nacionalidad: customerData.nacionalidad || '',
+                departamento: customerData.departamento || '',
+                comoNosConociste: customerData.comoNosConociste || '',
+                ...privatePaths,
+            });
+            await sendEmailVerification(credential.user);
+            await signOut(auth);
+            setCurrentCustomer(null);
+            return {
+                id,
+                name: customerData.name,
+                phone: customerData.phone,
+                ci: customerData.ci,
+                email: cleanEmail,
+                rentalsCount: 0, purchasesCount: 0, firstVisit: '', lastVisit: '', notes: '',
+            };
+        } catch (error) {
+            if (authCreated && auth.currentUser) await signOut(auth).catch(() => undefined);
+            throw error;
         }
-
-        if (docFileAnverso) {
-            try {
-                const fileExt = docFileAnverso.name.split('.').pop() || 'pdf';
-                const pathRef = storageRef(storage, `customers/documents/${id}_anverso.${fileExt}`);
-                const result = await uploadWithTimeout(pathRef, docFileAnverso);
-                documentoUrl = await getDownloadURL(result.ref);
-            } catch (err) {
-                console.error("Error uploading document front, checking for base64 fallback:", err);
-                if (docFileAnverso.size < 500000) {
-                    try {
-                        const base64 = await new Promise<string>((resolve, reject) => {
-                            const reader = new FileReader();
-                            reader.onloadend = () => resolve(reader.result as string);
-                            reader.onerror = reject;
-                            reader.readAsDataURL(docFileAnverso);
-                        });
-                        documentoUrl = base64;
-                    } catch (fallbackErr) {
-                        console.error("Error creating base64 fallback for document front:", fallbackErr);
-                    }
-                }
-            }
-        }
-
-        if (docFileReverso) {
-            try {
-                const fileExt = docFileReverso.name.split('.').pop() || 'pdf';
-                const pathRef = storageRef(storage, `customers/documents/${id}_reverso.${fileExt}`);
-                const result = await uploadWithTimeout(pathRef, docFileReverso);
-                documentoReversoUrl = await getDownloadURL(result.ref);
-            } catch (err) {
-                console.error("Error uploading document back, checking for base64 fallback:", err);
-                if (docFileReverso.size < 500000) {
-                    try {
-                        const base64 = await new Promise<string>((resolve, reject) => {
-                            const reader = new FileReader();
-                            reader.onloadend = () => resolve(reader.result as string);
-                            reader.onerror = reject;
-                            reader.readAsDataURL(docFileReverso);
-                        });
-                        documentoReversoUrl = base64;
-                    } catch (fallbackErr) {
-                        console.error("Error creating base64 fallback for document back:", fallbackErr);
-                    }
-                }
-            }
-        }
-
-        const newCustomer: Customer = {
-            id,
-            ...customerData,
-            rentalsCount: 0,
-            purchasesCount: 0,
-            firstVisit: new Date().toISOString(),
-            lastVisit: new Date().toISOString(),
-            notes: '',
-            autofotoUrl,
-            documentoUrl,
-            documentoReversoUrl
-        };
-
-        await setDoc(doc(db, 'customers', id), newCustomer);
-
-        setCurrentCustomer(newCustomer);
-        if (remember) {
-            localStorage.setItem('briz_logged_customer', JSON.stringify(newCustomer));
-        } else {
-            localStorage.removeItem('briz_logged_customer');
-        }
-
-        return newCustomer;
     };
 
-    const logoutCustomer = () => {
+    const logoutCustomer = async () => {
+        await signOut(auth);
         setCurrentCustomer(null);
         localStorage.removeItem('briz_logged_customer');
     };
+
+    const customerUid = currentCustomer?.id;
+    const getMyRentalHistory = useCallback(async (): Promise<Rental[]> => {
+        if (!customerUid) return [];
+        const history = await getMyRentalsBackend();
+        return history as unknown as Rental[];
+    }, [customerUid]);
+
+    const createRentalGroup = (input: ReservationGroupInput) => createRentalGroupBackend(input);
 
     // CRUD ACTIONS
     const addInventoryItem = async (item: InventoryItem) => {
@@ -851,6 +1039,7 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
         }
         saveLocalRoutes(current => current.filter(r => r.id !== id));
     };
+
     const addBikeCategory = async (cat: string) => {
         const trimmed = cat.trim();
         if (trimmed && !bikeCategories.includes(trimmed)) {
@@ -870,13 +1059,11 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
         const updated = bikeCategories.map(c => c === trimmedOld ? trimmedNew : c);
         await setDoc(doc(db, 'settings', 'bike_categories'), { categories: updated });
 
-        // Update items in inventory
         const itemsToUpdate = inventory.filter(i => i.category === trimmedOld);
         for (const item of itemsToUpdate) {
             await updateInventoryItem(item.id, { category: trimmedNew });
         }
 
-        // Update combos
         const combosToUpdate = combos.filter(c => c.category === trimmedOld);
         for (const combo of combosToUpdate) {
             await updateCombo(combo.id, { category: trimmedNew });
@@ -909,13 +1096,11 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
         await setDoc(doc(db, 'settings', 'shop_categories'), { categories: updated });
         setShopCategories(updated);
 
-        // Update items in inventory
         const itemsToUpdate = inventory.filter(i => i.category === trimmedOld);
         for (const item of itemsToUpdate) {
             await updateInventoryItem(item.id, { category: trimmedNew });
         }
 
-        // Update combos
         const combosToUpdate = combos.filter(c => c.category === trimmedOld);
         for (const combo of combosToUpdate) {
             await updateCombo(combo.id, { category: trimmedNew });
@@ -936,233 +1121,86 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
         await deleteDoc(doc(db, 'combos', id));
     };
 
-    const addRental = async (rental: Omit<Rental, 'id' | 'reservationCode' | 'status' | 'createdAt' | 'updatedAt' | 'paymentStatus'>): Promise<Rental> => {
-        const id = generateId('rental');
-        
-        // Collision-safe sequential code generation from real-time local state array
-        const currentYear = new Date().getFullYear();
-        const yearPrefix = `BRIZ-${currentYear}-`;
-        
-        let seq = 1;
-        const yearRentals = rentals.filter(r => r.reservationCode && r.reservationCode.startsWith(yearPrefix));
-        if (yearRentals.length > 0) {
-            const sequences = yearRentals.map(r => {
-                const parts = r.reservationCode.split('-');
-                const num = parseInt(parts[parts.length - 1], 10);
-                return isNaN(num) ? 0 : num;
-            });
-            const maxSeq = Math.max(...sequences, 0);
-            seq = maxSeq + 1;
-        }
-        
-        const reservationCode = `${yearPrefix}${String(seq).padStart(4, '0')}`;
-        const method = rental.paymentMethod.toLowerCase();
-        const paymentStatus: Rental['paymentStatus'] = method === 'qr' || method.includes('transfer') ? 'pending_review' : 'unpaid';
-        const nowStr = new Date().toISOString();
-
-        const newRental: Rental = {
-            ...rental,
-            id,
-            reservationCode,
-            productNameSnapshot: rental.productNameSnapshot || rental.productName,
-            paymentStatus,
-            status: 'pending',
-            createdAt: nowStr,
-            updatedAt: nowStr,
-            createdDate: nowStr
-        };
-        
-        // Firestore does NOT accept undefined values â€” strip them before writing
-        const cleanData: Record<string, any> = {};
-        for (const [key, value] of Object.entries(newRental)) {
-            if (value !== undefined) {
-                cleanData[key] = value;
-            }
-        }
-        
-        // Wrap in try-catch so Firestore errors NEVER block the user flow
-        try {
-            setDoc(doc(db, 'rentals', id), cleanData).catch(err => {
-                console.error("Firestore background upload failed:", err);
-            });
-        } catch (err) {
-            console.error("Firestore setDoc sync error (non-blocking):", err);
-        }
-
-        return newRental;
+    /** Server callable validates role, interval and inventory and commits group-wide confirmation. */
+    const confirmRentalGroup = async (ids: string[], _actor?: string): Promise<{ ok: boolean; error?: string }> => {
+        void _actor;
+        try { await runAdminRentalAction('confirm', ids); return { ok: true }; }
+        catch (error) { return { ok: false, error: error instanceof Error ? error.message : 'Error al confirmar el grupo.' }; }
+    };
+    const confirmRental = async (id: string, actor?: string): Promise<boolean> => {
+        const res = await confirmRentalGroup([id], actor);
+        return res.ok;
     };
 
-    const confirmRental = async (id: string, actor?: string): Promise<boolean> => {
-        const rental = rentals.find(r => r.id === id);
-        if (!rental || (rental.status !== 'pending' && rental.status !== 'Pendiente')) return false;
-
-        // Atomic update for stock
-        const batch = writeBatch(db);
-        const invCopy = [...inventory];
-
-        const updateStock = (itemId: string, qty: number, wsSize?: string) => {
-            if (itemId.startsWith('srv_')) return true;
-            const itemIdx = invCopy.findIndex(i => i.id === itemId);
-            if (itemIdx < 0) return false;
-            const item = { ...invCopy[itemIdx] };
-            if (item.hasWheelSizes && item.wheelSizes) {
-                const wsIdx = item.wheelSizes.findIndex(w => w.size === wsSize);
-                if (wsIdx < 0 || item.wheelSizes[wsIdx].stock < qty) return false;
-                item.wheelSizes = [...item.wheelSizes];
-                item.wheelSizes[wsIdx] = { ...item.wheelSizes[wsIdx], stock: item.wheelSizes[wsIdx].stock - qty };
-            } else {
-                if ((item.stock ?? 0) < qty) return false;
-                item.stock = (item.stock ?? 0) - qty;
-            }
-            invCopy[itemIdx] = item;
-            batch.update(doc(db, 'inventory', itemId), item as any);
-            return true;
-        };
-
-        let success = true;
-        if (rental.productType === 'single') {
-            success = updateStock(rental.productId, rental.quantity, rental.selectedWheelSize);
-        } else {
-            const combo = combos.find(c => c.id === rental.productId);
-            if (!combo) success = false;
-            else {
-                for (const comp of combo.components) {
-                    const selection = rental.componentSelections?.find(cs => cs.inventoryItemId === comp.inventoryItemId);
-                    if (!updateStock(comp.inventoryItemId, comp.quantity * rental.quantity, selection?.wheelSize)) {
-                        success = false; break;
-                    }
-                }
-            }
-        }
-
-        if (!success) return false;
-
-        batch.update(doc(db, 'rentals', id), { 
-            status: 'confirmed',
-            updatedAt: new Date().toISOString(),
-            lastUpdatedBy: actor || 'admin'
+    const deliverRentalGroup = async (ids: string[], _actor?: string) => {
+        void _actor;
+        await runAdminRentalAction('deliver', ids);
+    };
+    /**
+     * Atomic helper to restore stock and transition status for a group of rentals
+     * (used by both cancelRentalGroup and returnRentalGroup).
+     */
+    const restoreStockAndTransitionGroup = async (
+        ids: string[], targetStatus: 'cancelled' | 'returned', _actor?: string, returnOptions?: ReturnRentalOptions
+    ) => {
+        void _actor;
+        await runAdminRentalAction(targetStatus === 'cancelled' ? 'cancel' : 'return', ids, {
+            damagedUnits: returnOptions?.damagedUnits || 0,
+            conditionNotes: returnOptions?.conditionNotes,
         });
-        await batch.commit();
-        return true;
+    };
+    const cancelRentalGroup = async (ids: string[], actor?: string) => {
+        await restoreStockAndTransitionGroup(ids, 'cancelled', actor);
     };
 
     const cancelRental = async (id: string, actor?: string) => {
-        const rental = rentals.find(r => r.id === id);
-        if (!rental) return;
-
-        if (rental.status === 'confirmed' || rental.status === 'Confirmado') {
-            const batch = writeBatch(db);
-            const restoreStock = (itemId: string, qty: number, wsSize?: string) => {
-                if (itemId.startsWith('srv_')) return;
-                const item = inventory.find(i => i.id === itemId);
-                if (!item) return;
-                const updated = { ...item };
-                if (updated.hasWheelSizes && updated.wheelSizes) {
-                    updated.wheelSizes = updated.wheelSizes.map(w => w.size === wsSize ? { ...w, stock: w.stock + qty } : w);
-                } else {
-                    updated.stock = (updated.stock ?? 0) + qty;
-                }
-                batch.update(doc(db, 'inventory', itemId), updated as any);
-            };
-
-            if (rental.productType === 'single') {
-                restoreStock(rental.productId, rental.quantity, rental.selectedWheelSize);
-            } else {
-                const combo = combos.find(c => c.id === rental.productId);
-                combo?.components.forEach(comp => {
-                    const sel = rental.componentSelections?.find(cs => cs.inventoryItemId === comp.inventoryItemId);
-                    restoreStock(comp.inventoryItemId, comp.quantity * rental.quantity, sel?.wheelSize);
-                });
-            }
-            batch.update(doc(db, 'rentals', id), { 
-                status: 'cancelled',
-                updatedAt: new Date().toISOString(),
-                lastUpdatedBy: actor || 'admin'
-            });
-            await batch.commit();
-        } else {
-            await updateDoc(doc(db, 'rentals', id), { 
-                status: 'cancelled',
-                updatedAt: new Date().toISOString(),
-                lastUpdatedBy: actor || 'admin'
-            });
-        }
+        await restoreStockAndTransitionGroup([id], 'cancelled', actor);
     };
 
-    const returnRental = async (id: string, actor?: string) => {
-        const rental = rentals.find(r => r.id === id);
-        if (!rental) return;
-
-        if (rental.status === 'confirmed' || rental.status === 'Confirmado') {
-            const batch = writeBatch(db);
-            const restoreStock = (itemId: string, qty: number, wsSize?: string) => {
-                if (itemId.startsWith('srv_')) return;
-                const item = inventory.find(i => i.id === itemId);
-                if (!item) return;
-                const updated = { ...item };
-                if (updated.hasWheelSizes && updated.wheelSizes) {
-                    updated.wheelSizes = updated.wheelSizes.map(w => w.size === wsSize ? { ...w, stock: w.stock + qty } : w);
-                } else {
-                    updated.stock = (updated.stock ?? 0) + qty;
-                }
-                batch.update(doc(db, 'inventory', itemId), updated as any);
-            };
-
-            if (rental.productType === 'single') {
-                restoreStock(rental.productId, rental.quantity, rental.selectedWheelSize);
-            } else {
-                const combo = combos.find(c => c.id === rental.productId);
-                combo?.components.forEach(comp => {
-                    const sel = rental.componentSelections?.find(cs => cs.inventoryItemId === comp.inventoryItemId);
-                    restoreStock(comp.inventoryItemId, comp.quantity * rental.quantity, sel?.wheelSize);
-                });
-            }
-            batch.update(doc(db, 'rentals', id), { 
-                status: 'returned',
-                updatedAt: new Date().toISOString(),
-                lastUpdatedBy: actor || 'admin'
-            });
-            await batch.commit();
-        }
+    const returnRentalGroup = async (ids: string[], actor?: string, options?: ReturnRentalOptions) => {
+        await restoreStockAndTransitionGroup(ids, 'returned', actor, options);
     };
 
-    const updateRentalPaymentStatus = async (id: string, paymentStatus: Rental['paymentStatus'], actor?: string) => {
-        await updateDoc(doc(db, 'rentals', id), {
-            paymentStatus,
-            updatedAt: new Date().toISOString(),
-            lastUpdatedBy: actor || 'admin'
+    const returnRental = async (id: string, actor?: string, options?: ReturnRentalOptions) => {
+        await restoreStockAndTransitionGroup([id], 'returned', actor, options);
+    };
+
+    const recordRentalPaymentMovement = (input: RecordRentalPaymentMovementInput) => recordRentalPaymentBackend(input);
+    const updateRental = async (id: string, updates: Partial<Rental>, _actor?: string) => {
+        void _actor;
+        const current = rentals.find((rental) => rental.id === id);
+        if (!current) throw new Error('No se encontró el alquiler que deseas editar.');
+        const groupCode = current.reservationCode || current.id;
+        const group = rentals.filter((rental) => (rental.reservationCode || rental.id) === groupCode);
+        await updateRentalGroup({
+            reservationCode: groupCode,
+            rentalIds: group.map((rental) => rental.id),
+            date: updates.date || current.date,
+            pickupTime: updates.pickupTime || current.pickupTime || '09:00',
+            duration: updates.duration ? String(updates.duration) : String(current.duration),
+            deliveryService: updates.deliveryService ?? Boolean(current.deliveryService),
+            pickupService: updates.pickupService ?? Boolean(current.pickupService),
+            mapsLink: updates.mapsLink ?? current.mapsLink ?? '',
+            notes: updates.notes ?? current.notes ?? '',
+            items: group.map((rental) => ({
+                id: rental.id, productId: rental.id === id ? updates.productId || rental.productId : rental.productId,
+                productType: rental.id === id ? updates.productType || rental.productType || 'single' : rental.productType || 'single',
+                quantity: rental.id === id ? updates.quantity ?? rental.quantity : rental.quantity,
+                selectedWheelSize: rental.id === id ? updates.selectedWheelSize ?? rental.selectedWheelSize : rental.selectedWheelSize,
+            })),
         });
     };
-
-    const updateRental = async (id: string, updates: Partial<Rental>, actor?: string) => {
-        const cleanUpdates: Record<string, any> = {};
-        for (const [key, value] of Object.entries(updates)) {
-            if (value !== undefined && key !== 'id' && key !== 'reservationCode' && key !== 'createdAt' && key !== 'createdDate') {
-                cleanUpdates[key] = value;
-            }
-        }
-
-        await updateDoc(doc(db, 'rentals', id), {
-            ...cleanUpdates,
-            updatedAt: new Date().toISOString(),
-            lastUpdatedBy: actor || 'admin'
-        });
+    const markRentalExpired = async (id: string, _actor?: string) => {
+        void _actor;
+        await runAdminRentalAction('expire', [id]);
     };
-
-    const markRentalExpired = async (id: string, actor?: string) => {
-        await updateDoc(doc(db, 'rentals', id), {
-            status: 'expired',
-            updatedAt: new Date().toISOString(),
-            lastUpdatedBy: actor || 'admin'
-        });
+    const deleteRentalGroup = async (ids: string[]) => {
+        await runAdminRentalAction('cancel', ids);
     };
 
     const deleteRental = async (id: string) => {
-        const rental = rentals.find(r => r.id === id);
-        if (rental?.status === 'Confirmado') await cancelRental(id);
-        await deleteDoc(doc(db, 'rentals', id));
+        await runAdminRentalAction('cancel', [id]);
     };
-
     const addSale = async (s: Omit<Sale, 'id' | 'date' | 'status'>) => {
         const id = generateId('sale');
         await setDoc(doc(db, 'sales', id), { ...s, id, status: 'Pendiente', date: new Date().toISOString() });
@@ -1175,32 +1213,61 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
     };
 
     const addOrUpdateCustomer = async (c: { name: string; phone: string; ci: string }, isPurchase: boolean) => {
-        const existing = customers.find(cust => cust.ci === c.ci || cust.phone === c.phone);
+        const cleanCi = (c.ci || '').trim();
+        const cleanPhone = (c.phone || '').trim();
+        const existing = customers.find(cust => (cleanCi && cust.ci === cleanCi) || (cleanPhone && cust.phone === cleanPhone));
+
         if (existing) {
-            await updateDoc(doc(db, 'customers', existing.id), {
-                name: c.name, phone: c.phone, ci: c.ci,
-                purchasesCount: existing.purchasesCount + (isPurchase ? 1 : 0),
-                rentalsCount: existing.rentalsCount + (!isPurchase ? 1 : 0),
+            const updates = {
+                name: c.name || existing.name,
+                phone: c.phone || existing.phone,
+                ci: c.ci || existing.ci,
+                purchasesCount: (existing.purchasesCount || 0) + (isPurchase ? 1 : 0),
+                rentalsCount: (existing.rentalsCount || 0) + (!isPurchase ? 1 : 0),
                 lastVisit: new Date().toISOString()
-            });
+            };
+            await updateDoc(doc(db, 'customers', existing.id), updates);
+            setCustomers((current) => current.map((customer) => customer.id === existing!.id ? { ...customer, ...updates } : customer));
         } else {
             const id = generateId('cust');
-            await setDoc(doc(db, 'customers', id), {
-                id, ...c, rentalsCount: isPurchase ? 0 : 1, purchasesCount: isPurchase ? 1 : 0,
-                firstVisit: new Date().toISOString(), lastVisit: new Date().toISOString(), notes: ''
-            });
+            const newCustomer: Customer = {
+                id,
+                ...c,
+                rentalsCount: isPurchase ? 0 : 1,
+                purchasesCount: isPurchase ? 1 : 0,
+                firstVisit: new Date().toISOString(),
+                lastVisit: new Date().toISOString(),
+                notes: '',
+                ...(isAdminSession && adminStoreScope !== 'all' ? { store: adminStoreScope } : {}),
+            };
+            await setDoc(doc(db, 'customers', id), newCustomer);
+            setCustomers((current) => [...current, newCustomer]);
         }
     };
+
     const updateCustomer = async (id: string, c: Partial<Customer>) => {
+        if ('password' in c) throw new Error('Las contraseñas se actualizan desde Firebase Authentication.');
         await updateDoc(doc(db, 'customers', id), c);
+        setCustomers((current) => current.map((customer) => customer.id === id ? { ...customer, ...c } : customer));
     };
+
     const deleteCustomer = async (id: string) => {
         await deleteDoc(doc(db, 'customers', id));
+        setCustomers((current) => current.filter((customer) => customer.id !== id));
     };
 
     const addServiceOrder = async (so: Omit<ServiceOrder, 'id' | 'date'>) => {
-        const id = generateId('so');
-        await setDoc(doc(db, 'serviceOrders', id), { ...so, id, date: new Date().toISOString() });
+        if (isAdminSession) {
+            const id = generateId('so');
+            await setDoc(doc(db, 'serviceOrders', id), {
+                ...so,
+                ...(adminStoreScope !== 'all' ? { store: adminStoreScope } : {}),
+                id,
+                date: new Date().toISOString(),
+            });
+            return;
+        }
+        await createServiceOrderBackend(so);
     };
     const updateServiceOrder = async (id: string, so: Partial<ServiceOrder>) => {
         await updateDoc(doc(db, 'serviceOrders', id), so);
@@ -1284,7 +1351,7 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
 
     const resetAllData = async () => {
         const batch = writeBatch(db);
-        rentals.forEach(r => batch.delete(doc(db, 'rentals', r.id)));
+        // Rental history is intentionally excluded from browser-side bulk deletion.
         sales.forEach(s => batch.delete(doc(db, 'sales', s.id)));
         customers.forEach(c => batch.delete(doc(db, 'customers', c.id)));
         serviceOrders.forEach(s => batch.delete(doc(db, 'serviceOrders', s.id)));
@@ -1294,17 +1361,22 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
     const mergedRoutes = mergeRoutes(routes, localRoutes);
 
     const value: StoreContextType = {
-        inventory, combos, rentals, sales, customers, serviceOrders, isLoaded,
+        adminStoreScope,
+        inventory, combos, rentals, rentalPaymentMovements, sales, customers, serviceOrders, isLoaded,
         rentalSettings, updateRentalSettings,
         addInventoryItem, updateInventoryItem, deleteInventoryItem,
         addCombo, updateCombo, deleteCombo,
-        addRental, confirmRental, cancelRental, returnRental, deleteRental,
-        updateRental, updateRentalPaymentStatus, markRentalExpired,
+        confirmRental, confirmRentalGroup, deliverRentalGroup,
+        cancelRental, cancelRentalGroup, returnRental, returnRentalGroup,
+        deleteRental, deleteRentalGroup,
+        updateRental, recordRentalPaymentMovement, markRentalExpired,
         addSale, updateSaleStatus, deleteSale,
-        addOrUpdateCustomer, updateCustomer, deleteCustomer,
+        addOrUpdateCustomer, updateCustomer, deleteCustomer, verifyCustomerRecovery,
         addServiceOrder, updateServiceOrder, deleteServiceOrder,
-        getItemStock, getComboAvailability, calculatePrice, resetAllData,
-        currentCustomer, loginCustomer, registerCustomer, logoutCustomer,
+        getItemStock, getComboAvailability,
+        getAvailableStockForInterval, getComboAvailabilityForInterval,
+        calculatePrice, resetAllData,
+        currentCustomer, loginCustomer, registerCustomer, logoutCustomer, getMyRentalHistory, createRentalGroup,
         routes: mergedRoutes, addRoute, updateRoute, deleteRoute,
         events, addEvent, updateEvent, deleteEvent,
         bikeCategories, addBikeCategory, deleteBikeCategory, updateBikeCategory, reorderBikeCategories,

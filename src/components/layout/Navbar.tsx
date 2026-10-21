@@ -345,7 +345,7 @@ export default function Navbar() {
                         <Link 
                             to="/" 
                             className="group flex items-center shrink-0" 
-                            aria-label="BRIZ Centro de la Bicicleta"
+                            aria-label={language === 'es' ? 'BRIZ Centro de la Bicicleta' : 'BRIZ Bicycle Center'}
                         >
                             <img
                                 src="/logo_bicicleta_principal.png"
@@ -364,9 +364,9 @@ export default function Navbar() {
                         {/* Tire Track 1 */}
                         <TireTrackSeparator className="mx-2.5" style={{ height: 56, width: 16 }} />
 
-                        {/* Centro de la Bicicleta text */}
+                        {/* {language === 'es' ? 'Centro de la Bicicleta' : 'Bicycle Center'} text */}
                         <span className="font-cocon font-black uppercase leading-none tracking-wider text-white drop-shadow-sm shrink-0" style={{ fontSize: 18 }}>
-                            Centro de la Bicicleta
+                            {language === 'es' ? 'Centro de la Bicicleta' : 'Bicycle Center'}
                         </span>
 
                         {/* Tire Track 2 */}
@@ -478,20 +478,20 @@ export default function Navbar() {
                                     <div className="absolute right-0 top-full pt-2 opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto transition-all duration-200 z-50">
                                         <div className="bg-brand-charcoal border border-white/10 rounded-2xl p-2 w-48 shadow-xl">
                                             <div className="px-3 py-2 border-b border-white/5 text-left">
-                                                <p className="text-[10px] text-white/40 font-bold uppercase tracking-wider font-maiandra">Cliente</p>
+                                                <p className="text-[10px] text-white/40 font-bold uppercase tracking-wider font-maiandra">{language === 'es' ? 'Cliente' : 'Customer'}</p>
                                                 <p className="text-xs font-bold text-white truncate font-cocon">{currentCustomer.name}</p>
                                             </div>
                                             <Link
                                                 to="/profile"
                                                 className="w-full flex items-center gap-2 text-left px-3 py-2 text-xs font-bold text-white/80 hover:bg-white/5 rounded-xl mt-1 transition-colors font-cocon"
                                             >
-                                                <User className="w-3.5 h-3.5" /> Mi perfil
+                                                <User className="w-3.5 h-3.5" /> {language === 'es' ? 'Mi perfil' : 'My Profile'}
                                             </Link>
                                             <button 
                                                 onClick={logoutCustomer} 
                                                 className="w-full flex items-center gap-2 text-left px-3 py-2 text-xs font-bold text-red-400 hover:bg-red-500/10 rounded-xl mt-1 transition-colors font-cocon"
                                             >
-                                                <LogOut className="w-3.5 h-3.5" /> Cerrar Sesión
+                                                <LogOut className="w-3.5 h-3.5" /> {language === 'es' ? 'Cerrar Sesión' : 'Sign Out'}
                                             </button>
                                         </div>
                                     </div>
@@ -501,7 +501,7 @@ export default function Navbar() {
                                     onClick={() => setAuthModalOpen(true)}
                                     className="h-10 px-5 flex items-center gap-2 rounded-full bg-white text-brand-black hover:bg-brand-yellow-light font-cocon text-xs font-bold uppercase transition hover:scale-105 shadow-sm"
                                 >
-                                    <User className="w-4 h-4" /> Iniciar Sesión
+                                    <User className="w-4 h-4" /> {language === 'es' ? 'Iniciar Sesión' : 'Sign In'}
                                 </button>
                             )}
 
@@ -552,7 +552,7 @@ export default function Navbar() {
                         <Link 
                             to="/" 
                             className="group flex items-center shrink-0" 
-                            aria-label="BRIZ Centro de la Bicicleta"
+                            aria-label={language === 'es' ? 'BRIZ Centro de la Bicicleta' : 'BRIZ Bicycle Center'}
                         >
                             <img
                                 src="/logo_bicicleta_principal.png"
@@ -571,9 +571,9 @@ export default function Navbar() {
                         {/* Tire Track separator - mobile */}
                         <TireTrackSeparator className="mx-1.5" style={{ height: 40, width: 12 }} />
 
-                        {/* Centro de la Bicicleta text - mobile */}
+                        {/* {language === 'es' ? 'Centro de la Bicicleta' : 'Bicycle Center'} text - mobile */}
                         <span className="font-cocon font-black uppercase leading-none tracking-wide text-white drop-shadow-sm shrink-0 whitespace-nowrap" style={{ fontSize: 'min(11px, 2.8vw)' }}>
-                            Centro de la Bicicleta
+                            {language === 'es' ? 'Centro de la Bicicleta' : 'Bicycle Center'}
                         </span>
 
                         {/* Spacer */}
@@ -583,7 +583,7 @@ export default function Navbar() {
                         <button
                             onClick={() => setMobileOpen((open) => !open)}
                             className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/18 text-white transition-transform active:scale-95"
-                            aria-label={mobileOpen ? 'Cerrar menu' : 'Abrir menu'}
+                            aria-label={mobileOpen ? (language === 'es' ? 'Cerrar menú' : 'Close menu') : (language === 'es' ? 'Abrir menú' : 'Open menu')}
                             aria-expanded={mobileOpen}
                             type="button"
                         >
@@ -716,7 +716,7 @@ export default function Navbar() {
                                             className="w-full flex min-w-0 items-center gap-3 rounded-2xl px-4 py-3 bg-white/12 text-brand-black font-cocon text-sm font-bold hover:bg-white/22 transition-all text-left"
                                         >
                                             <User className="h-5 w-5 shrink-0" strokeWidth={2.2} />
-                                            <span className="min-w-0 flex-1 whitespace-normal break-words leading-tight">Mi perfil</span>
+                                            <span className="min-w-0 flex-1 whitespace-normal break-words leading-tight">{language === 'es' ? 'Mi perfil' : 'My Profile'}</span>
                                         </Link>
                                         <button 
                                             onClick={() => {
@@ -726,7 +726,7 @@ export default function Navbar() {
                                             className="w-full flex items-center gap-3 rounded-2xl px-4 py-3 bg-red-500/10 text-red-700 font-cocon text-sm font-bold hover:bg-red-500/20 transition-all text-left"
                                         >
                                             <LogOut className="h-5 w-5 shrink-0 text-red-700" strokeWidth={2.2} />
-                                            <span>Cerrar Sesión</span>
+                                            <span>{language === 'es' ? 'Cerrar Sesión' : 'Sign Out'}</span>
                                         </button>
                                     </div>
                                 ) : (
@@ -738,7 +738,7 @@ export default function Navbar() {
                                         className="w-full flex items-center gap-3 rounded-2xl px-4 py-3 bg-white text-brand-black font-cocon text-sm font-bold hover:bg-white/90 transition-all text-left"
                                     >
                                         <User className="h-5 w-5 shrink-0" strokeWidth={2.2} />
-                                        <span>Iniciar Sesión</span>
+                                        <span>{language === 'es' ? 'Iniciar Sesión' : 'Sign In'}</span>
                                     </button>
                                 )}
                             </div>

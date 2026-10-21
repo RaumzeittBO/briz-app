@@ -1,0 +1,224 @@
+# BRIZ — preparación de salida a producción
+
+## Estado vigente de preservación y Telegram — 2026-10-21
+
+- Copia puntual de solo lectura guardada localmente en `G:\ProjectBriz\BRIZ_RELEASE_PRESERVATION_2026-10-21`: inventario (173), combos (14), rutas (2), eventos (2), configuración comercial (3 docs), rol Admin actual y 43 objetos de `inventory/` + `events/` (9,409,348 bytes). No contiene clientes, alquileres, pagos, customer uploads ni credenciales Auth. Recuperación Firestore probada en `demo-briz-preservation` con 195 documentos y comparación exacta de campos; los 43 archivos se subieron y descargaron del Storage Emulator con comparación byte por byte y checksums. No hubo escrituras productivas.
+- Admin `prueba2@briz.com` (UID `C8MUz2wZrPOyaNySZc44YShLHoJ3`) existe/no está deshabilitado; el registro de rol Admin se preservó. `www.briz.com.bo` está autorizado en Firebase Auth.
+- La programación diaria/7 días está activa; no hay primera copia materializada. **La ausencia de esa copia dejó de ser un gate** dado que el catálogo/configuración fueron exportados y su restauración fue verificada localmente. Se recomienda conservar el schedule: tarifa aproximada `US$0.21 × tamaño de la base fuente en GiB al mes` en régimen estable y `US$0.20/GiB` por restore. El tamaño total facturable de Firestore no se midió. [Precios oficiales](https://cloud.google.com/firestore/pricing).
+- Secretos Telegram vacíos creados en `briz-4ef3a`: `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`. Solo el service account `briz-telegram-runtime@briz-4ef3a.iam.gserviceaccount.com` tiene `roles/secretmanager.secretAccessor` en cada secreto; aún hay cero versiones. Las primeras seis versiones activas por cuenta de facturación y 10,000 lecturas son gratuitas; después, cada versión cuesta US$0.06 por ubicación/mes. Las dos versiones sumarían hasta US$0.12/mes si la cuota compartida ya está agotada; la replicación automática cuenta como una ubicación. [Precios Secret Manager](https://cloud.google.com/secret-manager/pricing).
+- Falta la intervención del propietario: revocar token anterior en BotFather, crear el reemplazo y guardar directamente token y chat ID como versiones en los secretos existentes, sin compartir valores. Después se validará acceso, una notificación y deduplicación; retirar `VITE_TELEGRAM_*` de Vercel solo tras esa prueba.
+- No se desplegaron índices, Functions ni Rules y no hubo merge ni escritura productiva. La rama tiene dos commits locales sin push para no generar Preview fallido; PR #1 sigue sin fusionar. Próximo: esperar solo el ingreso seguro de los dos valores, y después ejecutar la ventana ya autorizada: índices → Functions (incluido trigger) → verificación de backend → merge a `main` → confirmar Vercel Production con `briz-4ef3a` → Rules estrictas → smoke de lectura/Auth/Admin. Mantener un rollback compatible; no volver a Rules inseguras como estado permanente.
+
+Las condiciones anteriores de “esperar la primera copia diaria”, donde aparezcan abajo, quedan reemplazadas por esta verificación de catálogo.
+
+## Gate actualizado de seguridad — 2026-10-21
+
+La regla local de `rentals` ahora niega todos los writes directos del Web SDK, incluidas escrituras/deletes de Admin y Manager. La prueba Emulator intenta cambios en `status`, `paymentStatus`, `total` y `amountPaid` para ambos roles y confirma `PERMISSION_DENIED`; la suite integrada confirma que callables autorizadas siguen confirmando, editando, cobrando, entregando, cancelando/devolviendo y manteniendo stock correcto. `npm run test:firebase`, reports, reconcile (8 fixtures/22 findings), core 16/16, TypeScript, build web, build Functions y ESLint del nuevo test pasaron. **La regla aún no está desplegada.**
+
+Push normal de estabilización y documentación confirmado/sincronizado; corrección de Rules en commit `76d7114554486db340a72e767712e87a287d9646`. PR #1 OPEN/Draft; `origin/main` permanece en `0140452678d23e6e352dcaacd353bfe7342912f5`. No se publicaron índices, Functions ni Rules, no se fusionó y no se modificaron `main`/Vercel, Firebase, Auth o datos.
+
+Vercel UI integrada confirma Production `0140452` Ready, dominios `briz.com.bo`/`www.briz.com.bo` e Instant Rollback disponible. Preview de la documentación más reciente falla en build por guard esperado: `Firebase is disabled for Vercel Preview until a dedicated staging Firebase project is configured.` No se debilitó el guard. La copia puntual verificada protege el catálogo/configuración. No se requiere el primer backup automático antes de desplegar.
+
+**Bloqueo obligatorio antes del merge:** Telegram. La rama conserva el trigger basado en Secret Manager; no hay secreto rotado/verificado. El propietario debe revocar el token antiguo en BotFather, generar uno nuevo y cargarlo directamente en Secret Manager de `briz-4ef3a` como `TELEGRAM_BOT_TOKEN` (y `TELEGRAM_CHAT_ID`), nunca compartirlo en el chat. Luego se desplegará/verificará el trigger. Si no se configura en esta ventana, detenerse antes del merge y obtener decisión expresa del propietario para aceptar que temporalmente no habrá aviso Telegram. Las nuevas reservas sí continúan, con estado de outbox veraz.
+
+Siguiente paso al reanudar: resolver Telegram y confirmar la copia puntual verificada, deployment Vercel anterior/rollback, permisos IAM y APIs/costos estrictamente necesarios. En cualquier fallo crítico, detenerse antes de la operación afectada. Orden de compatibilidad: índices → Functions → frontend en `main` → Rules/Storage estrictas inmediatamente tras comprobar el frontend nuevo. No usar el `main` viejo con Rules estrictas antes de la transición.
+
+## Addendum final de verificación — 2026-10-21
+
+Este addendum supersede los estados desactualizados más abajo que indican que Auth, Rules, Storage o los nombres de variables no pudieron verificarse. Solo se hicieron lecturas de consola y pruebas aisladas; no hubo escrituras, despliegue, push, merge ni modificación de `main`.
+
+### Hallazgos confirmados
+
+- Auth Email/Password está habilitado y hay tres cuentas ficticias. Un único Admin existente coincide entre Auth y `adminUsers`: `prueba2@briz.com`, UID `C8MUz2wZrPOyaNySZc44YShLHoJ3`, `active=true`, `role=admin`, sin `store` (global). Sin bootstrap inicial; el propietario no designó Admin de recuperación.
+- `www.briz.com.bo` no figura en los dominios Auth autorizados vistos (sí `localhost` y dominios Firebase predeterminados). Antes de aceptar el release, agregar el dominio autorizado si se requieren flujos de verificación/recuperación/redirección del cliente desde producción y verificar esos emails.
+- Corrección funcional de copy: el paso final decía que alquileres QR/transferencia estaban “confirmados”, aunque `createRentalGroup` guarda `pending`; además, sin el trigger de Telegram no sale mensaje automático. La pantalla ahora dice que la solicitud se recibió, está pendiente de confirmación y que no salió notificación automática, con enlace/indicaciones de perfil y WhatsApp en ES/EN. `npm run test:reservation-receipt` pasó; build final corre tras el cambio.
+- Firestore Rules activas permiten que cualquier Auth autenticado se considere Admin y se autoescriba en `adminUsers`; además exponen lecturas públicas de clientes, alquileres, ventas y órdenes de servicio, y aceptan altas públicas. Este es el principal bloqueo crítico de seguridad. El baseline exacto recuperado está en [`BRIZ_PRODUCTION_RULES_BASELINE_2026-10-21.md`](./BRIZ_PRODUCTION_RULES_BASELINE_2026-10-21.md). Storage Rules activas exigen `role=admin` y `active=true`, validan tipos/tamaño, y tienen bucket existente `briz-4ef3a.firebasestorage.app`. No se cambiaron Rules ni archivos.
+- Proyecto `briz-4ef3a` permanece en Blaze; Firestore `(default)` está en `southamerica-west1`. APIs core visibles habilitadas: Cloud Functions, Cloud Firestore, Firebase Storage, Identity Toolkit, Secure Token y Resource Manager; bucket existe. Functions/índices remotos: 0/0; repositorio: 13 exports (12 sin Telegram), cuatro índices. IAM no se inspeccionó y Cloud Build, Cloud Run, Artifact Registry y Eventarc no aparecen en la lista visible; la habilitación/permisos necesarios para Functions v2 son una puerta previa al despliegue, no se tocaron.
+- Functions que necesita el frontend: `beginCustomerRegistration`, `createCustomerProfile`, `getMyRentals`, `getAdminCustomers`, `createRentalGroup`, `adminRentalAction`, `recordRentalPaymentMovement`, `updateRentalGroup`, `provisionAdminUser`, `createServiceOrder`; agregar trigger necesario `syncRentalAvailabilityProjection` y endpoint de lectura `backendHealth`. Primer deploy explícito de esas 12, Node 22 / `us-central1`, omitiendo `sendReservationNotification`. No habilitar Telegram hasta token rotado y ambos secretos puestos en Secret Manager; el outbox solo puede marcar los estados reales.
+- Vercel UI confirmó el proyecto `briz-web` en `gfabrigtrf-7085s-projects` y los nueve nombres `VITE_FIREBASE_*` bajo Production solamente; los valores permanecieron ocultos. El build equivalente usó el SDK config obtenido por Firebase CLI para `briz-4ef3a`, `VERCEL_ENV=production`, `VITE_USE_FIREBASE_EMULATOR=false`, y pasó sin depender de staging. El bundle compilado no contiene marcadores de token ni endpoint Telegram. Variables antiguas Telegram y Google Maps siguen en Production y Preview; no se editaron. Rotar el token expuesto antes de cerrar el ciclo de seguridad.
+- Overview Vercel muestra el Production Deployment Ready de `main` en `0140452678d23e6e352dcaacd353bfe7342912f5`, ID inmutable `GEwbCAyYGzKDjCPPfv6phF75nyZ1`, host `briz-3ah6hfwrc-gfabrigtrf-7085s-projects.vercel.app`; dominios `briz.com.bo`/`www.briz.com.bo` asociados y acción Instant Rollback disponible. Revalidar justo antes del release. El `084dcb2` mencionado en páginas de Preview no es rollback de producción.
+
+### Validación repetida
+
+- `npm run test:firebase`: primera ejecución superó Rules, pero Functions Emulator excedió su timeout de 10 s al coincidir con el build Vite y acabó con `functions/not-found`. Un único reintento sin otro build en paralelo cargó las 13 definiciones y completó el recorrido Auth/Firestore/Functions/Storage con exit 0.
+- `npm run test:reports`, `npm run test:reconcile` (8 filas ficticias, 22 hallazgos), motor (16/16), `npm run test:reservation-receipt`, build web local y build Vercel Production equivalente posterior a la corrección de copy: pasaron. El bundle no tiene marcador Telegram. El build advierte `/noise.png` sin resolver y chunk JS ~1.97MB. Functions compila; emulador usó Node24 aunque se declara Node22, con un warning de metadata lookup transitorio.
+- `npx tsc --noEmit`: exit 0. ESLint dirigido a `AdminRentalsPage.tsx`, `DashboardPage.tsx`, `InventoryPage.tsx`, `ReportsPage.tsx`, `backend.ts`, `firebaseConfig.ts` y `functions/src/index.ts`: 51 errores, 0 warnings; 49 `@typescript-eslint/no-explicit-any` en páginas Admin operativas y 2 `no-unused-expressions` en `InventoryPage.tsx` líneas 224/226 por ternarios de efectos secundarios que ejecutan correctamente. No lo marco como limpio; tampoco es una regresión funcional, pero queda para una pasada de calidad posterior.
+
+### Secuencia y bloqueos del release
+
+1. Antes de ventana: renovar autorización y leer snapshot actual, confirmar que el deployment Vercel previo `GEwbCAyYGzKDjCPPfv6phF75nyZ1` continúa Ready, confirmar el manifiesto de la copia puntual (ya verificada) y el dominio Auth (ya autorizado). No exponer ni descargar datos personales.
+2. Habilitar solamente APIs requeridas por Functions v2 que falten; verificar IAM para despliegue. Ambos aún son puertas sin confirmar.
+3. `firebase deploy --only firestore:indexes --project briz-4ef3a`; esperar los cuatro índices en `READY`.
+4. Desplegar el lote enumerado de Functions de manera explícita, sin `sendReservationNotification`; consultar lista y `backendHealth` antes de avanzar.
+
+```powershell
+firebase deploy --only firestore:indexes --project briz-4ef3a
+firebase deploy --only functions:beginCustomerRegistration,functions:createCustomerProfile,functions:getMyRentals,functions:getAdminCustomers,functions:createRentalGroup,functions:syncRentalAvailabilityProjection,functions:adminRentalAction,functions:recordRentalPaymentMovement,functions:updateRentalGroup,functions:provisionAdminUser,functions:createServiceOrder,functions:backendHealth --project briz-4ef3a
+# Solo después de verificar que el frontend nuevo está activo:
+firebase deploy --only firestore:rules,storage --project briz-4ef3a
+```
+
+No incluir `functions:sendReservationNotification` hasta contar con token/chat rotados en Secret Manager; sin trigger, los documentos del outbox permanecen `pending` (no fueron enviados ni procesados).
+5. Publicar commits/docs y PR; propietario revisa/aprueba merge. La rama Production Vercel auto despliega `main`. Asegurar que las nueve variables Production efectivas mantengan el project ID correcto, emulator=false. Confirmar deployment listo/SHA y Auth de lectura.
+6. Con nuevo frontend activo, desplegar enseguida Firestore/Storage Rules nuevas. Esto deja intervalo breve con Rules antiguas permisivas; mantener ventana coordinada y monitorizada. No desplegar Rules estrictas primero: el `main` actual usa escritura directa y se rompería.
+7. Verificar login/lecturas/nav/inventario/reservas/reportes sin escrituras. El ciclo de alquiler y pagos reales requiere una autorización específica de datos de prueba.
+
+Rollback conjunto: restaurar exactamente las Rules previas desde el baseline, regresar Functions al código anterior compatible sin borrar recursos, y promover el deployment Vercel inmutable anterior. Conservar índices extra; no revertir ni borrar datos como rollback. Si cualquiera de las verificaciones previas/posteriores falla, detener la secuencia.
+
+**No está listo para aprobación final todavía:** Rules Firestore activas siguen siendo inseguras y aún faltan índices/Functions en producción. Auth `www.briz.com.bo`, IAM de runtime, nueve variables Production y APIs necesarias ya fueron comprobados. Preview puede seguir bloqueado y staging es opcional; no debilitar el guard ni apuntar Preview a producción. Telegram sí es gate porque el propietario confirmó que conserva los avisos: faltan las dos versiones seguras y la verificación del trigger. Completar esto dentro de la ventana coordinada; no dejar reglas inseguras como estado permanente.
+
+## Evaluación de publicación directa a producción — 2026-10-21
+
+Decisión vigente del propietario: conservar `briz-staging` sin Blaze y sin más operaciones; evaluar una salida controlada directamente a `briz-4ef3a`. Esta decisión reemplaza los addenda anteriores que condicionaban el release a provisionar staging. No autoriza todavía cambios en Firebase, Vercel ni `main`.
+
+### Resultado verificado en esta evaluación
+
+- Pruebas locales aisladas en `demo-briz-security`: `npm run test:firebase` pasó configuración, reglas Firestore/Storage y el ciclo Auth/Firestore/Functions/Storage; `npm run test:reports` pasó; `npm run test:reconcile` pasó con 8 registros ficticios y 22 hallazgos; motor de alquileres pasó 16/16; `npm run build` pasó TypeScript y Vite; el build Functions pasó dentro de `test:firebase`.
+- `npm run test:firebase` cubrió reserva pública idempotente, selección de aro/combos/accesorios, confirmación, entrega, cambios concurrentes, pagos/ledger, devolución dañada, límites de stock, roles, estados heredados en español y documentos sin campos recientes. Todo fue contra emuladores; no hubo escritura a producción.
+- ESLint dirigido a los archivos operativos modificados terminó con 32 errores (`no-explicit-any` y `react-refresh/only-export-components`), 0 warnings. No impidió TypeScript/build, pero la deuda se debe tratar como calidad pendiente; no es evidencia de regresión funcional.
+- Firebase CLI de solo lectura: `briz-4ef3a` tiene Firestore `(default)` en `southamerica-west1`, 0 Functions desplegadas y 0 índices compuestos remotos; el repositorio declara cuatro índices. Rules/Storage Rules actuales están capturadas en el baseline versionado; Auth `www.briz.com.bo` y el Admin existente ya se comprobaron de solo lectura.
+- `www.briz.com.bo` respondió HTTP 200 en una solicitud de solo lectura. `origin/main` está en `0140452678d23e6e352dcaacd353bfe7342912f5`. El `main` local está en otro commit local adelantado y no debe usarse como referencia de publicación. En la UI integrada se confirmó `briz-web`, el deployment Production anterior Ready con Instant Rollback y las nueve variables de Production; validar de nuevo el deployment inmediatamente antes de la ventana. Las nueve variables Firebase Production habían sido guardadas/verificadas previamente en la UI integrada; esta sesión no volvió a leerlas ni reveló valores.
+- PR #1 sigue OPEN/Draft, base `main`, head remoto `2c288adccb2e49c43ea568e801168760f5c27030`. Los Preview fallidos siguen siendo el guard de separación staging; no se generaron builds adicionales. Los commits locales de documentación siguen sin publicar. No se consultaron reglas de protección/rulesets de GitHub en esta evaluación; el estado de checks no constituye aprobación para merge.
+
+### Bloqueos imprescindibles frente a recomendaciones
+
+**Gates críticos pendientes:** (1) los cuatro índices y las Functions necesarias aún no están publicados; publicarlos/verificarlos antes del frontend. (2) el Admin y dominio Auth ya están comprobados; no crear usuarios. (3) Rules estrictas locales y baseline previo están disponibles; aplicarlas inmediatamente después de Production frontend. (4) las nueve variables de Production y el deployment anterior Ready ya se comprobaron; revalidar dentro de la ventana. (5) el propietario debe rotar el token antiguo en BotFather e ingresar token/chat directamente a los dos secretos ya creados; verificar notificación y deduplicación antes de retirar `VITE_TELEGRAM_*`. (6) mantener el deployment previo y reglas/Functions compatibles para rollback; la copia puntual de catálogo ya pasó restore en Emulator. El primer backup diario no es gate.
+
+**No son bloqueos funcionales por sí solos:** tener staging es la recomendación más segura, pero no es requisito técnico si el propietario acepta el riesgo de una ventana productiva controlada. App Check está deshabilitado por defecto (`enforceAppCheck: false`): es una recomendación de endurecimiento previa a abrir ampliamente el servicio; el motor valida Auth/roles en acciones administrativas, pero las reservas públicas siguen siendo endpoints expuestos. El aviso Node24 del emulador frente a Node22 solicitado, `/noise.png`, bundle grande y deuda ESLint son mantenimiento; no fallaron compilación ni pruebas de negocio.
+
+### Orden de transición sin web conectada a un backend incompatible
+
+1. Antes de la ventana, revisar el deployment Production previo y la configuración Production ya preparada; mantener la copia puntual local de catálogo junto al baseline Rules. No copiar datos de clientes.
+2. El propietario revoca el token anterior en BotFather, genera el reemplazo y guarda ambos valores directamente en los recursos Secret Manager vacíos preparados. `sendReservationNotification` no se despliega ni se integra a `main` hasta que ambas versiones existan y el acceso limitado esté verificado.
+3. Crear por procedimiento seguro de propietario el perfil inicial `adminUsers/{uid}` para una cuenta Auth existente; validar ese Admin y un Admin de recuperación. No activar reglas nuevas hasta confirmar los perfiles.
+4. Desplegar primero, de forma aditiva, los cuatro índices y esperar estado `READY`; después desplegar las Functions críticas Node22 de `us-central1` mediante lista explícita (y el trigger Telegram solo con sus secretos disponibles). Verificar despliegue/lista, logs y salud no mutante. Esto no cambia la web `main` actual, que permanece en el backend anterior.
+5. Con Functions listas, sacar PR #1 de Draft mediante revisión humana y merge aprobado a `main`; Vercel Production construye el nuevo frontend usando las nueve variables Production guardadas. Antes de continuar, verificar deployment READY, SHA, dominio y login/lecturas. No pasar solicitudes de prueba con cobros reales.
+6. Solo cuando el nuevo frontend esté activo y dependa de las Functions desplegadas, publicar Rules Firestore y Storage probadas en Emulator. Así se evita desplegar primero reglas que bloquean las escrituras directas del `main` viejo. Verificar acceso por rol, lecturas públicas sanitizadas, Storage, reserva, stock y Caja con procedimientos aprobados. La web no tendrá una ventana sin las Functions necesarias; las reglas finales se activan después de que el cliente nuevo está publicado.
+7. Una prueba end-to-end que cree reservas/pagos en Firebase real escribe datos y puede afectar reportes; requiere autorización separada con alcance de datos ficticios marcados. Sin esa autorización, limitar post-release a comprobaciones de lectura y no declarar validado el ciclo comercial en producción.
+
+### Rollback preparado
+
+- Conservar SHA remoto actual de `main` (`0140452…`), deployment Vercel Ready anterior, exportación de Firestore/Storage y copia exacta de Rules/Storage Rules previas antes de cambios. El ID de deployment debe obtenerlo el propietario en Vercel, pues la API retorna 403.
+- Si falla el cliente, restaurar/promover el deployment Vercel inmutable anterior; no editar `main` directamente. Si fallan Functions, volver a desplegar el código de Functions anterior guardado; no borrar recursos. Si fallan Rules, volver a publicar exactamente la copia anterior. Los índices extra pueden quedarse: no eliminarlos como parte de rollback. No iniciar migraciones de datos durante el release.
+- No se ha ejecutado ningún paso productivo de este plan. `briz-staging` permanece sin Blaze y no se volverá a operar.
+
+## Actualización de preparación Firebase — 2026-10-21 (posterior a autorización)
+
+### Variables Vercel guardadas
+
+Proyecto verificado en la sesión integrada: `briz-web` / `gfabrigtrf-7085s-projects`. Por autorización expresa del propietario, se guardaron y se verificaron tras recargar las siguientes variables en **Production únicamente** (no se muestran valores):
+
+### Firebase staging
+
+- Firebase CLI creó el proyecto `briz-staging` y su app web. No se enlazó una cuenta de facturación ni se activó Blaze.
+- La cuenta CLI pudo leer metadatos de producción y confirmó que la base Firestore `briz-4ef3a` está en `southamerica-west1`; se propone replicar esa región en staging. No se consultaron documentos.
+- Firestore Database no se creó: la API Firestore devolvió 403 por estar deshabilitada. Tampoco hay bucket, Functions ni alerta de presupuesto. Firebase Console integrada redirige a selector Google con sesión cerrada; no se automatizó login. `gcloud` no está instalado, así que no es posible consultar IDs de billing accounts desde este equipo.
+- Functions y Storage requieren Blaze según documentación oficial; la activación queda pendiente de que el propietario indique la cuenta de Cloud Billing permitida, el monto/moneda de alerta mensual y confirme el enlace a `briz-staging`. Un budget alert estándar no es un límite de gasto.
+
+| Variable | Entorno | Función |
+|---|---|---|
+| `VITE_FIREBASE_API_KEY` | Production | Firebase Web SDK |
+| `VITE_FIREBASE_AUTH_DOMAIN` | Production | Firebase Auth |
+| `VITE_FIREBASE_PROJECT_ID` | Production | Guardado como `briz-4ef3a` |
+| `VITE_FIREBASE_STORAGE_BUCKET` | Production | Firebase Storage |
+| `VITE_FIREBASE_MESSAGING_SENDER_ID` | Production | Firebase Web SDK |
+| `VITE_FIREBASE_APP_ID` | Production | Firebase Web SDK |
+| `VITE_FIREBASE_MEASUREMENT_ID` | Production | Firebase Web SDK |
+| `VITE_FIREBASE_ENVIRONMENT` | Production | Debe ser `production` |
+| `VITE_USE_FIREBASE_EMULATOR` | Production | Debe ser `false` |
+
+Preview no recibió Firebase. Debe seguir sin variables hasta disponer de un proyecto staging, bucket, Auth, Functions y datos separados. El build rechaza Preview sin staging y el cliente rechaza cualquier proyecto `briz-4ef3a` fuera de Production. La ausencia de variables produce error explícito.
+
+### Puertas aún cerradas
+
+- Variables Firebase guardadas en Vercel Production; no se ha ejecutado un deployment para hacerlas efectivas ni verificar un build remoto. Guardar las variables no creó un deployment. Preview continúa bloqueado de forma intencional.
+- Build Logs de Preview `2c288ad`, `bc879d9`, `d1009c9`, `d9905b2`: mismo error exacto `Firebase is disabled for Vercel Preview until a dedicated staging Firebase project is configured.` No agregar Firebase productivo a Preview ni iniciar más builds antes de provisionar staging.
+- Firebase `briz-4ef3a`: consulta CLI read-only del 2026-10-21 muestra cero Functions desplegadas y cero índices compuestos remotos. Rules/Storage publicadas no quedaron verificables. El repositorio declara cuatro compuestos locales y apunta Rules, Storage Rules, índices y Functions en `firebase.json`; nada se desplegó.
+- Revalidación local 2026-10-21 con `demo-briz-security`: `npm run test:firebase` pasó (config 9 checks, Rules Firestore/Storage, Auth/Firestore/Functions/Storage integrados); `test:reports`, `test:reconcile` (8 fixtures/22 hallazgos), motor (16/16), TypeScript y build web pasaron. La compilación Functions pasó en el flujo Firebase; `npm test --prefix functions` no tiene tests que coincidan con su glob (0 tests detectados). Avisos no bloqueantes: Emulator usa Node24 frente al Node22 declarado, `/noise.png` sin resolver y chunk JS ~1.97 MB.
+- No activar el trigger Telegram hasta rotar token viejo en BotFather y cargar el nuevo como Secret Manager de Functions. Nunca poner token en `VITE_*`, repo o chat. No eliminar valores existentes en Vercel hasta que se verifique el endpoint nuevo y la rotación.
+- PR #1 Draft; `main` no modificado. El merge no está listo: falta staging, rollout backend compatible, validación visual/funcional, comprender el auto-deploy Production, snapshot restaurable y rollback.
+- El commit de código `d1009c948ea1de4f0de10dbec40b88c628d355a7` y el de documentación `d9905b286296f2b763dd1bbfe5b60b7b49f5465f` están publicados; `ls-remote` coincide con `d9905b2`. PR #1 OPEN/Draft, sin checks asociados al head actual. El panel Vercel de Deployments muestra como último artefacto visible `084dcb2` Ready, sin deployment actual del commit nuevo; Vercel API retorna 403 y CLI fallback dice que el scope no existe. `www.briz.com.bo` carga el sitio de `main` anterior (`0140452`), comprobado solo como página pública de lectura.
+- El código de Functions compila y Emulator verifica reserva sin Telegram: outbox refleja `skipped_unconfigured`; `failed`/`delivery_unknown` no se reenvían automáticamente para evitar duplicados.
+
+`VERCEL_ENV` está documentado por Vercel como variable disponible en build/runtime; además se observó el checkbox de System Environment Variables habilitado en el proyecto. Referencia: [Vercel System Environment Variables](https://vercel.com/docs/environment-variables/system-environment-variables).
+
+No deployar ni mergear hasta cerrar Telegram y confirmar las puertas críticas anteriores; staging aislado no es requisito.
+
+## Addendum — Caja y gates de PR #1 (2026-10-21)
+
+- Vercel Preview informa deployment completado; esto solo valida que el artefacto de preview se construyó/publicó, no valida el flujo funcional ni su backend Firebase. Nota histórica supersedida: el navegador integrado confirmó `briz-web` y se guardaron/verificaron las nueve variables Firebase en Production solamente. Preview sigue sin Firebase por diseño; no es requisito de release. No ejecutar escrituras de sondeo.
+- Caja (decisión comercial aprobada por propietario): bruto cobrado, reembolsos de caja, efectivo neto (bruto menos reembolsos), correcciones contables no monetarias, ingreso reconocido (efectivo neto menos correcciones) y saldo contractual pendiente (contratado menos cobros; no suma correcciones ni reembolsos) son indicadores separados. Ventanas de contrato y cobro usan sus fechas respectivas; sede se aplica a los dos.
+- Legacy: solo filas `paid` sin ledger se reconocen/se convierten en recibo sintético único. `amountPaid/paidAt` con estado ya `unpaid` o `pending_review` es ambiguo y no se infiere; conciliar con evidencia y autorización antes de reconocerlo o migrarlo.
+- Condición de merge: PR #1 no sale de Draft hasta revisión manual del Owner después de Production; Preview puede seguir protegido y staging es opcional; confirmar rama de producción de Vercel; desplegar y validar Rules/Functions/índices de forma compatible y autorizada; conocer qué publica `main`; copia puntual de catálogo verificada y rollback compatible; sin errores críticos. La semántica de Caja fue aprobada; no se incluye deploy ni merge en esta preparación.
+
+### Fases diferidas (no iniciadas en este cierre)
+
+1. Conciliación y migración de datos históricos, con respaldo y dry-run.
+2. Preparación Blaze, App Check, Telegram y secretos (sin activar servicios).
+3. Revisión integral restante de Admin.
+4. Traducción natural ES/EN y diez artes gráficos pendientes en inglés.
+5. Validación responsive integral; categorías/eventos en alquileres móvil si sigue el defecto.
+6. Gestor Admin de imágenes de Home, después de cerrar alquileres críticos.
+7. Limpieza de ESLint y optimización.
+8. Preparación de despliegue seguro coordinado; ejecución solo con autorización expresa.
+
+**Estado al 2026-10-21:** preparación documental y de código local; no se habilitó facturación, no se crearon secretos reales, no se desplegó y no se accedió ni escribió producción. Requiere revisión y autorización del propietario antes de cada operación de servicio.
+
+| Requisito | Estado | Acción previa a publicación |
+|---|---|---|
+| Funciones v2 / Node 22 | Código compila localmente; Emulator probó flujos; consulta `briz-4ef3a` devolvió cero Functions desplegadas. No hay Functions en staging | Cuenta billing autorizada + confirmación para Blaze en staging; presupuesto, APIs, runtime/región; desplegar solo en staging hasta validar. Máquina/Emulator usan Node24 aunque el proyecto solicita Node22 |
+| Firebase Blaze y costos | El propietario informa que producción `briz-4ef3a` está en Blaze. Staging `briz-staging` no tiene billing enlazado; no se activó Blaze | Propietario proporciona la cuenta de Billing permitida, budget mensual/moneda y confirma el enlace a staging; alertas no son límites automáticos |
+| App Check | Bloqueante: helper callable mantiene `enforceAppCheck: false` por defecto | Registrar app web y proveedor reCAPTCHA Enterprise, integrar token/debug solo en staging, métricas y endurecimiento gradual de cada callable; acordar enforcement |
+| Dominios Auth | No verificados en proyecto | Aprobar y añadir solo dominios públicos/preview necesarios; probar correo, recuperación y redirecciones |
+| Secret Manager / Telegram | Los secretos solo están declarados; no hay credenciales productivas | Rotar primero token expuesto en BotFather; propietario entrega/configura token y chat autorizados mediante Secret Manager, nunca `VITE_*` |
+| Recuperación de outbox | Bloqueante operativo identificado | Si el trigger cae después de marcar `sending`, el reintento ve `sending` y no reclama el registro. `skipped_unconfigured` tampoco se reintenta solo cuando después se cargan secretos. Diseñar lease/recovery y monitoreo; Telegram no ofrece idempotencia de envío, por lo que la recuperación automática puede duplicar mensajes tras un timeout ambiguo. Definir política con propietario antes de activarla |
+| Admin inicial / roles | Callable `provisionAdminUser` requiere un Admin activo existente; el bootstrap no es autogestionado | Acordar bootstrap de propietario por operación CLI segura, comprobar identidad y tienda, crear segundo Admin de recuperación y retirar credenciales temporales |
+| Firestore / Storage rules | Reglas locales pasan Emulator; producción activa no verificable (gcloud no instalado). Staging aún no tiene Firestore ni Storage | Después de habilitar Firestore API y resolver billing/Storage, desplegar reglas en staging primero y probar roles |
+| Índices Firestore | Consulta remota del 2026-10-21: cero índices compuestos; cuatro índices necesarios versionados en `firestore.indexes.json`, aún no desplegados | Validar en staging y desplegar índices antes de Functions/frontend |
+| Variables Vercel | Las nueve Firebase vars se guardaron en `briz-web` / Production y se verificaron tras recargar; ninguna se asignó a Preview. La validación de build equivalente Production con `briz-4ef3a` ya pasó; confirmar el deployment Production después del merge. | Mantener Preview protegido y sin Firebase; staging es opcional |
+| Datos y archivos históricos | Solo reconciliación sintética/read-only preparada | Autorizar alcance; export protegido/desidentificado de Auth, Firestore y Storage; dry-run, mapeo aprobado, baseline de stock, checkpoints y criterios de parada. No migrar si hay combos ambiguos, stock sin baseline o grupos con estado discordante |
+| Ciclo Admin visual | Parcial; alta manual fue abierta antes; ciclo restante no validado visualmente | Completar [`BRIZ_ADMIN_MANUAL_VALIDATION.md`](./BRIZ_ADMIN_MANUAL_VALIDATION.md) en Emulator, desktop y 360–430 px |
+| Tests, lint y build | Cierre 2026-10-21: `test:firebase` (Rules + Functions/Auth/Firestore/Storage) pasó con timeout Emulator aumentado a 60s; `test:reports`, `test:reconcile` (8 fixtures/22 findings), motor (16/16), `tsc --noEmit`, web y Functions build pasaron. Lint dirigido a tres Admin pages: 31 `no-explicit-any` previos; helper/Functions/tests limpios. | Mantener y corregir deuda lint en fase dedicada. Build avisa `/noise.png` y bundle ~1.97MB. Emulator ejecutó Node24, Functions pide Node22; validar Node22 en CI/staging |
+| Caja (decisión Owner) | Corregido y confirmado por Emulator/reportes: bruto100, reembolso25, efectivo75, corrección5, reconocido70, pendiente0, estado paid; abono extra rechazado | Recorrido visual Owner en entorno aislado antes de merge |
+| PR #1 / main | OPEN Draft y sin merge. Rama de estabilización sincronizada en `2c288adccb2e49c43ea568e801168760f5c27030` antes de esta nota. Cuatro Preview recientes fallan por el guard de staging; `main` no se cambió | Mantener Preview protegido (staging opcional), validar variables Production con deployment coordinado, copia puntual validada y rollback compatible antes de aprobación |
+
+## Sesión local preparada para completar la revisión visual
+
+El 2026-10-21 iniciaron Authentication, Firestore, Functions y Storage Emulator con `demo-briz-security`; `npm run seed:admin-visual` creó la cuenta/catálogo ficticios y `npm run dev -- --host 127.0.0.1` informó `http://127.0.0.1:5173/` con `VITE_USE_FIREBASE_EMULATOR=true`. La política del navegador impidió abrir localhost para completar interacciones. Los procesos quedaron disponibles para que el propietario recorra el checklist; la cuenta está listada en ese documento. Ninguna interacción visual posterior se afirma como probada.
+
+## Orden propuesto para un futuro release (sin ejecutar ahora)
+
+1. Acordar costos/Blaze, APIs, dominios, roles iniciales y política de App Check/outbox.
+2. Mantener reconciliación histórica en Emulator/datasets ficticios o una copia local autorizada y desidentificada; no operar `briz-staging`.
+3. Revisar hallazgos, aprobar mapeos y completar validaciones históricas; detenerse ante cualquier umbral de riesgo acordado.
+4. Publicar índices/reglas compatibles, luego Functions y secretos rotados en staging; ejecutar smoke y permisos por rol.
+5. Activar App Check gradualmente y verificar callables; configurar variables de frontend y dominios Auth.
+6. Validar flujos, reportes, Storage privado, monitoreo, alertas y rollback en staging; aprobar por escrito el paso siguiente.
+7. Solo con autorización expresa, coordinar ventana, despliegue y validación post-release. No fusionar ni desplegar producción como parte de este bloque.
+
+## Estado de preparación coordinada — 2026-10-21
+
+- Rama remota y local estaban sincronizadas en `722078b935e53002856ceb7f620cdac9582bc0ba` al comenzar esta sesión. `origin/main` permanece en `0140452678d23e6e352dcaacd353bfe7342912f5`; PR #1 sigue OPEN/Draft. No hubo deploy, merge ni escrituras a registros operativos.
+- En la consola de `briz-4ef3a` se configuró backup diario con retención de 7 días; PITR permanece desactivado. La consola confirmó el cambio, pero aún no muestra una copia materializada. La ausencia de snapshot automático no bloquea el release: se conserva como protección adicional mientras el catálogo se protege con una copia puntual verificada. Firestore cobra el almacenamiento según tamaño/retención y la restauración por GiB; revisar [precios oficiales](https://cloud.google.com/firestore/pricing?hl=en) antes de variar la retención.
+- Se habilitaron Secret Manager API, Cloud Build API, Cloud Run Admin API y Eventarc API para los recursos estrictamente necesarios de Functions v2; Artifact Registry ya estaba habilitada. Pub/Sub, Cloud Functions, Firestore, Firebase Storage, Identity Toolkit y Secure Token estaban habilitadas. Esto no desplegó servicios ni creó secretos. Secret Manager muestra aún cero secretos creados.
+- Authentication tiene solo `localhost`, `briz-4ef3a.firebaseapp.com` y `briz-4ef3a.web.app`. `briz.com.bo` redirige (308) a `www.briz.com.bo`; el dominio de ejecución que se necesita autorizar es `www.briz.com.bo`. Agregarlo es un cambio de seguridad pendiente de confirmación en la ventana coordinada.
+- La cuenta Google que abrió la consola tiene rol Owner. La cuenta Compute predeterminada del proyecto tiene rol Editor y sería la identidad runtime por defecto de Functions v2. Para no desplegar Functions con ese alcance, el código ahora fija `briz-functions-runtime@briz-4ef3a.iam.gserviceaccount.com`; el principal todavía no existe. Antes del deploy debe crearse y recibir permisos mínimos (`roles/datastore.user`, `roles/firebaseauth.viewer` y `roles/secretmanager.secretAccessor` solo en los dos secretos usados por el trigger). No retirar el Editor de cuentas predeterminadas: puede afectar otros servicios del proyecto; el runtime de BRIZ debe usar la identidad dedicada.
+- El build de Functions pasó tras fijar la identidad runtime. No se repitieron las suites ya cerradas porque este cambio solo fija opciones de runtime y no altera el dominio de alquileres.
+- En el siguiente paso de la ventana, el propietario rota el token del bot actual en BotFather y carga token/chat directamente en Secret Manager; no compartir token por chat ni exponer valores en capturas/logs. Solo después de verificar metadatos, permisos efectivos, trigger y deduplicación se retiran las antiguas `VITE_TELEGRAM_*` de Vercel Production/Preview.
+- Bloqueos concretos antes de solicitar la rotación: materializar/verificar una copia, autorizar `www.briz.com.bo` en Firebase Auth, crear la identidad dedicada con permisos mínimos y verificar que el servicio de billing permite los recursos. La intervención de token se pedirá cuando estos puntos estén preparados. Los Preview permanecen protegidos sin Firebase productivo.
+
+## Revisión IAM, backup y Auth — 2026-10-21
+
+- Firestore `briz-4ef3a` conserva backup diario con retención de 7 días y PITR desactivado. La consola se recargó durante esta revisión: **todavía no hay ninguna copia listada**, la copia puntual del catálogo se verificó por separado; no se inició restauración sobre producción.
+- El trigger `sendReservationNotification` ahora declara `briz-telegram-runtime@briz-4ef3a.iam.gserviceaccount.com` por separado del runtime global `briz-functions-runtime@briz-4ef3a.iam.gserviceaccount.com`. El build de Functions pasó. **Ninguna de las dos identidades está creada todavía**, y no se otorgaron permisos IAM en esta sesión.
+- Alcance previsto al crear identidades: runtime general `roles/datastore.user` + `roles/firebaseauth.viewer`; runtime Telegram `roles/datastore.user`; Secret Accessor exclusivamente en cada secreto de Telegram tras su creación. `roles/datastore.user` es a nivel de proyecto/base de datos, no permite limitarse a la colección outbox; el código mantiene el acceso lógico del trigger sobre `telegramOutbox`. No crear claves JSON. No se añadió otro permiso `actAs` ni se amplió el acceso de ejecución.
+- En Auth se confirmaron solo `localhost`, `briz-4ef3a.firebaseapp.com` y `briz-4ef3a.web.app`. El origen público es `www.briz.com.bo`; el apex redirige con HTTP 308 a `www`. Los flujos actuales de recuperación/verificación usan los métodos Firebase sin `ActionCodeSettings` personalizado; no se observó dependencia del apex para dichos enlaces. Falta autorizar `www.briz.com.bo` para el origen público. No se alteró Auth ni se modificó la cuenta Admin existente.
+- El código preparado no se ha desplegado. No hay versiones Telegram aún: el propietario debe ingresarlas directamente. Tras validar acceso y notificación, continuar con el despliegue coordinado de índices, Functions, frontend/main y Rules estrictas.
+
+## IAM/Auth autorizado y verificación de backup — 2026-10-21 (estado actualizado arriba)
+
+- Creadas en `briz-4ef3a`: `briz-functions-runtime@briz-4ef3a.iam.gserviceaccount.com` con `roles/datastore.user` y `roles/firebaseauth.viewer`; `briz-telegram-runtime@briz-4ef3a.iam.gserviceaccount.com` con `roles/datastore.user`. La tabla IAM muestra solo esos roles para estas identidades; no tienen Editor ni Owner. La lista de cuentas muestra que no hay claves JSON. El runtime Telegram no tiene permisos de Secret Manager todavía; se concederá `roles/secretmanager.secretAccessor` solo en los dos secretos concretos cuando existan.
+- La identidad del operador de publicación aparece como Owner a nivel de proyecto. Ese rol incluye `iam.serviceAccounts.actAs`, por lo que no agregamos `roles/iam.serviceAccountUser` ni otra asignación sobre las cuentas runtime. Referencia: [permisos oficiales de IAM](https://docs.cloud.google.com/iam/docs/roles-permissions/iam#iam.serviceAccounts.actAs). La tabla IAM muestra a la vez cuentas de servicio por defecto con Editor; se conservan intactas y el código fija las identidades dedicadas para BRIZ.
+- Añadido `www.briz.com.bo` como dominio personalizado autorizado de Firebase Authentication. No se agregó el apex: `briz.com.bo` redirige a www y los flujos actuales no usan `ActionCodeSettings` personalizado. No se modificó el usuario Admin existente.
+- Nueva comprobación tras recargar Firestore: copia diaria listada **ninguna**. El schedule diario/7 días sigue configurado y PITR inhabilitado. La copia puntual de catálogo/configuración se restauró y comparó en el Emulator; no es necesario esperar el snapshot automático.
+- No se tocaron clientes, alquileres, inventario, pagos ni secretos; tampoco se desplegaron Functions/Rules, se fusionó PR o se publicó a `main`. El código del trigger separado pasa el build de Functions (commit local `77ce36b`, aún no publicado al remoto para evitar Preview sin staging). El paso inmediato pendiente es que el propietario cargue los nuevos valores Telegram directamente en los dos secretos ya preparados y abra la ventana coordinada.

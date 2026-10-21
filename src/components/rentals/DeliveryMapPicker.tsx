@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { MapPin, Navigation } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { useLanguage } from '@/context/LanguageContext';
 
 declare global {
     interface Window {
@@ -34,6 +35,7 @@ export default function DeliveryMapPicker({
     initialAddress = '',
     initialLatLng = null
 }: DeliveryMapPickerProps) {
+    const { language } = useLanguage();
     const mapRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLInputElement>(null);
     
@@ -111,7 +113,7 @@ export default function DeliveryMapPicker({
             position: initialCenter,
             map: map,
             draggable: true,
-            title: 'Arrastra para marcar tu ubicación exacta',
+            title: language === 'es' ? 'Arrastra para marcar tu ubicación exacta' : 'Drag to mark your exact location',
             animation: window.google.maps.Animation.DROP,
         });
         markerInstance.current = marker;
@@ -181,7 +183,7 @@ export default function DeliveryMapPicker({
                 if (status === 'OK' && results && results[0]) {
                     address = results[0].formatted_address;
                 } else {
-                    address = `Ubicación: ${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+                    address = `${language === 'es' ? 'Ubicación' : 'Location'}: ${lat.toFixed(6)}, ${lng.toFixed(6)}`;
                 }
                 setAddressText(address);
 
@@ -207,7 +209,7 @@ export default function DeliveryMapPicker({
                 if (status === 'OK' && results && results[0]) {
                     address = results[0].formatted_address;
                 } else {
-                    address = `Ubicación: ${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+                    address = `${language === 'es' ? 'Ubicación' : 'Location'}: ${lat.toFixed(6)}, ${lng.toFixed(6)}`;
                 }
                 setAddressText(address);
 
@@ -228,7 +230,7 @@ export default function DeliveryMapPicker({
     // Geolocation for current user position
     const handleGetCurrentLocation = () => {
         if (!navigator.geolocation) {
-            alert('La geolocalización no es soportada por tu navegador.');
+            alert(language === 'es' ? 'La geolocalización no es soportada por tu navegador.' : 'Geolocation is not supported by your browser.');
             return;
         }
 
@@ -255,7 +257,7 @@ export default function DeliveryMapPicker({
                     if (status === 'OK' && results && results[0]) {
                         address = results[0].formatted_address;
                     } else {
-                        address = `Mi ubicación: ${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+                        address = `${language === 'es' ? 'Mi ubicación' : 'My location'}: ${lat.toFixed(6)}, ${lng.toFixed(6)}`;
                     }
                     setAddressText(address);
 
@@ -267,7 +269,11 @@ export default function DeliveryMapPicker({
             },
             (error) => {
                 console.error('Geolocation error:', error);
-                alert('No pudimos acceder a tu ubicación actual. Por favor búscala usando la barra de búsqueda superior.');
+                alert(
+                    language === 'es'
+                        ? 'No pudimos acceder a tu ubicación actual. Por favor búscala usando la barra de búsqueda superior.'
+                        : 'We could not access your current location. Please search for your address using the search bar above.'
+                );
                 setLoadingLocation(false);
             },
             { enableHighAccuracy: true, timeout: 8000 }
@@ -283,7 +289,7 @@ export default function DeliveryMapPicker({
                         type="text"
                         value={addressText}
                         onChange={(e) => setAddressText(e.target.value)}
-                        placeholder="Busca tu dirección de envío..."
+                        placeholder={language === 'es' ? 'Busca tu dirección de envío...' : 'Search your delivery address...'}
                         className="bg-white border-brand-yellow/30 text-brand-black text-xs font-bold h-11 pr-8 rounded-xl focus-visible:ring-brand-yellow placeholder:text-gray-400"
                     />
                     <MapPin className="absolute right-3 top-3.5 w-4 h-4 text-brand-yellow-vibrant" />
@@ -293,7 +299,7 @@ export default function DeliveryMapPicker({
                     onClick={handleGetCurrentLocation}
                     disabled={loadingLocation}
                     className="h-11 px-3 bg-brand-charcoal text-brand-yellow hover:bg-brand-black rounded-xl cursor-pointer"
-                    title="Obtener mi ubicación actual"
+                    title={language === 'es' ? 'Obtener mi ubicación actual' : 'Use my current location'}
                 >
                     <Navigation className={`w-4 h-4 ${loadingLocation ? 'animate-spin' : ''}`} />
                 </Button>
@@ -304,7 +310,7 @@ export default function DeliveryMapPicker({
                 ref={mapRef} 
                 className="w-full h-[250px] sm:h-[300px] rounded-[1.5rem] border border-gray-200 overflow-hidden shadow-inner bg-gray-50 flex items-center justify-center text-xs font-bold text-gray-400"
             >
-                {!mapLoaded && <span>Cargando mapa interactivo...</span>}
+                {!mapLoaded && <span>{language === 'es' ? 'Cargando mapa interactivo...' : 'Loading interactive map...'}</span>}
             </div>
 
             {/* Status indicators */}
@@ -315,11 +321,23 @@ export default function DeliveryMapPicker({
                         : 'bg-amber-50 border-amber-100 text-amber-800'
                 }`}>
                     {isInside ? (
-                        <p>✓ Ubicación dentro de la zona de cobertura estándar. El costo de transporte se calculará automáticamente en base a tu pedido.</p>
+                        <p>
+                            {language === 'es'
+                                ? '✓ Ubicación dentro de la zona de cobertura estándar. El costo de transporte se calculará automáticamente en base a tu pedido.'
+                                : '✓ Location inside our standard delivery zone. The delivery fee will be calculated automatically based on your order.'}
+                        </p>
                     ) : (
                         <div>
-                            <p className="font-extrabold uppercase">⚠️ Ubicación fuera de la zona de tarifa estándar</p>
-                            <p className="mt-1 font-semibold normal-case text-amber-700">El pedido se registrará, pero el costo de transporte se coordinará manualmente contigo por WhatsApp. Mientras el costo de transporte será 0</p>
+                            <p className="font-extrabold uppercase">
+                                {language === 'es'
+                                    ? '⚠️ Ubicación fuera de la zona de tarifa estándar'
+                                    : '⚠️ Location outside standard delivery zone'}
+                            </p>
+                            <p className="mt-1 font-semibold normal-case text-amber-700">
+                                {language === 'es'
+                                    ? 'El pedido se registrará, pero el costo de transporte se coordinará manualmente contigo por WhatsApp. Mientras tanto el costo de transporte será 0.'
+                                    : 'Your booking will be registered, and our team will coordinate the custom delivery fee with you via WhatsApp. Meanwhile, the transport fee shows Bs. 0.'}
+                            </p>
                         </div>
                     )}
                 </div>

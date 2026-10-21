@@ -6,73 +6,162 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    function profile() {
+      return get(/databases/$(database)/documents/adminUsers/$(request.auth.uid)).data;
+    }
+
+    function activeAdmin() {
+      return signedIn()
+        && exists(/databases/$(database)/documents/adminUsers/$(request.auth.uid))
+        && profile().active == true
+        && profile().role in ['admin', 'manager', 'mechanic', 'viewer'];
+    }
+
+    function hasRole(roles) {
+      return activeAdmin() && profile().role in roles;
+    }
+
     function isAdmin() {
-      return signedIn();
+      return hasRole(['admin']);
+    }
+
+    function isCommercialManager() {
+      return hasRole(['admin', 'manager']);
+    }
+
+    function isScopedRead() {
+      return activeAdmin()
+        && (profile().role == 'admin'
+          || profile().store == 'all'
+          || (resource.data.store is string && resource.data.store == profile().store));
+    }
+
+    function isScopedWrite() {
+      return isCommercialManager()
+        && (profile().role == 'admin'
+          || profile().store == 'all'
+          || (request.resource.data.store is string && request.resource.data.store == profile().store));
+    }
+
+    function isScopedDelete() {
+      return isCommercialManager()
+        && (profile().role == 'admin'
+          || profile().store == 'all'
+          || (resource.data.store is string && resource.data.store == profile().store));
+    }
+
+    function isScopedRoleWrite(roles) {
+      return hasRole(roles)
+        && (profile().role == 'admin'
+          || profile().store == 'all'
+          || (request.resource.data.store is string && request.resource.data.store == profile().store));
+    }
+
+    function isScopedRoleDelete(roles) {
+      return hasRole(roles)
+        && (profile().role == 'admin'
+          || profile().store == 'all'
+          || (resource.data.store is string && resource.data.store == profile().store));
     }
 
     match /adminUsers/{adminUserId} {
-      allow read: if isAdmin();
-      allow create: if isAdmin();
-      allow update: if isAdmin();
-      allow delete: if false;
+      allow get: if activeAdmin() && (isAdmin() || request.auth.uid == adminUserId);
+      allow list: if isAdmin();
+      // Roles are provisioned only by a trusted Admin SDK function/CLI migration.
+      allow create, update, delete: if false;
     }
 
     match /settings/{settingId} {
-      allow read: if settingId != 'admin_security' || isAdmin();
+      allow read: if settingId in ['rental_settings', 'bike_categories', 'shop_categories', 'admin_navigation'] || isAdmin();
       allow write: if isAdmin();
     }
 
     match /inventory/{itemId} {
       allow read: if true;
-      allow write: if isAdmin();
+      allow create, update: if isScopedWrite();
+      allow delete: if isScopedDelete();
     }
 
     match /combos/{comboId} {
       allow read: if true;
-      allow write: if isAdmin();
+      allow create, update: if isScopedWrite();
+      allow delete: if isScopedDelete();
     }
 
     match /routes/{routeId} {
       allow read: if true;
-      allow write: if isAdmin();
+      allow create, update, delete: if isAdmin();
     }
 
     match /events/{eventId} {
       allow read: if true;
-      allow write: if isAdmin();
+      allow create, update, delete: if isAdmin();
     }
 
     match /rentals/{rentalId} {
-      allow read: if true;
-      allow create: if true;
-      allow update, delete: if isAdmin();
+      allow read: if isScopedRead();
+      // All lifecycle and financial writes go through trusted Functions/Admin SDK.
+      allow create: if false;
+      allow update, delete: if false;
     }
 
+    match /rentalPaymentMovements/{movementId} {
+      // Payment records are immutable to clients; trusted callables write them.
+      allow read: if isScopedRead();
+      allow create, update, delete: if false;
+    }
+
+    // Legacy customer documents can contain password hashes and identity scans.
+    // Keep them server/admin-only; customer apps use a sanitized profile endpoint.
     match /customers/{customerId} {
+      // Legacy records may still contain old password hashes; reads go through a sanitizing callable.
+      allow read: if false;
+      allow create, update: if isScopedWrite();
+      allow delete: if isScopedDelete();
+    }
+
+    match /customerProfiles/{uid} {
+      allow get: if signedIn() && request.auth.uid == uid;
+      allow list: if false;
+      allow write: if false;
+    }
+
+    match /customerPrivate/{uid} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
+    match /pendingCustomerRegistrations/{uid} {
+      allow read, write: if false;
+    }
+
+    match /rentals_busy_slots/{slotId} {
       allow read: if true;
-      allow create: if true;
-      allow update: if true;
-      allow delete: if isAdmin();
+      allow write: if false;
     }
 
     match /sales/{saleId} {
-      allow read: if true;
-      allow create: if true;
-      allow update, delete: if isAdmin();
+      allow read: if isScopedRead();
+      allow create, update: if isScopedWrite();
+      allow delete: if isScopedDelete();
     }
 
     match /serviceOrders/{serviceOrderId} {
+      allow read: if isScopedRead();
+      allow create: if isScopedRoleWrite(['admin', 'manager', 'mechanic']);
+      allow update: if isScopedRoleWrite(['admin', 'manager', 'mechanic']);
+      allow delete: if isScopedRoleDelete(['admin', 'manager', 'mechanic']);
+    }
+
+    match /communityItems/{itemId} {
       allow read: if true;
-      allow create: if true;
+      allow create: if request.resource.data.status == 'pending'
+        && request.resource.data.keys().hasOnly(['id', 'name', 'message', 'imageUrl', 'createdAt', 'status']);
       allow update, delete: if isAdmin();
     }
 
-    // Cyclists can submit only pending content. Administrators authenticated
-    // through Firebase are the only ones who can approve, reject or remove it.
-    match /communityItems/{itemId} {
-      allow read: if true;
-      allow create: if request.resource.data.status == 'pending';
-      allow update, delete: if isAdmin();
+    match /{document=**} {
+      allow read, write: if false;
     }
   }
 }

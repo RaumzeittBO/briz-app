@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { useStore } from '@/context/StoreContext';
+import { useLanguage } from '@/context/LanguageContext';
 
 const fadeUp = {
     initial: { opacity: 0, y: 30 },
@@ -129,6 +130,7 @@ export default function ServicePage() {
     const [bikeImageUrl, setBikeImageUrl] = useState('');
     const [isSending, setIsSending] = useState(false);
     const { addServiceOrder } = useStore();
+    const { language } = useLanguage();
     const selectedPlan = popularServices[selectedPlanIndex];
     const quoteTotal = quoteItems.reduce((total, item) => {
         const range = priceRange(item.price);
@@ -207,8 +209,8 @@ export default function ServicePage() {
             <section className="py-12 sm:py-20 bg-white">
                 <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
                     <motion.div {...fadeUp} className="text-center mb-7 sm:mb-10">
-                        <h2 className="text-3xl sm:text-5xl font-black tracking-tight text-brand-charcoal">Servicios más <span className="text-brand-yellow">solicitados</span></h2>
-                        <p className="mt-3 text-sm sm:text-lg text-brand-charcoal/60 font-bold">Selecciona un servicio para ver todo su alcance.</p>
+                        <h2 className="text-3xl sm:text-5xl font-black tracking-tight text-brand-charcoal">{language === 'es' ? <>Servicios más <span className="text-brand-yellow">solicitados</span></> : <>Most requested <span className="text-brand-yellow">services</span></>}</h2>
+                        <p className="mt-3 text-sm sm:text-lg text-brand-charcoal/60 font-bold">{language === 'es' ? 'Selecciona un servicio para ver todo su alcance.' : 'Select a service to view its full scope.'}</p>
                     </motion.div>
 
                     <div className="grid gap-3 sm:grid-cols-3 sm:gap-4">
@@ -252,12 +254,12 @@ export default function ServicePage() {
                             <p className="shrink-0 text-xl sm:text-2xl font-black text-brand-charcoal">Bs. {selectedPlan.price}</p>
                         </div>
                         <div className="mt-5 rounded-2xl bg-white p-4">
-                            <p className="text-[10px] font-black uppercase tracking-widest text-brand-charcoal/45">Ideal para</p>
+                            <p className="text-[10px] font-black uppercase tracking-widest text-brand-charcoal/45">{language === 'es' ? 'Ideal para' : 'Ideal for'}</p>
                             <p className="mt-2 text-sm font-bold leading-relaxed text-brand-charcoal/75">{selectedPlan.ideal}</p>
                         </div>
                         <div className="mt-6 grid gap-6 lg:grid-cols-[1fr_0.36fr]">
                             <div>
-                                <p className="text-xs font-black uppercase tracking-widest text-brand-charcoal">Qué incluye</p>
+                                <p className="text-xs font-black uppercase tracking-widest text-brand-charcoal">{language === 'es' ? 'Qué incluye' : 'What is included'}</p>
                                 <ul className="mt-4 grid gap-3 sm:grid-cols-2">
                                     {selectedPlan.includes.map(item => (
                                         <li key={item} className="flex items-start gap-2 text-sm font-bold leading-snug text-brand-charcoal/75">
@@ -267,7 +269,7 @@ export default function ServicePage() {
                                 </ul>
                             </div>
                             <div className="rounded-2xl bg-white p-4">
-                                <p className="text-xs font-black uppercase tracking-widest text-brand-charcoal">No incluye</p>
+                                <p className="text-xs font-black uppercase tracking-widest text-brand-charcoal">{language === 'es' ? 'No incluye' : 'Not included'}</p>
                                 <ul className="mt-4 space-y-2">
                                     {selectedPlan.excludes.map(item => (
                                         <li key={item} className="flex items-start gap-2 text-xs font-bold text-brand-charcoal/65">
@@ -283,7 +285,7 @@ export default function ServicePage() {
                             disabled={quoteItems.some(item => item.id === `popular_${selectedPlanIndex}`)}
                             className="mt-6 h-12 w-full rounded-xl bg-brand-cyan font-black text-white hover:bg-brand-cyan/85 disabled:opacity-55 sm:w-auto sm:px-8"
                         >
-                            <Plus className="mr-2 h-4 w-4" /> {quoteItems.some(item => item.id === `popular_${selectedPlanIndex}`) ? 'Añadido a cotización' : 'Añadir a cotización'}
+                            <Plus className="mr-2 h-4 w-4" /> {quoteItems.some(item => item.id === `popular_${selectedPlanIndex}`) ? (language === 'es' ? 'Añadido a cotización' : 'Added to quote') : (language === 'es' ? 'Añadir a cotización' : 'Add to quote')}
                         </Button>
                     </motion.article>
                 </div>
@@ -293,10 +295,10 @@ export default function ServicePage() {
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                     <motion.div {...fadeUp} className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between mb-6 sm:mb-9">
                         <div>
-                            <p className="text-[10px] font-black uppercase tracking-[0.22em] text-brand-yellow-vibrant">Mecánica Briz</p>
-                            <h2 className="mt-2 text-3xl sm:text-5xl font-black tracking-tight text-brand-charcoal">Otros <span className="text-brand-yellow">servicios</span></h2>
+                            <p className="text-[10px] font-black uppercase tracking-[0.22em] text-brand-yellow-vibrant">{language === 'es' ? 'Mecánica Briz' : 'Briz Mechanics'}</p>
+                            <h2 className="mt-2 text-3xl sm:text-5xl font-black tracking-tight text-brand-charcoal">{language === 'es' ? <>Otros <span className="text-brand-yellow">servicios</span></> : <>Additional <span className="text-brand-yellow">services</span></>}</h2>
                         </div>
-                        <p className="max-w-md text-sm font-bold leading-relaxed text-brand-charcoal/60">Puedes solicitarlos por separado o añadirlos al mantenimiento que elijas.</p>
+                        <p className="max-w-md text-sm font-bold leading-relaxed text-brand-charcoal/60">{language === 'es' ? 'Puedes solicitarlos por separado o añadirlos al mantenimiento que elijas.' : 'You can request them separately or add them to your chosen maintenance plan.'}</p>
                     </motion.div>
 
                     <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-4">
@@ -316,7 +318,7 @@ export default function ServicePage() {
                                     <p className="text-xs font-black leading-snug text-brand-charcoal">{service}</p>
                                 </div>
                                 <div className="w-full border-t border-brand-yellow/15 pt-2">
-                                    <p className="text-[8px] font-black uppercase tracking-widest text-brand-charcoal/40">Precio</p>
+                                    <p className="text-[8px] font-black uppercase tracking-widest text-brand-charcoal/40">{language === 'es' ? 'Precio' : 'Price'}</p>
                                     <p className="mt-0.5 text-sm font-black text-brand-charcoal">{price}</p>
                                     <button
                                         type="button"
@@ -324,7 +326,7 @@ export default function ServicePage() {
                                         disabled={quoteItems.some(item => item.id === `extra_${index}`)}
                                         className="mt-2 inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-wide text-brand-cyan hover:text-brand-charcoal disabled:text-brand-charcoal/35"
                                     >
-                                        <Plus className="h-3.5 w-3.5" /> {quoteItems.some(item => item.id === `extra_${index}`) ? 'Añadido' : 'Agregar'}
+                                        <Plus className="h-3.5 w-3.5" /> {quoteItems.some(item => item.id === `extra_${index}`) ? (language === 'es' ? 'Añadido' : 'Added') : (language === 'es' ? 'Agregar' : 'Add')}
                                     </button>
                                 </div>
                             </motion.div>
@@ -340,7 +342,7 @@ export default function ServicePage() {
                             <div className="flex items-center justify-between gap-3 border-b border-brand-cyan/15 pb-3">
                                 <div className="flex items-center gap-2 text-brand-charcoal">
                                     <ShoppingCart className="h-5 w-5 text-brand-cyan" />
-                                    <h3 className="font-black">Cotización de mecánica</h3>
+                                    <h3 className="font-black">{language === 'es' ? 'Cotización de mecánica' : 'Mechanical Quote'}</h3>
                                 </div>
                                 <span className="text-sm font-black text-brand-charcoal">Bs. {quoteTotal.min}{quoteTotal.max !== quoteTotal.min ? ` - ${quoteTotal.max}` : ''}</span>
                             </div>
@@ -358,7 +360,7 @@ export default function ServicePage() {
                                 ))}
                             </div>
                             <a href={quoteLink} target="_blank" rel="noopener noreferrer" className="mt-4 block">
-                                <Button className="h-11 w-full rounded-xl bg-brand-cyan font-black text-white hover:bg-brand-cyan/85 sm:w-auto sm:px-6">Solicitar cotización por WhatsApp</Button>
+                                <Button className="h-11 w-full rounded-xl bg-brand-cyan font-black text-white hover:bg-brand-cyan/85 sm:w-auto sm:px-6">{language === 'es' ? 'Solicitar cotización por WhatsApp' : 'Request quote via WhatsApp'}</Button>
                             </a>
                         </motion.div>
                     )}
@@ -369,14 +371,14 @@ export default function ServicePage() {
             <section className="py-24 sm:py-32 bg-white">
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                     <motion.div {...fadeUp} className="text-center mb-16 sm:mb-20">
-                        <h2 className="text-4xl sm:text-5xl font-black mb-6 tracking-tight text-brand-charcoal">¿Cómo funciona el <span className="text-brand-yellow">servicio</span>?</h2>
+                        <h2 className="text-4xl sm:text-5xl font-black mb-6 tracking-tight text-brand-charcoal">{language === 'es' ? <>¿Cómo funciona el <span className="text-brand-yellow">servicio</span>?</> : <>How does our <span className="text-brand-yellow">service</span> work?</>}</h2>
                     </motion.div>
                     <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-12 max-w-6xl mx-auto">
                         {[
-                            { step: '01', title: 'Trae tu bici', desc: 'Acércate a nuestro taller o solicita servicio de recogida a domicilio.', icon: '🚲' },
-                            { step: '02', title: 'Diagnóstico', desc: 'Realizamos una inspección técnica detallada para darte un presupuesto honesto.', icon: '📋' },
-                            { step: '03', title: 'Reparación', desc: 'Nuestros técnicos certificados trabajan con herramientas y repuestos de alta gama.', icon: '🔧' },
-                            { step: '04', title: 'Entrega', desc: 'Te notificamos cuando tu bici esté impecable. ¡Lista para la ruta!', icon: '✨' },
+                            { step: '01', title: language === 'es' ? 'Trae tu bici' : 'Bring your bike', desc: language === 'es' ? 'Acércate a nuestro taller o solicita servicio de recogida a domicilio.' : 'Visit our workshop or request home pickup service.', icon: '🚲' },
+                            { step: '02', title: language === 'es' ? 'Diagnóstico' : 'Diagnosis', desc: language === 'es' ? 'Realizamos una inspección técnica detallada para darte un presupuesto honesto.' : 'We perform a detailed technical inspection to give you an honest quote.', icon: '📋' },
+                            { step: '03', title: language === 'es' ? 'Reparación' : 'Repair', desc: language === 'es' ? 'Nuestros técnicos certificados trabajan con herramientas y repuestos de alta gama.' : 'Our certified technicians work with top-grade tools and parts.', icon: '🔧' },
+                            { step: '04', title: language === 'es' ? 'Entrega' : 'Delivery', desc: language === 'es' ? 'Te notificamos cuando tu bici esté impecable. ¡Lista para la ruta!' : 'We notify you when your bike is spotless and ready to ride!', icon: '✨' },
                         ].map((s, i) => (
                             <motion.div key={i} initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: i * 0.1 }} className="text-center space-y-6 group">
                                 <div className="relative">
@@ -407,10 +409,10 @@ export default function ServicePage() {
                             whileInView={{ opacity: 1, y: 0 }}
                             className="inline-block px-4 py-1.5 rounded-full bg-brand-yellow/10 text-brand-yellow font-black text-[10px] uppercase tracking-widest mb-6"
                         >
-                            Agenda Online
+                            {language === 'es' ? 'Agenda Online' : 'Online Booking'}
                         </motion.div>
-                        <h2 className="text-4xl sm:text-6xl font-black mb-8 tracking-tight text-brand-charcoal leading-tight">Solicita tu <span className="text-brand-yellow italic">turno hoy</span></h2>
-                        <p className="text-xl sm:text-2xl text-gray-400 font-bold max-w-2xl mx-auto leading-relaxed">Completa el formulario y te contactaremos de inmediato para confirmar tu horario.</p>
+                        <h2 className="text-4xl sm:text-6xl font-black mb-8 tracking-tight text-brand-charcoal leading-tight">{language === 'es' ? <>Solicita tu <span className="text-brand-yellow italic">turno hoy</span></> : <>Book your <span className="text-brand-yellow italic">appointment today</span></>}</h2>
+                        <p className="text-xl sm:text-2xl text-gray-400 font-bold max-w-2xl mx-auto leading-relaxed">{language === 'es' ? 'Completa el formulario y te contactaremos de inmediato para confirmar tu horario.' : 'Fill out the form and we will contact you right away to confirm your schedule.'}</p>
                     </motion.div>
                     <motion.div {...fadeUp}>
                         <Card className="bg-white rounded-[3rem] shadow-[0_40px_100px_rgba(0,0,0,0.08)] border-0 overflow-hidden relative group">
@@ -419,39 +421,39 @@ export default function ServicePage() {
                                 <form onSubmit={handleRequest} className="space-y-8">
                                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-8">
                                         <div className="space-y-3">
-                                            <Label className="text-brand-charcoal font-black text-xs uppercase tracking-widest ml-1 opacity-60">Nombre Completo</Label>
+                                            <Label className="text-brand-charcoal font-black text-xs uppercase tracking-widest ml-1 opacity-60">{language === 'es' ? 'Nombre Completo' : 'Full Name'}</Label>
                                             <Input value={request.name} onChange={event => setRequest(current => ({ ...current, name: event.target.value }))} placeholder="Tu nombre" required className="h-16 rounded-2xl bg-gray-50 border-0 focus-visible:ring-2 focus-visible:ring-brand-yellow/50 focus-visible:bg-white transition-all text-base font-bold shadow-inner" />
                                         </div>
                                         <div className="space-y-3">
-                                            <Label className="text-brand-charcoal font-black text-xs uppercase tracking-widest ml-1 opacity-60">Teléfono WhatsApp</Label>
+                                            <Label className="text-brand-charcoal font-black text-xs uppercase tracking-widest ml-1 opacity-60">{language === 'es' ? 'Teléfono WhatsApp' : 'WhatsApp Phone'}</Label>
                                             <Input value={request.phone} onChange={event => setRequest(current => ({ ...current, phone: event.target.value }))} placeholder="+591 7..." required className="h-16 rounded-2xl bg-gray-50 border-0 focus-visible:ring-2 focus-visible:ring-brand-yellow/50 focus-visible:bg-white transition-all text-base font-bold shadow-inner" />
                                         </div>
                                     </div>
                                     <div className="space-y-3">
-                                        <Label className="text-brand-charcoal font-black text-xs uppercase tracking-widest ml-1 opacity-60">Tipo de bicicleta</Label>
+                                        <Label className="text-brand-charcoal font-black text-xs uppercase tracking-widest ml-1 opacity-60">{language === 'es' ? 'Tipo de bicicleta' : 'Bicycle Type'}</Label>
                                         <Input value={request.bikeType} onChange={event => setRequest(current => ({ ...current, bikeType: event.target.value }))} placeholder="Ej: Mountain bike, urbana, ruta..." required className="h-16 rounded-2xl bg-gray-50 border-0 focus-visible:ring-2 focus-visible:ring-brand-yellow/50 focus-visible:bg-white transition-all text-base font-bold shadow-inner" />
                                     </div>
                                     <div className="space-y-3">
-                                        <Label className="text-brand-charcoal font-black text-xs uppercase tracking-widest ml-1 opacity-60">Falla o Servicio Necesitado</Label>
+                                        <Label className="text-brand-charcoal font-black text-xs uppercase tracking-widest ml-1 opacity-60">{language === 'es' ? 'Falla o Servicio Necesitado' : 'Issue or Service Needed'}</Label>
                                         <Textarea value={request.issue} onChange={event => setRequest(current => ({ ...current, issue: event.target.value }))} placeholder="Describe brevemente qué necesita tu bicicleta..." rows={4} required className="rounded-2xl bg-gray-50 border-0 focus-visible:ring-2 focus-visible:ring-brand-yellow/50 focus-visible:bg-white transition-all text-base font-bold shadow-inner resize-none p-5" />
                                     </div>
                                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-8">
                                         <div className="space-y-3">
-                                            <Label className="text-brand-charcoal font-black text-xs uppercase tracking-widest ml-1 opacity-60">Fecha Sugerida</Label>
+                                            <Label className="text-brand-charcoal font-black text-xs uppercase tracking-widest ml-1 opacity-60">{language === 'es' ? 'Fecha Sugerida' : 'Preferred Date'}</Label>
                                             <Input type="date" value={request.date} onChange={event => setRequest(current => ({ ...current, date: event.target.value }))} className="h-16 rounded-2xl bg-gray-50 border-0 focus-visible:ring-2 focus-visible:ring-brand-yellow/50 focus-visible:bg-white transition-all text-base font-bold shadow-inner" />
                                         </div>
                                         <div className="space-y-3">
-                                            <Label className="text-brand-charcoal font-black text-xs uppercase tracking-widest ml-1 opacity-60">Foto de la bicicleta</Label>
+                                            <Label className="text-brand-charcoal font-black text-xs uppercase tracking-widest ml-1 opacity-60">{language === 'es' ? 'Foto de la bicicleta' : 'Bicycle Photo'}</Label>
                                             <label className="flex h-16 cursor-pointer items-center gap-3 rounded-2xl bg-gray-50 px-5 font-bold text-brand-charcoal/70 transition hover:bg-brand-yellow/10">
                                                 <ImagePlus className="h-5 w-5 text-brand-yellow-vibrant" />
-                                                <span className="truncate">{bikeImageUrl ? 'Foto seleccionada' : 'Agregar foto (opcional)'}</span>
+                                                <span className="truncate">{bikeImageUrl ? (language === 'es' ? 'Foto seleccionada' : 'Photo selected') : (language === 'es' ? 'Agregar foto (opcional)' : 'Add photo (optional)')}</span>
                                                 <input type="file" accept="image/*" onChange={handleBikeImage} className="sr-only" />
                                             </label>
                                         </div>
                                     </div>
                                     {bikeImageUrl && <img src={bikeImageUrl} alt="Vista previa de la bicicleta" className="h-40 w-full rounded-2xl object-cover" />}
                                     <Button disabled={isSending} type="submit" className="w-full h-16 bg-brand-charcoal text-white hover:bg-brand-yellow hover:text-brand-black shadow-2xl hover:shadow-brand-yellow/30 hover:-translate-y-2 transition-all duration-500 rounded-2xl font-black text-xl border-0 uppercase tracking-tighter disabled:opacity-60">
-                                        {isSending ? 'Agendando...' : 'Agendar Ahora'}
+                                        {isSending ? (language === 'es' ? 'Agendando...' : 'Booking...') : (language === 'es' ? 'Agendar Ahora' : 'Book Now')}
                                     </Button>
                                 </form>
                             </CardContent>
@@ -467,10 +469,10 @@ export default function ServicePage() {
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
                     <div className="grid grid-cols-2 lg:grid-cols-4 gap-12 lg:gap-20 text-center">
                         {[
-                            { icon: Wrench, value: '500+', label: 'Bicis Reparadas', color: 'brand-yellow' },
-                            { icon: Star, value: '4.9', label: 'Satisfacción', color: 'brand-cyan' },
-                            { icon: Clock, value: '24h', label: 'Entrega Rápida', color: 'brand-pink' },
-                            { icon: Shield, value: '30 d', label: 'Garantía Total', color: 'brand-yellow' },
+                            { icon: Wrench, value: '500+', label: language === 'es' ? 'Bicis Reparadas' : 'Bikes Repaired', color: 'brand-yellow' },
+                            { icon: Star, value: '4.9', label: language === 'es' ? 'Satisfacción' : 'Satisfaction', color: 'brand-cyan' },
+                            { icon: Clock, value: '24h', label: language === 'es' ? 'Entrega Rápida' : 'Fast Turnaround', color: 'brand-pink' },
+                            { icon: Shield, value: '30 d', label: language === 'es' ? 'Garantía Total' : 'Full Warranty', color: 'brand-yellow' },
                         ].map((stat, i) => (
                             <motion.div key={i} initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: i * 0.1 }} className="space-y-6 group">
                                 <div className={`w-20 h-20 mx-auto rounded-3xl bg-${stat.color}/5 border border-${stat.color}/10 flex items-center justify-center transition-all duration-500 group-hover:scale-110 group-hover:bg-${stat.color}/20 group-hover:shadow-[0_20px_40px_rgba(0,0,0,0.3)]`}>

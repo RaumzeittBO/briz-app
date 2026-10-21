@@ -6,14 +6,16 @@ import {
     type User
 } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
-import { auth } from '../lib/firebase';
-import { db } from '../lib/firebase';
+import { auth, db } from '../lib/firebase';
 
-interface AdminProfile {
+export type AdminRole = 'admin' | 'manager' | 'mechanic' | 'viewer';
+
+export interface AdminProfile {
     uid: string;
     email: string;
     name?: string;
-    role: 'admin';
+    role: AdminRole;
+    store?: string;
     active: boolean;
 }
 
@@ -30,6 +32,8 @@ interface AuthContextType {
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
+
+const ALLOWED_ROLES: AdminRole[] = ['admin', 'manager', 'mechanic', 'viewer'];
 
 export function AuthProvider({ children }: { children: ReactNode }) {
     const [user, setUser] = useState<User | null>(null);
@@ -49,37 +53,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                     const adminRef = doc(db, 'adminUsers', currentUser.uid);
                     const snap = await getDoc(adminRef);
                     if (snap.exists()) {
-                        const data = snap.data() as AdminProfile;
-                        setAdminProfile({
-                            uid: currentUser.uid,
-                            email: data.email || currentUser.email || '',
-                            name: data.name,
-                            role: data.role || 'admin',
-                            active: data.active !== false
-                        });
+                        const data = snap.data() as Partial<AdminProfile>;
+                        if (ALLOWED_ROLES.includes(data.role as AdminRole)) {
+                            setAdminProfile({
+                                uid: currentUser.uid,
+                                email: data.email || currentUser.email || '',
+                                name: data.name || currentUser.displayName || 'Administrador',
+                                role: data.role as AdminRole,
+                                store: data.store || 'all',
+                                active: data.active !== false
+                            });
+                        }
                     } else {
-                        setAdminProfile({
-                            uid: currentUser.uid,
-                            email: currentUser.email || '',
-                            name: currentUser.displayName || 'Administrador',
-                            role: 'admin',
-                            active: true
-                        });
+                        setAdminProfile(null);
                     }
                 }
             } catch (error) {
                 console.error('No se pudo verificar el rol admin:', error);
-                if (currentUser) {
-                    setAdminProfile({
-                        uid: currentUser.uid,
-                        email: currentUser.email || '',
-                        name: currentUser.displayName || 'Administrador',
-                        role: 'admin',
-                        active: true
-                    });
-                } else {
-                    setAdminProfile(null);
-                }
+                // Deny by default on error instead of granting blind admin access
+                setAdminProfile(null);
             } finally {
                 setIsLoading(false);
             }
@@ -107,17 +99,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         sessionStorage.removeItem('briz_edit_mode');
     };
 
-    const isAdmin = !!user && !!adminProfile && adminProfile.active !== false && adminProfile.role === 'admin';
+    const isAdmin = !!user && !!adminProfile && adminProfile.active !== false && ALLOWED_ROLES.includes(adminProfile.role);
 
     return (
-        <AuthContext.Provider value={{ 
+        <AuthContext.Provider value={{
             user,
             adminProfile,
             isAuthenticated: isAdmin,
             isAdmin,
-            isEditMode, 
-            setEditMode, 
-            login, 
+            isEditMode,
+            setEditMode,
+            login,
             logout,
             isLoading
         }}>

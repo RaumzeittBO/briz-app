@@ -23,10 +23,12 @@ export const services: Service[] = [
 export interface CyclingRoute {
     id: string;
     name: string;
+    nameEn?: string;
     difficulty: 'Fácil' | 'Moderado' | 'Difícil';
     distance: string;
     duration: string;
     description: string;
+    descriptionEn?: string;
     highlights: string[];
     image: string;
     mapUrl?: string;

@@ -1,0 +1,399 @@
+# BRIZ (`briz.com.bo`) — MASTER ROADMAP & ENGINEERING LOG
+
+## Estado vigente — preservación de datos y release (2026-10-21)
+
+- Se creó una copia local de solo lectura en `G:\ProjectBriz\BRIZ_RELEASE_PRESERVATION_2026-10-21`. Incluye Firestore `inventory` (173 docs), `combos` (14), `routes` (2), `events` (2), `settings/rental_settings`, `settings/bike_categories`, `settings/shop_categories` y `adminUsers/C8MUz2wZrPOyaNySZc44YShLHoJ3`. Conserva los nombres/IDs, recursos REST con tipos y referencias, más 43 objetos de Storage de `inventory/` y `events/` (9,409,348 bytes) con metadatos y checksum. Excluye clientes, alquileres, pagos, community, customer uploads y credenciales Auth.
+- Recuperabilidad comprobada en Firestore Emulator con el proyecto demo `demo-briz-preservation`: 195 docs restaurados y comparados campo por campo; objetos restaurados, descargados y comparados byte por byte en Storage Emulator; el manifiesto conserva MD5/SHA-256 y metadata GCS. No se escribió en producción. Para restaurar archivos se preservan rutas, content type y metadata Firebase download token. El archivo queda local y fuera de Git.
+- Auth consultado de solo lectura: `prueba2@briz.com`, UID `C8MUz2wZrPOyaNySZc44YShLHoJ3`, existe y no está deshabilitado; su documento de rol Admin global se incluyó en la copia. `www.briz.com.bo` ya está autorizado.
+- Backup administrado: Firestore conserva una programación diaria con retención `604800s` (7 días), pero la lista de backups está vacía. **Esperar el primer backup automático ya no es requisito de publicación**: la copia local específica de catálogo/configuración fue verificada. Recomiendo conservar la programación para cambios futuros; el precio oficial es `US$0.000041096/GiB-hora` de backup, aproximadamente `US$0.21 por GiB de base fuente al mes` con una copia diaria y siete días de retención en régimen estable; restaurar cuesta `US$0.20/GiB`. El tamaño facturable total de Firestore no se midió, por lo que no se afirma un total mensual. [Precios Firestore](https://cloud.google.com/firestore/pricing) y [documentación de backups](https://cloud.google.com/firestore/docs/backups).
+- Telegram queda preparado sin valores: existen los secretos vacíos `TELEGRAM_BOT_TOKEN` y `TELEGRAM_CHAT_ID` en `briz-4ef3a`. Cada recurso da `roles/secretmanager.secretAccessor` únicamente a `briz-telegram-runtime@briz-4ef3a.iam.gserviceaccount.com`; no hay versiones ni se escribió ningún token. Al añadir versiones, las primeras seis versiones activas por cuenta de facturación al mes son gratuitas; el exceso cuesta `US$0.06 por versión/ubicación/mes` y las primeras 10,000 lecturas mensuales son gratuitas. Si la cuota compartida ya estuviera agotada, estas dos versiones añadirían hasta ~US$0.12/mes; la replicación automática cuenta como una ubicación. [Precios Secret Manager](https://cloud.google.com/secret-manager/pricing).
+- Siguiente intervención única del propietario: revocar el token antiguo en BotFather, generar el reemplazo y cargar token/chat ID directamente como nuevas versiones de esos dos secretos en Secret Manager; no compartir valores por chat. Después se verifica acceso del trigger, una notificación real controlada y ausencia de duplicados; solo entonces se retiran las variables `VITE_TELEGRAM_*` antiguas de Vercel.
+- Estado release: no se desplegaron índices, Functions ni Rules, no hubo merge ni escrituras productivas. La rama local está 2 commits por delante de `origin/codex/briz-critical-stabilization-20261020`; se evita publicar ahora para no provocar un Preview fallido mientras falta Telegram. Tras la intervención, continuar la ventana coordinada: verificar respaldo Vercel/variables y APIs requeridas → desplegar índices → Functions incluida Telegram → probar backend → merge PR #1 a `main` → verificar nuevo Vercel Production en `briz-4ef3a` → aplicar inmediatamente Rules estrictas → comprobar Auth/Admin, catálogo y salud. Ningún rollback dejará Rules inseguras como estado permanente.
+
+Las notas históricas que todavía listan el primer backup diario como gate quedan supersedidas por este estado vigente.
+
+## Addendum de release y seguridad — 2026-10-21
+
+Supersede los estados anteriores de esta bitácora sobre Rules y suites. Se corrigió `firestore.rules`: para `rentals`, el Web SDK ya no puede crear, modificar ni borrar documentos; las transiciones y pagos continúan en Functions/Admin SDK. **Este cambio está solo en la rama local y no está desplegado.** No se hicieron cambios a producción, usuarios, reservas, inventario, APIs, `main` ni Vercel.
+
+- Regresión nueva en `scripts/firebase-rules.test.ts`: Admin y Manager fallan al cambiar `status`, `paymentStatus`, `total`, `amountPaid` o borrar un alquiler; conservan lectura autorizada. Emulators demuestran que las callables autorizadas sí ejecutan reserva, confirmación, entrega, edición, devolución, pago y cancelación; las pruebas cubren inventario/idempotencia y ausencia de doble descuento.
+- Verificaciones de este cambio: `npm run test:firebase`, `npm run test:reports`, `npm run test:reconcile` (8 registros ficticios, 22 hallazgos), `npx tsx scripts/verify-briz-core.ts` (16/16), `npx tsc --noEmit`, `npm run build`, `npm run build --prefix functions` y ESLint del archivo de reglas. Todas pasaron. Avisos conocidos del build: `/noise.png`, bundle ~1.97 MB; Emulator Node24 vs Functions Node22 y warning transitorio de metadatos.
+- Telegram es gate para merge: el trigger `sendReservationNotification` usa Secret Manager pero no hay token rotado ni secretos productivos configurados. Reserva sigue funcionando y el outbox marca el estado real; no afirmar notificación activa. El propietario debe rotar en BotFather y cargar `TELEGRAM_BOT_TOKEN`/`TELEGRAM_CHAT_ID` directamente en Secret Manager/CLI seguro, nunca compartirlos en chat. Si no se completa, detenerse antes del merge y solicitar decisión expresa para publicar sin avisos.
+- Estado Git: push normal de la rama de estabilización confirmado y sincronizado; el commit de seguridad de Rules es `76d7114554486db340a72e767712e87a287d9646` y luego se publicó un commit documental. PR #1 OPEN/Draft; `origin/main` sigue en `0140452678d23e6e352dcaacd353bfe7342912f5`. No se fusionó. No se habilitaron APIs ni se desplegaron índices, Functions o Rules; no se modificaron Vercel ni Firebase. Mantener así hasta resolver Telegram y comprobar deployment/rollback y APIs estrictamente necesarias. La regla estricta debe publicarse después del frontend callable para evitar romper el `main` viejo.
+- Vercel: Production `0140452` permanece Ready con `briz.com.bo`/`www.briz.com.bo` y Instant Rollback disponible. El Preview del seguimiento documental falló en `npm run build` por el guard esperado: `Firebase is disabled for Vercel Preview until a dedicated staging Firebase project is configured.` No se quitó el guard ni se conectó Preview a producción. El baseline de Rules está versionado y la copia local de catálogo/configuración ya fue restaurada y verificada en Emulator; la ausencia del primer backup diario no bloquea el deploy.
+- Siguiente paso: intervención segura del propietario para los dos valores de Telegram; luego desplegar índices/Functions y continuar la ventana coordinada, conservando el orden compatible de frontend y Rules. PR #1 no se fusiona mientras haya este gate.
+
+## Addendum vigente — preparación final para publicación directa (2026-10-21)
+
+Este addendum reemplaza las afirmaciones históricas posteriores que decían que Auth, roles, Rules activas, Storage Rules o variables no se podían verificar. No autoriza escritura a producción, push, merge, ni despliegue.
+
+- **Auth/Admin (solo lectura):** Email/Password está habilitado. Hay tres cuentas ficticias de prueba. La cuenta `prueba2@briz.com` tiene UID `C8MUz2wZrPOyaNySZc44YShLHoJ3`; coincide con el único documento de `adminUsers` mostrado, `active=true`, `role=admin`. El perfil es Admin global (sin `store`). No se creó ni cambió ningún usuario. No hay Admin de recuperación identificado. `www.briz.com.bo` no figura entre los dominios Auth autorizados observados (solo `localhost` y los dominios Firebase predeterminados); comprobar/autorizar el dominio para enlaces de verificación/recuperación antes de validar ese recorrido.
+- **Rules activas recuperadas:** Firestore y Storage se leyeron desde la consola autenticada de `briz-4ef3a` y se guardaron como baseline de solo lectura en [`BRIZ_PRODUCTION_RULES_BASELINE_2026-10-21.md`](./BRIZ_PRODUCTION_RULES_BASELINE_2026-10-21.md). Firestore es críticamente permisiva: `isAdmin()` es cualquier sesión Auth; permite autoescritura de `adminUsers`, lectura pública de alquileres/clientes/ventas/órdenes de servicio y creación pública de varios documentos. Las Storage Rules sí exigen documento Admin activo para escritura administrativa. No se cambiaron reglas ni objetos.
+- **Functions/índices:** Firestore está en `southamerica-west1`; bucket `briz-4ef3a.firebasestorage.app` existe; Cloud Functions, Firestore, Identity Toolkit, Firebase Storage, Cloud Resource Manager y Token Service aparecen habilitadas en la consola de APIs. Functions desplegadas: 0. Índices compuestos remotos: 0 frente a cuatro declarados localmente. No se pudo verificar IAM de despliegue. La lista habilitada visible no incluye Cloud Build, Cloud Run, Artifact Registry o Eventarc; verificar/habilitar esas APIs para Functions v2 antes de desplegar. Node runtime solicitado: 22; región: `us-central1`.
+- **Functions candidatas sin Telegram:** `beginCustomerRegistration`, `createCustomerProfile`, `getMyRentals`, `getAdminCustomers`, `createRentalGroup`, `adminRentalAction`, `recordRentalPaymentMovement`, `updateRentalGroup`, `provisionAdminUser`, `createServiceOrder`, `syncRentalAvailabilityProjection` y `backendHealth`. Excluir `sendReservationNotification` hasta rotar el token/configurar ambos secretos de Secret Manager; el outbox no se debe reportar enviado/procesado si no se ejecutó el trigger. Las reglas y 4 índices se despliegan mediante comandos/alcances explícitos, no despliegue global.
+- **Vercel:** la página integrada confirma `briz-web` en el equipo `gfabrigtrf-7085s-projects`; los nueve nombres `VITE_FIREBASE_*` de Production están visibles con alcance Production únicamente (no se revelan valores). El build de verificación usó SDK config oficial de `briz-4ef3a`, `VERCEL_ENV=production`, emulator=false: compiló sin staging. Bundle escaneado: no tiene marcador/token Telegram. Siguen guardadas `VITE_TELEGRAM_CHAT_ID`, `VITE_TELEGRAM_BOT_TOKEN` y `VITE_GOOGLE_MAPS_API_KEY` con Production y Preview; no se tocaron. Rotar el token antiguo y retirarlo de Vercel después de asegurar el cliente nuevo.
+- **Rollback Vercel confirmado:** el overview de `briz-web` muestra el Production Deployment Ready desde `main` en commit `0140452678d23e6e352dcaacd353bfe7342912f5` (7 Jul), ID `GEwbCAyYGzKDjCPPfv6phF75nyZ1`, deployment `briz-3ah6hfwrc-gfabrigtrf-7085s-projects.vercel.app`; tiene `briz.com.bo` / `www.briz.com.bo` asociados. El botón “Instant Rollback” está disponible. Conservar ese deployment y confirmar que siga Ready justo antes de la ventana. `084dcb2` es Preview Ready, no usarlo como destino de rollback de Production.
+- **Pruebas:** `test:reports`, `test:reconcile` (8 fixtures / 22 hallazgos), motor (16/16), build web local, build equivalente a Production, `test:firebase` y `tsc --noEmit` terminaron correctamente. La primera corrida Firebase falló al cargar Functions en 10s mientras Vite construía en paralelo; la repetición aislada pasó. Advertencias vigentes: Node host 24 vs Functions 22, error transitorio de metadata lookup en emulator, `/noise.png` sin resolver y JS ~1.97MB. ESLint dirigido a cuatro páginas Admin y tres helpers/Functions encontró 51 errores, 0 warnings: 49 `@typescript-eslint/no-explicit-any` en cuatro páginas operativas y 2 `no-unused-expressions` en `InventoryPage.tsx` (ternarios que ejecutan correctamente sus ramas). Es deuda real de lint, no falla de compilación ni de suite funcional.
+- **Copia de reserva corregida:** detecté que el cliente decía “pedido confirmado” para QR/transferencia mientras el backend guarda toda nueva reserva pública en `pending`; el primer lote tampoco enviará Telegram. Cambié el éxito ES/EN a solicitud recibida, pendiente de confirmación y sin notificación automática. `npm run test:reservation-receipt`, Reports/Core 16/16, build web y build equivalente Production posterior al cambio pasaron; el scan de bundle dio `TELEGRAM_TOKEN_MARKER_IN_BUNDLE=False`.
+- **Estado de Git:** rama `codex/briz-critical-stabilization-20261020`; antes de esta actualización el HEAD local era `d750571653abff183ea6e2a8565588039c091fb8`, cuatro commits por delante de `origin/codex/...` en `2c288adccb2e49c43ea568e801168760f5c27030`. No se hizo push porque los builds Preview fallarían intencionalmente sin staging; PR #1 sigue OPEN/Draft, `main` sin cambios.
+- **Bloqueo para publicación:** no desplegar cliente mientras faltan las Functions/índices nuevos; no publicar Rules estrictas antes del frontend callable porque el cliente viejo hace escrituras directas. Después del frontend, aplicar inmediatamente Rules estrictas y validar. Antes del release se requiere la copia puntual de catálogo ya verificada, confirmar deployment listo de Vercel, APIs/IAM de Functions v2, dominio Auth, ventana aprobada y ensayo de rollback coordinado de Vercel + Rules + Functions. El token Telegram no será incluido ni hará fallar reservas.
+- **Siguiente paso:** tras cerrar ESLint/TypeScript y documentar resultado, presentar al propietario el plan exacto de la ventana productiva y esperar su autorización única. No volver a operar `briz-staging`.
+
+## Decisión vigente de release — publicación directa controlada (2026-10-21)
+
+El propietario indicó conservar `briz-staging` creado y sin Blaze, sin operaciones adicionales, y evaluar publicación directa a `briz-4ef3a`. Esta nota reemplaza la exigencia histórica de desplegar primero en staging; no autoriza cambios productivos ni merge.
+
+- Estado: suites críticas Emulator, reportes, conciliación sintética (8 fixtures/22 hallazgos), motor 16/16, TypeScript, build web y build Functions pasaron el 2026-10-21. ESLint dirigido falló con 32 errores de estilo/tipos (`no-explicit-any`, exports Fast Refresh); no errores de compilación.
+- Firebase remoto consultado sin escrituras: Firestore presente en `southamerica-west1`, cero Functions y cero índices; el repo contiene cuatro índices. Rules/Storage/Auth/roles actuales no verificables desde las credenciales disponibles.
+- Al inicio de la evaluación la rama local estaba en `7aaa6304afe3cd17550f47687ca9968f457af423`, con documentación local por delante; el head remoto sigue `2c288adccb2e49c43ea568e801168760f5c27030`. PR #1 sigue Draft. No hacer push que repita Preview fallido. `origin/main` es `0140452678d23e6e352dcaacd353bfe7342912f5`; el `main` local adelantado no representa al remoto.
+- `www.briz.com.bo` respondió 200 solo a una petición HTTP de lectura. Vercel API devuelve 403 para `briz-web`; confirmar manualmente la configuración/branch/deployment rollback desde la sesión del propietario.
+- Secuencia condicionada: verificación Auth/perfiles Admin, Rules actuales y copia puntual de catálogo ya validada → rotación del token Telegram actualmente expuesto por el frontend viejo → bootstrap explícito del primer perfil Admin → desplegar índices → Functions y secretos → merge/Production frontend → Rules/Storage estrictas cuando el cliente nuevo ya esté activo → smoke de solo lectura. Pruebas de escritura/cobro en producción requieren autorización separada.
+- Bloqueos funcionales: backend Functions e índices ausentes; roles de producción/primer Admin y reglas actuales no confirmados; destino/build de Production sin lectura actual de Vercel. Staging y App Check son recomendaciones para reducir riesgo, no motivo para abandonar la vía directa. Rotar el token Telegram antiguo es bloqueo de seguridad antes de publicar.
+- Detalle de transición, verificación y rollback: [`BRIZ_RELEASE_READINESS.md`](./BRIZ_RELEASE_READINESS.md).
+
+## Configuración Firebase/Vercel y bloqueo de release — actualización 2026-10-21
+
+- Vercel integrado: se verificó el proyecto `briz-web` del equipo `gfabrigtrf-7085s-projects`. Con autorización expresa del propietario se añadieron las nueve variables Firebase enumeradas abajo, todas con alcance **Production únicamente**; lista recargada y verificada, valores no expuestos. Las tres variables antiguas de Telegram/Maps permanecen en Production y Preview; no se modificaron ni eliminaron. Guardar variables no inició un deployment; no se pulsó Redeploy.
+- Staging: se creó el proyecto Firebase `briz-staging` y se registró su app web con la cuenta Firebase CLI autorizada. No se enlazó facturación ni se activaron servicios cobrables. `briz-staging` no tenía una base Firestore; el intento explícito de crearla quedó rechazado porque Firestore API aún está deshabilitada. El CLI read-only confirmó que Production usa `southamerica-west1`; ese es el destino propuesto para staging, sin haber creado DB. La consola integrada de Google redirige a selector de cuenta con sesión cerrada; no se automatizó login.
+- Bloqueo de billing: Cloud Functions for Firebase y Storage requieren plan Blaze; este workspace no tiene `gcloud`, no puede inspeccionar las cuentas de Cloud Billing disponibles, y no enlazará una cuenta por suposición. Storage bucket, Functions, budget alert, despliegue de backend y variables Vercel Preview quedan pendientes de la cuenta exacta y confirmación explícita del propietario. El plan Blaze y costos no se validaron en consola. Un budget alert estándar notifica pero no limita automáticamente el gasto.
+- La configuración web oficial del Firebase `briz-4ef3a` ya fue contrastada de solo lectura con `src/lib/firebase.ts`; los campos coinciden. Ningún recurso productivo fue escrito. Firebase CLI había mostrado cero Functions desplegadas e índices compuestos; Rules desplegadas no verificables. El repositorio ahora declara cuatro índices compuestos requeridos por consultas del código.
+- Cambios: Firebase se configura con una lista explícita de `VITE_FIREBASE_*`; Production exige `briz-4ef3a`, y Emulator usa `demo-briz-security`. Todo entorno Vercel distinto de Production rechaza el ID productivo. Vite valida en build la separación por `VERCEL_ENV`; Preview queda bloqueado hasta existir un proyecto Firebase de staging. Sin configurar Firebase, el cliente da un error explícito y nunca elige un proyecto por defecto. `.env.example` solo habilita Emulator. Un sentinel de prueba `VITE_TELEGRAM_BOT_TOKEN` no apareció en el bundle.
+- Telegram conserva la reserva si el envío no está configurado; outbox refleja `skipped_unconfigured`, `failed`, `delivery_unknown` o `sent` únicamente tras confirmación. Se deshabilitaron reintentos automáticos después de resultados explícitos o ambiguos para evitar duplicados. El trigger de Functions usa Secret Manager, pero no está desplegado; las variables Vercel antiguas siguen presentes y no se retiraron. El propietario debe rotar el token en BotFather y confirmar por canal seguro antes de cargar el secreto nuevo o retirar valores previos.
+- Suites: `test:firebase` (Rules + Auth/Firestore/Functions/Storage Emulator y recorrido integrado) pasó; `test:firebase-config` 9 checks; Reportes, reconciliación 8 fixtures/22 hallazgos, motor 16/16, TypeScript, Functions build, build web Emulator y ESLint dirigido pasaron. La corrida inicial de la regresión del outbox leyó antes de que Eventarc procesara; se corrigió la espera y la suite final pasó. Build mantiene advertencias conocidas de `/noise.png` y bundle ~1.97 MB; Functions Emulator usa Node24 frente a runtime Node22.
+- Los cuatro deployments Preview de `2c288ad`, `bc879d9`, `d1009c9` y `d9905b2` se revisaron por Build Logs; todos fallan en `npm run build` por `Firebase is disabled for Vercel Preview until a dedicated staging Firebase project is configured.` Es el guard esperado: Preview carece de `VITE_FIREBASE_ENVIRONMENT=staging` y se mantiene impedido de usar `briz-4ef3a`. No generar nuevos Preview ni aprobarlos como funcionales mientras falte staging.
+- Lectura Firebase CLI renovada: `functions:list --project briz-4ef3a` = 0 Functions y `firestore:indexes --project briz-4ef3a` = 0 índices remotos. Repo: cuatro índices compuestos declarados y `firebase.json` referencia Firestore Rules, Storage Rules e índices; Functions apunta a `functions` y runtime Node 22. Rules/Storage activos no se verificaron. No se hizo deploy ni se consultaron/escribieron documentos, usuarios, reservas o inventario.
+- Validación local renovada sobre emuladores `demo-briz-security`: `npm run test:firebase` pasó (9 checks de configuración, reglas Firestore/Storage e integración Auth/Firestore/Functions/Storage); reportes, reconciliación (8 fixtures/22 findings), motor (16/16), TypeScript y build web pasaron. `build --prefix functions` pasó dentro de la suite; `npm test --prefix functions` encontró 0 tests en el glob configurado. Avisos: host Emulator Node24 vs Functions Node22, `/noise.png` sin resolver y bundle JS de 1.97 MB. No hay escrituras productivas.
+- SHA remoto y local previo al addendum: `2c288adccb2e49c43ea568e801168760f5c27030`, rama sincronizada. PR #1 sigue OPEN/Draft y `main` no se modificó. No se hizo deploy. La rama no se empujará con nuevos commits hasta configurar Preview staging, para no provocar más builds Preview conocidos como fallidos.
+- El release sigue pendiente de la intervención Telegram y de publicar backend compatible. Nueve variables están configuradas en Production; su endpoint se verificará en el deployment posterior al merge. Preview sigue protegido y staging es opcional. La revisión visual pertenece a la prueba del propietario desde la web ya publicada; rollback debe estar preparado. El backup diario se conserva, pero no es una condición de release. Ningún merge ni deploy fue autorizado.
+
+### Siguiente paso ejecutable
+
+Siguiente tarea ejecutable: propietario indica el ID/nombre de la cuenta de Cloud Billing permitida y el monto/moneda mensual del budget alert, y confirma que autoriza vincularla a `briz-staging` para Storage/Functions. Después habilitar Firestore API y crear base en `southamerica-west1`; preparar Auth, Storage, budget, Rules, índices, Functions Node22 y datos sintéticos solo en staging; configurar Preview con esos valores y recién entonces publicar el commit pendiente. Mantener producción intacta y no pasar a `main`.
+
+### Fases siguientes conservadas
+
+1. Conciliación/migración histórica con respaldo, dry-run y reversibilidad.
+2. Blaze/App Check/Telegram y credenciales, sin activar nada hasta autorización y rotación.
+3. Revisión integral del panel Admin.
+4. Traducción natural completa ES/EN.
+5. Diez artes pendientes en inglés.
+6. Responsive de todas las páginas.
+7. Categorías/eventos móvil.
+8. Gestor de imágenes Home desde Admin.
+9. ESLint real y optimización.
+10. Preparación y despliegue coordinado, solo con autorización.
+
+## Auditoría de métricas de Caja y preparación de PR #1 — 2026-10-21
+
+- Decisión comercial final del propietario: una corrección contable no crea deuda, no es reembolso ni altera inventario/estado. Métricas: **cobros brutos**, **reembolsos reales**, **efectivo neto = cobros − reembolsos**, **ingreso neto reconocido = efectivo neto − correcciones** y **pendiente contractual = contratado − cobros** (corrección excluida). Contratado/pendiente permanecen en fecha programada; movimientos en su `actualAt`; filtro de sede aplica a ambos.
+- Dashboard, Reportes, Caja y CSV distinguen efectivo neto de ingreso neto reconocido; Dashboard/Reportes usan ingreso neto reconocido integral (incluye tienda/taller) y la exportación incluye ese total, mientras que Caja presenta por separado los dos netos de alquiler. Los registros históricos `paid` anteriores a la creación del ledger se usan como recibo legado una sola vez; una proyección posterior del ledger no se vuelve a sumar como pago histórico.
+- Caso histórico pendiente de conciliación: si un documento conserva `amountPaid/paidAt` pero su estado actual ya es `unpaid`/`pending_review`, no se registra automáticamente como efectivo legacy. No se infiere si fue un cobro, una corrección o un reembolso; debe revisarse en el bloque de conciliación antes de importar o reconocerlo.
+- Regresión de aritmética conocida en Emulator/reportes: abonos 40+60 = bruto 100; reembolso 25 => efectivo neto 75; corrección contable 5 => ingreso reconocido 70; **pendiente contractual 0**, pago sigue `paid` y un abono adicional se rechaza. Incluye dos sedes, adelanto y fila legacy paid ficticia; no se importan datos reales.
+- Verificación read-only 2026-10-21 en Firebase `briz-4ef3a`: `firebase functions:list` devolvió **cero Functions desplegadas**; `firestore:indexes` devolvió cero índices compuestos; el repo no contiene `firestore.indexes.json`. `firebase.json` apunta a Rules locales, pero no se pudo comprobar Rules publicadas (gcloud no está instalado). No se leyeron documentos Auth/Firestore/Storage ni se hicieron escrituras productivas. Las callables nuevas requieren release backend autorizado y plan compatible.
+- El Preview/check SUCCESS consultado al abrir la sesión corresponde al HEAD previo; no valida esta corrección ni el backend. Estado histórico supersedido: `briz-web` se confirmó en el navegador integrado, Production contiene las nueve variables Firebase de `briz-4ef3a`; Preview sigue aislado del backend y no es puerta de merge. Verificar la rama Production y el deployment dentro de la ventana coordinada.
+- PR #1 sigue Draft y no fusionada. Preview puede fallar por el guard de staging y no se debilita ni se apunta a producción; staging no es requisito de merge. El merge depende del backend compatible, revisión Owner, publicación de `main` conocida, copia puntual ya restaurada en Emulator y rollback compatible.
+- Validación 2026-10-21 tras el cambio: `npm run test:firebase` (Rules + Auth/Firestore/Functions/Storage, ciclo, inventario, ledger y legacy) pasó; `test:reports`, `test:reconcile` (8 fixtures/22 hallazgos), motor (16/16), `tsc --noEmit`, build web y Functions build pasaron. Primer intento Firebase solo falló por expectativa antigua (`unpaid` tras corrección); se cambió a exigir `paid` y la repetición pasó. ESLint dirigido: backend/helper/tests limpios; `AdminRentalsPage.tsx` mantiene 20 `no-explicit-any` preexistentes. Build avisa `/noise.png` y bundle JS 1.97 MB; Emulator usa Node24 aunque Functions declaran Node22.
+- No se desplegó, fusionó, migró, ni escribió producción. Siguiente paso: el propietario ingresa los valores Telegram en Secret Manager; luego continuar con la ventana coordinada y la revisión desde la web Production.
+- Actualización de publicación: commit de código probado `d2e07529673a19b45ae278bb6581aecb055fb3b1` ya está en `origin/codex/briz-critical-stabilization-20261020`; `ls-remote` coincide con el HEAD local. PR #1 continúa OPEN/Draft; en la consulta posterior al push aún no había checks nuevos (`statusCheckRollup=[]`). El Preview `SUCCESS` anterior no se atribuye a este commit.
+- Commits del cierre: `87d2fbd` (Caja/reporting/pruebas) y `37b3501` (documentación). El push normal de ambos terminó y el SHA remoto coincidió con HEAD `37b35016d3f96b0dd473794d030c9694c6c6373b` al verificarlo.
+
+## Cierre de caja auditable y reportes por sede — 2026-10-21 (publicado; revisión manual pendiente)
+
+- La métrica monetaria ahora restringe contratos y movimientos por la sede elegida; contratos/pendientes usan fecha programada y recibos/reembolsos/correcciones usan su fecha real. Contratado, pendiente, cobrado bruto, reembolsado, correcciones no monetarias y neto se informan por separado.
+- Se agregó `recordRentalPaymentMovement`: recibos parciales/múltiples, reembolsos y correcciones son movimientos inmutables, idempotentes, con actor, sede, motivo/referencia y auditoría. QR/transferencia requieren confirmación recibida; reembolso/corrección requieren confirmación explícita; un reverso no puede superar el cobro disponible. Regla comercial final (supersede la frase histórica de abajo): las correcciones reducen el ingreso reconocido, no generan deuda contractual ni salida de efectivo, y no cambian estado/inventario.
+- Se retiró la callable heredada que mutaba `paymentStatus` sin movimiento de caja. Se detectó y corrigió un defecto de inicialización: una proyección `paid` creada por el ledger podía ser reinterpretada como pago legacy, duplicando importes; los recibos legacy solo se sembrarán cuando el grupo no tenga ledger.
+- Los controles Admin presentan movimiento de caja en pedidos pagados o pendientes; bloqueo por grupo conserva carga/reintento. Validación visual sigue pendiente del propietario por restricción de navegación a localhost; no se declara como realizada.
+- Emulator `demo-briz-security`: `npm run test:firebase` pasó (rules, Auth/Firestore/Functions/Storage, Bs. 100 en abonos 40+60 concurrentes/idempotentes, corrección, reembolso Bs. 25, sobre-reembolso, QR no confirmado, ciclo de stock); `npm run test:reports`, `npm run test:reconcile` (8 fixtures/22 hallazgos), motor (16/16), TypeScript y builds web/Functions pasan. Build conserva aviso `/noise.png` y bundle ~1.97 MB. ESLint dirigido reporta 38 errores preexistentes en Admin/contexto, principalmente `no-explicit-any`, además reglas Fast Refresh; archivos helper/Functions/scripts seleccionados sin errores.
+- No se hizo deploy a producción, merge, migración ni escritura productiva. **Estado histórico de la primera consulta:** el check del Preview aparecía pendiente. **Actualización 2026-10-21:** GitHub confirma ahora que el deployment/check de Vercel terminó SUCCESS; su entorno Firebase y comportamiento funcional siguen sin comprobarse por falta de acceso al proyecto/team. La incertidumbre mantiene bloqueado el merge.
+- Próxima acción: obtener del propietario verificación legible de Vercel/entorno Firebase aislado, revisión visual y rollback compatible antes de considerar merge. La semántica comercial fue definida por el propietario.
+- Publicación histórica en esa consulta: `HEAD`/remoto `9ce840997ee3e51ec10a0cdbef9e711cc56308a5`; el estado actualizado y SHAs nuevos están en la auditoría de Caja al inicio. `origin/main`: `0140452678d23e6e352dcaacd353bfe7342912f5`. La PR draft #1 no se fusionó. Su check pasó posteriormente a `SUCCESS`. Team `gfabrigtrf-7085s-projects` devuelve 403 al conector y “scope does not exist” a la CLI autenticada de pachaxbo; env/deployment aún no son visibles.
+
+### Estado de módulos de este cierre
+
+| Módulo | Estado |
+|---|---|
+| Alquileres Admin y bloqueo por grupo | Implementado; automatización de ciclo/inventario superada; revisión visual owner pendiente |
+| Ledger de caja | Implementado y probado en Emulator con importes conocidos, concurrencia/idempotencia y permisos; corrección no monetaria no crea deuda ni cambia estado |
+| Inventario y disponibilidad | Suite automatizada superada para stock una vez, retorno sano/dañado y fechas; visual pendiente |
+| Dashboard/Reports | Filtros por sede y fecha de movimiento superados en fixtures; UI visual pendiente |
+| Exportación e impresión | Rutas revisadas por código, click-through manual pendiente |
+| Integración a `main` | PR #1 en borrador; merge bloqueado hasta comprobar disparadores de despliegue y resolver compatibilidad/migración productiva |
+| Producción | Bloqueada: no es release listo; no desplegar Rules/Functions/frontend ni ejecutar migraciones sin autorización |
+
+### Fases futuras — siguen pendientes
+
+1. Conciliación/migración histórica ficticia/protegida: backup, dry-run, reversibilidad y criterios de parada.
+2. Preparación de Firebase Blaze, App Check, secretos y Telegram (solo evaluación/configuración en staging; activación requiere autorización).
+3. Revisión integral restante del panel Admin.
+4. Traducción natural e integral ES/EN.
+5. Incorporar diez artes pendientes en inglés.
+6. Responsive de todas las páginas (incluye las pruebas manuales Admin 360–430 px).
+7. Corregir categorías/eventos en alquileres móvil si persiste.
+8. Gestor Admin de imágenes Home, después de cerrar alquileres críticos.
+9. Limpieza de errores ESLint y optimización.
+10. Despliegue coordinado tras comprobar migración/compatibilidad y con autorización expresa.
+
+## Incidencia crítica de alquileres y cobros — 2026-10-21
+
+> Registro histórico previo al ledger de caja; las afirmaciones sobre corregir `paymentStatus` y no soportar abonos/reembolsos fueron sustituidas por el cierre descrito arriba. No son el comportamiento vigente.
+
+- **Confirmación duplicada:** el registro que observó el propietario no se pudo recuperar ni inspeccionar, así que no se afirma que hubiera dos documentos. Sí se confirmó un fallo UX en el código: el modal de detalle se cerraba antes de resolver la solicitud y los botones no daban estado ocupado. Se corrigió para esperar éxito, mostrar “Confirmando…” y bloquear repetición local. El backend ya protegía el stock en transacción mediante estado y `stockDeducted`; las regresiones Emulator ahora prueban dos confirmaciones concurrentes, un único documento y un solo descuento. La creación manual conserva la clave idempotente hasta que alta y confirmación concluyan, también cubre respuesta perdida/reintento.
+- **Importes en cero (estado previo):** el reporte originalmente filtraba cobros por fecha programada; después se separaron fechas contractuales y fechas reales de movimientos. El ledger actual y el tratamiento de legacy se documentan en el cierre superior.
+- Devolución dañada se conserva sin multas/cobros automáticos; Emulator cubre devolución sana, dañada y pago posterior a devolución. Los pagos/historial permanecen en el documento.
+- **Validación visual:** no completada. La política del navegador automatizado bloquea localhost y no se intentó evadirla. El checklist manual se actualizó; no se declara que se hayan operado botones/modal ni vistas responsive.
+- **Pruebas de esa corrección (histórico):** los resultados y hallazgos actuales están en el cierre superior y en el handoff actualizado.
+- Seguridad: Emulator `demo-briz-security` solamente; ninguna operación contra producción, ningún deploy, merge o servicio facturable.
+- Git: `54605b98b25278f82d8a44c1853be5872ff46f64` (`fix(admin): make rental actions and receipts idempotent`) se publicó con push normal. `git ls-remote` coincidió con ese SHA; este registro documental se agrega en un commit aparte.
+- Próximo paso ejecutable: completar el checklist visual desde el navegador del propietario apuntando exclusivamente a Emulators; después preparar dry-run de conciliación histórica con fixture/copia desidentificada autorizada. Mantener App Check/Telegram pausados.
+
+> **ÚLTIMA ACTUALIZACIÓN:** 2026-10-21 (Hotfix de confirmación, pagos y reportes)
+> **ESTADO GENERAL:** El bloque 4 previo quedó publicado en `498bfbb24d5720228e89870b1c3769933a372bf6`; véase la sección de hotfix que sigue para el estado posterior. El recorrido visual de `/admin/rentals` sigue sin completarse por bloqueo del navegador a localhost. Se probó de forma automatizada solo en `demo-briz-security`; producción, despliegue, migración, billing y `main` no se tocaron. Build conserva el aviso preexistente `/noise.png` y el bundle JS minificado ronda 1.96 MB. Consultar Git para el SHA/estado actual de la rama.
+> **DOCUMENTO COMPLEMENTARIO OBLIGATORIO:** Ver [`BRIZ_HANDOFF_CODEX.md`](./BRIZ_HANDOFF_CODEX.md) y [`BRIZ_ARTES_EN_INGLES.md`](./BRIZ_ARTES_EN_INGLES.md).
+
+## Continuación Codex Bloque 3 — 2026-10-20
+
+## Bloque 4 — auditoría y readiness — 2026-10-21
+
+- Estado Git base del bloque: rama publicada `codex/briz-critical-stabilization-20261020`, referencia local `origin/...` alineada en `05dd70a` según el contexto confirmado por el usuario. No se rehizo diagnóstico de GitHub ni push de commits anteriores.
+- Cierre Git del bloque: commits `0fc28d2` y `498bfbb` publicados; `git ls-remote` devolvió `498bfbb24d5720228e89870b1c3769933a372bf6`, igual a HEAD; working tree limpio.
+- Auditoría por código/rules: Dashboard, alquileres, clientes, inventario, tienda/combos, ventas, taller, reportes, Settings/usuarios, eventos/rutas/comunidad y seed. Reglas permiten lecturas públicas solo de catálogo/proyección; clientes se sirven con callable sanitizada; rentals/sales/serviceOrders consultan por sede para managers; alquileres y roles mutan vía Functions/Admin SDK. No se declara click-through visual de esos módulos.
+- Hallazgos corregidos: (1) `SettingsPage` creaba una Firebase Auth secundaria sin conectarla al Auth Emulator, por lo que los admins visuales no quedaban garantizados en el entorno aislado; ahora conecta una sola vez a loopback. (2) ventas manuales desde manager omitían `store` y chocaban con reglas; ahora se escribe el alcance activo. (3) migración automática de `briz_inventory` desde localStorage podía reescribir stock remoto con datos viejos y el cliente no tenía permisos en reglas; se reemplazó por aviso sin escritura. (4) fixture core fijaba una reserva pasada y fallaba correctamente como alquiler vencido aún fuera; usa fechas futuras dinámicas.
+- `scripts/seed-admin-visual.ts` crea solo una cuenta y catálogo ficticios en Auth/Firestore Emulator, después de comprobar endpoints loopback. Cuenta de prueba y pasos están en [`BRIZ_ADMIN_MANUAL_VALIDATION.md`](./BRIZ_ADMIN_MANUAL_VALIDATION.md). La política de navegador impidió completar la revisión visual en este turno, por lo que el recorrido UI no se marca terminado.
+- Calidad de esta revisión: reconciliación sintética pasó (8 registros/22 hallazgos); motor core 16/16; TypeScript y ambos builds pasan. `npm run test:firebase` primero falló por carga concurrente, pero la repetición secuencial pasó completa. ESLint 217 problemas (207 errores/10 warnings), con errores en `initial_store.tsx` binario, `src_backup` y módulos operativos. No se masificó un lint cleanup.
+- Readiness no productivo creado en [`BRIZ_RELEASE_READINESS.md`](./BRIZ_RELEASE_READINESS.md): Blaze/costos, App Check, dominios Auth, Secret Manager/rotación Telegram, recovery outbox, bootstrap de Admin, rules/indexes, Vercel, orden reversible y autorizaciones requeridas. Hallazgo outbox: crash luego de `sending` deja un registro sin reclamar; recuperación automática podría duplicar Telegram por resultado ambiguo, requiere política del propietario.
+- No se ejecutó migración histórica, backup de producción, App Check, billing, secreto real, despliegue ni cambios a `main`.
+- **Siguiente paso ejecutable:** completar [`BRIZ_ADMIN_MANUAL_VALIDATION.md`](./BRIZ_ADMIN_MANUAL_VALIDATION.md) desde el navegador del propietario conectado solo al Emulator; después preparar el dry-run de conciliación sobre copia autorizada y desidentificada. Ver orden completa y demás fases al final de este roadmap.
+
+### Fases siguientes (orden mantenido)
+
+1. Cerrar la auditoría funcional del Admin (bloque actual) y registrar correcciones.
+2. Completar validación visual de alquileres en Emulator.
+3. Conciliar y migrar datos históricos solo con autorización, respaldo, dry-run y rollback.
+4. Preparar Firebase Blaze, App Check, dominios, Secret Manager/Telegram y roles iniciales.
+5. Completar traducción pública ES/EN natural.
+6. Incorporar los diez artes pendientes en inglés.
+7. Revisar responsive de todas las páginas en móvil y escritorio.
+8. Validar categorías/eventos en alquileres móvil.
+9. Crear gestor Admin de imágenes Home en ES/EN y escritorio/móvil (no iniciar antes de cerrar alquileres críticos).
+10. Limpiar ESLint, optimizar de forma segura y preparar despliegue coordinado solo tras autorización.
+
+- Rama activa: `codex/briz-critical-stabilization-20261020`; parte de `db522d4`. No se reescribieron los commits de los bloques anteriores.
+- `updateRentalGroup` (Functions/Admin SDK) sustituye la secuencia navegador de borrar/editar/anexar líneas. Lee el grupo, catálogo, inventario y reservas activas dentro de una transacción; valida sede, estados, combos/aros, horarios y stock; aplica deltas físicos si el grupo ya retenía stock; escribe altas/cambios/bajas, auditoría y bloqueos en el mismo commit. Ignora importes enviados por el navegador, calcula precios del catálogo y protege importes de pedidos pagados. Cambiar entrega/recojo sincroniza sus líneas de servicio y calcula el importe de zona cuando el enlace de Maps aporta coordenadas.
+- `adminRentalAction` centraliza confirmación, entrega, devolución, cancelación, expiración y pago en transacciones de servidor. Confirmar revalida solapamientos y demanda por componente, descuenta una sola vez y marca `stockDeducted`; entregar registra `deliveredAt` sin volver a descontar; devolver solo acepta entregados, libera accesorios y stock sano y envía la cantidad dañada indicada a mantenimiento; las transiciones no válidas/repetidas no alteran stock. Cancelar solo acepta pendiente/confirmado y conserva los documentos como historial.
+- El panel usa estas callables también para reservar manualmente, guardar ediciones y registrar pagos. Ya no ofrece borrar históricamente un alquiler; la acción de lista cancela y conserva el registro. Se retiró del modal de devolución la entrada de multas, sin agregar políticas comerciales.
+- Managers se limitan a documentos de su sede; si un registro histórico no incluye sede, el backend lo bloquea para manager en vez de inferirla. Administradores pueden editar líneas históricas sin sede. Combos históricos sin aro resoluble se rechazan con motivo de revisión y no asignan stock arbitrariamente.
+- Se añadió `scripts/reconcile-rentals.ts`, estrictamente de solo lectura y bloqueado fuera de `FIRESTORE_EMULATOR_HOST` con proyecto `demo-briz-security`; `npm run reconcile:rentals` inicia un emulador limpio y reporta inconsistencias sin reparar datos.
+- **Pruebas integrales Emulator:** reglas Firestore/Storage; creación, idempotencia, grupo manual; edición que agrega bici/accesorio y elimina línea; cambios de fecha/hora/duración/aro; sincronización de entrega/recojo con tarifa de zona; rechazo por stock; confirmación única, entrega, devolución sana/dañada, cancelación pendiente/confirmada, retorno anticipado rechazado; roles y alcance de manager/mechanic/viewer; compatibilidad de estado español sin sede/grupo; combo con componente compartido con accesorio seleccionado; reservas cliente concurrentes entre sí y con cambio administrativo de fecha. `npm run test:firebase` pasó.
+- **Otras verificaciones:** `npx tsx scripts/verify-briz-core.ts` (16/16), `npx tsc --noEmit`, `npm run build`, `npm run build --prefix functions` y `npm run test:reconcile` pasan. Build conserva avisos de `/noise.png` y bundle principal ~1.96 MB minificado.
+- **Lint:** `npm run lint` sigue fallando con 207 errores y 10 warnings (217 problemas); predominan `initial_store.tsx` binario, `src_backup`, `any` y patrones React. ESLint dirigido a `functions/src/index.ts`, `src/lib/backend.ts` y los scripts nuevos pasa; `StoreContext.tsx`/`AdminRentalsPage.tsx` conservan hallazgos de estilo/tipado.
+- **Estado visual registrado al cerrar originalmente el bloque 3:** aún no se había probado el panel con navegador. La actualización de esta continuación se detalla debajo; no se conciliaron datos reales ni se ejecutaron migraciones. La prueba de concurrencia fue mediante callable + transacciones reales del Emulator.
+- **Actualización de validación visual (2026-10-20):** Vite abrió en `http://127.0.0.1:5173/admin/rentals` conectado a Authentication, Firestore, Functions y Storage Emulator del proyecto `demo-briz-security`; login ficticio `rider-a@example.test`. Se creó `BRIZ-2026-0012` con combo aro 27, bici aro 26 y accesorio. Antes de recompilar Functions, el alta fallaba porque la UI omitía selección de componentes y serializaba accesorios como líneas de bici; se corrigió. En detalle se verificó historial y controles de edición, pago y confirmación. A 390 px se abrió el detalle móvil; la captura mostró contenido largo que requiere desplazamiento vertical. La automatización no pudo validar de forma fiable el cambio de fecha ni completar todos los botones del ciclo; no se declara validación completa de confirmación, entrega, pago, cancelación, devolución, inventario ni reportes desde UI. Los datos son exclusivamente sintéticos.
+- **Corrección adicional para Emulator:** `src/lib/firebase.ts` cambia a `demo-briz-security` cuando `VITE_USE_FIREBASE_EMULATOR=true`; no conecta Authentication/Firestore/Functions/Storage al proyecto productivo. `StoreContext` usa rutas locales predeterminadas en vez de intentar escribirlas desde un cliente sin permisos.
+- `npm run test:firebase` volvió a pasar tras la regresión; incluye reglas Firestore/Storage, edición, ciclo administrativo, pagos, estados históricos, permisos, concurrencia y combo con accesorio. La prueba reinicia el limitador ficticio entre escenarios solo dentro del emulador.
+- **Incidencia de navegador:** la reapertura actual de `http://127.0.0.1:5173/admin/rentals` fue bloqueada por la política de URL del navegador automatizado. La política prohíbe rodear el bloqueo con otra superficie o comandos de navegador; se conserva el alcance visual verificado previamente y se continúa con Emulator/fixtures.
+- **Conciliación histórica preparada, sin migración:** `scripts/reconcile-rentals-analysis.ts` normaliza estados ES históricos, detecta grupos/fechas/campos ausentes, combos sin selección o aro, grupos con estados discordantes, enlaces de cliente sin Auth, flags de stock sospechosos y diferencias de inventario solo cuando existe baseline explícito. Sin baseline, informa que hace falta revisión manual; no inventa el stock inicial. `npm run test:reconcile` usa 8 registros ficticios no vacíos (pendiente, confirmado, entregado, devuelto, cancelado, pagos, combo ambiguo, cliente sin enlace Auth y campos nuevos ausentes) y verifica 22 hallazgos. Contra Emulator con dataset integrado no vacío: 18 alquileres, 15 grupos, 3 inventarios, 5 clientes y 10 hallazgos. La herramienta es solo lectura.
+- **Plan seguro para una migración futura:** (1) recibir autorización y acordar alcance; (2) snapshot/export de Firestore y Auth con fecha/hash, cifrado y acceso restringido, desidentificar la copia cuando sea posible; (3) reconciliar el snapshot y guardar informe/manifest sin PII innecesaria; (4) aprobar por escrito mapeos de estados, grupos, combos y stock; (5) ejecutar dry-run y revisar todas las diferencias de alto riesgo; (6) migrar en lotes idempotentes en staging/copia, registrando before/after y checkpoint; (7) detenerse ante grupos discordantes, combos sin aro, inventario sin baseline o errores por encima del umbral acordado; (8) validar conteos, estados, pagos, stock, disponibilidad y reportes; (9) si hay fallas, parar escrituras y restaurar el snapshot o aplicar rollback por manifest, después emitir informe. No descargar datos reales ni ejecutar migraciones hasta autorización expresa.
+- Riesgos de producción siguen abiertos: App Check, plan Blaze/APIs y secretos de Functions, rotación Telegram y recuperación de outbox, conciliación autorizada de registros heredados, enlaces privados históricos, consultas a escala y avisos de lint/build.
+
+## Continuación Codex Bloque 2 — histórico — 2026-10-20
+
+- Rama activa: `codex/briz-critical-stabilization-20261020`. Base conservada: `70b85b3` y `bc501ca`; implementación del bloque 2 en `6a09918` (`feat(firebase): secure booking and customer auth flows`).
+- Seguridad Firestore/Storage: roles separados (`admin`, `manager`, `mechanic`, `viewer`), alcance por tienda cuando el documento lo define; clientes no escriben ventas, reservas, roles ni perfiles; `customers` no se puede leer desde el SDK cliente porque aún puede contener hashes heredados. Admin y manager consultan la callable sanitizada `getAdminCustomers`.
+- Backend Functions v2 / Node 22: `createRentalGroup` crea grupos y clientes manuales en transacción, calcula precios/stock desde catálogo, asigna código BRIZ, verifica solapamientos por aro y componentes, coordina bloqueos por recurso, limita solicitudes, registra idempotencia y escribe outbox/proyección pública. Incluye reservas administrativas manuales con verificación del rol.
+- Auth de cliente: Firebase Authentication, verificación de correo, recuperación por enlace de Firebase, registro privado de archivos en Storage, perfil sanitizado, consulta autorizada de historial con `getMyRentals`; el enlace de legado requiere verificar el mismo correo y borra el hash antiguo al vincularlo.
+- Disponibilidad: la web consulta `rentals_busy_slots`, que contiene solo recurso, aro, cantidades, intervalos y estado; datos de personas, pago y dirección quedan en rentals privados.
+- Telegram: trigger de Functions con Secret Manager y outbox. La ejecución local usa solo placeholders ignorados por Git y omite la entrega externa. Hay recursos Secret Manager vacíos, con acceso solo del runtime Telegram; no hay versiones activas. El propietario debe rotar el token en BotFather e ingresar los nuevos valores directamente en Secret Manager.
+- Firebase Emulator configurado para Auth, Firestore, Functions y Storage. Datos de prueba solo sintéticos, proyecto `demo-briz-security`.
+- Pruebas realizadas: `npm run test:firebase` aprobado (16 pruebas de reglas y 6 flujos integrados en los emuladores, incluyendo la protección de roles); `npx tsx scripts/verify-briz-core.ts` aprobado (16/16); `npx tsc --noEmit`, `npm run build` y `npm run build --prefix functions` aprobados. `npm run lint` falló con 220 problemas (210 errores, 10 warnings), principalmente `initial_store.tsx` binario, `src_backup`, `any` y reglas React.
+- Avisos de build actuales: `/noise.png` no se resuelve durante Vite build y bundle principal ~1.98 MB minificado.
+- **No se desplegó ni se modificó Firebase real. No se migraron cuentas reales ni se tocaron inventarios.**
+- Requisitos de producción pendientes: Functions requieren plan Blaze y APIs/credenciales habilitadas; no activar facturación sin autorización. Configurar App Check de web y cambiar `enforceAppCheck` antes de abrir callables públicamente. Cargar secretos Telegram solo después de rotar el token y autorizarlo.
+- La implementación del bloque 3 sustituyó las escrituras directas de alta/edición por callables. Falta cerrar el recorrido visual del ciclo completo y comprobar reportes/inventario desde interfaz.
+- **Próximo paso ejecutable:** completar el ciclo visual de `/admin/rentals` cuando el navegador permita acceder al localhost (confirmación, pago, entrega, edición, devolución sana/dañada, cancelación, inventario, historial tras recarga y reportes). La fase de conciliación queda preparada con fixtures, detección explicativa y plan reversible; luego realizar el inventario histórico autorizado en una copia desidentificada. Siguen después: Blaze/App Check/Telegram, revisión general Admin, traducción natural ES/EN, diez artes ingleses, responsive completo, categorías/eventos móvil, gestor de imágenes Home, ESLint/optimización y despliegue coordinado con autorización.
+
+---
+
+## HANDOFF — LEER PRIMERO
+Si eres **Codex** o **Gemini** retomando este repositorio sin acceso al historial de conversación, lee esta sección y [`BRIZ_HANDOFF_CODEX.md`](./BRIZ_HANDOFF_CODEX.md) antes de tocar cualquier archivo:
+
+1. **Rama y Commit Base:**
+   - **Rama actual:** `main`
+   - **Commit previo a la reparación:** `0140452` (`Update site favicon`)
+   - **Último commit estabilizado:** `c2c9ef1` (`feat(briz): stabilize rental engine, PBKDF2 auth, full EN translation, artwork registry and handoff docs`)
+   - **Regla de oro:** **NO desplegar a producción (`firebase deploy`) ni alterar datos reales de Firestore sin autorización expresa del propietario.**
+2. **Clasificación Estricta de Estados (No confundir compilación con validación en producción):**
+   - `IMPLEMENTADO`: Código escrito y compilando (`tsc --noEmit`).
+   - `PRUEBA UNITARIA SUPERADA`: Verificado mediante pruebas automatizadas deterministas en `scripts/verify-briz-core.ts` (lógica pura y simulaciones de estado).
+   - `PRUEBA INTEGRAL SUPERADA`: Flujo verificado de extremo a extremo contra emulador o entorno real con UI.
+   - `PENDIENTE DE VALIDACIÓN`: Implementado y con pruebas unitarias de motor, pero pendiente de prueba E2E con Firestore Emulator / UI en vivo.
+   - `BLOQUEADO`: Requiere una decisión comercial, activos gráficos externos o cambio de arquitectura (ej. Firebase Auth para clientes antes de cerrar lectura en `firestore.rules`).
+   - `PENDIENTE`: Aún no implementado (ej. Fase Futura de Gestor Administrativo de Artes Web).
+3. **Comandos de Verificación Rápida:**
+   ```bash
+   npx tsx scripts/verify-briz-core.ts   # Suite de pruebas deterministas (Motor de stock, intervalos, precios, PBKDF2, reportes, artes)
+   npx tsc --noEmit                      # Verificación estricta de tipos TypeScript
+   npm run build                         # Build de producción (Vite)
+   ```
+
+---
+
+## 1. ESTADO DEL REPOSITORIO Y GIT
+
+- **Rama activa:** `main`
+- **Commit base original:** `0140452` (`Update site favicon`)
+- **Archivos temporales eliminados de la raíz:**
+  - `initial_rentals.tsx`, `old_rentals_local.tsx`, `scratch_rentals.tsx`, `tsc_output.txt`
+- **Archivos nuevos creados:**
+  - `BRIZ_MASTER_ROADMAP.md` (este documento)
+  - `BRIZ_HANDOFF_CODEX.md` (guía de continuidad paso a paso para Codex)
+  - `BRIZ_ARTES_EN_INGLES.md` (inventario completo y especificaciones de artes gráficos ES/EN)
+  - `src/lib/dateUtils.ts` (utilidades de fecha/hora en zona horaria Bolivia `America/La_Paz` UTC-4)
+  - `src/lib/rentalPricing.ts` (motor unificado de tarifas de alquileres y accesorios)
+  - `src/lib/rentalAvailability.ts` (motor de disponibilidad por intervalos horarios, demandas por alquiler/combo/accesorio, deltas y transacciones Firestore)
+  - `src/lib/security.ts` (hashing de contraseñas con **PBKDF2-HMAC-SHA256** de 100,000 iteraciones + sal aleatoria, compatible con `sha256$` y texto plano heredado)
+  - `src/lib/artworkRegistry.ts` (registro centralizado y seguro de artes gráficos ES/EN con fallback automático para evitar errores 404 o mostrar artes en español por error)
+  - `scripts/verify-briz-core.ts` (suite automatizada de 16 bloques de pruebas de motor y regresión — **16/16 superadas**)
+- **Archivos existentes modificados (25 archivos):**
+  - `src/context/StoreContext.tsx`, `src/context/AuthContext.tsx`, `src/context/LanguageContext.tsx`
+  - `src/components/layout/Navbar.tsx`, `src/components/layout/Footer.tsx`, `src/components/layout/CustomerAuthModal.tsx`
+  - `src/components/rentals/RentalCheckoutWizard.tsx`, `src/components/rentals/DeliveryMapPicker.tsx`
+  - `src/pages/public/HomePage.tsx`, `src/pages/public/AboutPage.tsx`, `src/pages/public/RentalsPage.tsx`, `src/pages/public/ShopPage.tsx`, `src/pages/public/RoutesPage.tsx`, `src/pages/public/ServicePage.tsx`, `src/pages/public/CommunityPage.tsx`, `src/pages/public/ContactPage.tsx`, `src/pages/public/ProfilePage.tsx`
+  - `src/pages/admin/AdminRentalsPage.tsx`, `src/pages/admin/InventoryPage.tsx`, `src/pages/admin/DashboardPage.tsx`, `src/pages/admin/ReportsPage.tsx`
+  - `src/lib/translations.ts`, `src/lib/whatsapp.ts`, `src/lib/telegram.ts`, `src/data/mockData.ts`
+  - `firestore.rules`, `storage.rules`
+
+---
+
+## 2. MATRIZ DE ESTADO POR MÓDULO Y FASE
+
+| Fase / Módulo | Sub-tarea / Función | Estado Actual | Evidencia / Notas Técnicas |
+| :--- | :--- | :--- | :--- |
+| **FASE 1: Motor de Alquileres, Stock y Concurrencia** | Códigos únicos `BRIZ-YYYY-NNNN` con contador atómico (`counters/rentals_YYYY`) | `PRUEBA UNITARIA SUPERADA` / `PENDIENTE DE VALIDACIÓN` (Firestore real) | `allocateReservationCodesTx` en `StoreContext.tsx` usa `runTransaction` e inspecciona máximo histórico para no colisionar jamás. |
+| **FASE 1** | Estados diferenciados (`pending`, `confirmed`, `delivered`, `returned`, `cancelled`, `expired`) + compatibilidad legado (`Confirmado`, `Entregado`, `Devuelto`, etc.) | `PRUEBA UNITARIA SUPERADA` | `normalizeRentalStatus` y `isStockHoldingStatus` en `src/lib/rentalAvailability.ts`. |
+| **FASE 1** | Validación de disponibilidad por intervalo horario (`getAvailableStockForInterval`, `validateRentalDemandsAvailability`) sin doble descuento de alquileres confirmados | `PRUEBA UNITARIA SUPERADA` | Reconstruye capacidad operativa sumando `shelfStock + currentlyDeductedUnits` y resta únicamente las reservas que se solapan con `[startMs, endMs]`. |
+| **FASE 1** | Transacciones atómicas de stock en confirmación (`confirmRentalGroup`), entrega (`deliverRentalGroup`), devolución (`returnRentalGroup`), cancelación (`cancelRentalGroup`), eliminación (`deleteRentalGroup`) y edición diferencial (`updateRental`) | `PRUEBA UNITARIA SUPERADA` / `PENDIENTE DE VALIDACIÓN` (Emulador/UI) | `applyInventoryDeltasInTransaction` bloquea entregas sin confirmar, impide doble devolución, impide borrar reservas con stock retenido y calcula delta exacto al editar cantidad/aro/producto. |
+| **FASE 1** | Devolución con daño o mantenimiento (`returnCondition: 'damaged' \| 'maintenance'`) enviando unidades a `maintenanceStock` sin devolverlas al stock público | `PRUEBA UNITARIA SUPERADA` | Implementado en `returnRentalGroup` (`StoreContext.tsx`) y modal de devolución en `AdminRentalsPage.tsx`. |
+| **FASE 2: Bicicletas Combinadas y Accesorios** | Stock real de accesorios adicionales (`selectedAccessories: RentalAccessorySelection[]`) descontado al confirmar y liberado al devolver/cancelar | `PRUEBA UNITARIA SUPERADA` | Estructurado en `Rental.selectedAccessories`; incluido en `getRentalInventoryDemands`. |
+| **FASE 2** | Disponibilidad de combos por componente y tamaño de aro (`getComboAvailability`, `getComboMaxStockForInterval`) | `PRUEBA UNITARIA SUPERADA` | Calcula cuello de botella (`Math.min`) respetando `wheelSize` de cada componente. |
+| **FASE 2** | Rediseño compacto del selector de accesorios en `RentalCheckoutWizard.tsx` (chips/filas compactas con `+`/`-`, stock en vivo, resumen plegable) | `IMPLEMENTADO` / `PENDIENTE DE VALIDACIÓN` (UI móvil/desktop) | Elimina tarjetas gigantes en Paso 1 del wizard público. |
+| **FASE 3: Precios, Cálculos y Fechas Bolivia** | Motor unificado `calculateDurationPrice` + tarifas exactas de accesorios (1–3h, 4–8h, 24h, semana, mes) + fecha local Bolivia (`UTC-4`) | `PRUEBA UNITARIA SUPERADA` | Corrige bug de `NaN` en inglés, bug de fecha UTC después de las 20:00 BOT y discrepancias entre Wizard y Admin. |
+| **FASE 4: Reportes y Contabilidad** | Inclusión de alquileres `returned` / `Devuelto` y `delivered` en ingresos de `DashboardPage.tsx` y `ReportsPage.tsx`, separando cobrado (`paid`) vs por cobrar | `PRUEBA UNITARIA SUPERADA` | Antes los alquileres devueltos desaparecían de ingresos. Corregido y verificado. |
+| **FASE 4** | Filtros de período (`Hoy`, `Ayer`, `7 días`, `Este mes`, `Todo`, `Rango personalizado`), KPIs de flota, horas alquiladas, retrasos, accesorios y exportación CSV/Excel + Impresión/PDF | `IMPLEMENTADO` / `PENDIENTE DE VALIDACIÓN` (UI) | Implementado en `src/pages/admin/ReportsPage.tsx`. |
+| **FASE 5: Seguridad y Reglas** | Hashing de contraseñas de clientes y PIN admin con **PBKDF2-HMAC-SHA256** (`100,000` iteraciones + sal aleatoria de 16 bytes) y migración transparente al iniciar sesión | `PRUEBA UNITARIA SUPERADA` | `src/lib/security.ts`. Compatible con `sha256$` y texto plano antiguo (`needsUpgrade: true`). |
+| **FASE 5** | Reglas de Firestore (`firestore.rules`) y Storage (`storage.rules`) | `BLOQUEADO` (Despliegue a prod) | Ver sección 5: cerrar `allow read` en `customers` y `rentals` requiere migrar el login de clientes a Firebase Auth o Cloud Functions para no romper el login actual desde cliente. |
+| **FASE 6: Traducciones y Artes en Inglés** | Traducción natural y completa al inglés en todas las páginas públicas (`Navbar`, `Footer`, `Home`, `About`, `Rentals`, `Shop`, `Routes`, `Service`, `Community`, `Contact`, `Profile`, `RentalCheckoutWizard`, `DeliveryMapPicker`, `CustomerAuthModal`) sin depender de Google Translate | `IMPLEMENTADO` / `PRUEBA UNITARIA SUPERADA` | `LanguageContext.tsx` + `translations.ts` + soporte `nameEn`/`descriptionEn` en modelos dinámicos. |
+| **FASE 6** | Inventario de artes gráficos (`BRIZ_ARTES_EN_INGLES.md`) + registro seguro (`src/lib/artworkRegistry.ts`) sin rutas rotas `.webp` en `AboutPage.tsx` ni imágenes en español engañosas | `PRUEBA UNITARIA SUPERADA` | Corrige el 404 en `AboutPage.tsx` cuando `language === 'en'` y documenta los 10 archivos gráficos que requieren diseño en inglés. |
+| **PRIORIDAD 4: Bug Móvil Alquileres** | Ocultar bloque superior de "Eventos Especiales" cuando se selecciona una categoría específica (`Urbanas`, `Montañeras`, etc.) y hacer scroll suave al catálogo | `IMPLEMENTADO` / `PRUEBA UNITARIA SUPERADA` | Corregido en `src/pages/public/RentalsPage.tsx`. |
+| **PRIORIDAD 5: Gestor Admin de Artes Web** | Diseño técnico y registro en Roadmap del módulo `ADMIN — GESTOR DE ARTES E IMÁGENES DE LA WEB` | `PENDIENTE` (Diseñado para siguiente fase) | Especificación completa en sección 7 de este documento y en `BRIZ_HANDOFF_CODEX.md`. |
+
+---
+
+## 3. NUEVOS ESQUEMAS, ESTADOS Y CAMPOS DE FIRESTORE (100% RETROCOMPATIBLES)
+
+Todos los campos añadidos a interfaces en `src/context/StoreContext.tsx` son **opcionales (`?`)** y cuentan con normalizadores para que los documentos históricos sigan funcionando sin migraciones destructivas:
+
+### 3.1. Colección `rentals` (`Rental`)
+- `status`: Soporta `'pending' | 'confirmed' | 'delivered' | 'returned' | 'cancelled' | 'expired'` además de valores históricos `'Confirmado' | 'Entregado' | 'Devuelto' | 'Cancelado' | 'Pendiente' | 'Vencido'`.
+- `startTimestamp?: number` y `endTimestamp?: number`: Timestamps en milisegundos (`UTC-4` Bolivia) calculados automáticamente a partir de `date`, `time` (`startTime`) y `duration`. Si un documento antiguo no los tiene, `getRentalIntervalMs(rental)` los calcula al vuelo.
+- `selectedAccessories?: RentalAccessorySelection[]`: Lista estructurada `{ itemId, name, quantity, unitPrice, totalPrice }[]` para descontar y liberar stock real de cascos, luces, sillas de bebé, candados, etc.
+- `stockDeducted?: boolean`: Bandera de idempotencia transaccional (`true` cuando el stock físico ya fue descontado del estante, `false` cuando fue devuelto o cancelado).
+- `deliveredAt?: string`, `deliveredBy?: string`: Trazabilidad de entrega física.
+- `returnedAt?: string`, `returnedBy?: string`: Trazabilidad de devolución física.
+- `returnCondition?: 'ok' | 'damaged' | 'maintenance'`, `returnNotes?: string`: Estado físico al devolver.
+- `Translation fields` en productos/eventos/rutas (`InventoryItem`, `ComboProduct`, `EventItem`, `CyclingRoute`):
+  - `nameEn?: string`, `descriptionEn?: string`, `detailsEn?: string`.
+
+### 3.2. Colección `inventory` (`InventoryItem`)
+- `maintenanceStock?: number`: Unidades fuera de circulación pública por daño o mantenimiento al devolver un alquiler.
+- `wheelSizes?: { size: string; stock: number; maintenanceStock?: number }[]`: Soporte de stock en mantenimiento por aro.
+
+### 3.3. Colección `counters`
+- Documento `counters/rentals_YYYY` (`{ year: number, seq: number, updatedAt: string }`): Secuencia atómica para códigos `BRIZ-YYYY-NNNN`.
+
+---
+
+## 4. DECISIONES COMERCIALES PENDIENTES (NO INVENTADAS)
+
+Siguiendo la Regla Obligatoria #11, **no se han inventado tarifas de multas ni bloqueos automáticos no solicitados**. Quedan documentadas para decisión de gerencia:
+
+1. **Multa monetaria automática por hora/día de retraso:** Actualmente el sistema detecta y contabiliza alquileres vencidos (`isRentalOverdue`) y registra la hora exacta de devolución (`returnedAt`), pero no suma un recargo monetario automático al `total` sin autorización del administrador.
+2. **Buffer de limpieza/alistamiento entre reservas consecutivas:** Actualmente `DEFAULT_BUFFER_MINUTES = 0` en `src/lib/rentalAvailability.ts`. Si BRIZ desea 15 o 30 minutos de margen entre la devolución de un cliente y la reserva del siguiente, basta cambiar `DEFAULT_BUFFER_MINUTES`.
+3. **Expiración automática de reservas `pending` sin pago:** Las reservas creadas desde la web nacen como `pending` (no descuentan stock físico hasta que el admin confirma, pero sí previenen overbooking horario). La transición a `expired` se realiza desde el panel admin.
+
+---
+
+## 5. RIESGOS DE SEGURIDAD Y DESPLIEGUE (`BLOQUEADO` PARA PRODUCCIÓN)
+
+> **Nota de actualización:** la advertencia antigua de esta sección describía el estado anterior al Bloque 2 y está supersedida. Hoy clientes autentican con Firebase Auth y usan callables; `customers`/`rentals` permanecen privados para clientes en Firestore rules y la disponibilidad pública usa `rentals_busy_slots` sanitizados. El código actual no contiene `VITE_TELEGRAM_*`; notificaciones salen por Functions y Secret Manager. Esto no significa que producción esté lista.
+
+### Pendientes Obligatorios de Validación y Cierre
+
+- Completar el ciclo visual Admin de `/admin/rentals` en escritorio y móvil; seguir [`BRIZ_ADMIN_MANUAL_VALIDATION.md`](./BRIZ_ADMIN_MANUAL_VALIDATION.md).
+- Firebase Emulator se validó en repetición secuencial completa; la primera ejecución paralela tuvo timeout al cargar Functions.
+- Conciliación histórica real solo después de autorización, respaldo protegido, desidentificación cuando posible y dry-run aprobado.
+- App Check, Blaze/APIs/costos, dominios Auth, Secret Manager y bootstrap Admin según [`BRIZ_RELEASE_READINESS.md`](./BRIZ_RELEASE_READINESS.md).
+- Resolver recovery del outbox `sending` sin una política que introduzca duplicados inadvertidos.
+- Revisión manual de traducciones, diez artes ingleses, responsive de todas las páginas, categorías/eventos móvil, ESLint/build warnings y gestor de imágenes (en su orden de roadmap).
+
+Las reglas Firestore/Storage y el flujo cliente/Admin están cubiertos en Emulator, no desplegados. La ausencia de `firestore.indexes.json` debe resolverse en staging, inspeccionando índices requeridos por las consultas reales.
+
+---
+
+## 6. INVENTARIO DE ARTES EN INGLÉS (RESUMEN — VER `BRIZ_ARTES_EN_INGLES.md`)
+
+- **Artes ya traducidos y activos en inglés:**
+  - `/welcome.png` (reemplaza `/Bienvenidos.png`)
+  - `/menu-principal-web/Ingles/1.png` ("RENT A BIKE")
+  - `/menu-principal-web/Ingles/3.png` ("ACCESSORIES & SPARE PARTS")
+  - `/menu-principal-web/Ingles/4.png` ("TOURS & ROUTES")
+  - `/menu-principal-celular/Ingles/1.png` ("RENT A BIKE")
+- **Artes que existen en carpetas `/Ingles/` pero siguen en ESPAÑOL (o no existen) — Fallback seguro activado en `src/lib/artworkRegistry.ts`:**
+  - `/vive.webp` (Hero principal — no tiene versión en inglés todavía)
+  - `/menu-principal-web/Ingles/2.png` (Dice "SERVICIO TÉCNICO" en español)
+  - `/menu-principal-celular/Ingles/2.png`, `3.png`, `4.png` (Siguen en español)
+  - `/Conocenos-web/Ingles/1.png`, `2.png`, `3.png` (Siguen en español; además `AboutPage.tsx` pedía `.webp` causando error 404 — **corregido en `AboutPage.tsx` usando `artworkRegistry.ts`**)
+  - `/Conocenos-celular/Ingles/1.png`, `2.png`, `3.png` (Siguen en español; `AboutPage.tsx` pedía `.webp` — **corregido**)
+
+---
+
+## 7. DISEÑO DE FASE FUTURA: `ADMIN — GESTOR DE ARTES E IMÁGENES DE LA WEB` (PRIORIDAD 5)
+
+Para permitir que el administrador cambie banners y artes en español/inglés (Web y Móvil) desde el panel administrativo sin tocar código:
+
+1. **Colección Firestore propuesta:** `site_assets` (o documento `settings/site_artwork`).
+2. **Esquema de cada slot (`SiteArtworkSlot`):**
+   ```ts
+   export interface SiteArtworkSlot {
+     id: string; // ej. 'home_hero_badge', 'home_bento_1', 'about_slide_1'
+     section: 'home_hero' | 'home_bento' | 'about_carousel';
+     title: string;
+     recommendedWebSize: string;    // ej. '800x500 px'
+     recommendedMobileSize: string; // ej. '750x750 px'
+     esWebUrl: string;
+     esMobileUrl: string;
+     enWebUrl?: string;
+     enMobileUrl?: string;
+     enVerified?: boolean;          // true si la imagen en inglés está aprobada
+     updatedAt?: string;
+     updatedBy?: string;
+   }
+   ```
+3. **Almacenamiento en Firebase Storage:**
+   - Ruta estructurada: `site-artwork/{slotId}/{lang}_{device}_{timestamp}.{ext}` (protegido por `storage.rules` con `isAdmin()` y límite de 8MB `image/*`).
+4. **Integración con Frontend (`src/lib/artworkRegistry.ts`):**
+   - `artworkRegistry.ts` ya expone `getLocalizedArtwork(slotId, language, overrides?)`. Cuando se conecte el gestor admin, `StoreContext` leerá `site_assets` y lo pasará como `overrides` sin cambiar una sola línea en `HomePage.tsx` ni `AboutPage.tsx`.
+
+---
+
+## 8. INSTRUCCIÓN EXACTA PARA EL SIGUIENTE AGENTE (CODEX / GEMINI)
+
+1. Lee [`BRIZ_HANDOFF_CODEX.md`](./BRIZ_HANDOFF_CODEX.md) para ver el detalle técnico completo.
+2. Ejecuta `npx tsx scripts/verify-briz-core.ts` y `npx tsc --noEmit` para comprobar que los tests unitarios del motor y la compilación están en verde.
+3. **Siguiente tarea ejecutable inmediata:** el propietario completa [`BRIZ_ADMIN_MANUAL_VALIDATION.md`](./BRIZ_ADMIN_MANUAL_VALIDATION.md) en Emulator, ya que la política de URL impidió al agente volver a abrir localhost. Después preparar dry-run de conciliación de datos sintéticos/protegidos, sin migrar producción. Mantener las fases futuras al inicio de este roadmap; no iniciar el gestor de imágenes todavía.
+
+## Estado de release IAM/backup/Auth — 2026-10-21
+
+- `briz-functions-runtime` y `briz-telegram-runtime` ya existen en `briz-4ef3a` con los roles mínimos aprobados y sin Editor, Owner ni claves descargables. `sendReservationNotification` usa el runtime Telegram independiente. El operador ya tiene `actAs` por su rol Owner existente; no se añadieron permisos de impersonación adicionales.
+- `www.briz.com.bo` está autorizado en Firebase Auth. Apex omitido porque redirige a www y los flujos actuales usan el manejador predeterminado de Firebase.
+- Backup Firestore diario con retención de siete días continúa sin copia listada tras recarga. Histórico: la copia aún no se había materializado en esa revisión. Estado vigente: la copia puntual de catálogo/configuración está restaurada y verificada en Emulator; el primer backup diario no es gate.
+- Estado en esa revisión, ya supersedido: los secretos vacíos ya existen con acceso limitado al runtime Telegram. La intervención de rotación no depende del backup diario. No desplegar, fusionar ni escribir datos operativos como parte de esta preparación.
