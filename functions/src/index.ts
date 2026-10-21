@@ -1401,6 +1401,7 @@ export const createServiceOrder = onCall(callable(), async (request) => {
 
 export const sendReservationNotification = onDocumentCreated({
     document: 'telegramOutbox/{outboxId}',
+    serviceAccount: 'briz-telegram-runtime@briz-4ef3a.iam.gserviceaccount.com',
     secrets: [TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID],
     retry: false,
 }, async (event) => {

@@ -301,3 +301,10 @@ src/
 - Última comprobación local: `npm run build --prefix functions` pasó después de cambiar la identidad runtime. Las suites de dominio ya cerradas no se repitieron. No se modificó ni escribió ningún dato de clientes, reservas o stock reales.
 
 Próximo paso ejecutable: esperar y verificar la primera copia de Firestore. Preparar una única ventana que añada el dominio Auth, cree el runtime service account con roles mínimos, rote y guarde los secretos por intervención del propietario, despliegue índices/Functions y haga verificaciones de backend antes de cambiar PR #1. Detenerse si billing/API, roles efectivos o entrega Telegram fallan. Solo luego seguir el orden de merge/Production/Rules documentado en `BRIZ_RELEASE_READINESS.md`.
+
+### Estado IAM / backup / Auth — revisión 2026-10-21
+
+- Backup diario, retención 7 días, PITR desactivado; lista de copias todavía vacía tras recargar Cloud Console. No existe evidencia de copia restaurable todavía.
+- Código: `sendReservationNotification` especifica `briz-telegram-runtime@briz-4ef3a.iam.gserviceaccount.com`; el default global continúa en `briz-functions-runtime@briz-4ef3a.iam.gserviceaccount.com`. El build de Functions pasa. Las dos cuentas aún deben crearse y recibir únicamente `roles/datastore.user` (Telegram) y `roles/datastore.user` + `roles/firebaseauth.viewer` (general). Secret Accessor irá ligado individualmente a los dos secretos cuando existan. No se crearon claves JSON ni se desplegó.
+- En Auth se vieron solamente los dominios predeterminados. `www.briz.com.bo` es el origen público a autorizar; `briz.com.bo` redirige a www y los flujos actuales de reset/verificación no configuran `ActionCodeSettings`, por lo que no hay evidencia de que el apex necesite entrada propia. La cuenta Admin existente no se tocó.
+- No solicitar aún la rotación Telegram: primero faltan identidades/IAM y una copia materializada. Tampoco desplegar Functions/Rules ni integrar a main. Continuar con el mínimo cambio IAM/Auth, y detenerse si la consola no otorga el permiso mínimo o si surge un costo/permiso adicional.
