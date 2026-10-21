@@ -1,5 +1,20 @@
 # BRIZ — checklist manual de alquileres Admin (Emulator)
 
+## Casos nuevos tras la incidencia de cobros/confirmación (2026-10-21)
+
+La corrección de UI no se marcó como validación visual: el navegador automatizado bloquea localhost y esa restricción no se evadió. Tras abrir manualmente la app del Emulator, revisar estos controles en desktop y 360/390/430 px:
+
+1. Abrir una reserva pendiente en el detalle y pulsar **Confirmar Reserva**. El modal debe permanecer visible con **Confirmando…** hasta respuesta; al éxito se cierra y la lista actualiza sin segunda pulsación. Probar error de stock: mostrar error y conservar modal/reserva pendiente.
+2. Pulsar confirmar en la tarjeta; mientras carga el botón queda deshabilitado. Repetir doble clic en **Crear Alquiler**; una clave de sesión debe producir un solo código/documento. No refrescar/limpiar storage hasta finalizar.
+3. Crear un alquiler manual para mañana marcado pagado hoy. En Reportes “Este mes”, debe verse el cobro de hoy aunque la fecha programada sea mañana; el contratado pertenece a mañana. Un registro legacy pagado sin `paidAt` se debe etiquetar como fecha desconocida en “Todo el historial”, sin aparecer en un rango fechado.
+4. Registrar pago antes de entrega, entregar y devolver. Confirmar que el pago e historial persisten; una devolución impaga no se cuenta como cobro. Registrar un pago después de devolver y verificar que la fecha de cobro sea la actual sin alterar estado devuelto.
+5. En retorno, probar cantidades dañadas y sanas: la suma dañada no supera las unidades entregadas, stock sano vuelve a disponible, dañadas a mantenimiento y no aparece un cargo automático.
+6. Probar confirmación/edición/cancelación/devolución/pago y que la lista refleje el resultado al terminar, sin repetir pulsaciones. Contrastar inventario y Reportes con combos y accesorio individual; no sumar unidades de combo como una segunda línea monetaria.
+
+Un cobro ya guardado se mantiene reportado tras cancelación o devolución mientras no exista una operación explícita de reembolso.
+
+Las pruebas automatizadas contra `demo-briz-security` cubren estas invariantes backend/reporting; no reemplazan los pasos visuales listados aquí.
+
 **Estado:** el 2026-10-21 se iniciaron Auth, Firestore, Functions y Storage Emulator, se sembró la cuenta/catálogo ficticios y Vite quedó iniciado en `http://127.0.0.1:5173/`. El navegador automatizado bloqueó el acceso al `localhost` por política de URL; no se repitió el acceso ni se declara como visualmente probado. Los procesos siguen disponibles para completar el recorrido manual. Las suites de Emulator cubren lógica y permisos del backend, pero no sustituyen esta lista.
 
 ## Preparar un entorno exclusivamente ficticio

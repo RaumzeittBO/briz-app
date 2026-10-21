@@ -688,6 +688,7 @@ export const createRentalGroup = onCall(callable(), async (request) => {
                 total: Number(line.total),
                 paymentMethod: input.paymentMethod,
                 paymentStatus: manualPaymentStatus || (input.paymentMethod === 'QR' || input.paymentMethod === 'Transferencia' ? 'pending_review' : 'unpaid'),
+                ...(manualPaymentStatus === 'paid' ? { paidAt: now.toDate().toISOString(), amountPaid: Number(line.total) } : {}),
                 status: 'pending',
                 source: adminManual ? 'manual' : 'web',
                 ...(adminManual ? { createdBy: uid, deliveryService: manualDelivery, pickupService: manualPickup, ...(manualMapsLink ? { mapsLink: manualMapsLink } : {}) } : {}),
@@ -897,10 +898,15 @@ export const adminRentalAction = onCall(callable(), async (request) => {
         if (action === 'payment') {
             const paymentStatus = String(request.data.paymentStatus);
             if (!['paid', 'unpaid', 'pending_review'].includes(paymentStatus)) throw new HttpsError('invalid-argument', 'Estado de pago inválido.');
-            rows.forEach((row, index) => tx.update(refs[index], {
-                paymentStatus, updatedAt: now, lastUpdatedBy: uid,
-                ...appendRentalAudit(row, uid, 'payment', row.paymentStatus || 'unpaid', paymentStatus, now),
-            } as DocumentData));
+            rows.forEach((row, index) => {
+                // Treat retries as idempotent: keep the original receipt time and don't append duplicate audit events.
+                if (row.paymentStatus === paymentStatus) return;
+                tx.update(refs[index], {
+                    paymentStatus, updatedAt: now, lastUpdatedBy: uid,
+                    ...(paymentStatus === 'paid' ? { paidAt: row.paidAt || now, amountPaid: Number(row.amountPaid) || Number(row.total) || 0 } : {}),
+                    ...appendRentalAudit(row, uid, 'payment', row.paymentStatus || 'unpaid', paymentStatus, now),
+                } as DocumentData);
+            });
             return;
         }
         const allowed = action === 'confirm' ? rows.every((row) => LEGACY_PENDING.includes(String(row.status)))

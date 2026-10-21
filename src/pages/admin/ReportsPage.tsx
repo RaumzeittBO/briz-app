@@ -23,6 +23,7 @@ import { useStore } from '@/context/StoreContext';
 import type { Rental } from '@/context/StoreContext';
 import { toBoliviaDateString, addDaysToDateString, parseBoliviaDateTime } from '@/lib/dateUtils';
 import { parseDurationToHours } from '@/lib/rentalPricing';
+import { summarizeRentalMoney } from '@/lib/rentalReportMoney';
 
 type DateRangePreset = 'today' | 'yesterday' | 'last7' | 'thisMonth' | 'lastMonth' | 'custom' | 'all';
 
@@ -145,18 +146,13 @@ export default function ReportsPage() {
   }, [serviceOrders, dateBounds]);
 
   // 1, 2, 3, 4: Financial metrics (Alquileres, Tienda, Taller, Cobrado vs Pendiente)
-  const rentalGrossIncome = useMemo(
-    () => effectivePeriodRentals.reduce((sum, r) => sum + (Number(r.total) || 0), 0),
-    [effectivePeriodRentals]
+  const rentalMoney = useMemo(
+    () => summarizeRentalMoney(rentals, dateBounds.start, dateBounds.end, preset === 'all'),
+    [rentals, dateBounds, preset]
   );
-  const rentalPaidIncome = useMemo(
-    () =>
-      effectivePeriodRentals
-        .filter(r => r.paymentStatus === 'paid')
-        .reduce((sum, r) => sum + (Number(r.total) || 0), 0),
-    [effectivePeriodRentals]
-  );
-  const rentalPendingPaymentIncome = Math.max(0, rentalGrossIncome - rentalPaidIncome);
+  const rentalGrossIncome = rentalMoney.contracted;
+  const rentalPaidIncome = rentalMoney.collected;
+  const rentalPendingPaymentIncome = rentalMoney.pending;
 
   const salesIncome = useMemo(
     () => periodSales.reduce((sum, s) => sum + (Number(s.total) || 0), 0),
@@ -166,7 +162,7 @@ export default function ReportsPage() {
     () => periodServices.reduce((sum, so) => sum + (Number(so.costEstimate ?? (so as any).price) || 0), 0),
     [periodServices]
   );
-  const totalConsolidatedIncome = rentalGrossIncome + salesIncome + serviceIncome;
+  const totalConsolidatedIncome = rentalPaidIncome + rentalMoney.collectedDateUnknown + salesIncome + serviceIncome;
 
   // 5, 6, 7, 8: Bike rankings (most rented, least/zero rented, revenue per bike, hours/days rented)
   const bikePerformance = useMemo(() => {
@@ -340,10 +336,12 @@ export default function ReportsPage() {
   const timelineChartData = useMemo(() => {
     const dayMap = new Map<string, { date: string; alquileres: number; ventas: number; taller: number }>();
 
-    effectivePeriodRentals.forEach(r => {
-      const d = getRentalDateStr(r);
+    rentals.forEach(r => {
+      if (!isEffectiveRental(r.status) || (r.paymentStatus !== 'paid' && !(Number(r.amountPaid) > 0)) || !r.paidAt) return;
+      const d = toBoliviaDateString(r.paidAt);
+      if (d < dateBounds.start || d > dateBounds.end) return;
       const curr = dayMap.get(d) || { date: d, alquileres: 0, ventas: 0, taller: 0 };
-      curr.alquileres += Number(r.total) || 0;
+      curr.alquileres += Math.max(0, Number(r.amountPaid) || (r.paymentStatus === 'paid' ? Number(r.total) || 0 : 0));
       dayMap.set(d, curr);
     });
 
@@ -362,7 +360,7 @@ export default function ReportsPage() {
     });
 
     return Array.from(dayMap.values()).sort((a, b) => a.date.localeCompare(b.date));
-  }, [effectivePeriodRentals, periodSales, periodServices]);
+  }, [rentals, dateBounds, periodSales, periodServices]);
 
   // 17: Export to CSV/Excel and Printable PDF
   const handleExportCSV = () => {
@@ -372,10 +370,11 @@ export default function ReportsPage() {
     lines.push([esc('REPORTE INTEGRAL BRIZ'), esc(dateBounds.label), esc(`Sede: ${selectedStore === 'all' ? 'Todas' : selectedStore}`)].join(','));
     lines.push('');
     lines.push([esc('RESUMEN FINANCIERO'), esc('Monto (Bs.)')].join(','));
-    lines.push([esc('Ingresos Totales Consolidados'), esc(totalConsolidatedIncome)].join(','));
-    lines.push([esc('Alquileres (Total Efectivo)'), esc(rentalGrossIncome)].join(','));
-    lines.push([esc('Alquileres Cobrados (Pagados)'), esc(rentalPaidIncome)].join(','));
+    lines.push([esc('Alquileres contratados por fecha de alquiler'), esc(rentalGrossIncome)].join(','));
+    lines.push([esc('Cobrado con fecha de pago verificable'), esc(rentalPaidIncome)].join(','));
+    lines.push([esc('Cobros históricos sin fecha verificable'), esc(rentalMoney.collectedDateUnknown)].join(','));
     lines.push([esc('Alquileres Pendientes de Cobro'), esc(rentalPendingPaymentIncome)].join(','));
+    lines.push([esc('Ventas y servicios del período'), esc(salesIncome + serviceIncome)].join(','));
     lines.push([esc('Ventas Tienda (Completadas)'), esc(salesIncome)].join(','));
     lines.push([esc('Servicios Taller (Terminados)'), esc(serviceIncome)].join(','));
     lines.push('');
@@ -523,26 +522,30 @@ export default function ReportsPage() {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <Card className="bg-[#1A1A1A] border-white/5 rounded-2xl p-5">
           <div className="flex items-center justify-between mb-2">
-            <p className="text-[10px] font-black uppercase text-white/40 tracking-widest">Ingresos Consolidados</p>
+            <p className="text-[10px] font-black uppercase text-white/40 tracking-widest">Ingresos cobrados / completados</p>
             <DollarSign className="w-4 h-4 text-brand-yellow" />
           </div>
           <p className="text-3xl font-black text-brand-yellow">Bs. {totalConsolidatedIncome}</p>
           <p className="text-[11px] text-white/40 font-bold mt-1">
-            Alquileres + Tienda + Taller
+            Cobros de alquiler por paidAt + ventas y servicios completados
           </p>
         </Card>
 
         <Card className="bg-[#1A1A1A] border-white/5 rounded-2xl p-5">
           <div className="flex items-center justify-between mb-2">
-            <p className="text-[10px] font-black uppercase text-white/40 tracking-widest">Ingresos por Alquileres</p>
+            <p className="text-[10px] font-black uppercase text-white/40 tracking-widest">Alquileres contratados</p>
             <Bike className="w-4 h-4 text-green-400" />
           </div>
           <p className="text-3xl font-black text-white">Bs. {rentalGrossIncome}</p>
+          <p className="text-[10px] text-white/40">Por fecha programada del alquiler</p>
           <div className="flex items-center gap-2 mt-1 text-[10px] font-bold">
-            <span className="text-emerald-400">Cobrado: Bs. {rentalPaidIncome}</span>
+            <span className="text-emerald-400">Cobrado por fecha de pago: Bs. {rentalPaidIncome}</span>
             <span className="text-white/20">•</span>
             <span className="text-amber-400">Por cobrar: Bs. {rentalPendingPaymentIncome}</span>
           </div>
+          {rentalMoney.collectedDateUnknown > 0 && (
+            <p className="mt-2 text-xs text-amber-300">Bs. {rentalMoney.collectedDateUnknown} figuran pagados en registros históricos sin fecha de cobro verificable; se muestran solo en “Todo el historial”.</p>
+          )}
         </Card>
 
         <Card className="bg-[#1A1A1A] border-white/5 rounded-2xl p-5">
@@ -609,7 +612,7 @@ export default function ReportsPage() {
       <div className="grid lg:grid-cols-2 gap-6">
         <Card className="bg-[#1A1A1A] border-white/5 rounded-2xl overflow-hidden">
           <CardHeader className="border-b border-white/5 pb-3">
-            <CardTitle className="text-white text-sm font-bold">Evolución de Ingresos en el Periodo (Bs.)</CardTitle>
+            <CardTitle className="text-white text-sm font-bold">Cobros de alquiler y ventas/servicios completados (Bs.)</CardTitle>
           </CardHeader>
           <CardContent className="pt-4 px-2">
             {timelineChartData.length > 0 ? (
@@ -618,7 +621,7 @@ export default function ReportsPage() {
                   <XAxis dataKey="date" stroke="rgba(255,255,255,0.35)" fontSize={10} tickLine={false} axisLine={false}/>
                   <YAxis stroke="rgba(255,255,255,0.35)" fontSize={10} tickLine={false} axisLine={false}/>
                   <Tooltip contentStyle={{background:'#222',border:'1px solid rgba(255,255,255,0.1)',borderRadius:'10px',color:'#fff'}}/>
-                  <Bar dataKey="alquileres" fill="#F5B800" radius={[4,4,0,0]} name="Alquileres (Bs.)"/>
+                  <Bar dataKey="alquileres" fill="#F5B800" radius={[4,4,0,0]} name="Cobros de alquiler (paidAt)"/>
                   <Bar dataKey="ventas" fill="#60A5FA" radius={[4,4,0,0]} name="Tienda (Bs.)"/>
                   <Bar dataKey="taller" fill="#C084FC" radius={[4,4,0,0]} name="Taller (Bs.)"/>
                 </BarChart>

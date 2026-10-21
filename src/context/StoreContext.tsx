@@ -181,6 +181,8 @@ export interface Rental {
     endTime?: string;
     total: number;
     amountPaid?: number;
+    /** Payment timestamp recorded at the time of payment; absent on legacy records. */
+    paidAt?: string;
     lateFee?: number;
     extensionFee?: number;
     paymentMethod: string;

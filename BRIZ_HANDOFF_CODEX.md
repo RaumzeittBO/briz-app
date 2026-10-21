@@ -1,5 +1,17 @@
 # BRIZ (`briz.com.bo`) — DOCUMENTO DE HANDOFF TÉCNICO PARA CODEX
 
+## Hotfix alquileres/reportes — 2026-10-21
+
+- Rama base `codex/briz-critical-stabilization-20261020`; SHA publicado al iniciar este hotfix `d4e89af173ad98670bbd5b1039f0d54392b4735`. Consultar historial de Git y `git ls-remote` para el commit final.
+- Confirmación Admin en tarjeta/modal: la UI cerraba el modal sin esperar el callable y no comunicaba ni bloqueaba una solicitud en curso. Se añadió bloqueo local/estado visible y el detalle se cierra solo tras éxito. Alta manual guarda y reutiliza su idempotency key hasta que también termina la confirmación.
+- No se recuperaron los documentos que motivaron el reporte del propietario; no se puede concluir que hubiera reservas duplicadas. Las regresiones Emulator verifican idempotencia manual y carreras de confirmación: una única línea, una sola confirmación y un solo descuento físico. Confirmación sin disponibilidad deja la reserva pendiente y el inventario sin mutación.
+- Causa de dinero omitido: el reporte filtraba por fecha del alquiler y los docs no tenían fecha de pago. `functions/src/index.ts` registra `paidAt` y `amountPaid` en pagos nuevos; Dashboard/Reports contabilizan efectivo en la fecha `America/La_Paz` del pago. Contratado y pendiente usan fecha programada. Los pagos registrados no desaparecen al cancelar/devolver; no existe inferencia de reembolso. Registros pagados legacy sin fecha son visibles como fecha desconocida solo en todo el historial; no se les asigna una fecha inventada.
+- Casos Emulator: alta manual pagada para fecha futura; concurrencia/idempotencia de alta y confirmación; error por stock agotado; pago previo a entrega; devolución sana y dañada; devolución no crea pago; pagar después de devolver conserva status/historial; combos/accesorios/aros e inventario. Suite completa final de rules + integración pasó; una corrida previa dejó stock del fixture consumido y se corrigió cancelando el registro sintético.
+- `test:reports` comprueba rango mensual vs histórico, pago fecha futura, legacy sin fecha, devuelto impago, pago posterior y línea de accesorio sin filtrado duplicado. TypeScript y builds finales web/Functions pasaron; web mantiene avisos `/noise.png` y bundle grande.
+- No fue posible completar validación visual: política de navegador bloquea la apertura de localhost; no se evadió. Sigue pendiente operar todos los controles y vistas 360–430 px / desktop siguiendo `BRIZ_ADMIN_MANUAL_VALIDATION.md`.
+- Lint seleccionado: 32 errores existentes en AdminRentals/Dashboard/Reports (mayormente `no-explicit-any` y React Compiler `preserve-manual-memoization`); revisar por separado. No se observó error nuevo en el helper ni en estas líneas de backend.
+- Restricciones respetadas: Emulator demo únicamente, sin producción, deploy, merge, usuarios reales, migración ni facturación.
+
 ## Estado verificado por Codex — 2026-10-21 (Bloque 4)
 
 - Rama activa: `codex/briz-critical-stabilization-20261020`; HEAD inicial de este bloque `05dd70a`, alineado con la referencia `origin/...` local y publicación confirmada por el usuario.

@@ -307,9 +307,13 @@ export default function AdminRentalsPage() {
   const [returnModalGroup, setReturnModalGroup] = useState<GroupedRental | null>(null);
   const [returnDamagedUnits, setReturnDamagedUnits] = useState(0);
   const [returnNotes, setReturnNotes] = useState('');
+  const actionLockRef = useRef(new Set<string>());
+  const [busyActionKey, setBusyActionKey] = useState<string | null>(null);
 
   // Manual Rental Wizard States
   const [newRentalModalOpen, setNewRentalModalOpen] = useState(false);
+  const manualCreateLockRef = useRef(false);
+  const [creatingManualRental, setCreatingManualRental] = useState(false);
   const [newRentalStep, setNewRentalStep] = useState(1);
   const [newRentalCart, setNewRentalCart] = useState<any[]>([]);
   const [newRentalForm, setNewRentalForm] = useState({
@@ -442,30 +446,36 @@ export default function AdminRentalsPage() {
       .sort((a, b) => new Date(b.createdAt || b.createdDate || '').getTime() - new Date(a.createdAt || a.createdDate || '').getTime());
   }, [groupedRentals, filter, search]);
 
+  const runExclusiveAction = async (key: string, operation: () => Promise<void>) => {
+    if (actionLockRef.current.has(key)) return false;
+    actionLockRef.current.add(key);
+    setBusyActionKey(key);
+    try { await operation(); return true; }
+    finally {
+      actionLockRef.current.delete(key);
+      setBusyActionKey(current => current === key ? null : current);
+    }
+  };
+
   const handleConfirmGroup = async (group: GroupedRental) => {
     const ids = group.items.map(item => item.id);
-    let result: { ok: boolean; error?: string };
-    try { await runAdminRentalAction('confirm', ids); result = { ok: true }; }
-    catch (error) { result = { ok: false, error: error instanceof Error ? error.message : 'No hay stock disponible para todos los componentes.' }; }
-    if (!result.ok) {
-      alert(`Error al confirmar la reserva:\n${result.error || 'No hay stock disponible para todos los componentes.'}`);
-      return;
-    }
-    if (selected?.id === group.id) {
-      setSelected(prev => {
-        if (!prev || prev.id !== group.id) return prev;
-        return {
-          ...prev,
-          status: 'confirmed',
-          items: prev.items.map(item => ({ ...item, status: 'confirmed' }))
-        };
+    try {
+      const completed = await runExclusiveAction(`confirm:${group.id}`, async () => {
+        await runAdminRentalAction('confirm', ids);
+        if (selected?.id === group.id) setSelected(prev => prev?.id === group.id ? {
+          ...prev, status: 'confirmed', items: prev.items.map(item => ({ ...item, status: 'confirmed' }))
+        } : prev);
       });
+      return completed;
+    } catch (error) {
+      alert(`Error al confirmar la reserva:\n${error instanceof Error ? error.message : 'No hay stock disponible para todos los componentes.'}`);
+      return false;
     }
   };
 
   const handleDeliverGroup = async (group: GroupedRental) => {
     const ids = group.items.map(item => item.id);
-    await runAdminRentalAction('deliver', ids);
+    await runExclusiveAction(`deliver:${group.id}`, async () => { await runAdminRentalAction('deliver', ids); });
     if (selected?.id === group.id) {
       setSelected(prev => {
         if (!prev || prev.id !== group.id) return prev;
@@ -482,7 +492,7 @@ export default function AdminRentalsPage() {
   const handleCancelGroup = async (group: GroupedRental) => {
     if (!confirm('¿Seguro que deseas cancelar esta reserva de alquiler? Si estaba confirmada, el stock se restaurará automáticamente.')) return;
     const ids = group.items.map(item => item.id);
-    await runAdminRentalAction('cancel', ids);
+    await runExclusiveAction(`cancel:${group.id}`, async () => { await runAdminRentalAction('cancel', ids); });
     if (selected?.id === group.id) setSelected(null);
   };
 
@@ -495,7 +505,7 @@ export default function AdminRentalsPage() {
   const handleConfirmReturnGroup = async () => {
     if (!returnModalGroup) return;
     const ids = returnModalGroup.items.map(item => item.id);
-    await runAdminRentalAction('return', ids, { damagedUnits: returnDamagedUnits, conditionNotes: returnNotes.trim() || undefined });
+    await runExclusiveAction(`return:${returnModalGroup.id}`, async () => { await runAdminRentalAction('return', ids, { damagedUnits: returnDamagedUnits, conditionNotes: returnNotes.trim() || undefined }); });
 
     setReturnModalGroup(null);
     if (selected?.id === returnModalGroup.id) setSelected(null);
@@ -513,7 +523,7 @@ export default function AdminRentalsPage() {
   };
 
   const handleMarkPaidGroup = async (group: GroupedRental, methodText: string) => {
-    await runAdminRentalAction('payment', group.items.map(item => item.id), { paymentStatus: 'paid', paymentMethodNote: methodText });
+    await runExclusiveAction(`payment:${group.id}`, async () => { await runAdminRentalAction('payment', group.items.map(item => item.id), { paymentStatus: 'paid', paymentMethodNote: methodText }); });
     if (selected?.id === group.id) {
       setSelected(prev => {
         if (!prev || prev.id !== group.id) return prev;
@@ -582,14 +592,14 @@ export default function AdminRentalsPage() {
 
   const handleSaveEditedGroup = async () => {
     if (!selected || !editForm) return;
-    await updateRentalGroup({
+    await runExclusiveAction(`edit:${selected.id}`, async () => { await updateRentalGroup({
       reservationCode: selected.reservationCode || selected.id,
       rentalIds: selected.items.map(item => item.id),
       date: editForm.date, pickupTime: editForm.pickupTime, duration: editForm.duration,
       deliveryService: editForm.deliveryService, pickupService: editForm.pickupService,
       mapsLink: editForm.mapsLink, notes: editForm.notes,
       items: editForm.items.map(item => ({ id: item.isNew ? '' : item.id, productId: item.productId, productType: item.productType, quantity: Math.max(1, item.quantity), selectedWheelSize: item.selectedWheelSize || '' })),
-    });
+    }); });
 
     setEditingOrder(false);
     setSelected(null);
@@ -711,6 +721,7 @@ export default function AdminRentalsPage() {
   };
 
   const handleWizardSubmit = async () => {
+    if (manualCreateLockRef.current) return;
     let finalCustomer: any = null;
     if (newRentalCustomerMode === 'existing') {
       finalCustomer = customers.find(c => c.id === newRentalSelectedCustomerId);
@@ -765,6 +776,8 @@ export default function AdminRentalsPage() {
       paymentMethod,
     };
 
+    manualCreateLockRef.current = true;
+    setCreatingManualRental(true);
     try {
       const fingerprint = JSON.stringify(booking);
       const storageKey = 'briz_admin_checkout_idempotency';
@@ -772,15 +785,18 @@ export default function AdminRentalsPage() {
       const idempotencyKey = saved?.fingerprint === fingerprint && saved.key ? saved.key : `admin_${crypto.randomUUID()}`;
       sessionStorage.setItem(storageKey, JSON.stringify({ fingerprint, key: idempotencyKey }));
       const result = await createRentalGroup({ ...booking, idempotencyKey });
-      sessionStorage.removeItem(storageKey);
       if (newRentalForm.status === 'confirmed') {
         await runAdminRentalAction('confirm', result.rentalIds);
       }
+      sessionStorage.removeItem(storageKey);
       alert(`Alquiler manual creado con éxito. Código: ${result.reservationCode}`);
       setNewRentalModalOpen(false);
     } catch (error) {
       console.error('Error creating manual rental:', error);
       alert(error instanceof Error ? error.message : 'Ocurrió un error al crear el alquiler.');
+    } finally {
+      manualCreateLockRef.current = false;
+      setCreatingManualRental(false);
     }
   };
   const renderStep1 = () => {
@@ -1526,9 +1542,10 @@ export default function AdminRentalsPage() {
           </Button>
           <Button
             onClick={handleWizardSubmit}
+            disabled={creatingManualRental}
             className="flex-1 h-10 bg-brand-yellow hover:bg-brand-yellow-light text-brand-black font-black rounded-xl text-xs uppercase cursor-pointer"
           >
-            <CheckCircle2 className="w-4 h-4 mr-1.5" /> Crear Alquiler
+            <CheckCircle2 className="w-4 h-4 mr-1.5" /> {creatingManualRental ? 'Creando alquiler…' : 'Crear Alquiler'}
           </Button>
         </div>
       </div>
@@ -1734,10 +1751,11 @@ export default function AdminRentalsPage() {
                     <div className="grid grid-cols-3 gap-2 pt-2 border-t border-white/5">
                       <Button
                         size="sm"
+                        disabled={busyActionKey === `confirm:${g.id}`}
                         onClick={() => handleConfirmGroup(g)}
                         className="bg-green-600 hover:bg-green-700 text-white rounded-full h-11 text-xs font-black uppercase flex items-center justify-center gap-1.5"
                       >
-                        <CheckCircle2 className="w-4 h-4" /> Confirmar
+                        <CheckCircle2 className="w-4 h-4" /> {busyActionKey === `confirm:${g.id}` ? 'Confirmando…' : 'Confirmar'}
                       </Button>
 
                       {g.paymentStatus !== 'paid' ? (
@@ -2633,9 +2651,10 @@ export default function AdminRentalsPage() {
                     {(selected.status === 'pending' || selected.status === 'Pendiente') && (
                       <Button 
                         className="flex-1 h-11 bg-green-600 hover:bg-green-700 text-white font-black rounded-xl text-xs uppercase cursor-pointer" 
-                        onClick={() => { handleConfirmGroup(selected); setSelected(null); }}
+                        disabled={busyActionKey === `confirm:${selected.id}`}
+                        onClick={async () => { if (await handleConfirmGroup(selected)) setSelected(null); }}
                       >
-                        Confirmar Reserva
+                        {busyActionKey === `confirm:${selected.id}` ? 'Confirmando…' : 'Confirmar Reserva'}
                       </Button>
                     )}
 

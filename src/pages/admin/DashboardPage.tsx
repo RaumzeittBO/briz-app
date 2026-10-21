@@ -5,6 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { useStore } from '@/context/StoreContext';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { toBoliviaDateString, addDaysToDateString } from '@/lib/dateUtils';
+import { summarizeRentalMoney } from '@/lib/rentalReportMoney';
 
 const statusColors: Record<string, string> = {
   'Pendiente': 'bg-yellow-500/15 text-yellow-500 border-0',
@@ -85,7 +86,7 @@ export default function DashboardPage() {
   const rentalsToday = rentalsTodayList.filter(r => !r.productId.startsWith('srv_')).length;
   const salesToday = salesTodayList.length;
   const incomeToday =
-    rentalsTodayList.reduce((s, r) => s + (Number(r.total) || 0), 0) +
+    summarizeRentalMoney(rentals, todayStr, todayStr).collected +
     salesTodayList.reduce((s, v) => s + (Number(v.total) || 0), 0) +
     servicesTodayList.reduce((s, so) => s + (Number(so.costEstimate ?? (so as any).price) || 0), 0);
 
@@ -104,7 +105,7 @@ export default function DashboardPage() {
   const rentalsWeek = rentalsWeekList.filter(r => !r.productId.startsWith('srv_')).length;
   const salesWeek = salesWeekList.length;
   const incomeWeek =
-    rentalsWeekList.reduce((s, r) => s + (Number(r.total) || 0), 0) +
+    summarizeRentalMoney(rentals, weekAgoStr, todayStr).collected +
     salesWeekList.reduce((s, v) => s + (Number(v.total) || 0), 0) +
     servicesWeekList.reduce((s, so) => s + (Number(so.costEstimate ?? (so as any).price) || 0), 0);
 
@@ -123,7 +124,7 @@ export default function DashboardPage() {
   const rentalsMonth = rentalsMonthList.filter(r => !r.productId.startsWith('srv_')).length;
   const salesMonth = salesMonthList.length;
   const incomeMonth =
-    rentalsMonthList.reduce((s, r) => s + (Number(r.total) || 0), 0) +
+    summarizeRentalMoney(rentals, monthAgoStr, todayStr).collected +
     salesMonthList.reduce((s, v) => s + (Number(v.total) || 0), 0) +
     servicesMonthList.reduce((s, so) => s + (Number(so.costEstimate ?? (so as any).price) || 0), 0);
 
@@ -165,10 +166,12 @@ export default function DashboardPage() {
       const [y, m, d] = ds.split('-').map(Number);
       const label = new Date(y, m - 1, d).toLocaleDateString('es', { weekday: 'short' });
       const dayRentals = effectiveRentals.filter(r => getRentalBoliviaDate(r) === ds);
+      const rentalReceipts = effectiveRentals.filter(r => r.paidAt && toBoliviaDateString(r.paidAt) === ds
+        && (r.paymentStatus === 'paid' || Number(r.amountPaid) > 0));
       days.push({
         name: label,
         alquileres: dayRentals.filter(r => !r.productId.startsWith('srv_')).length,
-        ingresos: dayRentals.reduce((s, r) => s + (Number(r.total) || 0), 0)
+        ingresos: rentalReceipts.reduce((sum, r) => sum + Math.max(0, Number(r.amountPaid) || (r.paymentStatus === 'paid' ? Number(r.total) || 0 : 0)), 0)
       });
     }
     return days;

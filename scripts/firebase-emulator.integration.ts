@@ -170,11 +170,29 @@ try {
     assert.equal(manualRental.get('source'), 'manual');
     assert.equal(manualRental.get('customerName'), 'Counter Customer');
     assert.equal(manualRental.get('paymentStatus'), 'paid');
+    assert.ok(manualRental.get('paidAt'), 'A manually paid future rental records the actual receipt time.');
+    assert.equal(manualRental.get('date') > manualRental.get('paidAt').slice(0, 10), true, 'Future rental date remains separate from payment date.');
     assert.equal((await adminDb.collection('customers').where('ci', '==', 'TEST-1009').get()).size, 1);
     const manualRetry = await call<{ reservationCode: string; rentalIds: string[]; duplicate: boolean }>(userA.functions, 'createRentalGroup', manualBooking);
     assert.equal(manualRetry.duplicate, true);
     assert.equal(manualRetry.rentalIds[0], manualResult.rentalIds[0]);
+    assert.equal((await adminDb.collection('rentals').where('reservationCode', '==', manualResult.reservationCode).get()).size, 1,
+        'A retried manual create with the same idempotency key must persist exactly one rental line.');
     pass('Administrative manual booking validates role, creates customer and rental atomically, and retries idempotently');
+
+    const doubleManualBooking = {
+        ...manualBooking,
+        adminCustomer: { id: userA.uid },
+        date: new Intl.DateTimeFormat('en-CA', { timeZone: 'America/La_Paz' }).format(new Date(Date.now() + 5 * 24 * 60 * 60 * 1000)),
+        idempotencyKey: `manual_race_${crypto.randomUUID()}`,
+    };
+    const doubleManualResults = await Promise.all([
+        call<{ reservationCode: string }>(userA.functions, 'createRentalGroup', doubleManualBooking),
+        call<{ reservationCode: string }>(userA.functions, 'createRentalGroup', doubleManualBooking),
+    ]);
+    assert.equal(doubleManualResults[0].reservationCode, doubleManualResults[1].reservationCode);
+    assert.equal((await adminDb.collection('rentals').where('reservationCode', '==', doubleManualResults[0].reservationCode).get()).size, 1);
+    pass('Two concurrent manual-create requests with one idempotency key persist a single rental record');
 
     // Isolate later booking scenarios from the intentional per-user five-per-minute limiter.
     await adminDb.doc(`_requestLimits/reservations_${createHash('sha256').update(userA.uid).digest('hex')}`).delete();
@@ -236,6 +254,21 @@ try {
     assert.equal((await adminDb.collection('rentals').where('reservationCode', '==', editable.reservationCode).get()).size, 1);
     pass('Administrative group editing atomically adds/removes lines, changes size/date/time/duration, and rejects insufficient availability');
 
+    const failedConfirmation = await call<{ rentalIds: string[] }>(userA.functions, 'createRentalGroup', {
+        adminManual: true, adminCustomer: { id: userA.uid },
+        lines: [{ productId: 'bike-emulator', productType: 'single', quantity: 1, wheelSize: '26' }],
+        date: new Intl.DateTimeFormat('en-CA', { timeZone: 'America/La_Paz' }).format(new Date(Date.now() + 13 * 24 * 60 * 60 * 1000)),
+        pickupTime: '13:00', duration: '1 hora', paymentMethod: 'Efectivo', idempotencyKey: `confirm_error_${crypto.randomUUID()}`,
+    });
+    const failureInventoryRef = adminDb.collection('inventory').doc('bike-emulator');
+    const failureInventoryBefore = await failureInventoryRef.get();
+    const originalWheelSizes = failureInventoryBefore.get('wheelSizes') as Array<Record<string, unknown> & { size: string; stock: number }>;
+    await failureInventoryRef.update({ wheelSizes: originalWheelSizes.map((wheel) => wheel.size === '26' ? { ...wheel, stock: 0 } : wheel) });
+    await assert.rejects(() => call(userA.functions, 'adminRentalAction', { action: 'confirm', rentalIds: failedConfirmation.rentalIds }));
+    assert.equal((await adminDb.collection('rentals').doc(failedConfirmation.rentalIds[0]).get()).get('status'), 'pending');
+    await failureInventoryRef.update({ wheelSizes: originalWheelSizes });
+    pass('A server-side confirmation error leaves the reservation pending and does not consume inventory');
+
     const lifecycle = await call<{ rentalIds: string[]; reservationCode: string }>(userA.functions, 'createRentalGroup', {
         adminManual: true, adminCustomer: { id: userA.uid },
         lines: [{ productId: 'bike-emulator', productType: 'single', quantity: 1, wheelSize: '26' }],
@@ -254,6 +287,25 @@ try {
     assert.equal((await adminDb.collection('rentals').doc(lifecycle.rentalIds[0]).get()).get('status'), 'returned');
     await assert.rejects(() => call(userA.functions, 'adminRentalAction', { action: 'return', rentalIds: lifecycle.rentalIds, damagedUnits: 0 }));
     pass('Administrative confirmation deducts once, delivery preserves stock, and damaged return restores only healthy stock');
+
+    const concurrentConfirm = await call<{ rentalIds: string[]; reservationCode: string }>(userA.functions, 'createRentalGroup', {
+        adminManual: true, adminCustomer: { id: userA.uid },
+        lines: [{ productId: 'bike-emulator', productType: 'single', quantity: 1, wheelSize: '26' }],
+        date: new Intl.DateTimeFormat('en-CA', { timeZone: 'America/La_Paz' }).format(new Date(Date.now() + 11 * 24 * 60 * 60 * 1000)),
+        pickupTime: '12:00', duration: '1 hora', paymentMethod: 'Efectivo', idempotencyKey: `confirm_race_${crypto.randomUUID()}`,
+    });
+    const concurrentStock = (await adminDb.collection('inventory').doc('bike-emulator').get()).get('wheelSizes')[0].stock;
+    const confirmRace = await Promise.allSettled([
+        call(userA.functions, 'adminRentalAction', { action: 'confirm', rentalIds: concurrentConfirm.rentalIds }),
+        call(userA.functions, 'adminRentalAction', { action: 'confirm', rentalIds: concurrentConfirm.rentalIds }),
+    ]);
+    assert.equal(confirmRace.filter((result) => result.status === 'fulfilled').length, 1);
+    assert.equal(confirmRace.filter((result) => result.status === 'rejected').length, 1);
+    assert.equal((await adminDb.collection('inventory').doc('bike-emulator').get()).get('wheelSizes')[0].stock, concurrentStock - 1);
+    assert.equal((await adminDb.collection('rentals').where('reservationCode', '==', concurrentConfirm.reservationCode).get()).size, 1);
+    await call(userA.functions, 'adminRentalAction', { action: 'cancel', rentalIds: concurrentConfirm.rentalIds });
+    assert.equal((await adminDb.collection('inventory').doc('bike-emulator').get()).get('wheelSizes')[0].stock, concurrentStock);
+    pass('Two simultaneous confirmations of one rental are serialized and deduct inventory once');
 
     const userB = await client('rider-b@example.test', 'TestPass#123');
     await call(userB.functions, 'beginCustomerRegistration', { name: 'Rider B', phone: '+59170000002', ci: 'TEST-1002' });
@@ -298,6 +350,12 @@ try {
     assert.equal(returnedManager.get('status'), 'returned');
     assert.equal(returnedManager.get('total'), paidBeforeReturn, 'Return must retain historical charges.');
     assert.equal((await adminDb.collection('inventory').doc('bike-emulator').get()).get('wheelSizes')[0].stock, stockBeforeHealthyReturn + 1);
+    assert.equal(returnedManager.get('paymentStatus'), 'unpaid', 'Returning a rental does not invent or add a payment.');
+    await call(userB.functions, 'adminRentalAction', { action: 'payment', rentalIds: managerCycle.rentalIds, paymentStatus: 'paid' });
+    const paidAfterReturn = await adminDb.collection('rentals').doc(managerCycle.rentalIds[0]).get();
+    assert.equal(paidAfterReturn.get('status'), 'returned');
+    assert.equal(paidAfterReturn.get('paymentStatus'), 'paid');
+    assert.ok(paidAfterReturn.get('paidAt'));
     const confirmedCancel = await call<{ rentalIds: string[] }>(userB.functions, 'createRentalGroup', managerBooking(17));
     await call(userB.functions, 'adminRentalAction', { action: 'confirm', rentalIds: confirmedCancel.rentalIds });
     const stockBeforeConfirmedCancel = (await adminDb.collection('inventory').doc('bike-emulator').get()).get('wheelSizes')[0].stock;
