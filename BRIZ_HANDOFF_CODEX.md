@@ -293,7 +293,7 @@ src/
 
 ### Handoff de release actualizado — 2026-10-21
 
-- GitHub: `codex/briz-critical-stabilization-20261020` y `origin` coinciden en `722078b935e53002856ceb7f620cdac9582bc0ba`; `origin/main` está en `0140452678d23e6e352dcaacd353bfe7342912f5`. PR #1 sigue OPEN/Draft. No merge/deploy.
+- GitHub: al abrir esta ventana, la rama local/remota coincidía en `722078b935e53002856ceb7f620cdac9582bc0ba`. El cambio de identidad runtime se publicó en `cb43b52f1548f37cc15b9b6af6bbb7549f56f682`; `origin/main` continúa en `0140452678d23e6e352dcaacd353bfe7342912f5`. PR #1 sigue OPEN/Draft. No merge/deploy.
 - Firebase Console (`briz-4ef3a`): se guardó la configuración de backup diario/7 días. Falta que aparezca y se verifique la primera copia recuperable. Secret Manager API, Cloud Build, Cloud Run y Eventarc quedaron habilitadas; Artifact Registry y APIs Firebase usadas ya estaban disponibles. No se crearon valores ni recursos de secretos.
 - Auth sigue sin dominio BRIZ: solo están los tres dominios predeterminados. El apex `briz.com.bo` redirige a `www.briz.com.bo`; autorizar solo `www.briz.com.bo` después de confirmación de acción en la ventana.
 - Bloqueo de mínimo privilegio nuevo: `412008664703-compute@developer.gserviceaccount.com` tiene Editor y sería el runtime predeterminado v2. `functions/src/index.ts` ahora fija `briz-functions-runtime@briz-4ef3a.iam.gserviceaccount.com`; aún falta crear esta cuenta y asignar Firestore User, Firebase Authentication Viewer y Secret Accessor scoped solo a los dos secretos. No retirar roles de cuentas por defecto sin simular impactos.
