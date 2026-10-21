@@ -1,5 +1,15 @@
 # BRIZ (`briz.com.bo`) — MASTER ROADMAP & ENGINEERING LOG
 
+## Addendum de release y seguridad — 2026-10-21
+
+Supersede los estados anteriores de esta bitácora sobre Rules y suites. Se corrigió `firestore.rules`: para `rentals`, el Web SDK ya no puede crear, modificar ni borrar documentos; las transiciones y pagos continúan en Functions/Admin SDK. **Este cambio está solo en la rama local y no está desplegado.** No se hicieron cambios a producción, usuarios, reservas, inventario, APIs, `main` ni Vercel.
+
+- Regresión nueva en `scripts/firebase-rules.test.ts`: Admin y Manager fallan al cambiar `status`, `paymentStatus`, `total`, `amountPaid` o borrar un alquiler; conservan lectura autorizada. Emulators demuestran que las callables autorizadas sí ejecutan reserva, confirmación, entrega, edición, devolución, pago y cancelación; las pruebas cubren inventario/idempotencia y ausencia de doble descuento.
+- Verificaciones de este cambio: `npm run test:firebase`, `npm run test:reports`, `npm run test:reconcile` (8 registros ficticios, 22 hallazgos), `npx tsx scripts/verify-briz-core.ts` (16/16), `npx tsc --noEmit`, `npm run build`, `npm run build --prefix functions` y ESLint del archivo de reglas. Todas pasaron. Avisos conocidos del build: `/noise.png`, bundle ~1.97 MB; Emulator Node24 vs Functions Node22 y warning transitorio de metadatos.
+- Telegram es gate para merge: el trigger `sendReservationNotification` usa Secret Manager pero no hay token rotado ni secretos productivos configurados. Reserva sigue funcionando y el outbox marca el estado real; no afirmar notificación activa. El propietario debe rotar en BotFather y cargar `TELEGRAM_BOT_TOKEN`/`TELEGRAM_CHAT_ID` directamente en Secret Manager/CLI seguro, nunca compartirlos en chat. Si no se completa, detenerse antes del merge y solicitar decisión expresa para publicar sin avisos.
+- Release no ejecutado: no se habilitaron APIs ni se desplegaron índices, Functions o Rules; no se publicó la rama ni se fusionó PR #1. Mantenerlas así hasta cerrar Telegram, verificación de respaldo/deployment/rollback, permisos/APIs estrictamente necesarios y dominios Auth. La regla estricta debe publicarse después del frontend callable para evitar romper el `main` viejo.
+- Siguiente paso: resolver la acción del propietario para Telegram; luego reanudar la ventana desde el chequeo de respaldo y APIs y el despliegue explícito, conservando el orden compatible de frontend y Rules. PR #1 no se fusiona mientras haya este gate.
+
 ## Addendum vigente — preparación final para publicación directa (2026-10-21)
 
 Este addendum reemplaza las afirmaciones históricas posteriores que decían que Auth, roles, Rules activas, Storage Rules o variables no se podían verificar. No autoriza escritura a producción, push, merge, ni despliegue.

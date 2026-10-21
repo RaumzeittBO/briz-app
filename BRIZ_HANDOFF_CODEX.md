@@ -1,5 +1,13 @@
 # BRIZ (`briz.com.bo`) — DOCUMENTO DE HANDOFF TÉCNICO PARA CODEX
 
+## Addendum de seguridad/gate de release — 2026-10-21
+
+- Último cambio local: `firestore.rules` niega `create/update/delete` directos en `rentals`; Admin y Manager solo leen por Web SDK y las mutaciones pasan por Functions/Admin SDK. Prueba agregada: cada rol no puede cambiar `status`, `paymentStatus`, `total`, `amountPaid`, ni borrar; el acceso por sede de lectura permanece.
+- Validación ejecutada: `npm run test:firebase` (Rules + Auth/Firestore/Functions/Storage; reserva pública, callables administrativas, pagos, transiciones e inventario), reportes, reconciliación ficticia (8/22), motor 16/16, TypeScript, build web, build Functions y ESLint del test de Rules: todo pasó. Avisos: `/noise.png`, bundle ~1.97 MB, Functions Emulator corre sobre Node24 aunque runtime pide Node22, un warning de metadata lookup sin fallo.
+- Sin escrituras productivas: las Rules corregidas aún no están publicadas. No se habilitaron APIs, no se desplegaron índices/Functions, no hubo push/merge ni deploy Vercel. PR #1 y `main` siguen intactos conforme a lo verificado antes de este cambio; volver a comprobar antes del release.
+- **Bloqueo antes de merge: Telegram.** No se puede verificar/activar notificación sin token rotado. Propietario: revocar el token viejo y generar uno nuevo en BotFather; guardar token y chat ID directamente como secretos `TELEGRAM_BOT_TOKEN` y `TELEGRAM_CHAT_ID` del proyecto Firebase `briz-4ef3a` mediante Secret Manager o `firebase functions:secrets:set`, sin enviar el token por chat. Activar trigger solo después; si no se hará ahora, pedir decisión explícita de aceptar release temporal sin Telegram. No fusionar hasta esa decisión/configuración.
+- Mantener `briz-staging` sin operaciones y sin Blaze. No forzar Preview hacia producción. Antes de continuar: confirmar respaldo recuperable y deployment de Vercel, revisar APIs/IAM/costos inesperados y dominios Auth; publicar backend/índices de forma explícita y compatible; después merge solo cuando se cierre Telegram; frontend nuevo antes de Rules estrictas; comprobar login, navegación y health sin writes reales.
+
 ## Estado vigente de release — 2026-10-21
 
 El siguiente resumen es el estado actual de solo lectura y supersede los estados antiguos que negaban acceso a Rules/Auth/Vercel. No ejecutar producción, push ni merge sin una autorización final del propietario.

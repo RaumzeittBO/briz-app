@@ -37,7 +37,10 @@ async function seed(): Promise<void> {
         await setDoc(doc(db, 'inventory', 'bike-cbba'), { id: 'bike-cbba', store: 'cochabamba', stock: 4 });
         await setDoc(doc(db, 'inventory', 'bike-la-paz'), { id: 'bike-la-paz', store: 'lapaz', stock: 3 });
         await setDoc(doc(db, 'inventory', 'manager-delete'), { id: 'manager-delete', store: 'cochabamba', stock: 1 });
-        await setDoc(doc(db, 'rentals', 'private-rental'), { id: 'private-rental', store: 'cochabamba', customerName: 'Test only' });
+        await setDoc(doc(db, 'rentals', 'private-rental'), {
+            id: 'private-rental', store: 'cochabamba', customerName: 'Test only',
+            status: 'pending', paymentStatus: 'unpaid', total: 40, amountPaid: 0,
+        });
         await setDoc(doc(db, 'rentalPaymentMovements', 'movement-cbba'), { id: 'movement-cbba', store: 'cochabamba', reservationCode: 'TEST-001', type: 'receipt', amount: 10 });
         await setDoc(doc(db, 'customers', 'legacy-customer'), { id: 'legacy-customer', password: 'test-hash' });
         await setDoc(doc(db, 'serviceOrders', 'workshop-order'), { id: 'workshop-order', store: 'cochabamba', status: 'Recibido' });
@@ -81,6 +84,22 @@ try {
     await test('manager is scoped to their store for private rental reads', async () => {
         await assertSucceeds(getDoc(doc(manager.firestore(), 'rentals', 'private-rental')));
         await assertFails(getDoc(doc(otherStoreManager.firestore(), 'rentals', 'private-rental')));
+    });
+    await test('Admin and Manager cannot directly alter rental lifecycle, payment, amount, or delete rentals', async () => {
+        const protectedFields = [
+            { status: 'confirmed' },
+            { paymentStatus: 'paid' },
+            { total: 1 },
+            { amountPaid: 40 },
+        ];
+        for (const context of [admin, manager]) {
+            for (const fields of protectedFields) {
+                await assertFails(updateDoc(doc(context.firestore(), 'rentals', 'private-rental'), fields));
+            }
+            await assertFails(deleteDoc(doc(context.firestore(), 'rentals', 'private-rental')));
+        }
+        await assertSucceeds(getDoc(doc(admin.firestore(), 'rentals', 'private-rental')));
+        await assertSucceeds(getDoc(doc(manager.firestore(), 'rentals', 'private-rental')));
     });
     await test('cash movement ledger reads are store-scoped and client writes stay forbidden', async () => {
         await assertSucceeds(getDoc(doc(admin.firestore(), 'rentalPaymentMovements', 'movement-cbba')));

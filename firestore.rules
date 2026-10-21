@@ -100,10 +100,9 @@ service cloud.firestore {
 
     match /rentals/{rentalId} {
       allow read: if isScopedRead();
-      // Public reservations are created through a server function. Admin SDK writes bypass rules.
+      // All lifecycle and financial writes go through trusted Functions/Admin SDK.
       allow create: if false;
-      allow update: if isScopedWrite();
-      allow delete: if isScopedDelete();
+      allow update, delete: if false;
     }
 
     match /rentalPaymentMovements/{movementId} {

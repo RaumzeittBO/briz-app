@@ -1,5 +1,15 @@
 # BRIZ — preparación de salida a producción
 
+## Gate actualizado de seguridad — 2026-10-21
+
+La regla local de `rentals` ahora niega todos los writes directos del Web SDK, incluidas escrituras/deletes de Admin y Manager. La prueba Emulator intenta cambios en `status`, `paymentStatus`, `total` y `amountPaid` para ambos roles y confirma `PERMISSION_DENIED`; la suite integrada confirma que callables autorizadas siguen confirmando, editando, cobrando, entregando, cancelando/devolviendo y manteniendo stock correcto. `npm run test:firebase`, reports, reconcile (8 fixtures/22 findings), core 16/16, TypeScript, build web, build Functions y ESLint del nuevo test pasaron. **La regla aún no está desplegada.**
+
+El release no avanzó a operaciones productivas: no se publicaron índices, Functions ni reglas, no se publicaron commits, no se fusionó PR #1 y no se modificó `main`/Vercel. No se hicieron escrituras de datos ni cambios de Auth. PR/remote deben revisarse de nuevo antes del release.
+
+**Bloqueo obligatorio antes del merge:** Telegram. La rama conserva el trigger basado en Secret Manager; no hay secreto rotado/verificado. El propietario debe revocar el token antiguo en BotFather, generar uno nuevo y cargarlo directamente en Secret Manager de `briz-4ef3a` como `TELEGRAM_BOT_TOKEN` (y `TELEGRAM_CHAT_ID`), nunca compartirlo en el chat. Luego se desplegará/verificará el trigger. Si no se configura en esta ventana, detenerse antes del merge y obtener decisión expresa del propietario para aceptar que temporalmente no habrá aviso Telegram. Las nuevas reservas sí continúan, con estado de outbox veraz.
+
+Siguiente paso al reanudar: resolver Telegram y comprobar de nuevo backup recuperable, deployment Vercel anterior/rollback, permisos IAM y APIs/costos estrictamente necesarios. En cualquier fallo crítico, detenerse antes de la operación afectada. Orden de compatibilidad: índices → Functions → frontend en `main` → Rules/Storage estrictas inmediatamente tras comprobar el frontend nuevo. No usar el `main` viejo con Rules estrictas antes de la transición.
+
 ## Addendum final de verificación — 2026-10-21
 
 Este addendum supersede los estados desactualizados más abajo que indican que Auth, Rules, Storage o los nombres de variables no pudieron verificarse. Solo se hicieron lecturas de consola y pruebas aisladas; no hubo escrituras, despliegue, push, merge ni modificación de `main`.
