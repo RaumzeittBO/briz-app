@@ -6,6 +6,13 @@
 
 Proyecto verificado en la sesión integrada: `briz-web` / `gfabrigtrf-7085s-projects`. Por autorización expresa del propietario, se guardaron y se verificaron tras recargar las siguientes variables en **Production únicamente** (no se muestran valores):
 
+### Firebase staging
+
+- Firebase CLI creó el proyecto `briz-staging` y su app web. No se enlazó una cuenta de facturación ni se activó Blaze.
+- La cuenta CLI pudo leer metadatos de producción y confirmó que la base Firestore `briz-4ef3a` está en `southamerica-west1`; se propone replicar esa región en staging. No se consultaron documentos.
+- Firestore Database no se creó: la API Firestore devolvió 403 por estar deshabilitada. Tampoco hay bucket, Functions ni alerta de presupuesto. Firebase Console integrada redirige a selector Google con sesión cerrada; no se automatizó login. `gcloud` no está instalado, así que no es posible consultar IDs de billing accounts desde este equipo.
+- Functions y Storage requieren Blaze según documentación oficial; la activación queda pendiente de que el propietario indique la cuenta de Cloud Billing permitida, el monto/moneda de alerta mensual y confirme el enlace a `briz-staging`. Un budget alert estándar no es un límite de gasto.
+
 | Variable | Entorno | Función |
 |---|---|---|
 | `VITE_FIREBASE_API_KEY` | Production | Firebase Web SDK |
@@ -57,14 +64,14 @@ No deployar ni mergear hasta completar staging aislado y las puertas anteriores.
 
 | Requisito | Estado | Acción previa a publicación |
 |---|---|---|
-| Funciones v2 / Node 22 | Código compila localmente; Emulator probó flujos; consulta `briz-4ef3a` devolvió cero Functions desplegadas | Confirmar cuota/plan, runtime regional, APIs y presupuesto/alertas; desplegar solo con autorización. Máquina/Emulator usan Node24 aunque el proyecto solicita Node22 |
-| Firebase Blaze y costos | El propietario informa que `briz-4ef3a` está en Blaze; no se cambió el plan ni se habilitó facturación en esta sesión | Confirmar presupuesto/alertas y costo esperado tras revisar carga/egress/Functions/Storage antes de publicación |
+| Funciones v2 / Node 22 | Código compila localmente; Emulator probó flujos; consulta `briz-4ef3a` devolvió cero Functions desplegadas. No hay Functions en staging | Cuenta billing autorizada + confirmación para Blaze en staging; presupuesto, APIs, runtime/región; desplegar solo en staging hasta validar. Máquina/Emulator usan Node24 aunque el proyecto solicita Node22 |
+| Firebase Blaze y costos | El propietario informa que producción `briz-4ef3a` está en Blaze. Staging `briz-staging` no tiene billing enlazado; no se activó Blaze | Propietario proporciona la cuenta de Billing permitida, budget mensual/moneda y confirma el enlace a staging; alertas no son límites automáticos |
 | App Check | Bloqueante: helper callable mantiene `enforceAppCheck: false` por defecto | Registrar app web y proveedor reCAPTCHA Enterprise, integrar token/debug solo en staging, métricas y endurecimiento gradual de cada callable; acordar enforcement |
 | Dominios Auth | No verificados en proyecto | Aprobar y añadir solo dominios públicos/preview necesarios; probar correo, recuperación y redirecciones |
 | Secret Manager / Telegram | Los secretos solo están declarados; no hay credenciales productivas | Rotar primero token expuesto en BotFather; propietario entrega/configura token y chat autorizados mediante Secret Manager, nunca `VITE_*` |
 | Recuperación de outbox | Bloqueante operativo identificado | Si el trigger cae después de marcar `sending`, el reintento ve `sending` y no reclama el registro. `skipped_unconfigured` tampoco se reintenta solo cuando después se cargan secretos. Diseñar lease/recovery y monitoreo; Telegram no ofrece idempotencia de envío, por lo que la recuperación automática puede duplicar mensajes tras un timeout ambiguo. Definir política con propietario antes de activarla |
 | Admin inicial / roles | Callable `provisionAdminUser` requiere un Admin activo existente; el bootstrap no es autogestionado | Acordar bootstrap de propietario por operación CLI segura, comprobar identidad y tienda, crear segundo Admin de recuperación y retirar credenciales temporales |
-| Firestore / Storage rules | Reglas locales pasan Emulator; publicación activa no verificable (gcloud no instalado) | Confirmar reglas publicadas; conciliar scopes legacy y desplegar reglas compatibles solo con autorización |
+| Firestore / Storage rules | Reglas locales pasan Emulator; producción activa no verificable (gcloud no instalado). Staging aún no tiene Firestore ni Storage | Después de habilitar Firestore API y resolver billing/Storage, desplegar reglas en staging primero y probar roles |
 | Índices Firestore | Consulta remota del 2026-10-21: cero índices compuestos; cuatro índices necesarios versionados en `firestore.indexes.json`, aún no desplegados | Validar en staging y desplegar índices antes de Functions/frontend |
 | Variables Vercel | Las nueve Firebase vars se guardaron en `briz-web` / Production y se verificaron tras recargar; ninguna se asignó a Preview. Todavía falta un deployment Production autorizado para validar el build/valores efectivos. | Mantener Preview sin Firebase hasta staging aislado; después configurar solo con los valores de ese staging |
 | Datos y archivos históricos | Solo reconciliación sintética/read-only preparada | Autorizar alcance; export protegido/desidentificado de Auth, Firestore y Storage; dry-run, mapeo aprobado, baseline de stock, checkpoints y criterios de parada. No migrar si hay combos ambiguos, stock sin baseline o grupos con estado discordante |
