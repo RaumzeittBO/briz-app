@@ -1,10 +1,10 @@
 # BRIZ — preparación de salida a producción
 
-## Actualización de preparación Firebase — 2026-10-21
+## Actualización de preparación Firebase — 2026-10-21 (posterior a autorización)
 
-### Configuración Vercel que requiere aprobación del propietario
+### Variables Vercel guardadas
 
-Proyecto verificado en la sesión integrada: `briz-web` / `gfabrigtrf-7085s-projects`. No se editaron valores. Alcance propuesto para añadir (nombres únicamente; no se muestran valores):
+Proyecto verificado en la sesión integrada: `briz-web` / `gfabrigtrf-7085s-projects`. Por autorización expresa del propietario, se guardaron y se verificaron tras recargar las siguientes variables en **Production únicamente** (no se muestran valores):
 
 | Variable | Entorno | Función |
 |---|---|---|
@@ -18,12 +18,14 @@ Proyecto verificado en la sesión integrada: `briz-web` / `gfabrigtrf-7085s-proj
 | `VITE_FIREBASE_ENVIRONMENT` | Production | Debe ser `production` |
 | `VITE_USE_FIREBASE_EMULATOR` | Production | Debe ser `false` |
 
-Preview no debe recibir ninguna variable Firebase hasta disponer de un proyecto staging, bucket, Auth, Functions y datos separados. El build de Vercel rechaza Production como destino Preview, y el cliente rechaza cualquier proyecto `briz-4ef3a` fuera de Production. La ausencia de variables produce error explícito.
+Preview no recibió Firebase. Debe seguir sin variables hasta disponer de un proyecto staging, bucket, Auth, Functions y datos separados. El build rechaza Preview sin staging y el cliente rechaza cualquier proyecto `briz-4ef3a` fuera de Production. La ausencia de variables produce error explícito.
 
 ### Puertas aún cerradas
 
-- Vercel todavía no tiene `VITE_FIREBASE_*`; la sesión no ha escrito nada. La configuración propuesta espera aprobación del propietario.
-- Firebase `briz-4ef3a`: último chequeo CLI read-only mostró cero Functions y cero índices compuestos. Rules/Storage publicadas no quedaron verificables. El repositorio declara cuatro compuestos locales; nada se desplegó.
+- Variables Firebase guardadas en Vercel Production; no se ha ejecutado un deployment para hacerlas efectivas ni verificar un build remoto. Guardar las variables no creó un deployment. Preview continúa bloqueado de forma intencional.
+- Build Logs de Preview `2c288ad`, `bc879d9`, `d1009c9`, `d9905b2`: mismo error exacto `Firebase is disabled for Vercel Preview until a dedicated staging Firebase project is configured.` No agregar Firebase productivo a Preview ni iniciar más builds antes de provisionar staging.
+- Firebase `briz-4ef3a`: consulta CLI read-only del 2026-10-21 muestra cero Functions desplegadas y cero índices compuestos remotos. Rules/Storage publicadas no quedaron verificables. El repositorio declara cuatro compuestos locales y apunta Rules, Storage Rules, índices y Functions en `firebase.json`; nada se desplegó.
+- Revalidación local 2026-10-21 con `demo-briz-security`: `npm run test:firebase` pasó (config 9 checks, Rules Firestore/Storage, Auth/Firestore/Functions/Storage integrados); `test:reports`, `test:reconcile` (8 fixtures/22 hallazgos), motor (16/16), TypeScript y build web pasaron. La compilación Functions pasó en el flujo Firebase; `npm test --prefix functions` no tiene tests que coincidan con su glob (0 tests detectados). Avisos no bloqueantes: Emulator usa Node24 frente al Node22 declarado, `/noise.png` sin resolver y chunk JS ~1.97 MB.
 - No activar el trigger Telegram hasta rotar token viejo en BotFather y cargar el nuevo como Secret Manager de Functions. Nunca poner token en `VITE_*`, repo o chat. No eliminar valores existentes en Vercel hasta que se verifique el endpoint nuevo y la rotación.
 - PR #1 Draft; `main` no modificado. El merge no está listo: falta staging, rollout backend compatible, validación visual/funcional, comprender el auto-deploy Production, snapshot restaurable y rollback.
 - El commit de código `d1009c948ea1de4f0de10dbec40b88c628d355a7` y el de documentación `d9905b286296f2b763dd1bbfe5b60b7b49f5465f` están publicados; `ls-remote` coincide con `d9905b2`. PR #1 OPEN/Draft, sin checks asociados al head actual. El panel Vercel de Deployments muestra como último artefacto visible `084dcb2` Ready, sin deployment actual del commit nuevo; Vercel API retorna 403 y CLI fallback dice que el scope no existe. `www.briz.com.bo` carga el sitio de `main` anterior (`0140452`), comprobado solo como página pública de lectura.
@@ -31,7 +33,7 @@ Preview no debe recibir ninguna variable Firebase hasta disponer de un proyecto 
 
 `VERCEL_ENV` está documentado por Vercel como variable disponible en build/runtime; además se observó el checkbox de System Environment Variables habilitado en el proyecto. Referencia: [Vercel System Environment Variables](https://vercel.com/docs/environment-variables/system-environment-variables).
 
-No deployar ni mergear hasta que el propietario confirme las variables y las puertas anteriores estén cerradas.
+No deployar ni mergear hasta completar staging aislado y las puertas anteriores.
 
 ## Addendum — Caja y gates de PR #1 (2026-10-21)
 
@@ -56,20 +58,20 @@ No deployar ni mergear hasta que el propietario confirme las variables y las pue
 | Requisito | Estado | Acción previa a publicación |
 |---|---|---|
 | Funciones v2 / Node 22 | Código compila localmente; Emulator probó flujos; consulta `briz-4ef3a` devolvió cero Functions desplegadas | Confirmar cuota/plan, runtime regional, APIs y presupuesto/alertas; desplegar solo con autorización. Máquina/Emulator usan Node24 aunque el proyecto solicita Node22 |
-| Firebase Blaze y costos | No activado | Propietario autoriza plan, presupuesto/alertas y costo esperado tras revisar carga/egress/Functions/Storage |
+| Firebase Blaze y costos | El propietario informa que `briz-4ef3a` está en Blaze; no se cambió el plan ni se habilitó facturación en esta sesión | Confirmar presupuesto/alertas y costo esperado tras revisar carga/egress/Functions/Storage antes de publicación |
 | App Check | Bloqueante: helper callable mantiene `enforceAppCheck: false` por defecto | Registrar app web y proveedor reCAPTCHA Enterprise, integrar token/debug solo en staging, métricas y endurecimiento gradual de cada callable; acordar enforcement |
 | Dominios Auth | No verificados en proyecto | Aprobar y añadir solo dominios públicos/preview necesarios; probar correo, recuperación y redirecciones |
 | Secret Manager / Telegram | Los secretos solo están declarados; no hay credenciales productivas | Rotar primero token expuesto en BotFather; propietario entrega/configura token y chat autorizados mediante Secret Manager, nunca `VITE_*` |
 | Recuperación de outbox | Bloqueante operativo identificado | Si el trigger cae después de marcar `sending`, el reintento ve `sending` y no reclama el registro. `skipped_unconfigured` tampoco se reintenta solo cuando después se cargan secretos. Diseñar lease/recovery y monitoreo; Telegram no ofrece idempotencia de envío, por lo que la recuperación automática puede duplicar mensajes tras un timeout ambiguo. Definir política con propietario antes de activarla |
 | Admin inicial / roles | Callable `provisionAdminUser` requiere un Admin activo existente; el bootstrap no es autogestionado | Acordar bootstrap de propietario por operación CLI segura, comprobar identidad y tienda, crear segundo Admin de recuperación y retirar credenciales temporales |
 | Firestore / Storage rules | Reglas locales pasan Emulator; publicación activa no verificable (gcloud no instalado) | Confirmar reglas publicadas; conciliar scopes legacy y desplegar reglas compatibles solo con autorización |
-| Índices Firestore | Consulta remota previa: cero índices compuestos; cuatro índices necesarios ya versionados en `firestore.indexes.json`, aún no desplegados | Validar en staging y desplegar índices antes de Functions/frontend |
-| Variables Vercel | Sesión integrada verificó `briz-web`; no hay Firebase vars. Tabla Production-only pendiente de aprobación. | Configurar `main`/Production después de confirmar; Preview queda sin Firebase hasta proyecto staging aislado |
+| Índices Firestore | Consulta remota del 2026-10-21: cero índices compuestos; cuatro índices necesarios versionados en `firestore.indexes.json`, aún no desplegados | Validar en staging y desplegar índices antes de Functions/frontend |
+| Variables Vercel | Las nueve Firebase vars se guardaron en `briz-web` / Production y se verificaron tras recargar; ninguna se asignó a Preview. Todavía falta un deployment Production autorizado para validar el build/valores efectivos. | Mantener Preview sin Firebase hasta staging aislado; después configurar solo con los valores de ese staging |
 | Datos y archivos históricos | Solo reconciliación sintética/read-only preparada | Autorizar alcance; export protegido/desidentificado de Auth, Firestore y Storage; dry-run, mapeo aprobado, baseline de stock, checkpoints y criterios de parada. No migrar si hay combos ambiguos, stock sin baseline o grupos con estado discordante |
 | Ciclo Admin visual | Parcial; alta manual fue abierta antes; ciclo restante no validado visualmente | Completar [`BRIZ_ADMIN_MANUAL_VALIDATION.md`](./BRIZ_ADMIN_MANUAL_VALIDATION.md) en Emulator, desktop y 360–430 px |
 | Tests, lint y build | Cierre 2026-10-21: `test:firebase` (Rules + Functions/Auth/Firestore/Storage) pasó con timeout Emulator aumentado a 60s; `test:reports`, `test:reconcile` (8 fixtures/22 findings), motor (16/16), `tsc --noEmit`, web y Functions build pasaron. Lint dirigido a tres Admin pages: 31 `no-explicit-any` previos; helper/Functions/tests limpios. | Mantener y corregir deuda lint en fase dedicada. Build avisa `/noise.png` y bundle ~1.97MB. Emulator ejecutó Node24, Functions pide Node22; validar Node22 en CI/staging |
 | Caja (decisión Owner) | Corregido y confirmado por Emulator/reportes: bruto100, reembolso25, efectivo75, corrección5, reconocido70, pendiente0, estado paid; abono extra rechazado | Recorrido visual Owner en entorno aislado antes de merge |
-| PR #1 / main | OPEN Draft y sin merge. Código probado publicado como `d2e07529673a19b45ae278bb6581aecb055fb3b1`; remoto coincide. Consulta post-push: sin checks nuevos aún. Consulta Firebase indica cero Functions; Vercel production branch no comprobada | Esperar y revisar checks del último HEAD; resolver Preview aislado, Functions/Rules/índices/plan, backup restaurable y rollback antes de aprobación |
+| PR #1 / main | OPEN Draft y sin merge. Rama de estabilización sincronizada en `2c288adccb2e49c43ea568e801168760f5c27030` antes de esta nota. Cuatro Preview recientes fallan por el guard de staging; `main` no se cambió | Crear staging, desplegar y validar backend ahí, activar Preview, validar Production variables con deployment coordinado, backup restaurable y rollback antes de aprobación |
 
 ## Sesión local preparada para completar la revisión visual
 
