@@ -1,5 +1,30 @@
 # BRIZ (`briz.com.bo`) — DOCUMENTO DE HANDOFF TÉCNICO PARA CODEX
 
+## Estado vigente del cierre de caja — 2026-10-21
+
+- Base de trabajo: `41a74773db88ae3fddc30bded64b6d29239f7f87`. Commit final actual `5abcd1f2c1bb21258c0edaef832b4f3388fcb5cb`, publicado en `origin/codex/briz-critical-stabilization-20261020`; `git ls-remote` coincide con HEAD. `origin/main` en la última consulta: `0140452678d23e6e352dcaacd353bfe7342912f5`.
+- Ledger `rentalPaymentMovements`: abonos parciales/múltiples, devoluciones de dinero explícitas, correcciones no monetarias, actor/sede/método/importe/fecha real/referencia, idempotencia y auditoría. QR/transferencia exige confirmación; reembolso/corrección requiere confirmación, motivo y referencia. Solo callable escribe; lectura es por sede.
+- Se retiró el endpoint heredado que alteraba `paymentStatus` sin movimiento. Se encontró y corrigió el doble conteo de cobros legacy sintéticos cuando una fila ya estaba marcada pagada por el propio ledger. Reportes distinguen contratado, cobrado, reembolsado, corregido, neto y pendiente; fechas reales de movimientos y programación se mantienen separadas.
+- Regla conservadora implementada: reembolso no reabre deuda contractual; corrección reduce valor reconocido y eleva el saldo, pero no es flujo de caja. Requiere aprobación del propietario antes de producción; no se simula una transferencia real ni se borran cobros.
+- Casos de Emulator: importe conocido Bs. 100 con abonos Bs. 40/Bs. 60 y concurrencia idempotente, reembolso Bs. 25, exceso rechazado, QR sin confirmación rechazado, corrección y permisos por sede. Rerun de `npm run test:firebase` pasó luego del fix de doble conteo. `test:reports`, `test:reconcile` (8 casos/22 hallazgos), motor 16/16, TypeScript y build web/Functions pasaron; el build avisa `/noise.png` y bundle JS ~1.97 MB.
+- ESLint dirigido final: 38 errores existentes en Admin/contexto (principalmente `no-explicit-any`, además reglas Fast Refresh). El único `prefer-const` dirigido fue corregido. Los helpers, Functions y scripts seleccionados pasan ESLint limpios. Estos errores no corresponden al ledger nuevo.
+- No se completó click-through visual: el navegador automatizado bloquea localhost y no se intentó evadir. La revisión owner/manual en escritorio y móvil sigue pendiente; usar `BRIZ_ADMIN_MANUAL_VALIDATION.md` exclusivamente con `demo-briz-security`.
+- Merge a `main` bloqueado: no se pudo confirmar toda configuración GitHub/Vercel/Actions; lista vacía de Vercel accesible no demuestra ausencia de despliegue automático. Además las reglas/Functions no están desplegadas en Firebase real. Preparar PR sin merge; nunca desplegar como parte de este cierre.
+- PR draft #1 abierto como `pachaxbo-commits`: [https://github.com/RaumzeittBO/briz-app/pull/1](https://github.com/RaumzeittBO/briz-app/pull/1). Estado GitHub: abierto, no fusionado, base SHA `0140452678d23e6e352dcaacd353bfe7342912f5`, head SHA `5abcd1f2c1bb21258c0edaef832b4f3388fcb5cb`.
+
+### Clasificación y siguiente bloque
+
+| Área | Estado |
+|---|---|
+| Alquileres Admin / transiciones / caja | Implementado; pruebas automatizadas superadas; click-through visual pendiente |
+| Inventario / disponibilidad / reportes | Pruebas automatizadas superadas; revisión visual manual pendiente |
+| Integración a `main` | PR Draft listo para revisión, merge bloqueado por despliegue automático no confirmado y dependencia de Rules/Functions aún no productivas |
+| Producción | Bloqueada; no lista para release. No desplegar ni migrar sin verificación/autorización |
+
+Pendiente para fases posteriores: completar revisión manual; conciliación y migración histórica autorizada; Blaze/App Check/secretos/Telegram; auditoría integral restante de Admin; traducción ES/EN y diez artes en inglés; responsive completo y categorías/eventos móvil; gestor de imágenes Home desde Admin; ESLint restante y optimización; despliegue coordinado con autorización expresa. El último commit funcional publicado es `5abcd1f2c1bb21258c0edaef832b4f3388fcb5cb`; este documento queda en un commit de cierre posterior en la misma rama.
+
+> Las secciones siguientes conservan el handoff previo como historial. Las políticas de pago descritas allí que contradigan este encabezado están supersedidas.
+
 ## Incidencia de cobros y exclusión de acciones — 2026-10-21 (continuación)
 
 - En esta continuación se corrigió el alcance por sede de métricas monetarias y del gráfico de recibos. Contratado/pendiente siguen la fecha programada del alquiler; cobrado sigue `paidAt` (America/La_Paz). Las filas de dos sedes, anticipos, devoluciones y registros con un estado de pago corregido están cubiertas en `test:reports`.
@@ -12,6 +37,8 @@
 - Cierre Git: consultar el SHA y resultado de `git ls-remote` informados tras commit/push. No ejecutar producción, despliegue, merge, billing, App Check ni Telegram.
 
 ## Hotfix alquileres/reportes — 2026-10-21
+
+> Registro histórico anterior al ledger. Las referencias a cambios manuales de `paymentStatus` y ausencia de movimientos parciales/reembolsos no describen el comportamiento vigente.
 
 - Rama base `codex/briz-critical-stabilization-20261020`; SHA publicado al iniciar este hotfix `d4e89af173ad98670bbd5b1039f0d54392b4735`. Consultar historial de Git y `git ls-remote` para el commit final.
 - Commit de implementación del hotfix `54605b98b25278f82d8a44c1853be5872ff46f64`; el push normal terminó correctamente y `git ls-remote` coincidió. La actualización de este handoff se publica en un commit documental separado.

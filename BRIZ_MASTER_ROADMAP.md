@@ -1,22 +1,49 @@
 # BRIZ (`briz.com.bo`) — MASTER ROADMAP & ENGINEERING LOG
 
-## Incidencia de conciliación de sede y acciones de pago — 2026-10-21 (en curso)
+## Cierre de caja auditable y reportes por sede — 2026-10-21 (publicado; revisión manual pendiente)
 
-- Corrección local: el resumen de alquileres y su gráfico filtran por sede; el efectivo continúa fechado por `paidAt`, mientras contratado/pendiente usan fecha programada. Las pruebas cubren dos sedes, pagos anticipados, devolución y cobro corregido.
-- Las operaciones Admin ahora adquieren bloqueo por grupo (no por tipo de operación); confirmación, pago, entrega, cancelación, expiración, edición y devolución ignoran doble ejecución, bloquean transiciones rivales, reflejan carga y conservan el modal ante error. Errores permanecen visibles vía alerta y permiten reintento.
-- Pago corregido de `paid` a `unpaid`/`pending_review` conserva importe/fecha originales como evidencia, añade before/after al log y deja de sumar como efectivo vigente. No se borra un cobro ni se crea reembolso. La representación de reembolsos, pagos parciales y ajustes de caja queda bloqueada hasta decisión comercial explícita.
-- Fixtures y suite de Emulator comprueban sede/date, pago anticipado, devolución y trazabilidad al corregir estado. Aún no se declara click-through visual de la interfaz; el propietario debe ejecutar el recorrido corto al inicio de [`BRIZ_ADMIN_MANUAL_VALIDATION.md`](./BRIZ_ADMIN_MANUAL_VALIDATION.md).
-- Validación ejecutada en este cierre: `npm run test:firebase` (reglas Firestore/Storage e integración Functions/Auth/Firestore/Storage) pasó en `demo-briz-security`; `npm run test:reports`, `npm run test:reconcile` (8 alquileres sintéticos/22 hallazgos), motor (16/16), `npx tsc --noEmit`, `npm run build` y `npm run build --prefix functions` pasaron. ESLint de helper/Functions/scripts pasó limpio; ESLint dirigido a las páginas Admin muestra 25 errores `no-explicit-any` en código operativo preexistente (20 alquileres, 5 reportes), que no impiden build ni pruebas. Los builds conservan `/noise.png` y aviso de chunk principal ~1.96 MB.
-- Recorrido visual no ejecutado automáticamente; queda al propietario siguiendo el checklist, con Emulator exclusivamente. Este cierre no hizo deploy, merge, migración, ni mutaciones reales.
-- Cierre Git: ver el encabezado actualizado del handoff para commit local/remoto y estado de rama.
+- La métrica monetaria ahora restringe contratos y movimientos por la sede elegida; contratos/pendientes usan fecha programada y recibos/reembolsos/correcciones usan su fecha real. Contratado, pendiente, cobrado bruto, reembolsado, correcciones no monetarias y neto se informan por separado.
+- Se agregó `recordRentalPaymentMovement`: recibos parciales/múltiples, reembolsos y correcciones son movimientos inmutables, idempotentes, con actor, sede, motivo/referencia y auditoría. QR/transferencia requieren confirmación recibida; reembolso/corrección requieren confirmación explícita; un reverso no puede superar el cobro disponible. Un reembolso no recrea deuda. Correcciones reducen valor reconocido y elevan saldo contractual; no representan salida de efectivo. Requiere aprobación manual del propietario antes de uso productivo.
+- Se retiró la callable heredada que mutaba `paymentStatus` sin movimiento de caja. Se detectó y corrigió un defecto de inicialización: una proyección `paid` creada por el ledger podía ser reinterpretada como pago legacy, duplicando importes; los recibos legacy solo se sembrarán cuando el grupo no tenga ledger.
+- Los controles Admin presentan movimiento de caja en pedidos pagados o pendientes; bloqueo por grupo conserva carga/reintento. Validación visual sigue pendiente del propietario por restricción de navegación a localhost; no se declara como realizada.
+- Emulator `demo-briz-security`: `npm run test:firebase` pasó (rules, Auth/Firestore/Functions/Storage, Bs. 100 en abonos 40+60 concurrentes/idempotentes, corrección, reembolso Bs. 25, sobre-reembolso, QR no confirmado, ciclo de stock); `npm run test:reports`, `npm run test:reconcile` (8 fixtures/22 hallazgos), motor (16/16), TypeScript y builds web/Functions pasan. Build conserva aviso `/noise.png` y bundle ~1.97 MB. ESLint dirigido reporta 38 errores preexistentes en Admin/contexto, principalmente `no-explicit-any`, además reglas Fast Refresh; archivos helper/Functions/scripts seleccionados sin errores.
+- Sin deploy, merge, migración, acceso o escritura productiva. La preparación de PR no autoriza merge: no está demostrada la configuración de despliegue automático de Vercel/Actions.
+- Próxima acción: completar revisión manual del checklist con Emulator, aprobar semántica comercial de correcciones y obtener verificación de integración/deploy antes de considerar merge.
+- Publicación: commit `5abcd1f2c1bb21258c0edaef832b4f3388fcb5cb` está en `origin/codex/briz-critical-stabilization-20261020`; `git ls-remote` coincide. `origin/main` consultada: `0140452678d23e6e352dcaacd353bfe7342912f5`. PR draft #1: [BRIZ: cierre de caja auditable y estabilización de alquileres](https://github.com/RaumzeittBO/briz-app/pull/1). El PR lo abrió `pachaxbo-commits`; está abierto/no fusionado.
+
+### Estado de módulos de este cierre
+
+| Módulo | Estado |
+|---|---|
+| Alquileres Admin y bloqueo por grupo | Implementado; automatización de ciclo/inventario superada; revisión visual owner pendiente |
+| Ledger de caja | Implementado y probado en Emulator con importes conocidos, concurrencia/idempotencia y permisos; semántica de corrección requiere aprobación comercial |
+| Inventario y disponibilidad | Suite automatizada superada para stock una vez, retorno sano/dañado y fechas; visual pendiente |
+| Dashboard/Reports | Filtros por sede y fecha de movimiento superados en fixtures; UI visual pendiente |
+| Exportación e impresión | Rutas revisadas por código, click-through manual pendiente |
+| Integración a `main` | PR #1 en borrador; merge bloqueado hasta comprobar disparadores de despliegue y resolver compatibilidad/migración productiva |
+| Producción | Bloqueada: no es release listo; no desplegar Rules/Functions/frontend ni ejecutar migraciones sin autorización |
+
+### Fases futuras — siguen pendientes
+
+1. Revisión visual manual de caja, alquileres, inventario y reportes en escritorio/móvil (360–430 px).
+2. Conciliación/migración de históricos con respaldo autorizado y dry-run.
+3. Preparación de Firebase Blaze, App Check, secretos y Telegram (sin activarlos aún).
+4. Revisión integral restante del panel Admin.
+5. Traducción natural e integral ES/EN y diez artes pendientes en inglés.
+6. Responsive de todas las páginas y categorías/eventos en alquiler móvil.
+7. Gestor Admin de imágenes Home (después de cerrar alquileres críticos).
+8. Limpieza ESLint y optimización.
+9. Despliegue coordinado solo después de verificación y autorización.
 
 ## Incidencia crítica de alquileres y cobros — 2026-10-21
 
+> Registro histórico previo al ledger de caja; las afirmaciones sobre corregir `paymentStatus` y no soportar abonos/reembolsos fueron sustituidas por el cierre descrito arriba. No son el comportamiento vigente.
+
 - **Confirmación duplicada:** el registro que observó el propietario no se pudo recuperar ni inspeccionar, así que no se afirma que hubiera dos documentos. Sí se confirmó un fallo UX en el código: el modal de detalle se cerraba antes de resolver la solicitud y los botones no daban estado ocupado. Se corrigió para esperar éxito, mostrar “Confirmando…” y bloquear repetición local. El backend ya protegía el stock en transacción mediante estado y `stockDeducted`; las regresiones Emulator ahora prueban dos confirmaciones concurrentes, un único documento y un solo descuento. La creación manual conserva la clave idempotente hasta que alta y confirmación concluyan, también cubre respuesta perdida/reintento.
-- **Importes en cero:** causa comprobada en `ReportsPage`: cobros se filtraban por la fecha programada del alquiler, no por cuándo se recibió el dinero, y no había `paidAt`. Cobrar hoy un alquiler futuro lo excluía del período y el total principal podía mezclar pendiente y contratado. Se registra `paidAt`/`amountPaid` al crear un alquiler manual ya pagado o al cambiar a pagado; reportes y Dashboard separan monto contratado (fecha del alquiler), pendiente y efectivo cobrado (fecha del pago, La Paz). Los cobros persistidos permanecen en efectivo recibido después de cancelación/devolución; el sistema no infiere reembolsos. Cobros legacy sin `paidAt` no reciben fechas inventadas: se excluyen de rangos fechados y se identifican en Todo el historial.
+- **Importes en cero (estado previo):** el reporte originalmente filtraba cobros por fecha programada; después se separaron fechas contractuales y fechas reales de movimientos. El ledger actual y el tratamiento de legacy se documentan en el cierre superior.
 - Devolución dañada se conserva sin multas/cobros automáticos; Emulator cubre devolución sana, dañada y pago posterior a devolución. Los pagos/historial permanecen en el documento.
 - **Validación visual:** no completada. La política del navegador automatizado bloquea localhost y no se intentó evadirla. El checklist manual se actualizó; no se declara que se hayan operado botones/modal ni vistas responsive.
-- **Pruebas de esta corrección:** `test:reports`, motor 16/16, `test:reconcile`, TypeScript, builds web/Functions y suites Emulator pasaron. La primera integración ampliada detectó contaminación del fixture al dejar una bicicleta confirmada; se agregó cancelación de limpieza y el rerun completo pasó. Lint dirigido reporta 32 problemas preexistentes en los archivos Admin (principalmente `any` y una incompatibilidad de memoización React Compiler); se mantienen fuera del alcance de esta incidencia.
+- **Pruebas de esa corrección (histórico):** los resultados y hallazgos actuales están en el cierre superior y en el handoff actualizado.
 - Seguridad: Emulator `demo-briz-security` solamente; ninguna operación contra producción, ningún deploy, merge o servicio facturable.
 - Git: `54605b98b25278f82d8a44c1853be5872ff46f64` (`fix(admin): make rental actions and receipts idempotent`) se publicó con push normal. `git ls-remote` coincidió con ese SHA; este registro documental se agrega en un commit aparte.
 - Próximo paso ejecutable: completar el checklist visual desde el navegador del propietario apuntando exclusivamente a Emulators; después preparar dry-run de conciliación histórica con fixture/copia desidentificada autorizada. Mantener App Check/Telegram pausados.
