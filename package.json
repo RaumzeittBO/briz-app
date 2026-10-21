@@ -12,6 +12,7 @@
     "test:firebase": "npm run test:firebase-config && node scripts/prepare-emulator-secrets.cjs && npm run build --prefix functions && npm run test:rules && firebase emulators:exec --project demo-briz-security --only \"auth,firestore,functions,storage\" \"npx tsx scripts/firebase-emulator.integration.ts\"",
     "test:reconcile": "npx tsx scripts/reconcile-rentals.test.ts",
     "test:reports": "npx tsx scripts/rental-report-money.test.ts",
+    "test:reservation-receipt": "npx tsx scripts/reservation-receipt-copy.test.ts",
     "seed:admin-visual": "npx tsx scripts/seed-admin-visual.ts",
     "reconcile:rentals": "firebase emulators:exec --project demo-briz-security --only firestore \"npx tsx scripts/reconcile-rentals.ts\"",
     "preview": "vite preview"

@@ -12,6 +12,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { useStore, type InventoryItem } from '@/context/StoreContext';
 import { useLanguage } from '@/context/LanguageContext';
 import { t, getLocalizedField } from '@/lib/translations';
+import { getReservationReceiptCopy } from '@/lib/reservationReceiptCopy';
 import DeliveryMapPicker from './DeliveryMapPicker';
 import { addDaysToDateString, toBoliviaDateString } from '@/lib/dateUtils';
 import { getAccessoryAddonUnitPrice, parseDurationToHours } from '@/lib/rentalPricing';
@@ -1564,12 +1565,10 @@ export default function RentalCheckoutWizard({
                                     {language === 'es' ? 'Código' : 'Code'}: {reservationCode}
                                 </p>
                                 <h2 className="font-tan text-2xl uppercase text-brand-black leading-tight">
-                                    {paymentMethod === 'cash'
-                                        ? (language === 'es' ? 'Tu pedido está en estado reservado hasta realizar el pago' : 'Your booking is reserved until payment is completed')
-                                        : (language === 'es' ? 'Tu pedido está confirmado' : 'Your booking is confirmed')}
+                                    {getReservationReceiptCopy(language === 'es' ? 'es' : 'en').title}
                                 </h2>
                                 <p className="text-xs font-semibold text-brand-charcoal/70 leading-relaxed font-sans">
-                                    {language === 'es' ? 'Recibirás confirmación cuando tu pedido esté listo para ser entregado.' : 'You will receive confirmation once your order is ready for pickup or delivery.'}
+                                    {getReservationReceiptCopy(language === 'es' ? 'es' : 'en').description}
                                 </p>
                             </div>
 
