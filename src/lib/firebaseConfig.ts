@@ -82,7 +82,7 @@ export function resolveFirebaseRuntimeConfig(
   if (deployment === 'production' && config.projectId !== PRODUCTION_PROJECT_ID) {
     throw new Error(`Vercel Production must use Firebase project ${PRODUCTION_PROJECT_ID}.`);
   }
-  if ((deployment === 'preview' || deployment === 'local') && config.projectId === PRODUCTION_PROJECT_ID) {
+  if (deployment !== 'production' && config.projectId === PRODUCTION_PROJECT_ID) {
     throw new Error(`Firebase project ${PRODUCTION_PROJECT_ID} is forbidden outside Vercel Production.`);
   }
 
