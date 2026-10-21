@@ -125,12 +125,18 @@ try {
     assert.equal(group.size, 2);
     const outbox = await adminDb.collection('telegramOutbox').where('reservationCode', '==', first.reservationCode).get();
     assert.equal(outbox.size, 1);
+    let notificationStatus = outbox.docs[0].get('status');
+    for (let attempt = 0; attempt < 120 && notificationStatus === 'pending'; attempt += 1) {
+        await new Promise((resolve) => setTimeout(resolve, 500));
+        notificationStatus = (await outbox.docs[0].ref.get()).get('status');
+    }
+    assert.equal(notificationStatus, 'skipped_unconfigured', 'Emulator booking succeeds while notification is truthfully marked unconfigured.');
     const projection = await adminDb.collection('rentals_busy_slots').where('availabilityGroupId', '==', group.docs[0].data().availabilityGroupId).get();
     assert.equal(projection.size, 2);
     assert.ok(projection.docs.every((slot) => !('customerName' in slot.data()) && !('customerPhone' in slot.data()) && !('customerCI' in slot.data())));
     const ownHistory = await call<{ rentals: Array<Record<string, unknown>> }>(userA.functions, 'getMyRentals');
     assert.ok(ownHistory.rentals.some((rental) => rental.reservationCode === first.reservationCode));
-    pass('Booking is priced on server, atomic, idempotent and emits private outbox/public sanitized slots');
+    pass('Booking is priced on server, atomic, idempotent and emits private outbox/public sanitized slots; Telegram absence does not block booking');
 
     const comboDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/La_Paz' }).format(new Date(Date.now() + 3 * 24 * 60 * 60 * 1000));
     const comboBooking = {

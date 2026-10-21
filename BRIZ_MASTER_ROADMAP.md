@@ -1,5 +1,32 @@
 # BRIZ (`briz.com.bo`) — MASTER ROADMAP & ENGINEERING LOG
 
+## Configuración Firebase/Vercel y bloqueo de release — 2026-10-21
+
+- Vercel integrado: URL `vercel.com/gfabrigtrf-7085s-projects/briz-web/settings/environment-variables`, proyecto y equipo coinciden. Solo se leyeron nombres/alcances; no se leyeron ni cambiaron valores. No hay variables `VITE_FIREBASE_*`. Las variables existentes visibles son `VITE_TELEGRAM_CHAT_ID`, `VITE_TELEGRAM_BOT_TOKEN` y `VITE_GOOGLE_MAPS_API_KEY`, todas en Production y Preview. No tocar otros proyectos.
+- La configuración web oficial del Firebase `briz-4ef3a` ya fue contrastada de solo lectura con `src/lib/firebase.ts`; los campos coinciden. Ningún recurso productivo fue escrito. Firebase CLI había mostrado cero Functions desplegadas e índices compuestos; Rules desplegadas no verificables. El repositorio ahora declara cuatro índices compuestos requeridos por consultas del código.
+- Cambios locales: Firebase se configura con una lista explícita de `VITE_FIREBASE_*`; Production exige `briz-4ef3a`, y Emulator usa `demo-briz-security`. Vite valida en build la separación por `VERCEL_ENV`; Preview rechaza Production y queda bloqueado hasta existir un proyecto Firebase de staging. Sin configurar Firebase, el cliente da un error explícito y nunca elige un proyecto por defecto. `.env.example` solo habilita Emulator. Un sentinel de prueba `VITE_TELEGRAM_BOT_TOKEN` no apareció en el bundle.
+- Telegram conserva la reserva si el envío no está configurado; outbox refleja `skipped_unconfigured`, `failed`, `delivery_unknown` o `sent` únicamente tras confirmación. Se deshabilitaron reintentos automáticos después de resultados explícitos o ambiguos para evitar duplicados. El trigger de Functions usa Secret Manager, pero no está desplegado; las variables Vercel antiguas siguen presentes y no se retiraron. El propietario debe rotar el token en BotFather y confirmar por canal seguro antes de cargar el secreto nuevo o retirar valores previos.
+- Suites: `test:firebase` (Rules + Auth/Firestore/Functions/Storage Emulator y recorrido integrado) pasó; `test:firebase-config` 7 checks; Reportes, reconciliación 8 fixtures/22 hallazgos, motor 16/16, TypeScript, Functions build, build web Emulator y ESLint dirigido pasaron. La corrida inicial de la regresión del outbox leyó antes de que Eventarc procesara; se corrigió la espera y la suite final pasó. Build mantiene advertencias conocidas de `/noise.png` y bundle ~1.97 MB; Functions Emulator usa Node24 frente a runtime Node22.
+- No se modificó Vercel, Firebase, usuarios, reservas o inventario reales; no se desplegó ni fusionó. PR #1 sigue Draft. `main` permanece sin cambios. Antes de agregar estas variables a Vercel, el propietario debe aprobar esta lista (solo Production; ningún Firebase Preview): `VITE_FIREBASE_API_KEY`, `VITE_FIREBASE_AUTH_DOMAIN`, `VITE_FIREBASE_PROJECT_ID`, `VITE_FIREBASE_STORAGE_BUCKET`, `VITE_FIREBASE_MESSAGING_SENDER_ID`, `VITE_FIREBASE_APP_ID`, `VITE_FIREBASE_MEASUREMENT_ID`, `VITE_FIREBASE_ENVIRONMENT`, `VITE_USE_FIREBASE_EMULATOR`. No se muestran valores; las variables públicas del SDK se incorporan al bundle web.
+- Merge/release sigue bloqueado hasta aprobación de la lista, backend compatible desplegado y probado en staging/producción con migración compatible, secreto Telegram rotado y cargado por vía segura, Preview aislado, Rules/Functions/índices verificados, revisión visual del propietario, backup restaurable y rollback ensayado. No se autorizó aún el merge ni el deploy.
+
+### Siguiente paso ejecutable
+
+El propietario confirma la tabla de variables para Production. Después se guardan desde la sesión integrada, se valida el build de Production sin publicar, se crea/identifica staging Firebase antes de habilitar Preview, se rota el token Telegram fuera del chat y se completa la revisión backend/backup. No pasar a `main` hasta cerrar todas las puertas de release.
+
+### Fases siguientes conservadas
+
+1. Conciliación/migración histórica con respaldo, dry-run y reversibilidad.
+2. Blaze/App Check/Telegram y credenciales, sin activar nada hasta autorización y rotación.
+3. Revisión integral del panel Admin.
+4. Traducción natural completa ES/EN.
+5. Diez artes pendientes en inglés.
+6. Responsive de todas las páginas.
+7. Categorías/eventos móvil.
+8. Gestor de imágenes Home desde Admin.
+9. ESLint real y optimización.
+10. Preparación y despliegue coordinado, solo con autorización.
+
 ## Auditoría de métricas de Caja y preparación de PR #1 — 2026-10-21
 
 - Decisión comercial final del propietario: una corrección contable no crea deuda, no es reembolso ni altera inventario/estado. Métricas: **cobros brutos**, **reembolsos reales**, **efectivo neto = cobros − reembolsos**, **ingreso neto reconocido = efectivo neto − correcciones** y **pendiente contractual = contratado − cobros** (corrección excluida). Contratado/pendiente permanecen en fecha programada; movimientos en su `actualAt`; filtro de sede aplica a ambos.

@@ -1397,7 +1397,7 @@ export const createServiceOrder = onCall(callable(), async (request) => {
 export const sendReservationNotification = onDocumentCreated({
     document: 'telegramOutbox/{outboxId}',
     secrets: [TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID],
-    retry: true,
+    retry: false,
 }, async (event) => {
     const snapshot = event.data;
     if (!snapshot) return;
@@ -1423,15 +1423,28 @@ export const sendReservationNotification = onDocumentCreated({
     const escape = (value: unknown) => String(value || '').replace(/[&<>]/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[character]!);
     const lines = Array.isArray(payload.items) ? payload.items.map((item: Record<string, unknown>) => `• ${item.quantity}x ${escape(item.name)} — Bs. ${Number(item.total) || 0}`).join('\n') : '';
     const message = `🚲 <b>NUEVA RESERVA</b>\nCódigo: <code>${escape(data.reservationCode)}</code>\nCliente: ${escape(payload.customerName)}\nTeléfono: ${escape(payload.customerPhone)}\nCI: <code>${escape(payload.customerCI)}</code>\nFecha: ${escape(payload.date)} ${escape(payload.pickupTime)}\nDuración: ${escape(payload.duration)}\nTotal: Bs. ${Number(payload.total) || 0}\n${lines}`;
-    const response = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ chat_id: chatId, text: message, parse_mode: 'HTML', disable_web_page_preview: true }),
-    });
-    const telegramResult = await response.json() as { ok?: boolean; error_code?: number };
+    let response: Response;
+    let telegramResult: { ok?: boolean; error_code?: number };
+    try {
+        response = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ chat_id: chatId, text: message, parse_mode: 'HTML', disable_web_page_preview: true }),
+        });
+        telegramResult = await response.json() as { ok?: boolean; error_code?: number };
+    } catch (error) {
+        // A network/parse failure may happen after Telegram accepted the message. Never auto-retry
+        // that ambiguous delivery, because Telegram does not provide an idempotency key here.
+        await ref.update({
+            status: 'delivery_unknown',
+            lastError: error instanceof Error ? `Delivery could not be verified: ${error.name}` : 'Delivery could not be verified.',
+            updatedAt: FieldValue.serverTimestamp(),
+        });
+        return;
+    }
     if (!response.ok || telegramResult.ok !== true) {
-        await ref.update({ status: 'failed', lastError: `Telegram HTTP ${response.status}`, updatedAt: FieldValue.serverTimestamp() });
-        throw new Error(`Telegram notification failed (${response.status}; ${telegramResult.error_code || 'api-error'})`);
+        await ref.update({ status: 'failed', lastError: `Telegram rejected the notification (HTTP ${response.status}; ${telegramResult.error_code || 'api-error'})`, updatedAt: FieldValue.serverTimestamp() });
+        return;
     }
     await ref.update({ status: 'sent', sentAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp(), lastError: FieldValue.delete() });
 });

@@ -1,5 +1,13 @@
 # BRIZ — checklist manual de alquileres Admin (Emulator)
 
+## Puerta de configuración previa a las pruebas visuales — 2026-10-21
+
+- El Preview actual no debe usarse para escribir pruebas: no tiene configuración Firebase y el código ahora rechaza el proyecto de producción en Preview. Para pruebas visuales, iniciar Authentication/Firestore/Functions/Storage Emulator según los pasos de esta guía. No inventar datos del cliente real.
+- Propuesta de variables Vercel, pendiente de aprobación: nueve variables Firebase enumeradas en `BRIZ_RELEASE_READINESS.md`, solo para Production. No configurar Preview hasta tener staging aislado.
+- `VITE_TELEGRAM_BOT_TOKEN` y `VITE_TELEGRAM_CHAT_ID` existen como variables heredadas de Vercel para Production y Preview, pero el código cliente no las usa. La prueba con sentinel confirmó que un valor de `VITE_TELEGRAM_BOT_TOKEN` no aparece en los assets web. No retirar las variables viejas hasta que el propietario rote el token en BotFather y verifique el Secret Manager de Functions. La reserva de Emulator funciona sin credenciales y deja la notificación como `skipped_unconfigured`.
+- El cliente Firebase usa una lista explícita de variables `VITE_FIREBASE_*`. No pasar todo `import.meta.env` al código cliente: podría exponer otras variables con prefijo `VITE_`.
+
+
 ## Casos nuevos tras la incidencia de cobros/confirmación (2026-10-21)
 
 ### Caja — importes de control para aprobación del propietario
