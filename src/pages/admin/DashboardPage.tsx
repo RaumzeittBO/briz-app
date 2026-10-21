@@ -44,7 +44,7 @@ const isEffectiveRentalStatus = (status?: string) =>
   status === 'returned';
 
 export default function DashboardPage() {
-  const { inventory, combos, rentals, sales, serviceOrders, customers } = useStore();
+  const { inventory, combos, rentals, rentalPaymentMovements, sales, serviceOrders, customers } = useStore();
 
   const todayStr = toBoliviaDateString();
   const weekAgoStr = addDaysToDateString(todayStr, -6);
@@ -105,7 +105,7 @@ export default function DashboardPage() {
   const rentalsWeek = rentalsWeekList.filter(r => !r.productId.startsWith('srv_')).length;
   const salesWeek = salesWeekList.length;
   const incomeWeek =
-    summarizeRentalMoney(rentals, weekAgoStr, todayStr).collected +
+    summarizeRentalMoney(rentals, weekAgoStr, todayStr, false, rentalPaymentMovements).netCollected +
     salesWeekList.reduce((s, v) => s + (Number(v.total) || 0), 0) +
     servicesWeekList.reduce((s, so) => s + (Number(so.costEstimate ?? (so as any).price) || 0), 0);
 
@@ -124,7 +124,7 @@ export default function DashboardPage() {
   const rentalsMonth = rentalsMonthList.filter(r => !r.productId.startsWith('srv_')).length;
   const salesMonth = salesMonthList.length;
   const incomeMonth =
-    summarizeRentalMoney(rentals, monthAgoStr, todayStr).collected +
+    summarizeRentalMoney(rentals, monthAgoStr, todayStr, false, rentalPaymentMovements).netCollected +
     salesMonthList.reduce((s, v) => s + (Number(v.total) || 0), 0) +
     servicesMonthList.reduce((s, so) => s + (Number(so.costEstimate ?? (so as any).price) || 0), 0);
 
@@ -165,17 +165,19 @@ export default function DashboardPage() {
       const ds = addDaysToDateString(todayStr, -i);
       const [y, m, d] = ds.split('-').map(Number);
       const label = new Date(y, m - 1, d).toLocaleDateString('es', { weekday: 'short' });
-      const dayRentals = effectiveRentals.filter(r => getRentalBoliviaDate(r) === ds);
-      const rentalReceipts = effectiveRentals.filter(r => r.paidAt && toBoliviaDateString(r.paidAt) === ds
-        && (r.paymentStatus === 'paid' || Number(r.amountPaid) > 0));
+      const dayRentals = effectiveRentals.filter(r => (r.date && /^\d{4}-\d{2}-\d{2}$/.test(r.date) ? r.date : toBoliviaDateString(r.createdAt || r.createdDate || new Date())) === ds);
+      const dayMovements = rentalPaymentMovements.filter(movement => movement.actualAt && toBoliviaDateString(movement.actualAt) === ds);
+      const ledgerGroups = new Set(rentalPaymentMovements.map(movement => movement.reservationCode));
+      const legacyReceipts = rentals.filter(r => !ledgerGroups.has(r.reservationCode || r.id) && r.paymentStatus === 'paid' && r.paidAt && toBoliviaDateString(r.paidAt) === ds);
+      const cashNet = dayMovements.reduce((sum, movement) => sum + (movement.type === 'receipt' ? Number(movement.amount) || 0 : movement.type === 'refund' ? -(Number(movement.amount) || 0) : 0), 0);
       days.push({
         name: label,
         alquileres: dayRentals.filter(r => !r.productId.startsWith('srv_')).length,
-        ingresos: rentalReceipts.reduce((sum, r) => sum + Math.max(0, Number(r.amountPaid) || (r.paymentStatus === 'paid' ? Number(r.total) || 0 : 0)), 0)
+        ingresos: cashNet + legacyReceipts.reduce((sum, r) => sum + Math.max(0, Number(r.amountPaid) || Number(r.total) || 0), 0)
       });
     }
     return days;
-  }, [effectiveRentals, todayStr]);
+  }, [effectiveRentals, rentals, rentalPaymentMovements, todayStr]);
 
   const hasData = rentals.length > 0 || sales.length > 0;
   const recentRentals = [...rentals]

@@ -6,24 +6,25 @@ La corrección de UI no se marcó como validación visual: el navegador automati
 
 1. Abrir una reserva pendiente en el detalle y pulsar **Confirmar Reserva**. El modal debe permanecer visible con **Confirmando…** hasta respuesta; al éxito se cierra y la lista actualiza sin segunda pulsación. Probar error de stock: mostrar error y conservar modal/reserva pendiente.
 2. Pulsar confirmar en la tarjeta; mientras carga el botón queda deshabilitado. Repetir doble clic en **Crear Alquiler**; una clave de sesión debe producir un solo código/documento. No refrescar/limpiar storage hasta finalizar.
-3. Crear un alquiler manual para mañana marcado pagado hoy. En Reportes “Este mes”, debe verse el cobro de hoy aunque la fecha programada sea mañana; el contratado pertenece a mañana. Un registro legacy pagado sin `paidAt` se debe etiquetar como fecha desconocida en “Todo el historial”, sin aparecer en un rango fechado.
-4. Registrar pago antes de entrega, entregar y devolver. Confirmar que el pago e historial persisten; una devolución impaga no se cuenta como cobro. Registrar un pago después de devolver y verificar que la fecha de cobro sea la actual sin alterar estado devuelto.
-5. En retorno, probar cantidades dañadas y sanas: la suma dañada no supera las unidades entregadas, stock sano vuelve a disponible, dañadas a mantenimiento y no aparece un cargo automático.
-6. Probar confirmación/edición/cancelación/devolución/pago y que la lista refleje el resultado al terminar, sin repetir pulsaciones. Contrastar inventario y Reportes con combos y accesorio individual; no sumar unidades de combo como una segunda línea monetaria.
+3. En Caja registrar un anticipo de **Bs. 40** y luego el saldo de **Bs. 60** para un pedido de Bs. 100. El segundo cobro no debe aumentar el total contratado. QR/transferencia requieren marcar recibido. Un mismo envío/reintento no debe crear dos movimientos.
+4. Sobre ese ejemplo, registrar un reembolso explícito de **Bs. 20** referido al primer cobro: se muestra en su propia fecha; no borra el cobro original ni recrea deuda contractual. Un reembolso mayor al remanente del cobro se rechaza. Una corrección requiere referencia y motivo; se registra separada del efectivo y no afirma que salió dinero.
+5. Entregar y devolver. Confirmar que los cobros e historial persisten; una devolución impaga no se cuenta como cobro. Registrar un pago después de devolver y verificar que se conserva el estado devuelto.
+6. En retorno, probar cantidades dañadas y sanas: la suma dañada no supera las unidades entregadas, stock sano vuelve a disponible, dañadas a mantenimiento y no aparece un cargo automático.
+7. Probar confirmación/edición/cancelación/devolución/pago y que la lista refleje el resultado al terminar, sin repetir pulsaciones. Contrastar inventario y Reportes con combos y accesorio individual; no sumar unidades de combo como una segunda línea monetaria.
 
-Un cobro ya guardado se mantiene reportado tras cancelación o devolución mientras no exista una operación explícita de reembolso.
+Un cobro ya guardado se mantiene en el historial tras cancelación o devolución. El reporte resta reembolsos y correcciones en sus fechas reales, pero no elimina movimientos originales. `Cobrado` es el bruto recibido, `Reembolsado` es salida de caja explícita, `Corregido` es ajuste no monetario y `Neto` es la vista reconocida. El pendiente contractual descuenta recibos y suma correcciones; un reembolso no reabre la deuda. El propietario debe revisar y aprobar esta semántica contable en la prueba manual antes de uso productivo.
 
 ## Recorrido corto del propietario: reserva → inventario → reportes
 
 Ejecutar solo con la cuenta/catálogo sintéticos del Emulator (nunca con el proyecto productivo). Anotar el total que muestra Admin como **T** y el stock visible antes de confirmar como **S**. Utilizar una bicicleta individual, una sede conocida y fechas futuras sin conflictos:
 
 1. Crear en `/rentals` una reserva pendiente de 1 bicicleta y completar el envío. En `/admin/rentals`, confirmar **una sola vez**. Debe quedar confirmada; la misma reserva no debe duplicarse. Stock retenido: `S - 1`.
-2. Registrar el pago total de **T**. En Reportes, para la sede de esa reserva y el día de cobro, `Cobrado = T`; el pendiente de ese alquiler queda en `0`. Si el alquiler está programado para otro día, `Contratado = T` aparece en el período de la fecha programada, no se mueve al día del pago.
+2. Registrar uno o más recibos que sumen **T**. En Reportes, para la sede de esa reserva y el día de cobro, `Cobrado = T`; el pendiente de ese alquiler queda en `0`. Si el alquiler está programado para otro día, `Contratado = T` aparece en el período de la fecha programada, no se mueve al día del pago.
 3. Entregar. El stock queda en `S - 1` (entrega no vuelve a descontar). Devolver en buen estado. El stock regresa exactamente a `S`; el estado queda devuelto y el pago/historial permanece.
 4. Recargar Admin, Inventario y Reportes. El mismo código, pago e importes deben persistir; ni el stock ni el cobro deben cambiar por recargar. El cobro se ve una sola vez.
 5. Cambiar Reportes a otra sede: el cobro de **T** no debe aparecer allí. Volver a la sede de la reserva: debe aparecer por `paidAt`, aunque la fecha del alquiler sea distinta.
 
-No simular reembolsos ni cambiar un cobro ya recibido a `unpaid` para representar una devolución. Si se corrige el estado a `unpaid`/`pending_review`, `amountPaid` y `paidAt` quedan preservados como trazabilidad, pero Reportes deja de reconocerlos como cobro vigente; el sistema no afirma que se haya hecho un reembolso. La política para reversos, pagos parciales y ajustes de caja requiere decisión comercial del propietario antes de representar esos movimientos.
+No cambiar `paymentStatus` a `unpaid` para simular reembolso ni corrección. Usa movimiento explícito con importe, fecha real, referencia y motivo. Los datos históricos originales se conservan; los movimientos posteriores son inmutables e idempotentes.
 
 Las pruebas automatizadas contra `demo-briz-security` cubren estas invariantes backend/reporting; no reemplazan los pasos visuales listados aquí.
 

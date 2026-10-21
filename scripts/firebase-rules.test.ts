@@ -38,6 +38,7 @@ async function seed(): Promise<void> {
         await setDoc(doc(db, 'inventory', 'bike-la-paz'), { id: 'bike-la-paz', store: 'lapaz', stock: 3 });
         await setDoc(doc(db, 'inventory', 'manager-delete'), { id: 'manager-delete', store: 'cochabamba', stock: 1 });
         await setDoc(doc(db, 'rentals', 'private-rental'), { id: 'private-rental', store: 'cochabamba', customerName: 'Test only' });
+        await setDoc(doc(db, 'rentalPaymentMovements', 'movement-cbba'), { id: 'movement-cbba', store: 'cochabamba', reservationCode: 'TEST-001', type: 'receipt', amount: 10 });
         await setDoc(doc(db, 'customers', 'legacy-customer'), { id: 'legacy-customer', password: 'test-hash' });
         await setDoc(doc(db, 'serviceOrders', 'workshop-order'), { id: 'workshop-order', store: 'cochabamba', status: 'Recibido' });
         await setDoc(doc(db, 'sales', 'sale'), { id: 'sale', store: 'cochabamba', total: 10 });
@@ -80,6 +81,13 @@ try {
     await test('manager is scoped to their store for private rental reads', async () => {
         await assertSucceeds(getDoc(doc(manager.firestore(), 'rentals', 'private-rental')));
         await assertFails(getDoc(doc(otherStoreManager.firestore(), 'rentals', 'private-rental')));
+    });
+    await test('cash movement ledger reads are store-scoped and client writes stay forbidden', async () => {
+        await assertSucceeds(getDoc(doc(admin.firestore(), 'rentalPaymentMovements', 'movement-cbba')));
+        await assertSucceeds(getDoc(doc(manager.firestore(), 'rentalPaymentMovements', 'movement-cbba')));
+        await assertFails(getDoc(doc(otherStoreManager.firestore(), 'rentalPaymentMovements', 'movement-cbba')));
+        await assertFails(getDoc(doc(anonymous.firestore(), 'rentalPaymentMovements', 'movement-cbba')));
+        await assertFails(setDoc(doc(admin.firestore(), 'rentalPaymentMovements', 'forged'), { store: 'cochabamba', amount: 100 }));
     });
     await test('viewer can read scoped rental data but cannot modify it', async () => {
         await assertSucceeds(getDoc(doc(viewer.firestore(), 'rentals', 'private-rental')));

@@ -106,6 +106,12 @@ service cloud.firestore {
       allow delete: if isScopedDelete();
     }
 
+    match /rentalPaymentMovements/{movementId} {
+      // Payment records are immutable to clients; trusted callables write them.
+      allow read: if isScopedRead();
+      allow create, update, delete: if false;
+    }
+
     // Legacy customer documents can contain password hashes and identity scans.
     // Keep them server/admin-only; customer apps use a sanitized profile endpoint.
     match /customers/{customerId} {

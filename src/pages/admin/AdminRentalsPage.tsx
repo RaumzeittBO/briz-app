@@ -292,6 +292,8 @@ export default function AdminRentalsPage() {
     customers,
     calculatePrice,
     createRentalGroup,
+    rentalPaymentMovements,
+    recordRentalPaymentMovement,
     bikeCategories
   } = useStore();
 
@@ -307,6 +309,14 @@ export default function AdminRentalsPage() {
   const [returnModalGroup, setReturnModalGroup] = useState<GroupedRental | null>(null);
   const [returnDamagedUnits, setReturnDamagedUnits] = useState(0);
   const [returnNotes, setReturnNotes] = useState('');
+  const [paymentModalGroup, setPaymentModalGroup] = useState<GroupedRental | null>(null);
+  const [paymentType, setPaymentType] = useState<'receipt' | 'refund' | 'correction'>('receipt');
+  const [paymentAmount, setPaymentAmount] = useState('');
+  const [paymentMethod, setPaymentMethod] = useState<'Efectivo' | 'QR' | 'Transferencia'>('Efectivo');
+  const [paymentReference, setPaymentReference] = useState('');
+  const [paymentReason, setPaymentReason] = useState('');
+  const [paymentConfirmed, setPaymentConfirmed] = useState(false);
+  const paymentIdempotencyKeyRef = useRef('');
   const actionLockRef = useRef(new Set<string>());
   const [busyActionByGroup, setBusyActionByGroup] = useState<Record<string, string>>({});
 
@@ -532,22 +542,35 @@ export default function AdminRentalsPage() {
     } catch (error) { alert(`Error al expirar la reserva:\n${error instanceof Error ? error.message : 'Intenta nuevamente.'}`); return false; }
   };
 
-  const handleMarkPaidGroup = async (group: GroupedRental, methodText: string) => {
+  const openPaymentDialog = (group: GroupedRental, type: 'receipt' | 'refund' | 'correction' = 'receipt') => {
+    setPaymentModalGroup(group);
+    setPaymentType(type);
+    setPaymentAmount(type === 'receipt' ? '' : '');
+    setPaymentMethod('Efectivo');
+    setPaymentReference('');
+    setPaymentReason('');
+    setPaymentConfirmed(false);
+    paymentIdempotencyKeyRef.current = crypto.randomUUID().replaceAll('-', '');
+  };
+
+  const handleRecordPaymentMovement = async () => {
+    if (!paymentModalGroup) return;
+    const group = paymentModalGroup;
     try {
-      const completed = await runExclusiveAction(group.id, 'payment', async () => { await runAdminRentalAction('payment', group.items.map(item => item.id), { paymentStatus: 'paid', paymentMethodNote: methodText }); });
-      if (!completed) return false;
-    } catch (error) { alert(`Error al registrar el pago:\n${error instanceof Error ? error.message : 'Intenta nuevamente.'}`); return false; }
-    if (selected?.id === group.id) {
-      setSelected(prev => {
-        if (!prev || prev.id !== group.id) return prev;
-        return {
-          ...prev,
-          paymentStatus: 'paid',
-          items: prev.items.map(item => ({ ...item, paymentStatus: 'paid', paidAt: new Date().toISOString(), amountPaid: Number(item.amountPaid) || Number(item.total) || 0 }))
-        };
+      const completed = await runExclusiveAction(group.id, 'payment', async () => {
+        await recordRentalPaymentMovement({
+          rentalIds: group.items.map(item => item.id), type: paymentType, amount: Number(paymentAmount), method: paymentMethod,
+          actualAt: new Date().toISOString(), idempotencyKey: paymentIdempotencyKeyRef.current,
+          ...(paymentReference ? { referenceMovementId: paymentReference } : {}), ...(paymentReason.trim() ? { reason: paymentReason.trim() } : {}),
+          ...(paymentType === 'receipt' && paymentMethod !== 'Efectivo' ? { confirmedReceived: paymentConfirmed } : {}),
+          ...(paymentType !== 'receipt' ? { confirmed: paymentConfirmed } : {}),
+        });
       });
+      if (!completed) return;
+      setPaymentModalGroup(null);
+    } catch (error) {
+      alert(`Error al registrar el movimiento: ${error instanceof Error ? error.message : 'Intenta nuevamente.'}`);
     }
-    return true;
   };
 
   const handleDeleteGroup = async (group: GroupedRental) => {
@@ -1780,24 +1803,14 @@ export default function AdminRentalsPage() {
                         <CheckCircle2 className="w-4 h-4" /> {busyActionByGroup[g.id] === 'confirm' ? 'Confirmando…' : 'Confirmar'}
                       </Button>
 
-                      {g.paymentStatus !== 'paid' ? (
-                        <Button
-                          size="sm"
-                          disabled={Boolean(busyActionByGroup[g.id])}
-                          onClick={() => handleMarkPaidGroup(g, g.paymentMethod)}
-                          className="bg-blue-600 hover:bg-blue-700 text-white rounded-full h-11 text-[11px] font-black uppercase flex items-center justify-center gap-1"
-                        >
-                          <Wallet className="w-3.5 h-3.5" /> Pagado
-                        </Button>
-                      ) : (
-                        <Button
-                          size="sm"
-                          disabled
-                          className="bg-white/5 text-white/30 rounded-full h-11 text-xs font-black uppercase"
-                        >
-                          ✓ Pagado
-                        </Button>
-                      )}
+                      <Button
+                        size="sm"
+                        disabled={Boolean(busyActionByGroup[g.id])}
+                        onClick={() => openPaymentDialog(g)}
+                        className="bg-blue-600 hover:bg-blue-700 text-white rounded-full h-11 text-[11px] font-black uppercase flex items-center justify-center gap-1"
+                      >
+                        <Wallet className="w-3.5 h-3.5" /> Caja
+                      </Button>
 
                       <Button
                         size="sm"
@@ -2036,6 +2049,45 @@ export default function AdminRentalsPage() {
               </div>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Auditable receipt, refund and correction entry. */}
+      <Dialog open={!!paymentModalGroup} onOpenChange={open => { if (!open && (!paymentModalGroup || !busyActionByGroup[paymentModalGroup.id])) setPaymentModalGroup(null); }}>
+        <DialogContent className="max-w-md w-[95vw] bg-brand-charcoal border border-white/10 text-white rounded-3xl p-6">
+          {paymentModalGroup && (() => {
+            const group = paymentModalGroup;
+            const groupMovements = rentalPaymentMovements.filter(m => m.reservationCode === group.reservationCode);
+            const receipts = groupMovements.filter(m => m.type === 'receipt');
+            const refunds = groupMovements.filter(m => m.type === 'refund');
+            const corrections = groupMovements.filter(m => m.type === 'correction');
+            const legacyRows = groupMovements.length === 0 ? group.items.filter(item => item.paymentStatus === 'paid') : [];
+            const grossReceipts = receipts.reduce((sum, m) => sum + (Number(m.amount) || 0), 0) + legacyRows.reduce((sum, item) => sum + (Number(item.amountPaid) || Number(item.total) || 0), 0);
+            const refundedTotal = refunds.reduce((sum, m) => sum + (Number(m.amount) || 0), 0);
+            const correctedTotal = corrections.reduce((sum, m) => sum + (Number(m.amount) || 0), 0);
+            const references = [
+              ...receipts.map(m => ({ id: String(m.movementId || m.id), label: `Cobro ${String(m.movementId || m.id).slice(-8)} · Bs. ${m.amount}` })),
+              ...legacyRows.map(item => ({ id: `legacy_${item.id.replace(/[^A-Za-z0-9_-]/g, '_')}`, label: `Registro histórico · Bs. ${Number(item.amountPaid) || Number(item.total) || 0}` })),
+            ];
+            return <div className="space-y-4">
+              <DialogHeader><DialogTitle className="text-white font-black">Movimiento de caja · {group.reservationCode}</DialogTitle></DialogHeader>
+              <div className="grid grid-cols-2 gap-2 rounded-xl border border-white/10 bg-black/30 p-3 text-xs">
+                <p>Contratado <strong>Bs. {group.total.toFixed(2)}</strong></p><p>Cobrado <strong>Bs. {grossReceipts.toFixed(2)}</strong></p>
+                <p>Reembolsado <strong>Bs. {refundedTotal.toFixed(2)}</strong></p><p>Corregido <strong>Bs. {correctedTotal.toFixed(2)}</strong></p>
+                <p>Neto reconocido <strong>Bs. {(grossReceipts - refundedTotal - correctedTotal).toFixed(2)}</strong></p>
+                <p>Pendiente <strong>Bs. {Math.max(0, group.total - grossReceipts + correctedTotal).toFixed(2)}</strong></p>
+              </div>
+              <label className="block text-xs font-bold">Tipo<select className="mt-1 w-full rounded-lg bg-black/40 border border-white/10 p-2" value={paymentType} onChange={e => setPaymentType(e.target.value as typeof paymentType)}><option value="receipt">Registrar cobro</option><option value="refund">Registrar reembolso</option><option value="correction">Corregir cobro (sin salida de caja)</option></select></label>
+              <label className="block text-xs font-bold">Importe (Bs.)<Input type="number" min="0.01" step="0.01" value={paymentAmount} onChange={e => setPaymentAmount(e.target.value)} className="mt-1 bg-black/40" /></label>
+              <label className="block text-xs font-bold">Método<select className="mt-1 w-full rounded-lg bg-black/40 border border-white/10 p-2" value={paymentMethod} onChange={e => setPaymentMethod(e.target.value as typeof paymentMethod)}><option>Efectivo</option><option>QR</option><option>Transferencia</option></select></label>
+              {paymentType !== 'receipt' && <>
+                <label className="block text-xs font-bold">Cobro de referencia<select className="mt-1 w-full rounded-lg bg-black/40 border border-white/10 p-2" value={paymentReference} onChange={e => setPaymentReference(e.target.value)}><option value="">Seleccionar cobro</option>{references.map(r => <option key={r.id} value={r.id}>{r.label}</option>)}</select></label>
+                <label className="block text-xs font-bold">Motivo<textarea value={paymentReason} onChange={e => setPaymentReason(e.target.value)} className="mt-1 w-full rounded-lg bg-black/40 border border-white/10 p-2" /></label>
+              </>}
+              {((paymentType === 'receipt' && paymentMethod !== 'Efectivo') || paymentType !== 'receipt') && <label className="flex gap-2 items-start text-xs"><input type="checkbox" checked={paymentConfirmed} onChange={e => setPaymentConfirmed(e.target.checked)} />{paymentType === 'receipt' ? 'Confirmo que el pago QR/transferencia fue recibido.' : `Confirmo expresamente este ${paymentType === 'refund' ? 'reembolso' : 'ajuste contable'}.`}</label>}
+              <div className="flex gap-2"><Button variant="ghost" disabled={Boolean(busyActionByGroup[group.id])} onClick={() => setPaymentModalGroup(null)}>Cancelar</Button><Button disabled={Boolean(busyActionByGroup[group.id]) || Number(paymentAmount) <= 0 || ((paymentType !== 'receipt') && (!paymentReference || !paymentReason.trim() || !paymentConfirmed)) || ((paymentType === 'receipt' && paymentMethod !== 'Efectivo') && !paymentConfirmed)} onClick={handleRecordPaymentMovement}>{busyActionByGroup[group.id] === 'payment' ? 'Registrando…' : 'Guardar movimiento'}</Button></div>
+            </div>;
+          })()}
         </DialogContent>
       </Dialog>
 
@@ -2697,13 +2749,13 @@ export default function AdminRentalsPage() {
                       </Button>
                     )}
 
-                    {selected.paymentStatus !== 'paid' && (
+                    {(
                       <Button 
                         className="flex-1 h-11 bg-blue-600 hover:bg-blue-700 text-white font-black rounded-xl text-xs uppercase cursor-pointer" 
                         disabled={Boolean(busyActionByGroup[selected.id])}
-                        onClick={() => { handleMarkPaidGroup(selected, selected.paymentMethod); }}
+                        onClick={() => openPaymentDialog(selected)}
                       >
-                        {busyActionByGroup[selected.id] === 'payment' ? 'Registrando…' : 'Registrar Pago'}
+                        {busyActionByGroup[selected.id] === 'payment' ? 'Registrando…' : 'Caja / Registrar Pago'}
                       </Button>
                     )}
 

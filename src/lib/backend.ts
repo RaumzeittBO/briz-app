@@ -67,7 +67,7 @@ export async function createRentalGroup(input: ReservationGroupInput): Promise<{
     return result.data;
 }
 
-export type AdminRentalActionName = 'confirm' | 'deliver' | 'return' | 'cancel' | 'expire' | 'payment';
+export type AdminRentalActionName = 'confirm' | 'deliver' | 'return' | 'cancel' | 'expire';
 export async function runAdminRentalAction(action: AdminRentalActionName, rentalIds: string[], options: Record<string, unknown> = {}): Promise<{ ok: boolean }> {
     const result = await httpsCallable<{ action: AdminRentalActionName; rentalIds: string[] } & Record<string, unknown>, { ok: boolean }>(functions, 'adminRentalAction')({ action, rentalIds, ...options });
     return result.data;
@@ -87,6 +87,23 @@ export interface UpdateRentalGroupInput {
 }
 export async function updateRentalGroup(input: UpdateRentalGroupInput): Promise<void> {
     await httpsCallable<UpdateRentalGroupInput, { ok: boolean }>(functions, 'updateRentalGroup')(input);
+}
+
+export type RecordRentalPaymentMovementInput = {
+    rentalIds: string[];
+    type: 'receipt' | 'refund' | 'correction';
+    amount: number;
+    method: 'Efectivo' | 'QR' | 'Transferencia';
+    actualAt: string;
+    idempotencyKey: string;
+    referenceMovementId?: string;
+    reason?: string;
+    confirmedReceived?: boolean;
+    confirmed?: boolean;
+};
+export async function recordRentalPaymentMovement(input: RecordRentalPaymentMovementInput): Promise<{ movementId: string; duplicate: boolean }> {
+    const result = await httpsCallable<RecordRentalPaymentMovementInput, { ok: boolean; movementId: string; duplicate: boolean }>(functions, 'recordRentalPaymentMovement')(input);
+    return { movementId: result.data.movementId, duplicate: result.data.duplicate };
 }
 
 export async function createServiceOrder(data: Record<string, unknown>): Promise<void> {

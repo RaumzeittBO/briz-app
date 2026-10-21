@@ -24,7 +24,8 @@ import {
     signOut,
 } from 'firebase/auth';
 import { auth, db, storage } from '../lib/firebase';
-import { runAdminRentalAction, updateRentalGroup } from '../lib/backend';
+import { runAdminRentalAction, updateRentalGroup, recordRentalPaymentMovement as recordRentalPaymentBackend, type RecordRentalPaymentMovementInput } from '../lib/backend';
+import type { RentalPaymentMovement } from '../lib/rentalReportMoney';
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { cyclingRoutes as DEFAULT_ROUTES, type CyclingRoute } from '../data/mockData';
 import {
@@ -278,6 +279,7 @@ export interface ServiceOrder {
     notes: string;
     bikeImageUrl?: string;
     date: string;
+    store?: string;
 }
 
 export interface EventSubcategory {
@@ -318,6 +320,7 @@ interface StoreContextType {
     inventory: InventoryItem[];
     combos: ComboProduct[];
     rentals: Rental[];
+    rentalPaymentMovements: RentalPaymentMovement[];
     sales: Sale[];
     customers: Customer[];
     serviceOrders: ServiceOrder[];
@@ -372,7 +375,7 @@ interface StoreContextType {
     deleteRental: (id: string) => Promise<void>;
     deleteRentalGroup: (ids: string[]) => Promise<void>;
     updateRental: (id: string, updates: Partial<Rental>, actor?: string) => Promise<void>;
-    updateRentalPaymentStatus: (id: string, paymentStatus: Rental['paymentStatus'], actor?: string) => Promise<void>;
+    recordRentalPaymentMovement: (input: RecordRentalPaymentMovementInput) => Promise<{ movementId: string; duplicate: boolean }>;
     markRentalExpired: (id: string, actor?: string) => Promise<void>;
 
     // Sale CRUD
@@ -487,6 +490,7 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
     const [inventory, setInventory] = useState<InventoryItem[]>([]);
     const [combos, setCombos] = useState<ComboProduct[]>([]);
     const [rentals, setRentals] = useState<Rental[]>([]);
+    const [rentalPaymentMovements, setRentalPaymentMovements] = useState<RentalPaymentMovement[]>([]);
     const [sales, setSales] = useState<Sale[]>([]);
     const [customers, setCustomers] = useState<Customer[]>([]);
     const [serviceOrders, setServiceOrders] = useState<ServiceOrder[]>([]);
@@ -736,6 +740,20 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
             () => setRentals([])
         );
 
+        let unsubPaymentMovements: (() => void) | undefined;
+        if (isAdminSession) {
+            const movementQuery = adminStoreScope === 'all'
+                ? query(collection(db, 'rentalPaymentMovements'))
+                : query(collection(db, 'rentalPaymentMovements'), where('store', '==', adminStoreScope));
+            unsubPaymentMovements = onSnapshot(
+                movementQuery,
+                (snap) => setRentalPaymentMovements(snap.docs.map(d => ({ ...d.data(), id: d.id }) as RentalPaymentMovement)),
+                (err) => { console.error('Error fetching rental payment movements:', err); setRentalPaymentMovements([]); }
+            );
+        } else {
+            setRentalPaymentMovements([]);
+        }
+
         let unsubSales: (() => void) | undefined;
         let customerLoadCancelled = false;
         let unsubSO: (() => void) | undefined;
@@ -768,6 +786,7 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
 
         return () => {
             unsubRentals();
+            if (unsubPaymentMovements) unsubPaymentMovements();
             if (unsubSales) unsubSales();
             customerLoadCancelled = true;
             if (unsubSO) unsubSO();
@@ -1146,10 +1165,7 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
         await restoreStockAndTransitionGroup([id], 'returned', actor, options);
     };
 
-    const updateRentalPaymentStatus = async (id: string, paymentStatus: Rental['paymentStatus'], _actor?: string) => {
-        void _actor;
-        await runAdminRentalAction('payment', [id], { paymentStatus });
-    };
+    const recordRentalPaymentMovement = (input: RecordRentalPaymentMovementInput) => recordRentalPaymentBackend(input);
     const updateRental = async (id: string, updates: Partial<Rental>, _actor?: string) => {
         void _actor;
         const current = rentals.find((rental) => rental.id === id);
@@ -1199,7 +1215,7 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
     const addOrUpdateCustomer = async (c: { name: string; phone: string; ci: string }, isPurchase: boolean) => {
         const cleanCi = (c.ci || '').trim();
         const cleanPhone = (c.phone || '').trim();
-        let existing = customers.find(cust => (cleanCi && cust.ci === cleanCi) || (cleanPhone && cust.phone === cleanPhone));
+        const existing = customers.find(cust => (cleanCi && cust.ci === cleanCi) || (cleanPhone && cust.phone === cleanPhone));
 
         if (existing) {
             const updates = {
@@ -1346,14 +1362,14 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
 
     const value: StoreContextType = {
         adminStoreScope,
-        inventory, combos, rentals, sales, customers, serviceOrders, isLoaded,
+        inventory, combos, rentals, rentalPaymentMovements, sales, customers, serviceOrders, isLoaded,
         rentalSettings, updateRentalSettings,
         addInventoryItem, updateInventoryItem, deleteInventoryItem,
         addCombo, updateCombo, deleteCombo,
         confirmRental, confirmRentalGroup, deliverRentalGroup,
         cancelRental, cancelRentalGroup, returnRental, returnRentalGroup,
         deleteRental, deleteRentalGroup,
-        updateRental, updateRentalPaymentStatus, markRentalExpired,
+        updateRental, recordRentalPaymentMovement, markRentalExpired,
         addSale, updateSaleStatus, deleteSale,
         addOrUpdateCustomer, updateCustomer, deleteCustomer, verifyCustomerRecovery,
         addServiceOrder, updateServiceOrder, deleteServiceOrder,

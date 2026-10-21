@@ -42,7 +42,7 @@ const isCancelledOrExpired = (status?: string) =>
   status === 'Expirado';
 
 export default function ReportsPage() {
-  const { rentals, sales, serviceOrders, inventory, combos } = useStore();
+  const { rentals, rentalPaymentMovements, sales, serviceOrders, inventory, combos } = useStore();
 
   const todayStr = toBoliviaDateString();
   const [preset, setPreset] = useState<DateRangePreset>('thisMonth');
@@ -122,6 +122,7 @@ export default function ReportsPage() {
   // Receipts are grouped by payment date, so this scope applies the branch
   // without restricting the rental's scheduled date to the report period.
   const storeRentals = useMemo(() => filterRentalMoneyByStore(rentals, selectedStore), [rentals, selectedStore]);
+  const storePaymentMovements = useMemo(() => filterRentalMoneyByStore(rentalPaymentMovements, selectedStore), [rentalPaymentMovements, selectedStore]);
 
   const effectivePeriodRentals = useMemo(
     () => periodRentals.filter(r => isEffectiveRental(r.status)),
@@ -136,23 +137,25 @@ export default function ReportsPage() {
   const periodSales = useMemo(() => {
     return sales.filter(s => {
       if (s.status !== 'Completado') return false;
+      if (selectedStore !== 'all' && (s.store || 'Cochabamba') !== selectedStore) return false;
       const d = getSaleDateStr(s);
       return d >= dateBounds.start && d <= dateBounds.end;
     });
-  }, [sales, dateBounds]);
+  }, [sales, dateBounds, selectedStore]);
 
   const periodServices = useMemo(() => {
     return (serviceOrders || []).filter(so => {
       if (so.status !== 'Entregado' && so.status !== 'Listo' && (so.status as string) !== 'Terminado') return false;
+      if (selectedStore !== 'all' && (so.store || 'Cochabamba') !== selectedStore) return false;
       const d = getServiceDateStr(so);
       return d >= dateBounds.start && d <= dateBounds.end;
     });
-  }, [serviceOrders, dateBounds]);
+  }, [serviceOrders, dateBounds, selectedStore]);
 
   // 1, 2, 3, 4: Financial metrics (Alquileres, Tienda, Taller, Cobrado vs Pendiente)
   const rentalMoney = useMemo(
-    () => summarizeRentalMoney(storeRentals, dateBounds.start, dateBounds.end, preset === 'all'),
-    [storeRentals, dateBounds, preset]
+    () => summarizeRentalMoney(storeRentals, dateBounds.start, dateBounds.end, preset === 'all', storePaymentMovements),
+    [storeRentals, storePaymentMovements, dateBounds, preset]
   );
   const rentalGrossIncome = rentalMoney.contracted;
   const rentalPaidIncome = rentalMoney.collected;
@@ -166,7 +169,7 @@ export default function ReportsPage() {
     () => periodServices.reduce((sum, so) => sum + (Number(so.costEstimate ?? (so as any).price) || 0), 0),
     [periodServices]
   );
-  const totalConsolidatedIncome = rentalPaidIncome + rentalMoney.collectedDateUnknown + salesIncome + serviceIncome;
+  const totalConsolidatedIncome = rentalMoney.netCollected + rentalMoney.collectedDateUnknown + salesIncome + serviceIncome;
 
   // 5, 6, 7, 8: Bike rankings (most rented, least/zero rented, revenue per bike, hours/days rented)
   const bikePerformance = useMemo(() => {
@@ -338,33 +341,35 @@ export default function ReportsPage() {
 
   // Chart data across selected range (grouped by day)
   const timelineChartData = useMemo(() => {
-    const dayMap = new Map<string, { date: string; alquileres: number; ventas: number; taller: number }>();
+    const dayMap = new Map<string, { date: string; alquileres: number; reembolsos: number; correcciones: number; ventas: number; taller: number }>();
 
-    storeRentals.forEach(r => {
-      if (r.paymentStatus !== 'paid' || !r.paidAt) return;
-      const d = toBoliviaDateString(r.paidAt);
+    storePaymentMovements.forEach(movement => {
+      if (!movement.actualAt) return;
+      const d = toBoliviaDateString(movement.actualAt);
       if (d < dateBounds.start || d > dateBounds.end) return;
-      const curr = dayMap.get(d) || { date: d, alquileres: 0, ventas: 0, taller: 0 };
-      curr.alquileres += Math.max(0, Number(r.amountPaid) || (r.paymentStatus === 'paid' ? Number(r.total) || 0 : 0));
+      const curr = dayMap.get(d) || { date: d, alquileres: 0, reembolsos: 0, correcciones: 0, ventas: 0, taller: 0 };
+      if (movement.type === 'receipt') curr.alquileres += Number(movement.amount) || 0;
+      if (movement.type === 'refund') curr.reembolsos += Number(movement.amount) || 0;
+      if (movement.type === 'correction') curr.correcciones += Number(movement.amount) || 0;
       dayMap.set(d, curr);
     });
 
     periodSales.forEach(s => {
       const d = getSaleDateStr(s);
-      const curr = dayMap.get(d) || { date: d, alquileres: 0, ventas: 0, taller: 0 };
+      const curr = dayMap.get(d) || { date: d, alquileres: 0, reembolsos: 0, correcciones: 0, ventas: 0, taller: 0 };
       curr.ventas += Number(s.total) || 0;
       dayMap.set(d, curr);
     });
 
     periodServices.forEach(so => {
       const d = getServiceDateStr(so);
-      const curr = dayMap.get(d) || { date: d, alquileres: 0, ventas: 0, taller: 0 };
+      const curr = dayMap.get(d) || { date: d, alquileres: 0, reembolsos: 0, correcciones: 0, ventas: 0, taller: 0 };
       curr.taller += Number(so.costEstimate ?? (so as any).price) || 0;
       dayMap.set(d, curr);
     });
 
     return Array.from(dayMap.values()).sort((a, b) => a.date.localeCompare(b.date));
-  }, [storeRentals, dateBounds, periodSales, periodServices]);
+  }, [storePaymentMovements, dateBounds, periodSales, periodServices]);
 
   // 17: Export to CSV/Excel and Printable PDF
   const handleExportCSV = () => {
@@ -376,6 +381,9 @@ export default function ReportsPage() {
     lines.push([esc('RESUMEN FINANCIERO'), esc('Monto (Bs.)')].join(','));
     lines.push([esc('Alquileres contratados por fecha de alquiler'), esc(rentalGrossIncome)].join(','));
     lines.push([esc('Cobrado con fecha de pago verificable'), esc(rentalPaidIncome)].join(','));
+    lines.push([esc('Reembolsos registrados'), esc(rentalMoney.refunded)].join(','));
+    lines.push([esc('Correcciones contables (sin salida de caja)'), esc(rentalMoney.corrected)].join(','));
+    lines.push([esc('Cobro neto de alquileres'), esc(rentalMoney.netCollected)].join(','));
     lines.push([esc('Cobros históricos sin fecha verificable'), esc(rentalMoney.collectedDateUnknown)].join(','));
     lines.push([esc('Alquileres Pendientes de Cobro'), esc(rentalPendingPaymentIncome)].join(','));
     lines.push([esc('Ventas y servicios del período'), esc(salesIncome + serviceIncome)].join(','));
@@ -531,7 +539,7 @@ export default function ReportsPage() {
           </div>
           <p className="text-3xl font-black text-brand-yellow">Bs. {totalConsolidatedIncome}</p>
           <p className="text-[11px] text-white/40 font-bold mt-1">
-            Cobros de alquiler por paidAt + ventas y servicios completados
+            Cobro neto de alquileres (abonos − correcciones − reembolsos) + ventas y servicios
           </p>
         </Card>
 
@@ -546,6 +554,11 @@ export default function ReportsPage() {
             <span className="text-emerald-400">Cobrado por fecha de pago: Bs. {rentalPaidIncome}</span>
             <span className="text-white/20">•</span>
             <span className="text-amber-400">Por cobrar: Bs. {rentalPendingPaymentIncome}</span>
+          </div>
+          <div className="mt-1 flex flex-wrap gap-x-2 text-[10px] font-bold text-white/55">
+            <span>Reembolsado: Bs. {rentalMoney.refunded}</span>
+            <span>Corrección: Bs. {rentalMoney.corrected}</span>
+            <span className="text-white">Neto: Bs. {rentalMoney.netCollected}</span>
           </div>
           {rentalMoney.collectedDateUnknown > 0 && (
             <p className="mt-2 text-xs text-amber-300">Bs. {rentalMoney.collectedDateUnknown} figuran pagados en registros históricos sin fecha de cobro verificable; se muestran solo en “Todo el historial”.</p>
@@ -625,7 +638,9 @@ export default function ReportsPage() {
                   <XAxis dataKey="date" stroke="rgba(255,255,255,0.35)" fontSize={10} tickLine={false} axisLine={false}/>
                   <YAxis stroke="rgba(255,255,255,0.35)" fontSize={10} tickLine={false} axisLine={false}/>
                   <Tooltip contentStyle={{background:'#222',border:'1px solid rgba(255,255,255,0.1)',borderRadius:'10px',color:'#fff'}}/>
-                  <Bar dataKey="alquileres" fill="#F5B800" radius={[4,4,0,0]} name="Cobros de alquiler (paidAt)"/>
+                  <Bar dataKey="alquileres" fill="#F5B800" radius={[4,4,0,0]} name="Abonos de alquiler (fecha real)"/>
+                  <Bar dataKey="reembolsos" fill="#F87171" radius={[4,4,0,0]} name="Reembolsos registrados"/>
+                  <Bar dataKey="correcciones" fill="#A78BFA" radius={[4,4,0,0]} name="Correcciones contables"/>
                   <Bar dataKey="ventas" fill="#60A5FA" radius={[4,4,0,0]} name="Tienda (Bs.)"/>
                   <Bar dataKey="taller" fill="#C084FC" radius={[4,4,0,0]} name="Taller (Bs.)"/>
                 </BarChart>

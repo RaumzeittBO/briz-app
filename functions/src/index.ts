@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { initializeApp, getApps } from 'firebase-admin/app';
-import { FieldPath, FieldValue, Timestamp, getFirestore, type DocumentData, type DocumentSnapshot, type QueryDocumentSnapshot } from 'firebase-admin/firestore';
+import { FieldPath, FieldValue, Timestamp, getFirestore, type DocumentData, type DocumentReference, type DocumentSnapshot, type QueryDocumentSnapshot } from 'firebase-admin/firestore';
 import { getAuth } from 'firebase-admin/auth';
 import { defineSecret } from 'firebase-functions/params';
 import { onCall, onRequest, HttpsError, type CallableRequest } from 'firebase-functions/v2/https';
@@ -812,7 +812,7 @@ export const syncRentalAvailabilityProjection = onDocumentWritten('rentals/{rent
 // Administrative rental mutations are deliberately server-only: the browser
 // submits intent, while role, store scope, current state and stock are checked
 // again inside the Firestore transaction.
-type AdminRentalAction = 'confirm' | 'deliver' | 'return' | 'cancel' | 'expire' | 'payment';
+type AdminRentalAction = 'confirm' | 'deliver' | 'return' | 'cancel' | 'expire';
 const LEGACY_PENDING = ['pending', 'Pendiente'];
 const LEGACY_CONFIRMED = ['confirmed', 'Confirmado'];
 const LEGACY_DELIVERED = ['delivered', 'Entregado'];
@@ -876,7 +876,7 @@ export const adminRentalAction = onCall(callable(), async (request) => {
     const { uid } = requireAuth(request);
     if (!exactObject(request.data)) throw new HttpsError('invalid-argument', 'Solicitud inválida.');
     const action = String(request.data.action) as AdminRentalAction;
-    if (!['confirm', 'deliver', 'return', 'cancel', 'expire', 'payment'].includes(action)) throw new HttpsError('invalid-argument', 'Acción inválida.');
+    if (!['confirm', 'deliver', 'return', 'cancel', 'expire'].includes(action)) throw new HttpsError('invalid-argument', 'Acción inválida.');
     const ids = Array.isArray(request.data.rentalIds) ? [...new Set(request.data.rentalIds.map((id) => cleanString(id, 150)).filter(Boolean))] : [];
     if (!ids.length || ids.length > 100) throw new HttpsError('invalid-argument', 'El grupo de alquiler no es válido.');
     const roleRef = db.doc(`adminUsers/${uid}`);
@@ -894,31 +894,7 @@ export const adminRentalAction = onCall(callable(), async (request) => {
         }
         const now = new Date().toISOString();
         const target = action === 'confirm' ? 'confirmed' : action === 'deliver' ? 'delivered' : action === 'return' ? 'returned'
-            : action === 'cancel' ? 'cancelled' : action === 'expire' ? 'expired' : '';
-        if (action === 'payment') {
-            const paymentStatus = String(request.data.paymentStatus);
-            if (!['paid', 'unpaid', 'pending_review'].includes(paymentStatus)) throw new HttpsError('invalid-argument', 'Estado de pago inválido.');
-            rows.forEach((row, index) => {
-                // Treat retries as idempotent: keep the original receipt time and don't append duplicate audit events.
-                if (row.paymentStatus === paymentStatus) return;
-                const paymentBefore = {
-                    status: row.paymentStatus || 'unpaid',
-                    amountPaid: Number(row.amountPaid) || 0,
-                    paidAt: row.paidAt || null,
-                };
-                const paymentAfter = {
-                    status: paymentStatus,
-                    amountPaid: paymentStatus === 'paid' ? (Number(row.total) || Number(row.amountPaid) || 0) : paymentBefore.amountPaid,
-                    paidAt: paymentStatus === 'paid' ? now : paymentBefore.paidAt,
-                };
-                tx.update(refs[index], {
-                    paymentStatus, updatedAt: now, lastUpdatedBy: uid,
-                    ...(paymentStatus === 'paid' ? { paidAt: now, amountPaid: paymentAfter.amountPaid } : {}),
-                    ...appendRentalAudit(row, uid, 'payment', paymentBefore, paymentAfter, now),
-                } as DocumentData);
-            });
-            return;
-        }
+            : action === 'cancel' ? 'cancelled' : 'expired';
         const allowed = action === 'confirm' ? rows.every((row) => LEGACY_PENDING.includes(String(row.status)))
             : action === 'deliver' ? rows.every((row) => LEGACY_CONFIRMED.includes(String(row.status)))
             : action === 'return' ? rows.every((row) => LEGACY_DELIVERED.includes(String(row.status)))
@@ -1033,6 +1009,137 @@ export const adminRentalAction = onCall(callable(), async (request) => {
         });
     });
     return { ok: true };
+});
+
+type RentalPaymentMovementType = 'receipt' | 'refund' | 'correction';
+type RentalPaymentMethod = 'Efectivo' | 'QR' | 'Transferencia';
+
+export const recordRentalPaymentMovement = onCall(callable(), async (request) => {
+    const { uid } = requireAuth(request);
+    if (!exactObject(request.data)) throw new HttpsError('invalid-argument', 'Movimiento de caja inválido.');
+    const rentalIds = Array.isArray(request.data.rentalIds)
+        ? [...new Set(request.data.rentalIds.map((id) => cleanString(id, 150)).filter(Boolean))]
+        : [];
+    if (!rentalIds.length || rentalIds.length > 100) throw new HttpsError('invalid-argument', 'El grupo de alquiler no es válido.');
+    const type = String(request.data.type) as RentalPaymentMovementType;
+    if (!['receipt', 'refund', 'correction'].includes(type)) throw new HttpsError('invalid-argument', 'Tipo de movimiento inválido.');
+    const amountNumber = Number(request.data.amount);
+    const amount = Math.round(amountNumber * 100) / 100;
+    if (!Number.isFinite(amountNumber) || amount <= 0 || Math.abs(amount - amountNumber) > 0.000001) {
+        throw new HttpsError('invalid-argument', 'El importe debe ser positivo y tener máximo dos decimales.');
+    }
+    const method = String(request.data.method) as RentalPaymentMethod;
+    if (!['Efectivo', 'QR', 'Transferencia'].includes(method)) throw new HttpsError('invalid-argument', 'Método de pago inválido.');
+    const actualAtInput = cleanString(request.data.actualAt, 40);
+    const actualAt = actualAtInput ? new Date(actualAtInput) : new Date();
+    if (Number.isNaN(actualAt.getTime())) throw new HttpsError('invalid-argument', 'La fecha real del movimiento no es válida.');
+    const idempotencyKey = cleanString(request.data.idempotencyKey, 100);
+    if (!/^[A-Za-z0-9_-]{16,100}$/.test(idempotencyKey)) throw new HttpsError('invalid-argument', 'Clave de idempotencia inválida.');
+    const referenceMovementId = cleanString(request.data.referenceMovementId, 180);
+    const reason = cleanString(request.data.reason, 500);
+    if ((type === 'refund' || type === 'correction') && (!referenceMovementId || !reason || request.data.confirmed !== true)) {
+        throw new HttpsError('failed-precondition', 'Confirma explícitamente la operación, referencia el cobro y explica el motivo.');
+    }
+    if (type === 'receipt' && method !== 'Efectivo' && request.data.confirmedReceived !== true) {
+        throw new HttpsError('failed-precondition', 'Confirma que el abono por QR/transferencia fue recibido antes de registrarlo.');
+    }
+    const roleRef = db.doc(`adminUsers/${uid}`);
+    const movementRef = db.doc(`rentalPaymentMovements/${uid}_${idempotencyKey}`);
+    const fingerprint = JSON.stringify({ rentalIds: rentalIds.slice().sort(), type, amount, method, actualAt: actualAt.toISOString(), referenceMovementId, reason });
+    const result = await db.runTransaction(async (tx) => {
+        const [roleSnap, movementSnap, ...rentalSnaps] = await Promise.all([
+            tx.get(roleRef), tx.get(movementRef), ...rentalIds.map((id) => tx.get(db.doc(`rentals/${id}`))),
+        ]);
+        const role = roleSnap.data();
+        requireRentalAdmin(role);
+        if (movementSnap.exists) {
+            if (movementSnap.get('requestFingerprint') !== fingerprint) throw new HttpsError('already-exists', 'La clave ya se usó para otro movimiento.');
+            return { movementId: movementSnap.id, duplicate: true };
+        }
+        const rows = rentalSnaps.filter((snap) => snap.exists).map((snap) => ({ ...snap.data()!, id: snap.id } as DocumentData));
+        if (!rows.length || rows.length !== rentalIds.length) throw new HttpsError('not-found', 'No se encontró el grupo completo.');
+        const codes = new Set(rows.map((row) => String(row.reservationCode || row.id)));
+        if (codes.size !== 1) throw new HttpsError('failed-precondition', 'El movimiento debe corresponder a un solo pedido.');
+        const reservationCode = [...codes][0];
+        if (role?.role === 'manager' && role.store !== 'all' && rows.some((row) => !row.store || row.store !== role.store)) {
+            throw new HttpsError('permission-denied', 'El alquiler pertenece a otra tienda.');
+        }
+        const store = String(rows.find((row) => row.store)?.store || 'Cochabamba');
+        const movementsQuery = db.collection('rentalPaymentMovements').where('reservationCode', '==', reservationCode);
+        const existingSnap = await tx.get(movementsQuery);
+        const legacyRefs = rows.map((row) => db.doc(`rentalPaymentMovements/legacy_${String(row.id).replace(/[^A-Za-z0-9_-]/g, '_')}`));
+        const legacySnaps = await Promise.all(legacyRefs.map((ref) => tx.get(ref)));
+        const existing: DocumentData[] = existingSnap.docs.map((snap) => ({ ...snap.data(), id: snap.id }));
+        const legacyToCreate: Array<{ ref: DocumentReference; data: DocumentData }> = [];
+        // A paid projection after the ledger starts is not a legacy receipt.
+        // Seed legacy documents only once, before the first real movement exists.
+        if (existingSnap.docs.length === 0) legacySnaps.forEach((snap, index) => {
+            if (snap.exists) return;
+            const row = rows[index];
+            if (row.paymentStatus !== 'paid') return;
+            const legacyAmount = Math.round((Number(row.amountPaid) || Number(row.total) || 0) * 100) / 100;
+            if (legacyAmount <= 0) return;
+            const legacyData: DocumentData = {
+                reservationCode, rentalIds: [String(row.id)], store: String(row.store || store), type: 'receipt',
+                amount: legacyAmount, method: ['QR', 'Transferencia', 'Efectivo'].includes(String(row.paymentMethod)) ? row.paymentMethod : 'Efectivo',
+                actualAt: typeof row.paidAt === 'string' ? row.paidAt : null, actorUid: null,
+                recordedAt: row.updatedAt || row.createdAt || new Date().toISOString(), legacy: true,
+            };
+            existing.push({ ...legacyData, id: legacyRefs[index].id });
+            legacyToCreate.push({ ref: legacyRefs[index], data: legacyData });
+        });
+        const groupTotal = Math.round(rows.reduce((sum, row) => sum + Math.max(0, Number(row.total) || 0), 0) * 100) / 100;
+        const receipts = existing.filter((entry) => entry.type === 'receipt');
+        const corrections = existing.filter((entry) => entry.type === 'correction');
+        const refunds = existing.filter((entry) => entry.type === 'refund');
+        const correctionByReference = new Map<string, number>();
+        const refundByReference = new Map<string, number>();
+        corrections.forEach((entry) => correctionByReference.set(String(entry.referenceMovementId), (correctionByReference.get(String(entry.referenceMovementId)) || 0) + Number(entry.amount)));
+        refunds.forEach((entry) => refundByReference.set(String(entry.referenceMovementId), (refundByReference.get(String(entry.referenceMovementId)) || 0) + Number(entry.amount)));
+        const grossReceipts = receipts.reduce((sum, entry) => sum + Number(entry.amount || 0), 0);
+        const totalCorrections = corrections.reduce((sum, entry) => sum + Number(entry.amount || 0), 0);
+        let reference: DocumentData | undefined;
+        let availableForReference = 0;
+        if (type !== 'receipt') {
+            reference = receipts.find((entry) => String(entry.id) === referenceMovementId);
+            if (!reference) throw new HttpsError('not-found', 'No se encontró el cobro que se quiere corregir/reembolsar.');
+            availableForReference = Math.round((Number(reference.amount) - (correctionByReference.get(referenceMovementId) || 0) - (refundByReference.get(referenceMovementId) || 0)) * 100) / 100;
+            if (amount > availableForReference) throw new HttpsError('failed-precondition', `El importe supera el disponible para esta referencia (Bs. ${Math.max(0, availableForReference)}).`);
+        }
+        if (type === 'receipt' && amount > Math.max(0, groupTotal - grossReceipts + totalCorrections)) {
+            throw new HttpsError('failed-precondition', 'El abono supera el saldo contractual pendiente.');
+        }
+        const now = new Date().toISOString();
+        const movement = {
+            reservationCode, rentalIds, store, type, amount, method, actualAt: actualAt.toISOString(),
+            recordedAt: now, actorUid: uid, idempotencyKey,
+            ...(referenceMovementId ? { referenceMovementId } : {}), ...(reason ? { reason } : {}),
+            ...(type === 'receipt' && method !== 'Efectivo' ? { receivedConfirmed: true } : {}),
+            requestFingerprint: fingerprint,
+        };
+        const afterAmounts = {
+            receipts: grossReceipts + (type === 'receipt' ? amount : 0),
+            refunds: refunds.reduce((sum, entry) => sum + Number(entry.amount || 0), 0) + (type === 'refund' ? amount : 0),
+            corrections: totalCorrections + (type === 'correction' ? amount : 0),
+        };
+        const beforeAmounts = {
+            receipts: grossReceipts,
+            refunds: refunds.reduce((sum, entry) => sum + Number(entry.amount || 0), 0),
+            corrections: totalCorrections,
+        };
+        const recognizedAfter = afterAmounts.receipts - afterAmounts.corrections;
+        const paymentStatus = type === 'refund'
+            ? String(rows.find((row) => row.paymentStatus)?.paymentStatus || 'unpaid')
+            : recognizedAfter + 0.001 >= groupTotal ? 'paid' : 'unpaid';
+        legacyToCreate.forEach(({ ref, data }) => tx.create(ref, data));
+        tx.create(movementRef, movement);
+        rows.forEach((row, index) => tx.update(rentalSnaps[index].ref, {
+            updatedAt: now, lastUpdatedBy: uid, paymentStatus,
+            ...appendRentalAudit(row, uid, `payment_${type}`, beforeAmounts, afterAmounts, now),
+        }));
+        return { movementId: movementRef.id, duplicate: false };
+    });
+    return { ok: true, ...result };
 });
 
 export const updateRentalGroup = onCall(callable(), async (request) => {

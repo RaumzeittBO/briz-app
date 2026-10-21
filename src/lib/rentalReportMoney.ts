@@ -15,8 +15,23 @@ export interface RentalMoneyRow {
 export interface RentalMoneySummary {
   contracted: number;
   collected: number;
+  refunded: number;
+  corrected: number;
+  netCollected: number;
   pending: number;
   collectedDateUnknown: number;
+}
+
+export interface RentalPaymentMovement {
+  id?: string;
+  movementId?: string;
+  reservationCode: string;
+  store?: string;
+  type: 'receipt' | 'refund' | 'correction';
+  amount: number;
+  actualAt?: string | null;
+  referenceMovementId?: string;
+  legacy?: boolean;
 }
 
 const effectiveStatuses = new Set(['Confirmado', 'confirmed', 'Entregado', 'delivered', 'Devuelto', 'returned']);
@@ -38,36 +53,67 @@ export function summarizeRentalMoney(
   start: string,
   end: string,
   includeUndatedLegacyPayments = false,
+  movements: RentalPaymentMovement[] = [],
 ): RentalMoneySummary {
   let contracted = 0;
   let pending = 0;
   let collected = 0;
+  let refunded = 0;
+  let corrected = 0;
   let collectedDateUnknown = 0;
 
-  for (const row of rows) {
-    const total = Math.max(0, Number(row.total) || 0);
-    const rentalDay = day(row.date) || day(row.createdAt) || day(row.createdDate);
-    const isInRentalRange = Boolean(rentalDay && rentalDay >= start && rentalDay <= end);
-    const isEffective = effectiveStatuses.has(String(row.status || ''));
-    const paid = row.paymentStatus === 'paid';
-    // Only a currently recognized paid state contributes to cash totals. Keep
-    // amountPaid/paidAt on the rental as an audit trace when status is corrected.
-    const recordedPaid = paid ? Math.max(0, Number(row.amountPaid) || total) : 0;
-    const amountDue = Math.max(0, total - recordedPaid);
+  const groups = new Map<string, RentalMoneyRow[]>();
+  rows.forEach(row => {
+    const key = String(row.reservationCode || row.id || '');
+    groups.set(key, [...(groups.get(key) || []), row]);
+  });
+  const movementGroups = new Set(movements.map(movement => String(movement.reservationCode || '')));
 
-    if (isEffective && isInRentalRange) {
-      contracted += total;
-      pending += amountDue;
+  const inDateRange = (value?: string | null) => {
+    const valueDay = day(value);
+    return Boolean(valueDay && valueDay >= start && valueDay <= end);
+  };
+
+  for (const [groupId, groupRows] of groups) {
+    const groupTotal = groupRows.reduce((sum, row) => sum + Math.max(0, Number(row.total) || 0), 0);
+    const rentalDay = groupRows.map(row => day(row.date) || day(row.createdAt) || day(row.createdDate)).find(Boolean);
+    const isInRentalRange = Boolean(rentalDay && rentalDay >= start && rentalDay <= end);
+    const isEffective = groupRows.some(row => effectiveStatuses.has(String(row.status || '')));
+    const groupMovements = movements.filter(movement => String(movement.reservationCode || '') === groupId);
+
+    let allReceipts = 0;
+    let allCorrections = 0;
+    for (const movement of groupMovements) {
+      const amount = Math.max(0, Number(movement.amount) || 0);
+      if (movement.type === 'receipt') allReceipts += amount;
+      if (movement.type === 'correction') allCorrections += amount;
+      if (movement.type === 'receipt' && inDateRange(movement.actualAt)) collected += amount;
+      if (movement.type === 'receipt' && movement.legacy && !day(movement.actualAt) && includeUndatedLegacyPayments) collectedDateUnknown += amount;
+      if (movement.type === 'refund' && inDateRange(movement.actualAt)) refunded += amount;
+      if (movement.type === 'correction' && inDateRange(movement.actualAt)) corrected += amount;
     }
 
-    if (!paid) continue;
-    const paymentDay = day(row.paidAt);
-    if (!paymentDay) {
-      if (includeUndatedLegacyPayments) collectedDateUnknown += recordedPaid;
-    } else if (paymentDay >= start && paymentDay <= end) {
-      collected += recordedPaid;
+    // Preserve historical rows without fabricating payment movements. Once a
+    // group has ledger entries, its ledger is the sole money source of truth.
+    if (!movementGroups.has(groupId)) {
+      for (const row of groupRows) {
+        if (row.paymentStatus !== 'paid') continue;
+        const amount = Math.max(0, Number(row.amountPaid) || Number(row.total) || 0);
+        allReceipts += amount;
+        const paymentDay = day(row.paidAt);
+        if (!paymentDay) {
+          if (includeUndatedLegacyPayments) collectedDateUnknown += amount;
+        } else if (paymentDay >= start && paymentDay <= end) collected += amount;
+      }
+    }
+
+    if (isEffective && isInRentalRange) {
+      contracted += groupTotal;
+      // Refunds are cash outflows; they do not recreate contractual debt.
+      pending += Math.max(0, groupTotal - allReceipts + allCorrections);
     }
   }
 
-  return { contracted, collected, pending, collectedDateUnknown };
+  const netCollected = collected - refunded - corrected;
+  return { contracted, collected, refunded, corrected, netCollected, pending, collectedDateUnknown };
 }

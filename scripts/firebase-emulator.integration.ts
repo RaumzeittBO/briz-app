@@ -351,24 +351,73 @@ try {
     assert.equal(returnedManager.get('total'), paidBeforeReturn, 'Return must retain historical charges.');
     assert.equal((await adminDb.collection('inventory').doc('bike-emulator').get()).get('wheelSizes')[0].stock, stockBeforeHealthyReturn + 1);
     assert.equal(returnedManager.get('paymentStatus'), 'unpaid', 'Returning a rental does not invent or add a payment.');
-    await call(userB.functions, 'adminRentalAction', { action: 'payment', rentalIds: managerCycle.rentalIds, paymentStatus: 'paid' });
+    const receiptKey = `receipt_${crypto.randomUUID()}`;
+    const receiptAt = new Date().toISOString();
+    const receipt = await call<{ movementId: string; duplicate: boolean }>(userB.functions, 'recordRentalPaymentMovement', {
+        rentalIds: managerCycle.rentalIds, type: 'receipt', amount: paidBeforeReturn, method: 'Efectivo', actualAt: receiptAt, idempotencyKey: receiptKey,
+    });
+    const duplicateReceipt = await call<{ movementId: string; duplicate: boolean }>(userB.functions, 'recordRentalPaymentMovement', {
+        rentalIds: managerCycle.rentalIds, type: 'receipt', amount: paidBeforeReturn, method: 'Efectivo', actualAt: receiptAt, idempotencyKey: receiptKey,
+    });
+    assert.equal(duplicateReceipt.duplicate, true, 'Retry with the same key cannot create a second receipt.');
+    assert.equal(duplicateReceipt.movementId, receipt.movementId);
     const paidAfterReturn = await adminDb.collection('rentals').doc(managerCycle.rentalIds[0]).get();
     assert.equal(paidAfterReturn.get('status'), 'returned');
     assert.equal(paidAfterReturn.get('paymentStatus'), 'paid');
-    assert.ok(paidAfterReturn.get('paidAt'));
     const receiptAtBeforeCorrection = paidAfterReturn.get('paidAt');
     const receiptAmountBeforeCorrection = paidAfterReturn.get('amountPaid');
-    await call(userB.functions, 'adminRentalAction', { action: 'payment', rentalIds: managerCycle.rentalIds, paymentStatus: 'pending_review' });
+    await call(userB.functions, 'recordRentalPaymentMovement', {
+        rentalIds: managerCycle.rentalIds, type: 'correction', amount: 1, method: 'Efectivo', actualAt: new Date().toISOString(),
+        idempotencyKey: `correction_${crypto.randomUUID()}`, referenceMovementId: receipt.movementId, reason: 'Corrección ficticia de prueba', confirmed: true,
+    });
     const paymentCorrected = await adminDb.collection('rentals').doc(managerCycle.rentalIds[0]).get();
-    assert.equal(paymentCorrected.get('paymentStatus'), 'pending_review');
+    assert.equal(paymentCorrected.get('paymentStatus'), 'unpaid');
     assert.equal(paymentCorrected.get('paidAt'), receiptAtBeforeCorrection, 'A status correction must preserve the historical receipt timestamp.');
     assert.equal(paymentCorrected.get('amountPaid'), receiptAmountBeforeCorrection, 'A status correction must preserve the historical receipt amount.');
     const paymentAudit = paymentCorrected.get('auditLog').at(-1);
-    assert.equal(paymentAudit.before.status, 'paid');
-    assert.equal(paymentAudit.before.paidAt, receiptAtBeforeCorrection);
-    assert.equal(paymentAudit.before.amountPaid, receiptAmountBeforeCorrection);
-    assert.equal(paymentAudit.after.status, 'pending_review');
-    assert.equal(paymentAudit.after.paidAt, receiptAtBeforeCorrection);
+    assert.equal(paymentAudit.action, 'payment_correction');
+    assert.equal(paymentAudit.before.receipts, paidBeforeReturn);
+    assert.equal(paymentAudit.after.corrections, 1);
+    const refund = await call<{ movementId: string }>(userB.functions, 'recordRentalPaymentMovement', {
+        rentalIds: managerCycle.rentalIds, type: 'refund', amount: 10, method: 'Efectivo', actualAt: new Date().toISOString(),
+        idempotencyKey: `refund_${crypto.randomUUID()}`, referenceMovementId: receipt.movementId, reason: 'Reembolso ficticio de prueba', confirmed: true,
+    });
+    assert.ok(refund.movementId);
+    const moneyRows = await adminDb.collection('rentalPaymentMovements').where('reservationCode', '==', managerCycle.reservationCode).get();
+    assert.equal(moneyRows.docs.filter(doc => doc.get('type') === 'receipt').length, 1);
+    assert.equal(moneyRows.docs.filter(doc => doc.get('type') === 'refund').length, 1);
+    assert.equal(moneyRows.docs.filter(doc => doc.get('type') === 'receipt').reduce((sum, doc) => sum + Number(doc.get('amount')), 0), paidBeforeReturn);
+    assert.equal(moneyRows.docs.filter(doc => doc.get('type') === 'refund').reduce((sum, doc) => sum + Number(doc.get('amount')), 0), 10);
+    await assert.rejects(() => call(userB.functions, 'recordRentalPaymentMovement', {
+        rentalIds: managerCycle.rentalIds, type: 'refund', amount: paidBeforeReturn, method: 'Efectivo', actualAt: new Date().toISOString(),
+        idempotencyKey: `overrefund_${crypto.randomUUID()}`, referenceMovementId: receipt.movementId, reason: 'Excede lo cobrado', confirmed: true,
+    }), 'A refund cannot exceed the available receipt balance.');
+
+    const exactLedgerCode = `TEST-100-${crypto.randomUUID()}`;
+    const exactLedgerDoc = await adminDb.collection('rentals').add({
+        reservationCode: exactLedgerCode, store: (await adminDb.collection('rentals').doc(managerCycle.rentalIds[0]).get()).get('store'),
+        total: 100, status: 'returned', paymentStatus: 'unpaid', productId: 'bike-emulator', quantity: 1, auditLog: [],
+    });
+    const firstPartialKey = `partial40_${crypto.randomUUID()}`;
+    const firstPartialAt = new Date().toISOString();
+    const partialCalls = await Promise.all([
+        call<{ movementId: string; duplicate: boolean }>(userB.functions, 'recordRentalPaymentMovement', { rentalIds: [exactLedgerDoc.id], type: 'receipt', amount: 40, method: 'Efectivo', actualAt: firstPartialAt, idempotencyKey: firstPartialKey }),
+        call<{ movementId: string; duplicate: boolean }>(userB.functions, 'recordRentalPaymentMovement', { rentalIds: [exactLedgerDoc.id], type: 'receipt', amount: 40, method: 'Efectivo', actualAt: firstPartialAt, idempotencyKey: firstPartialKey }),
+    ]);
+    assert.equal(new Set(partialCalls.map(result => result.movementId)).size, 1, 'Concurrent same-key receipt submissions resolve to one immutable event.');
+    assert.equal(partialCalls.filter(result => result.duplicate).length, 1);
+    await call(userB.functions, 'recordRentalPaymentMovement', { rentalIds: [exactLedgerDoc.id], type: 'receipt', amount: 60, method: 'QR', confirmedReceived: true, actualAt: new Date().toISOString(), idempotencyKey: `partial60_${crypto.randomUUID()}` });
+    const firstReceiptId = partialCalls[0].movementId;
+    await call(userB.functions, 'recordRentalPaymentMovement', { rentalIds: [exactLedgerDoc.id], type: 'refund', amount: 25, method: 'Efectivo', actualAt: new Date().toISOString(), idempotencyKey: `refund25_${crypto.randomUUID()}`, referenceMovementId: firstReceiptId, reason: 'Reembolso de ejemplo', confirmed: true });
+    const exactLedgerMovements = await adminDb.collection('rentalPaymentMovements').where('reservationCode', '==', exactLedgerCode).get();
+    const exactReceipts = exactLedgerMovements.docs.filter(doc => doc.get('type') === 'receipt');
+    assert.equal(exactReceipts.length, 2);
+    assert.equal(exactReceipts.reduce((sum, doc) => sum + Number(doc.get('amount')), 0), 100, 'Two partial receipts total exactly Bs. 100.');
+    assert.equal(exactLedgerMovements.docs.filter(doc => doc.get('type') === 'refund').reduce((sum, doc) => sum + Number(doc.get('amount')), 0), 25);
+    assert.equal((await adminDb.collection('rentals').doc(exactLedgerDoc.id).get()).get('paymentStatus'), 'paid', 'A refund does not recreate contractual debt.');
+    await assert.rejects(() => call(userB.functions, 'recordRentalPaymentMovement', { rentalIds: [exactLedgerDoc.id], type: 'receipt', amount: 1, method: 'QR', actualAt: new Date().toISOString(), idempotencyKey: `unconfirmed_${crypto.randomUUID()}` }), 'Unconfirmed QR receipts must fail.');
+    await assert.rejects(() => call(userB.functions, 'recordRentalPaymentMovement', { rentalIds: [exactLedgerDoc.id], type: 'refund', amount: 16, method: 'Efectivo', actualAt: new Date().toISOString(), idempotencyKey: `overpartial_${crypto.randomUUID()}`, referenceMovementId: firstReceiptId, reason: 'Excede disponible', confirmed: true }), 'Refund cannot exceed the remaining referenced receipt amount.');
+    await assert.rejects(() => call(userB.functions, 'adminRentalAction', { action: 'payment', rentalIds: managerCycle.rentalIds, paymentStatus: 'paid' }));
     const confirmedCancel = await call<{ rentalIds: string[] }>(userB.functions, 'createRentalGroup', managerBooking(17));
     await call(userB.functions, 'adminRentalAction', { action: 'confirm', rentalIds: confirmedCancel.rentalIds });
     const stockBeforeConfirmedCancel = (await adminDb.collection('inventory').doc('bike-emulator').get()).get('wheelSizes')[0].stock;
@@ -376,9 +425,13 @@ try {
     assert.equal((await adminDb.collection('inventory').doc('bike-emulator').get()).get('wheelSizes')[0].stock, stockBeforeConfirmedCancel + 1);
     assert.equal((await adminDb.collection('rentals').doc(confirmedCancel.rentalIds[0]).get()).get('status'), 'cancelled');
     await adminDb.collection('rentals').doc(managerCycle.rentalIds[0]).update({ store: 'shop-other' });
-    await assert.rejects(() => call(userB.functions, 'adminRentalAction', { action: 'payment', rentalIds: managerCycle.rentalIds, paymentStatus: 'paid' }));
+    await assert.rejects(() => call(userB.functions, 'recordRentalPaymentMovement', {
+        rentalIds: managerCycle.rentalIds, type: 'receipt', amount: 1, method: 'Efectivo', actualAt: new Date().toISOString(), idempotencyKey: `scope_${crypto.randomUUID()}`,
+    }));
     await adminDb.collection('adminUsers').doc(userB.uid).update({ role: 'mechanic' });
-    await assert.rejects(() => call(userB.functions, 'adminRentalAction', { action: 'payment', rentalIds: managerCycle.rentalIds, paymentStatus: 'paid' }));
+    await assert.rejects(() => call(userB.functions, 'recordRentalPaymentMovement', {
+        rentalIds: managerCycle.rentalIds, type: 'receipt', amount: 1, method: 'Efectivo', actualAt: new Date().toISOString(), idempotencyKey: `role_${crypto.randomUUID()}`,
+    }));
     await adminDb.collection('adminUsers').doc(userB.uid).update({ role: 'viewer' });
     await assert.rejects(() => call(userB.functions, 'updateRentalGroup', {
         reservationCode: managerCycle.reservationCode, date: managerDate(16), pickupTime: '15:00', duration: '1 hora',
