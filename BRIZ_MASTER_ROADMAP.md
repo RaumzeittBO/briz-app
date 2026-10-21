@@ -8,6 +8,7 @@
 - **Validación visual:** no completada. La política del navegador automatizado bloquea localhost y no se intentó evadirla. El checklist manual se actualizó; no se declara que se hayan operado botones/modal ni vistas responsive.
 - **Pruebas de esta corrección:** `test:reports`, motor 16/16, `test:reconcile`, TypeScript, builds web/Functions y suites Emulator pasaron. La primera integración ampliada detectó contaminación del fixture al dejar una bicicleta confirmada; se agregó cancelación de limpieza y el rerun completo pasó. Lint dirigido reporta 32 problemas preexistentes en los archivos Admin (principalmente `any` y una incompatibilidad de memoización React Compiler); se mantienen fuera del alcance de esta incidencia.
 - Seguridad: Emulator `demo-briz-security` solamente; ninguna operación contra producción, ningún deploy, merge o servicio facturable.
+- Git: `54605b98b25278f82d8a44c1853be5872ff46f64` (`fix(admin): make rental actions and receipts idempotent`) se publicó con push normal. `git ls-remote` coincidió con ese SHA; este registro documental se agrega en un commit aparte.
 - Próximo paso ejecutable: completar el checklist visual desde el navegador del propietario apuntando exclusivamente a Emulators; después preparar dry-run de conciliación histórica con fixture/copia desidentificada autorizada. Mantener App Check/Telegram pausados.
 
 > **ÚLTIMA ACTUALIZACIÓN:** 2026-10-21 (Hotfix de confirmación, pagos y reportes)
