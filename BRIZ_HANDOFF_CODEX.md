@@ -1,5 +1,16 @@
 # BRIZ (`briz.com.bo`) — DOCUMENTO DE HANDOFF TÉCNICO PARA CODEX
 
+## Incidencia de cobros y exclusión de acciones — 2026-10-21 (continuación)
+
+- En esta continuación se corrigió el alcance por sede de métricas monetarias y del gráfico de recibos. Contratado/pendiente siguen la fecha programada del alquiler; cobrado sigue `paidAt` (America/La_Paz). Las filas de dos sedes, anticipos, devoluciones y registros con un estado de pago corregido están cubiertas en `test:reports`.
+- `AdminRentalsPage` bloquea mutaciones por ID de grupo a través de confirmación, entrega, pago, cancelación, expiración, edición y devolución. Todas muestran estado cargando, deshabilitan mutaciones incompatibles y no cierran ni anuncian éxito ante operación ignorada o fallida; las excepciones muestran error y permiten reintentar.
+- Al cambiar un recibo de `paid` a `unpaid`/`pending_review`, backend preserva `amountPaid`/`paidAt` como evidencia histórica y registra before/after en `auditLog`. Reportes lo excluye como efectivo vigente, y el pendiente vuelve al total contratado. No se infiere reembolso. La política comercial para reembolsos reales, pagos parciales y ajustes contables sigue pendiente de aprobación; no borrar ni manipular cobros históricos.
+- La integración Emulator incluye una regresión del cambio de estado de pago y verifica persistencia de fecha/importe/auditoría. No se completó navegación visual automatizada: el propietario debe abrir el entorno `demo-briz-security` y seguir el recorrido de 5 pasos en `BRIZ_ADMIN_MANUAL_VALIDATION.md`.
+- ESLint dirigido reporta errores `no-explicit-any` preexistentes en `AdminRentalsPage.tsx` y `ReportsPage.tsx`; los archivos de soporte/Functions incluidos no agregan hallazgos. Revisar calidad en una fase separada.
+- Suites de este cierre: `test:firebase`, `test:reports`, `test:reconcile` (8 ficticios/22 hallazgos), motor (16/16), TypeScript, build web y build Functions pasaron. ESLint del helper, Functions y scripts pasó limpio; ESLint dirigido a ambas páginas Admin informó 25 `no-explicit-any` operativos (20 alquileres, 5 reportes), sin fallas de build. El build mantiene avisos de `/noise.png` y chunk ~1.96 MB.
+- Click-through visual queda pendiente del propietario. Siguiente paso: hacer el recorrido corto de `BRIZ_ADMIN_MANUAL_VALIDATION.md` en escritorio y móvil con Auth/Firestore/Functions/Storage Emulator; confirmar sede, estado, historial, importe y stock tras recarga. Después, atender la decisión comercial sobre reversos/parciales antes de modelar una contabilidad completa.
+- Cierre Git: consultar el SHA y resultado de `git ls-remote` informados tras commit/push. No ejecutar producción, despliegue, merge, billing, App Check ni Telegram.
+
 ## Hotfix alquileres/reportes — 2026-10-21
 
 - Rama base `codex/briz-critical-stabilization-20261020`; SHA publicado al iniciar este hotfix `d4e89af173ad98670bbd5b1039f0d54392b4735`. Consultar historial de Git y `git ls-remote` para el commit final.

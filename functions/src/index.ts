@@ -901,10 +901,20 @@ export const adminRentalAction = onCall(callable(), async (request) => {
             rows.forEach((row, index) => {
                 // Treat retries as idempotent: keep the original receipt time and don't append duplicate audit events.
                 if (row.paymentStatus === paymentStatus) return;
+                const paymentBefore = {
+                    status: row.paymentStatus || 'unpaid',
+                    amountPaid: Number(row.amountPaid) || 0,
+                    paidAt: row.paidAt || null,
+                };
+                const paymentAfter = {
+                    status: paymentStatus,
+                    amountPaid: paymentStatus === 'paid' ? (Number(row.total) || Number(row.amountPaid) || 0) : paymentBefore.amountPaid,
+                    paidAt: paymentStatus === 'paid' ? now : paymentBefore.paidAt,
+                };
                 tx.update(refs[index], {
                     paymentStatus, updatedAt: now, lastUpdatedBy: uid,
-                    ...(paymentStatus === 'paid' ? { paidAt: row.paidAt || now, amountPaid: Number(row.amountPaid) || Number(row.total) || 0 } : {}),
-                    ...appendRentalAudit(row, uid, 'payment', row.paymentStatus || 'unpaid', paymentStatus, now),
+                    ...(paymentStatus === 'paid' ? { paidAt: now, amountPaid: paymentAfter.amountPaid } : {}),
+                    ...appendRentalAudit(row, uid, 'payment', paymentBefore, paymentAfter, now),
                 } as DocumentData);
             });
             return;

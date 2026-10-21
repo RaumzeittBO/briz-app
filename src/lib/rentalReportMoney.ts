@@ -9,6 +9,7 @@ export interface RentalMoneyRow {
   total?: number;
   paymentStatus?: string;
   status?: string;
+  store?: string;
 }
 
 export interface RentalMoneySummary {
@@ -19,6 +20,10 @@ export interface RentalMoneySummary {
 }
 
 const effectiveStatuses = new Set(['Confirmado', 'confirmed', 'Entregado', 'delivered', 'Devuelto', 'returned']);
+export function filterRentalMoneyByStore<T extends RentalMoneyRow>(rows: T[], selectedStore: string): T[] {
+  if (selectedStore === 'all') return rows;
+  return rows.filter(row => (row.store || 'Cochabamba') === selectedStore);
+}
 const day = (value: unknown): string | undefined => {
   if (typeof value !== 'string' || !value) return undefined;
   if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
@@ -45,7 +50,9 @@ export function summarizeRentalMoney(
     const isInRentalRange = Boolean(rentalDay && rentalDay >= start && rentalDay <= end);
     const isEffective = effectiveStatuses.has(String(row.status || ''));
     const paid = row.paymentStatus === 'paid';
-    const recordedPaid = Math.max(0, Number(row.amountPaid) || (paid ? total : 0));
+    // Only a currently recognized paid state contributes to cash totals. Keep
+    // amountPaid/paidAt on the rental as an audit trace when status is corrected.
+    const recordedPaid = paid ? Math.max(0, Number(row.amountPaid) || total) : 0;
     const amountDue = Math.max(0, total - recordedPaid);
 
     if (isEffective && isInRentalRange) {
@@ -53,7 +60,7 @@ export function summarizeRentalMoney(
       pending += amountDue;
     }
 
-    if (!paid && !(Number(row.amountPaid) > 0)) continue;
+    if (!paid) continue;
     const paymentDay = day(row.paidAt);
     if (!paymentDay) {
       if (includeUndatedLegacyPayments) collectedDateUnknown += recordedPaid;

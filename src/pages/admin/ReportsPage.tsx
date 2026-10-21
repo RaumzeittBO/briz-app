@@ -23,7 +23,7 @@ import { useStore } from '@/context/StoreContext';
 import type { Rental } from '@/context/StoreContext';
 import { toBoliviaDateString, addDaysToDateString, parseBoliviaDateTime } from '@/lib/dateUtils';
 import { parseDurationToHours } from '@/lib/rentalPricing';
-import { summarizeRentalMoney } from '@/lib/rentalReportMoney';
+import { filterRentalMoneyByStore, summarizeRentalMoney } from '@/lib/rentalReportMoney';
 
 type DateRangePreset = 'today' | 'yesterday' | 'last7' | 'thisMonth' | 'lastMonth' | 'custom' | 'all';
 
@@ -119,6 +119,10 @@ export default function ReportsPage() {
     });
   }, [rentals, dateBounds, selectedStore]);
 
+  // Receipts are grouped by payment date, so this scope applies the branch
+  // without restricting the rental's scheduled date to the report period.
+  const storeRentals = useMemo(() => filterRentalMoneyByStore(rentals, selectedStore), [rentals, selectedStore]);
+
   const effectivePeriodRentals = useMemo(
     () => periodRentals.filter(r => isEffectiveRental(r.status)),
     [periodRentals]
@@ -147,8 +151,8 @@ export default function ReportsPage() {
 
   // 1, 2, 3, 4: Financial metrics (Alquileres, Tienda, Taller, Cobrado vs Pendiente)
   const rentalMoney = useMemo(
-    () => summarizeRentalMoney(rentals, dateBounds.start, dateBounds.end, preset === 'all'),
-    [rentals, dateBounds, preset]
+    () => summarizeRentalMoney(storeRentals, dateBounds.start, dateBounds.end, preset === 'all'),
+    [storeRentals, dateBounds, preset]
   );
   const rentalGrossIncome = rentalMoney.contracted;
   const rentalPaidIncome = rentalMoney.collected;
@@ -336,8 +340,8 @@ export default function ReportsPage() {
   const timelineChartData = useMemo(() => {
     const dayMap = new Map<string, { date: string; alquileres: number; ventas: number; taller: number }>();
 
-    rentals.forEach(r => {
-      if (!isEffectiveRental(r.status) || (r.paymentStatus !== 'paid' && !(Number(r.amountPaid) > 0)) || !r.paidAt) return;
+    storeRentals.forEach(r => {
+      if (r.paymentStatus !== 'paid' || !r.paidAt) return;
       const d = toBoliviaDateString(r.paidAt);
       if (d < dateBounds.start || d > dateBounds.end) return;
       const curr = dayMap.get(d) || { date: d, alquileres: 0, ventas: 0, taller: 0 };
@@ -360,7 +364,7 @@ export default function ReportsPage() {
     });
 
     return Array.from(dayMap.values()).sort((a, b) => a.date.localeCompare(b.date));
-  }, [rentals, dateBounds, periodSales, periodServices]);
+  }, [storeRentals, dateBounds, periodSales, periodServices]);
 
   // 17: Export to CSV/Excel and Printable PDF
   const handleExportCSV = () => {

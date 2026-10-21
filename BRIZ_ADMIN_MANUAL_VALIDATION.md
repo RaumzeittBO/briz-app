@@ -13,6 +13,18 @@ La corrección de UI no se marcó como validación visual: el navegador automati
 
 Un cobro ya guardado se mantiene reportado tras cancelación o devolución mientras no exista una operación explícita de reembolso.
 
+## Recorrido corto del propietario: reserva → inventario → reportes
+
+Ejecutar solo con la cuenta/catálogo sintéticos del Emulator (nunca con el proyecto productivo). Anotar el total que muestra Admin como **T** y el stock visible antes de confirmar como **S**. Utilizar una bicicleta individual, una sede conocida y fechas futuras sin conflictos:
+
+1. Crear en `/rentals` una reserva pendiente de 1 bicicleta y completar el envío. En `/admin/rentals`, confirmar **una sola vez**. Debe quedar confirmada; la misma reserva no debe duplicarse. Stock retenido: `S - 1`.
+2. Registrar el pago total de **T**. En Reportes, para la sede de esa reserva y el día de cobro, `Cobrado = T`; el pendiente de ese alquiler queda en `0`. Si el alquiler está programado para otro día, `Contratado = T` aparece en el período de la fecha programada, no se mueve al día del pago.
+3. Entregar. El stock queda en `S - 1` (entrega no vuelve a descontar). Devolver en buen estado. El stock regresa exactamente a `S`; el estado queda devuelto y el pago/historial permanece.
+4. Recargar Admin, Inventario y Reportes. El mismo código, pago e importes deben persistir; ni el stock ni el cobro deben cambiar por recargar. El cobro se ve una sola vez.
+5. Cambiar Reportes a otra sede: el cobro de **T** no debe aparecer allí. Volver a la sede de la reserva: debe aparecer por `paidAt`, aunque la fecha del alquiler sea distinta.
+
+No simular reembolsos ni cambiar un cobro ya recibido a `unpaid` para representar una devolución. Si se corrige el estado a `unpaid`/`pending_review`, `amountPaid` y `paidAt` quedan preservados como trazabilidad, pero Reportes deja de reconocerlos como cobro vigente; el sistema no afirma que se haya hecho un reembolso. La política para reversos, pagos parciales y ajustes de caja requiere decisión comercial del propietario antes de representar esos movimientos.
+
 Las pruebas automatizadas contra `demo-briz-security` cubren estas invariantes backend/reporting; no reemplazan los pasos visuales listados aquí.
 
 **Estado:** el 2026-10-21 se iniciaron Auth, Firestore, Functions y Storage Emulator, se sembró la cuenta/catálogo ficticios y Vite quedó iniciado en `http://127.0.0.1:5173/`. El navegador automatizado bloqueó el acceso al `localhost` por política de URL; no se repitió el acceso ni se declara como visualmente probado. Los procesos siguen disponibles para completar el recorrido manual. Las suites de Emulator cubren lógica y permisos del backend, pero no sustituyen esta lista.

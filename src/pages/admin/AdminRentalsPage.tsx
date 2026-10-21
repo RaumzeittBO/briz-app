@@ -308,7 +308,7 @@ export default function AdminRentalsPage() {
   const [returnDamagedUnits, setReturnDamagedUnits] = useState(0);
   const [returnNotes, setReturnNotes] = useState('');
   const actionLockRef = useRef(new Set<string>());
-  const [busyActionKey, setBusyActionKey] = useState<string | null>(null);
+  const [busyActionByGroup, setBusyActionByGroup] = useState<Record<string, string>>({});
 
   // Manual Rental Wizard States
   const [newRentalModalOpen, setNewRentalModalOpen] = useState(false);
@@ -446,21 +446,25 @@ export default function AdminRentalsPage() {
       .sort((a, b) => new Date(b.createdAt || b.createdDate || '').getTime() - new Date(a.createdAt || a.createdDate || '').getTime());
   }, [groupedRentals, filter, search]);
 
-  const runExclusiveAction = async (key: string, operation: () => Promise<void>) => {
-    if (actionLockRef.current.has(key)) return false;
-    actionLockRef.current.add(key);
-    setBusyActionKey(key);
+  const runExclusiveAction = async (groupId: string, action: string, operation: () => Promise<void>) => {
+    if (actionLockRef.current.has(groupId)) return false;
+    actionLockRef.current.add(groupId);
+    setBusyActionByGroup(current => ({ ...current, [groupId]: action }));
     try { await operation(); return true; }
     finally {
-      actionLockRef.current.delete(key);
-      setBusyActionKey(current => current === key ? null : current);
+      actionLockRef.current.delete(groupId);
+      setBusyActionByGroup(current => {
+        const next = { ...current };
+        delete next[groupId];
+        return next;
+      });
     }
   };
 
   const handleConfirmGroup = async (group: GroupedRental) => {
     const ids = group.items.map(item => item.id);
     try {
-      const completed = await runExclusiveAction(`confirm:${group.id}`, async () => {
+      const completed = await runExclusiveAction(group.id, 'confirm', async () => {
         await runAdminRentalAction('confirm', ids);
         if (selected?.id === group.id) setSelected(prev => prev?.id === group.id ? {
           ...prev, status: 'confirmed', items: prev.items.map(item => ({ ...item, status: 'confirmed' }))
@@ -475,25 +479,23 @@ export default function AdminRentalsPage() {
 
   const handleDeliverGroup = async (group: GroupedRental) => {
     const ids = group.items.map(item => item.id);
-    await runExclusiveAction(`deliver:${group.id}`, async () => { await runAdminRentalAction('deliver', ids); });
-    if (selected?.id === group.id) {
-      setSelected(prev => {
-        if (!prev || prev.id !== group.id) return prev;
-        return {
-          ...prev,
-          status: 'delivered',
-          deliveredAt: new Date().toISOString(),
-          items: prev.items.map(item => ({ ...item, status: 'delivered' }))
-        };
-      });
-    }
+    try {
+      const completed = await runExclusiveAction(group.id, 'deliver', async () => { await runAdminRentalAction('deliver', ids); });
+      if (!completed) return false;
+      if (selected?.id === group.id) setSelected(prev => prev?.id === group.id ? ({ ...prev, status: 'delivered', deliveredAt: new Date().toISOString(), items: prev.items.map(item => ({ ...item, status: 'delivered' })) }) : prev);
+      return true;
+    } catch (error) { alert(`Error al entregar la reserva:\n${error instanceof Error ? error.message : 'Intenta nuevamente.'}`); return false; }
   };
 
   const handleCancelGroup = async (group: GroupedRental) => {
     if (!confirm('¿Seguro que deseas cancelar esta reserva de alquiler? Si estaba confirmada, el stock se restaurará automáticamente.')) return;
     const ids = group.items.map(item => item.id);
-    await runExclusiveAction(`cancel:${group.id}`, async () => { await runAdminRentalAction('cancel', ids); });
-    if (selected?.id === group.id) setSelected(null);
+    try {
+      const completed = await runExclusiveAction(group.id, 'cancel', async () => { await runAdminRentalAction('cancel', ids); });
+      if (!completed) return false;
+      if (selected?.id === group.id) setSelected(null);
+      return true;
+    } catch (error) { alert(`Error al cancelar la reserva:\n${error instanceof Error ? error.message : 'Intenta nuevamente.'}`); return false; }
   };
 
   const openReturnDialog = (group: GroupedRental) => {
@@ -505,7 +507,10 @@ export default function AdminRentalsPage() {
   const handleConfirmReturnGroup = async () => {
     if (!returnModalGroup) return;
     const ids = returnModalGroup.items.map(item => item.id);
-    await runExclusiveAction(`return:${returnModalGroup.id}`, async () => { await runAdminRentalAction('return', ids, { damagedUnits: returnDamagedUnits, conditionNotes: returnNotes.trim() || undefined }); });
+    try {
+      const completed = await runExclusiveAction(returnModalGroup.id, 'return', async () => { await runAdminRentalAction('return', ids, { damagedUnits: returnDamagedUnits, conditionNotes: returnNotes.trim() || undefined }); });
+      if (!completed) return false;
+    } catch (error) { alert(`Error al registrar la devolución:\n${error instanceof Error ? error.message : 'Intenta nuevamente.'}`); return false; }
 
     setReturnModalGroup(null);
     if (selected?.id === returnModalGroup.id) setSelected(null);
@@ -514,33 +519,46 @@ export default function AdminRentalsPage() {
         ? 'Devolución registrada. Las unidades dañadas quedaron apartadas en Mantenimiento/Taller y los demás accesorios fueron liberados.'
         : '¡Devolución registrada con éxito! Todas las bicicletas y accesorios volvieron al stock disponible.'
     );
+    return true;
   };
 
   const handleExpireGroup = async (group: GroupedRental) => {
     if (!confirm('¿Marcar esta reserva como expirada?')) return;
-    await runAdminRentalAction('expire', group.items.map(item => item.id));
-    if (selected?.id === group.id) setSelected(null);
+    try {
+      const completed = await runExclusiveAction(group.id, 'expire', async () => { await runAdminRentalAction('expire', group.items.map(item => item.id)); });
+      if (!completed) return false;
+      if (selected?.id === group.id) setSelected(null);
+      return true;
+    } catch (error) { alert(`Error al expirar la reserva:\n${error instanceof Error ? error.message : 'Intenta nuevamente.'}`); return false; }
   };
 
   const handleMarkPaidGroup = async (group: GroupedRental, methodText: string) => {
-    await runExclusiveAction(`payment:${group.id}`, async () => { await runAdminRentalAction('payment', group.items.map(item => item.id), { paymentStatus: 'paid', paymentMethodNote: methodText }); });
+    try {
+      const completed = await runExclusiveAction(group.id, 'payment', async () => { await runAdminRentalAction('payment', group.items.map(item => item.id), { paymentStatus: 'paid', paymentMethodNote: methodText }); });
+      if (!completed) return false;
+    } catch (error) { alert(`Error al registrar el pago:\n${error instanceof Error ? error.message : 'Intenta nuevamente.'}`); return false; }
     if (selected?.id === group.id) {
       setSelected(prev => {
         if (!prev || prev.id !== group.id) return prev;
         return {
           ...prev,
           paymentStatus: 'paid',
-          items: prev.items.map(item => ({ ...item, paymentStatus: 'paid' }))
+          items: prev.items.map(item => ({ ...item, paymentStatus: 'paid', paidAt: new Date().toISOString(), amountPaid: Number(item.amountPaid) || Number(item.total) || 0 }))
         };
       });
     }
+    return true;
   };
 
   const handleDeleteGroup = async (group: GroupedRental) => {
     if (!confirm('¿Cancelar este alquiler? El registro y su historial de pagos se conservarán.')) return;
     const ids = group.items.map(item => item.id);
-    await runAdminRentalAction('cancel', ids);
-    if (selected?.id === group.id) setSelected(null);
+    try {
+      const completed = await runExclusiveAction(group.id, 'cancel', async () => { await runAdminRentalAction('cancel', ids); });
+      if (!completed) return false;
+      if (selected?.id === group.id) setSelected(null);
+      return true;
+    } catch (error) { alert(`Error al cancelar la reserva:\n${error instanceof Error ? error.message : 'Intenta nuevamente.'}`); return false; }
   };
 
   const recalcEditItemPrice = (productType: 'single' | 'combo', productId: string, durationStr: string, qty: number, fallbackTotal: number) => {
@@ -592,7 +610,8 @@ export default function AdminRentalsPage() {
 
   const handleSaveEditedGroup = async () => {
     if (!selected || !editForm) return;
-    await runExclusiveAction(`edit:${selected.id}`, async () => { await updateRentalGroup({
+    try {
+    const completed = await runExclusiveAction(selected.id, 'edit', async () => { await updateRentalGroup({
       reservationCode: selected.reservationCode || selected.id,
       rentalIds: selected.items.map(item => item.id),
       date: editForm.date, pickupTime: editForm.pickupTime, duration: editForm.duration,
@@ -600,9 +619,12 @@ export default function AdminRentalsPage() {
       mapsLink: editForm.mapsLink, notes: editForm.notes,
       items: editForm.items.map(item => ({ id: item.isNew ? '' : item.id, productId: item.productId, productType: item.productType, quantity: Math.max(1, item.quantity), selectedWheelSize: item.selectedWheelSize || '' })),
     }); });
+    if (!completed) return false;
+    } catch (error) { alert(`Error al guardar los cambios:\n${error instanceof Error ? error.message : 'Intenta nuevamente.'}`); return false; }
 
     setEditingOrder(false);
     setSelected(null);
+    return true;
   };
 
   const formatDateTime = (isoString?: string) => {
@@ -1751,16 +1773,17 @@ export default function AdminRentalsPage() {
                     <div className="grid grid-cols-3 gap-2 pt-2 border-t border-white/5">
                       <Button
                         size="sm"
-                        disabled={busyActionKey === `confirm:${g.id}`}
+                        disabled={Boolean(busyActionByGroup[g.id])}
                         onClick={() => handleConfirmGroup(g)}
                         className="bg-green-600 hover:bg-green-700 text-white rounded-full h-11 text-xs font-black uppercase flex items-center justify-center gap-1.5"
                       >
-                        <CheckCircle2 className="w-4 h-4" /> {busyActionKey === `confirm:${g.id}` ? 'Confirmando…' : 'Confirmar'}
+                        <CheckCircle2 className="w-4 h-4" /> {busyActionByGroup[g.id] === 'confirm' ? 'Confirmando…' : 'Confirmar'}
                       </Button>
 
                       {g.paymentStatus !== 'paid' ? (
                         <Button
                           size="sm"
+                          disabled={Boolean(busyActionByGroup[g.id])}
                           onClick={() => handleMarkPaidGroup(g, g.paymentMethod)}
                           className="bg-blue-600 hover:bg-blue-700 text-white rounded-full h-11 text-[11px] font-black uppercase flex items-center justify-center gap-1"
                         >
@@ -1789,18 +1812,20 @@ export default function AdminRentalsPage() {
                     <div className="grid grid-cols-2 gap-2">
                       <Button
                         size="sm"
+                        disabled={Boolean(busyActionByGroup[g.id])}
                         onClick={() => handleCancelGroup(g)}
                         className="bg-red-500/10 hover:bg-red-500 hover:text-white text-red-400 rounded-full h-9 text-[10px] font-black uppercase flex items-center justify-center gap-1"
                       >
-                        <Ban className="w-3.5 h-3.5" /> Cancelar
+                        <Ban className="w-3.5 h-3.5" /> {busyActionByGroup[g.id] === 'cancel' ? 'Cancelando…' : 'Cancelar'}
                       </Button>
 
                       <Button
                         size="sm"
+                        disabled={Boolean(busyActionByGroup[g.id])}
                         onClick={() => handleExpireGroup(g)}
                         className="bg-[#2D2D2D] hover:bg-zinc-700 text-zinc-400 hover:text-white rounded-full h-9 text-[10px] font-black uppercase flex items-center justify-center gap-1"
                       >
-                        <Clock className="w-3.5 h-3.5" /> Expirar
+                        <Clock className="w-3.5 h-3.5" /> {busyActionByGroup[g.id] === 'expire' ? 'Expirando…' : 'Expirar'}
                       </Button>
                     </div>
                   </CardContent>
@@ -1906,6 +1931,7 @@ export default function AdminRentalsPage() {
                   {(g.status === 'confirmed' || g.status === 'Confirmado') && (
                     <Button
                       size="sm"
+                      disabled={Boolean(busyActionByGroup[g.id])}
                       onClick={() => handleDeliverGroup(g)}
                       className="h-9 px-3 rounded-xl bg-emerald-600/20 text-emerald-300 hover:bg-emerald-600 hover:text-white text-[10px] font-black uppercase border border-emerald-500/30"
                       title="Marcar bicicleta como entregada físicamente al cliente"
@@ -1935,6 +1961,7 @@ export default function AdminRentalsPage() {
                     <Button
                       variant="ghost" size="icon"
                       className="w-9 h-9 rounded-xl bg-white/5 text-red-400/60 hover:bg-red-500 hover:text-white"
+                      disabled={Boolean(busyActionByGroup[g.id])}
                       onClick={() => handleDeleteGroup(g)} title="Cancelar y conservar historial"
                     >
                       <Ban className="w-4 h-4" />
@@ -1948,7 +1975,7 @@ export default function AdminRentalsPage() {
       </div>
 
       {/* RETURN MODAL (WITH OPTIONAL DAMAGE / MAINTENANCE / LATE FEE) */}
-      <Dialog open={!!returnModalGroup} onOpenChange={v => { if (!v) setReturnModalGroup(null); }}>
+      <Dialog open={!!returnModalGroup} onOpenChange={v => { if (!v && (!returnModalGroup || !busyActionByGroup[returnModalGroup.id])) setReturnModalGroup(null); }}>
         <DialogContent className="max-w-md bg-brand-charcoal border border-white/10 text-white rounded-3xl p-6 font-sans">
           {returnModalGroup && (
             <div className="space-y-4">
@@ -1992,6 +2019,7 @@ export default function AdminRentalsPage() {
                 <Button
                   type="button"
                   variant="ghost"
+                  disabled={Boolean(busyActionByGroup[returnModalGroup.id])}
                   onClick={() => setReturnModalGroup(null)}
                   className="flex-1 h-11 rounded-xl border border-white/10 text-white/60 hover:text-white font-bold text-xs uppercase"
                 >
@@ -1999,10 +2027,11 @@ export default function AdminRentalsPage() {
                 </Button>
                 <Button
                   type="button"
+                  disabled={Boolean(busyActionByGroup[returnModalGroup.id])}
                   onClick={handleConfirmReturnGroup}
                   className="flex-1 h-11 rounded-xl bg-brand-yellow hover:bg-brand-yellow-light text-brand-black font-black text-xs uppercase"
                 >
-                  Confirmar Devolución
+                  {busyActionByGroup[returnModalGroup.id] === 'return' ? 'Registrando…' : 'Confirmar Devolución'}
                 </Button>
               </div>
             </div>
@@ -2011,7 +2040,7 @@ export default function AdminRentalsPage() {
       </Dialog>
 
       {/* RESERVATION DETAIL MODAL */}
-      <Dialog open={!!selected} onOpenChange={v => { if (!v) setSelected(null); }}>
+      <Dialog open={!!selected} onOpenChange={v => { if (!v && (!selected || !busyActionByGroup[selected.id])) setSelected(null); }}>
         <DialogContent className="max-w-4xl w-[95vw] max-h-[90vh] overflow-y-auto bg-brand-charcoal border border-white/10 text-white p-0 rounded-3xl">
           {selected && (
             <>
@@ -2348,7 +2377,7 @@ export default function AdminRentalsPage() {
                   )}
 
                   {editingOrder && editForm && (
-                    <div className="bg-brand-yellow/10 p-4 rounded-2xl border border-brand-yellow/25 space-y-4">
+                    <fieldset disabled={Boolean(busyActionByGroup[selected.id])} className="bg-brand-yellow/10 p-4 rounded-2xl border border-brand-yellow/25 space-y-4 disabled:opacity-70">
                       <h4 className="text-[10px] text-brand-yellow font-black uppercase tracking-widest flex items-center gap-1">
                         <Edit3 className="w-3.5 h-3.5" /> Editar pedido del cliente
                       </h4>
@@ -2630,9 +2659,9 @@ export default function AdminRentalsPage() {
                         onClick={handleSaveEditedGroup}
                         className="h-11 w-full rounded-xl bg-brand-yellow text-xs font-black uppercase text-brand-black hover:bg-brand-yellow-light cursor-pointer"
                       >
-                        <Save className="mr-2 h-4 w-4" /> Guardar cambios del pedido
+                        <Save className="mr-2 h-4 w-4" /> {busyActionByGroup[selected.id] === 'edit' ? 'Guardando…' : 'Guardar cambios del pedido'}
                       </Button>
-                    </div>
+                    </fieldset>
                   )}
 
                   {/* Total amount header */}
@@ -2651,37 +2680,40 @@ export default function AdminRentalsPage() {
                     {(selected.status === 'pending' || selected.status === 'Pendiente') && (
                       <Button 
                         className="flex-1 h-11 bg-green-600 hover:bg-green-700 text-white font-black rounded-xl text-xs uppercase cursor-pointer" 
-                        disabled={busyActionKey === `confirm:${selected.id}`}
+                        disabled={Boolean(busyActionByGroup[selected.id])}
                         onClick={async () => { if (await handleConfirmGroup(selected)) setSelected(null); }}
                       >
-                        {busyActionKey === `confirm:${selected.id}` ? 'Confirmando…' : 'Confirmar Reserva'}
+                        {busyActionByGroup[selected.id] === 'confirm' ? 'Confirmando…' : 'Confirmar Reserva'}
                       </Button>
                     )}
 
                     {(selected.status === 'confirmed' || selected.status === 'Confirmado') && (
                       <Button 
                         className="flex-1 h-11 bg-emerald-600 hover:bg-emerald-700 text-white font-black rounded-xl text-xs uppercase cursor-pointer" 
+                        disabled={Boolean(busyActionByGroup[selected.id])}
                         onClick={() => { handleDeliverGroup(selected); }}
                       >
-                        Marcar como Entregado
+                        {busyActionByGroup[selected.id] === 'deliver' ? 'Entregando…' : 'Marcar como Entregado'}
                       </Button>
                     )}
 
                     {selected.paymentStatus !== 'paid' && (
                       <Button 
                         className="flex-1 h-11 bg-blue-600 hover:bg-blue-700 text-white font-black rounded-xl text-xs uppercase cursor-pointer" 
+                        disabled={Boolean(busyActionByGroup[selected.id])}
                         onClick={() => { handleMarkPaidGroup(selected, selected.paymentMethod); }}
                       >
-                        Registrar Pago
+                        {busyActionByGroup[selected.id] === 'payment' ? 'Registrando…' : 'Registrar Pago'}
                       </Button>
                     )}
 
                     {(selected.status === 'pending' || selected.status === 'Pendiente' || selected.status === 'confirmed' || selected.status === 'Confirmado') && (
                       <Button 
                         className="flex-1 h-11 bg-red-600 hover:bg-red-700 text-white font-black rounded-xl text-xs uppercase cursor-pointer" 
-                        onClick={() => { handleCancelGroup(selected); setSelected(null); }}
+                        disabled={Boolean(busyActionByGroup[selected.id])}
+                        onClick={() => { handleCancelGroup(selected); }}
                       >
-                        Cancelar Alquiler
+                        {busyActionByGroup[selected.id] === 'cancel' ? 'Cancelando…' : 'Cancelar Alquiler'}
                       </Button>
                     )}
 
@@ -2696,6 +2728,7 @@ export default function AdminRentalsPage() {
 
                     <Button 
                       variant="ghost" 
+                      disabled={Boolean(busyActionByGroup[selected.id])}
                       className="w-full h-10 text-white/40 font-bold hover:bg-white/5 hover:text-white rounded-xl text-xs uppercase mt-2 cursor-pointer" 
                       onClick={() => setSelected(null)}
                     >

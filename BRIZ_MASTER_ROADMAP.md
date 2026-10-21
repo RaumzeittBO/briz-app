@@ -1,5 +1,15 @@
 # BRIZ (`briz.com.bo`) — MASTER ROADMAP & ENGINEERING LOG
 
+## Incidencia de conciliación de sede y acciones de pago — 2026-10-21 (en curso)
+
+- Corrección local: el resumen de alquileres y su gráfico filtran por sede; el efectivo continúa fechado por `paidAt`, mientras contratado/pendiente usan fecha programada. Las pruebas cubren dos sedes, pagos anticipados, devolución y cobro corregido.
+- Las operaciones Admin ahora adquieren bloqueo por grupo (no por tipo de operación); confirmación, pago, entrega, cancelación, expiración, edición y devolución ignoran doble ejecución, bloquean transiciones rivales, reflejan carga y conservan el modal ante error. Errores permanecen visibles vía alerta y permiten reintento.
+- Pago corregido de `paid` a `unpaid`/`pending_review` conserva importe/fecha originales como evidencia, añade before/after al log y deja de sumar como efectivo vigente. No se borra un cobro ni se crea reembolso. La representación de reembolsos, pagos parciales y ajustes de caja queda bloqueada hasta decisión comercial explícita.
+- Fixtures y suite de Emulator comprueban sede/date, pago anticipado, devolución y trazabilidad al corregir estado. Aún no se declara click-through visual de la interfaz; el propietario debe ejecutar el recorrido corto al inicio de [`BRIZ_ADMIN_MANUAL_VALIDATION.md`](./BRIZ_ADMIN_MANUAL_VALIDATION.md).
+- Validación ejecutada en este cierre: `npm run test:firebase` (reglas Firestore/Storage e integración Functions/Auth/Firestore/Storage) pasó en `demo-briz-security`; `npm run test:reports`, `npm run test:reconcile` (8 alquileres sintéticos/22 hallazgos), motor (16/16), `npx tsc --noEmit`, `npm run build` y `npm run build --prefix functions` pasaron. ESLint de helper/Functions/scripts pasó limpio; ESLint dirigido a las páginas Admin muestra 25 errores `no-explicit-any` en código operativo preexistente (20 alquileres, 5 reportes), que no impiden build ni pruebas. Los builds conservan `/noise.png` y aviso de chunk principal ~1.96 MB.
+- Recorrido visual no ejecutado automáticamente; queda al propietario siguiendo el checklist, con Emulator exclusivamente. Este cierre no hizo deploy, merge, migración, ni mutaciones reales.
+- Cierre Git: ver el encabezado actualizado del handoff para commit local/remoto y estado de rama.
+
 ## Incidencia crítica de alquileres y cobros — 2026-10-21
 
 - **Confirmación duplicada:** el registro que observó el propietario no se pudo recuperar ni inspeccionar, así que no se afirma que hubiera dos documentos. Sí se confirmó un fallo UX en el código: el modal de detalle se cerraba antes de resolver la solicitud y los botones no daban estado ocupado. Se corrigió para esperar éxito, mostrar “Confirmando…” y bloquear repetición local. El backend ya protegía el stock en transacción mediante estado y `stockDeducted`; las regresiones Emulator ahora prueban dos confirmaciones concurrentes, un único documento y un solo descuento. La creación manual conserva la clave idempotente hasta que alta y confirmación concluyan, también cubre respuesta perdida/reintento.
