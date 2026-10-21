@@ -1,5 +1,17 @@
 # BRIZ (`briz.com.bo`) — DOCUMENTO DE HANDOFF TÉCNICO PARA CODEX
 
+## Handoff vigente — salida directa controlada (2026-10-21)
+
+El propietario decidió no enlazar Billing ni operar más `briz-staging`; se evalúa un release controlado directo a `briz-4ef3a`. No se hicieron cambios productivos ni push durante esta evaluación.
+
+- Pruebas recién ejecutadas: `npm run test:firebase`, `npm run test:reports`, `npm run test:reconcile` (8 fixtures, 22 hallazgos), motor 16/16 y `npm run build` (TypeScript+Vite) pasaron; build Functions pasó dentro de la suite Firebase. ESLint dirigido a los archivos críticos devuelve 32 errores de calidad (any/Fast Refresh), sin impedir build.
+- Estado remoto Firebase read-only: DB Firestore `(default)` en `southamerica-west1`; Functions 0; índices remotos 0 frente a cuatro en `firestore.indexes.json`. Estado de Rules, Auth y roles no fue consultable. No leer documentos de clientes ni ejecutar writes para resolverlo.
+- Al inicio de esta evaluación, la rama local `codex/briz-critical-stabilization-20261020` estaba en `7aaa6304afe3cd17550f47687ca9968f457af423`, con dos commits docs por delante del remoto `2c288adccb2e49c43ea568e801168760f5c27030`. Este addendum añade documentación local y no se ha publicado. No push: la PR #1 sigue Draft y el Preview falla intencionalmente por guard staging. `origin/main` = `0140452678d23e6e352dcaacd353bfe7342912f5`; no usar el branch local `main` adelantado.
+- Vercel API actual devuelve 403 para scope `gfabrigtrf-7085s-projects`. La web pública responde HTTP 200. La UI había confirmado previamente nueve variables Firebase Production-only; no se verificaron otra vez en esta llamada.
+- Bloqueo de compatibilidad: el `main` remoto aún usa escrituras directas de alquileres; las reglas nuevas deniegan esos writes y el frontend de la rama depende de Functions. Por eso: índices → Functions → frontend Production/merge → Rules/Storage estrictas. No aplicar las reglas antes de cambiar el cliente.
+- Bloqueo seguridad: el viejo `origin/main` lee `VITE_TELEGRAM_BOT_TOKEN`, que Vite puede incrustar en bundle público. Rotar en BotFather antes de publicar, usar Secret Manager para los nuevos valores, retirar el env `VITE_*` después de verificar que el cliente nuevo está activo. El primer Admin debe crearse con procedimiento seguro del propietario porque `provisionAdminUser` requiere un Admin activo existente.
+- Próxima acción: revisión de preparación y autorización explícita del propietario para el paquete coordinado de release que detalla [`BRIZ_RELEASE_READINESS.md`](./BRIZ_RELEASE_READINESS.md). No probar escrituras/cobros en producción sin autorización específica.
+
 ## Handoff — guardas Firebase/Vercel y continuidad de release — 2026-10-21
 
 ### Actualización de sesión — Vercel Preview y variables Production — 2026-10-21

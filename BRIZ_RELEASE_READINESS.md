@@ -1,5 +1,40 @@
 # BRIZ — preparación de salida a producción
 
+## Evaluación de publicación directa a producción — 2026-10-21
+
+Decisión vigente del propietario: conservar `briz-staging` sin Blaze y sin más operaciones; evaluar una salida controlada directamente a `briz-4ef3a`. Esta decisión reemplaza los addenda anteriores que condicionaban el release a provisionar staging. No autoriza todavía cambios en Firebase, Vercel ni `main`.
+
+### Resultado verificado en esta evaluación
+
+- Pruebas locales aisladas en `demo-briz-security`: `npm run test:firebase` pasó configuración, reglas Firestore/Storage y el ciclo Auth/Firestore/Functions/Storage; `npm run test:reports` pasó; `npm run test:reconcile` pasó con 8 registros ficticios y 22 hallazgos; motor de alquileres pasó 16/16; `npm run build` pasó TypeScript y Vite; el build Functions pasó dentro de `test:firebase`.
+- `npm run test:firebase` cubrió reserva pública idempotente, selección de aro/combos/accesorios, confirmación, entrega, cambios concurrentes, pagos/ledger, devolución dañada, límites de stock, roles, estados heredados en español y documentos sin campos recientes. Todo fue contra emuladores; no hubo escritura a producción.
+- ESLint dirigido a los archivos operativos modificados terminó con 32 errores (`no-explicit-any` y `react-refresh/only-export-components`), 0 warnings. No impidió TypeScript/build, pero la deuda se debe tratar como calidad pendiente; no es evidencia de regresión funcional.
+- Firebase CLI de solo lectura: `briz-4ef3a` tiene Firestore `(default)` en `southamerica-west1`, 0 Functions desplegadas y 0 índices compuestos remotos; el repositorio declara cuatro índices. No se pudieron consultar las Rules/Storage Rules activas ni el estado de Auth/proveedores/roles.
+- `www.briz.com.bo` respondió HTTP 200 en una solicitud de solo lectura. `origin/main` está en `0140452678d23e6e352dcaacd353bfe7342912f5`. El `main` local está en otro commit local adelantado y no debe usarse como referencia de publicación. El API Vercel para `briz-web` devuelve 403 de alcance; no pudimos confirmar desde API la rama Production, el deployment inmutable para rollback ni las variables vigentes. Las nueve variables Firebase Production habían sido guardadas/verificadas previamente en la UI integrada; esta sesión no volvió a leerlas ni reveló valores.
+- PR #1 sigue OPEN/Draft, base `main`, head remoto `2c288adccb2e49c43ea568e801168760f5c27030`. Los Preview fallidos siguen siendo el guard de separación staging; no se generaron builds adicionales. Los commits locales de documentación siguen sin publicar. No se consultaron reglas de protección/rulesets de GitHub en esta evaluación; el estado de checks no constituye aprobación para merge.
+
+### Bloqueos imprescindibles frente a recomendaciones
+
+**Bloquean la transición segura:** (1) Functions ausentes e índices remotos ausentes: publicar el frontend antes de ellos dejaría llamadas nuevas sin backend/consultas sin índice. (2) confirmar mediante consola el proveedor Auth activo, las cuentas autorizadas y sus UIDs/tiendas; `provisionAdminUser` exige que ya exista un Admin activo y no puede crear el primer Admin. (3) recuperar/exportar las reglas actuales y confirmar compatibilidad antes del cambio; su estado remoto no es verificable desde este CLI. (4) confirmar desde la sesión del propietario que Vercel Production apunta a `main`, que las nueve variables guardadas pertenecen a `briz-web` y registrar el último deployment Ready para rollback; el API disponible está denegado con 403. (5) rotar en BotFather el token antiguo porque `origin/main` lee `VITE_TELEGRAM_BOT_TOKEN` y el valor configurado en Vercel puede quedar embebido en el JavaScript público; guardar el nuevo token/chat solo en Secret Manager y retirar/revocar el valor viejo antes de publicar. (6) respaldar el estado actual y comprobar que el archivo/reglas de rollback esté disponible.
+
+**No son bloqueos funcionales por sí solos:** tener staging es la recomendación más segura, pero no es requisito técnico si el propietario acepta el riesgo de una ventana productiva controlada. App Check está deshabilitado por defecto (`enforceAppCheck: false`): es una recomendación de endurecimiento previa a abrir ampliamente el servicio; el motor valida Auth/roles en acciones administrativas, pero las reservas públicas siguen siendo endpoints expuestos. El aviso Node24 del emulador frente a Node22 solicitado, `/noise.png`, bundle grande y deuda ESLint son mantenimiento; no fallaron compilación ni pruebas de negocio.
+
+### Orden de transición sin web conectada a un backend incompatible
+
+1. Antes de cambios, desde sesión autorizada confirmar ramas/proyecto/variables de Vercel, dominios/proveedor Auth, UIDs y perfiles Admin, exportación Firestore/Storage apropiada y reglas activas. Preparar restauración y anotar el deployment Production actual. No copiar datos personales al workspace.
+2. Rotar el token Telegram antiguo. Configurar `TELEGRAM_BOT_TOKEN`/`TELEGRAM_CHAT_ID` solo como secretos de Functions (sin escribirlos en chat o Vercel `VITE_*`); verificar rotación y mantener notificación `skipped_unconfigured` hasta que esté lista.
+3. Crear por procedimiento seguro de propietario el perfil inicial `adminUsers/{uid}` para una cuenta Auth existente; validar ese Admin y un Admin de recuperación. No activar reglas nuevas hasta confirmar los perfiles.
+4. Desplegar primero, de forma aditiva, los cuatro índices y esperar estado `READY`; después desplegar Functions Node22 de `us-central1` con secretos autorizados. Verificar despliegue/lista, logs y salud no mutante. Esto no cambia la web `main` actual, que permanece en el backend anterior.
+5. Con Functions listas, sacar PR #1 de Draft mediante revisión humana y merge aprobado a `main`; Vercel Production construye el nuevo frontend usando las nueve variables Production guardadas. Antes de continuar, verificar deployment READY, SHA, dominio y login/lecturas. No pasar solicitudes de prueba con cobros reales.
+6. Solo cuando el nuevo frontend esté activo y dependa de las Functions desplegadas, publicar Rules Firestore y Storage probadas en Emulator. Así se evita desplegar primero reglas que bloquean las escrituras directas del `main` viejo. Verificar acceso por rol, lecturas públicas sanitizadas, Storage, reserva, stock y Caja con procedimientos aprobados. La web no tendrá una ventana sin las Functions necesarias; las reglas finales se activan después de que el cliente nuevo está publicado.
+7. Una prueba end-to-end que cree reservas/pagos en Firebase real escribe datos y puede afectar reportes; requiere autorización separada con alcance de datos ficticios marcados. Sin esa autorización, limitar post-release a comprobaciones de lectura y no declarar validado el ciclo comercial en producción.
+
+### Rollback preparado
+
+- Conservar SHA remoto actual de `main` (`0140452…`), deployment Vercel Ready anterior, exportación de Firestore/Storage y copia exacta de Rules/Storage Rules previas antes de cambios. El ID de deployment debe obtenerlo el propietario en Vercel, pues la API retorna 403.
+- Si falla el cliente, restaurar/promover el deployment Vercel inmutable anterior; no editar `main` directamente. Si fallan Functions, volver a desplegar el código de Functions anterior guardado; no borrar recursos. Si fallan Rules, volver a publicar exactamente la copia anterior. Los índices extra pueden quedarse: no eliminarlos como parte de rollback. No iniciar migraciones de datos durante el release.
+- No se ha ejecutado ningún paso productivo de este plan. `briz-staging` permanece sin Blaze y no se volverá a operar.
+
 ## Actualización de preparación Firebase — 2026-10-21 (posterior a autorización)
 
 ### Variables Vercel guardadas

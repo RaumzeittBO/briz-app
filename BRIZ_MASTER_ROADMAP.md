@@ -1,5 +1,17 @@
 # BRIZ (`briz.com.bo`) — MASTER ROADMAP & ENGINEERING LOG
 
+## Decisión vigente de release — publicación directa controlada (2026-10-21)
+
+El propietario indicó conservar `briz-staging` creado y sin Blaze, sin operaciones adicionales, y evaluar publicación directa a `briz-4ef3a`. Esta nota reemplaza la exigencia histórica de desplegar primero en staging; no autoriza cambios productivos ni merge.
+
+- Estado: suites críticas Emulator, reportes, conciliación sintética (8 fixtures/22 hallazgos), motor 16/16, TypeScript, build web y build Functions pasaron el 2026-10-21. ESLint dirigido falló con 32 errores de estilo/tipos (`no-explicit-any`, exports Fast Refresh); no errores de compilación.
+- Firebase remoto consultado sin escrituras: Firestore presente en `southamerica-west1`, cero Functions y cero índices; el repo contiene cuatro índices. Rules/Storage/Auth/roles actuales no verificables desde las credenciales disponibles.
+- Al inicio de la evaluación la rama local estaba en `7aaa6304afe3cd17550f47687ca9968f457af423`, con documentación local por delante; el head remoto sigue `2c288adccb2e49c43ea568e801168760f5c27030`. PR #1 sigue Draft. No hacer push que repita Preview fallido. `origin/main` es `0140452678d23e6e352dcaacd353bfe7342912f5`; el `main` local adelantado no representa al remoto.
+- `www.briz.com.bo` respondió 200 solo a una petición HTTP de lectura. Vercel API devuelve 403 para `briz-web`; confirmar manualmente la configuración/branch/deployment rollback desde la sesión del propietario.
+- Secuencia condicionada: respaldo + verificación Auth/perfiles Admin y copia de Rules → rotación del token Telegram actualmente expuesto por el frontend viejo → bootstrap explícito del primer perfil Admin → desplegar índices → Functions y secretos → merge/Production frontend → Rules/Storage estrictas cuando el cliente nuevo ya esté activo → smoke de solo lectura. Pruebas de escritura/cobro en producción requieren autorización separada.
+- Bloqueos funcionales: backend Functions e índices ausentes; roles de producción/primer Admin y reglas actuales no confirmados; destino/build de Production sin lectura actual de Vercel. Staging y App Check son recomendaciones para reducir riesgo, no motivo para abandonar la vía directa. Rotar el token Telegram antiguo es bloqueo de seguridad antes de publicar.
+- Detalle de transición, verificación y rollback: [`BRIZ_RELEASE_READINESS.md`](./BRIZ_RELEASE_READINESS.md).
+
 ## Configuración Firebase/Vercel y bloqueo de release — actualización 2026-10-21
 
 - Vercel integrado: se verificó el proyecto `briz-web` del equipo `gfabrigtrf-7085s-projects`. Con autorización expresa del propietario se añadieron las nueve variables Firebase enumeradas abajo, todas con alcance **Production únicamente**; lista recargada y verificada, valores no expuestos. Las tres variables antiguas de Telegram/Maps permanecen en Production y Preview; no se modificaron ni eliminaron. Guardar variables no inició un deployment; no se pulsó Redeploy.
