@@ -378,3 +378,10 @@ Para permitir que el administrador cambie banners y artes en español/inglés (W
 1. Lee [`BRIZ_HANDOFF_CODEX.md`](./BRIZ_HANDOFF_CODEX.md) para ver el detalle técnico completo.
 2. Ejecuta `npx tsx scripts/verify-briz-core.ts` y `npx tsc --noEmit` para comprobar que los tests unitarios del motor y la compilación están en verde.
 3. **Siguiente tarea ejecutable inmediata:** el propietario completa [`BRIZ_ADMIN_MANUAL_VALIDATION.md`](./BRIZ_ADMIN_MANUAL_VALIDATION.md) en Emulator, ya que la política de URL impidió al agente volver a abrir localhost. Después preparar dry-run de conciliación de datos sintéticos/protegidos, sin migrar producción. Mantener las fases futuras al inicio de este roadmap; no iniciar el gestor de imágenes todavía.
+
+## Estado de release IAM/backup/Auth — 2026-10-21
+
+- `briz-functions-runtime` y `briz-telegram-runtime` ya existen en `briz-4ef3a` con los roles mínimos aprobados y sin Editor, Owner ni claves descargables. `sendReservationNotification` usa el runtime Telegram independiente. El operador ya tiene `actAs` por su rol Owner existente; no se añadieron permisos de impersonación adicionales.
+- `www.briz.com.bo` está autorizado en Firebase Auth. Apex omitido porque redirige a www y los flujos actuales usan el manejador predeterminado de Firebase.
+- Backup Firestore diario con retención de siete días continúa sin copia listada tras recarga. El release coordinado permanece detenido hasta verificar una copia materializada; no se inició restauración.
+- No hay secretos Telegram ni bindings de Secret Accessor todavía. Mantener la rotación para la ventana posterior al backup. No desplegar, fusionar ni escribir datos operativos como parte de esta preparación.
