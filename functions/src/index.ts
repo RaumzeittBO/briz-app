@@ -3,6 +3,7 @@ import { initializeApp, getApps } from 'firebase-admin/app';
 import { FieldPath, FieldValue, Timestamp, getFirestore, type DocumentData, type DocumentReference, type DocumentSnapshot, type QueryDocumentSnapshot } from 'firebase-admin/firestore';
 import { getAuth } from 'firebase-admin/auth';
 import { defineSecret } from 'firebase-functions/params';
+import { setGlobalOptions } from 'firebase-functions/v2';
 import { onCall, onRequest, HttpsError, type CallableRequest } from 'firebase-functions/v2/https';
 import { onDocumentCreated, onDocumentWritten } from 'firebase-functions/v2/firestore';
 import {
@@ -27,6 +28,10 @@ if (getApps().length === 0) initializeApp();
 const db = getFirestore();
 const TELEGRAM_BOT_TOKEN = defineSecret('TELEGRAM_BOT_TOKEN');
 const TELEGRAM_CHAT_ID = defineSecret('TELEGRAM_CHAT_ID');
+
+// Runtime identity is provisioned at release with Firestore and Auth read roles;
+// Secret Manager access is scoped only to the reservation notification trigger.
+setGlobalOptions({ serviceAccount: 'briz-functions-runtime@briz-4ef3a.iam.gserviceaccount.com' });
 
 type BookingLine = {
     productId: string;

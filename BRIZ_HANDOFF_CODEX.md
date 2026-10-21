@@ -290,3 +290,14 @@ src/
 
 1. **Conciliación y migración segura de datos históricos:** iniciar con inventario de inconsistencias en copia/emulador, acordar mapeos y producir plan reversible; no escribir producción sin autorización.
 2. Luego seguir las diez fases ordenadas al inicio de `BRIZ_MASTER_ROADMAP.md`. La revisión visual pendiente de `/admin/rentals` debe completar reserva pública → confirmación → entrega → edición → pago → devolución y comprobar reportes e inventario en desktop y 360–430 px.
+
+### Handoff de release actualizado — 2026-10-21
+
+- GitHub: `codex/briz-critical-stabilization-20261020` y `origin` coinciden en `722078b935e53002856ceb7f620cdac9582bc0ba`; `origin/main` está en `0140452678d23e6e352dcaacd353bfe7342912f5`. PR #1 sigue OPEN/Draft. No merge/deploy.
+- Firebase Console (`briz-4ef3a`): se guardó la configuración de backup diario/7 días. Falta que aparezca y se verifique la primera copia recuperable. Secret Manager API, Cloud Build, Cloud Run y Eventarc quedaron habilitadas; Artifact Registry y APIs Firebase usadas ya estaban disponibles. No se crearon valores ni recursos de secretos.
+- Auth sigue sin dominio BRIZ: solo están los tres dominios predeterminados. El apex `briz.com.bo` redirige a `www.briz.com.bo`; autorizar solo `www.briz.com.bo` después de confirmación de acción en la ventana.
+- Bloqueo de mínimo privilegio nuevo: `412008664703-compute@developer.gserviceaccount.com` tiene Editor y sería el runtime predeterminado v2. `functions/src/index.ts` ahora fija `briz-functions-runtime@briz-4ef3a.iam.gserviceaccount.com`; aún falta crear esta cuenta y asignar Firestore User, Firebase Authentication Viewer y Secret Accessor scoped solo a los dos secretos. No retirar roles de cuentas por defecto sin simular impactos.
+- Secret Manager aún no muestra secretos. El propietario conserva la rotación del mismo bot/grupo: llegado el momento, revoca en BotFather, genera el token y lo escribe por sí mismo en la consola de Secret Manager, junto al chat ID. No ingresar ese token en chat, terminal, archivos ni logs. No eliminar `VITE_TELEGRAM_*` de Vercel hasta probar el trigger de la rama nueva.
+- Última comprobación local: `npm run build --prefix functions` pasó después de cambiar la identidad runtime. Las suites de dominio ya cerradas no se repitieron. No se modificó ni escribió ningún dato de clientes, reservas o stock reales.
+
+Próximo paso ejecutable: esperar y verificar la primera copia de Firestore. Preparar una única ventana que añada el dominio Auth, cree el runtime service account con roles mínimos, rote y guarde los secretos por intervención del propietario, despliegue índices/Functions y haga verificaciones de backend antes de cambiar PR #1. Detenerse si billing/API, roles efectivos o entrega Telegram fallan. Solo luego seguir el orden de merge/Production/Rules documentado en `BRIZ_RELEASE_READINESS.md`.
