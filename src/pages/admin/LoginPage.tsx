@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent } from '@/components/ui/card';
 import { useAuth } from '@/context/AuthContext';
+import { formatAdminProfileFailure, formatSignInError } from '@/context/adminAuth';
 import { Link } from 'react-router-dom';
 
 export default function LoginPage() {
@@ -14,20 +15,25 @@ export default function LoginPage() {
     const [showPassword, setShowPassword] = useState(false);
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
-    const { login } = useAuth();
+    const { login, authError, clearAuthError, isLoading: authLoading } = useAuth();
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setError('');
+        clearAuthError();
         setLoading(true);
 
         try {
             await login(username, password);
-        } catch (err: any) {
-            setError('Correo o contraseña incorrectos');
+        } catch (err: unknown) {
+            setError(formatSignInError(err));
+        } finally {
             setLoading(false);
         }
     };
+
+    const isSubmitting = loading || authLoading;
+    const visibleError = error || (authError ? formatAdminProfileFailure(authError) : '');
 
     return (
         <div className="min-h-screen bg-brand-charcoal flex items-center justify-center px-4 relative overflow-hidden">
@@ -65,6 +71,7 @@ export default function LoginPage() {
                                     type="email"
                                     placeholder="tu@email.com"
                                     value={username}
+                                    disabled={isSubmitting}
                                     onChange={(e) => setUsername(e.target.value)}
                                     required
                                     className="bg-black/40 border-white/5 text-white placeholder:text-white/10 pl-6 h-14 rounded-full focus:ring-brand-yellow/30 focus:border-white/20 transition-all font-bold"
@@ -77,6 +84,7 @@ export default function LoginPage() {
                                         type={showPassword ? 'text' : 'password'}
                                         placeholder="••••••••"
                                         value={password}
+                                        disabled={isSubmitting}
                                         onChange={(e) => setPassword(e.target.value)}
                                         required
                                         className="bg-black/40 border-white/5 text-white placeholder:text-white/10 pl-6 pr-14 h-14 rounded-full focus:ring-brand-yellow/30 focus:border-white/20 transition-all font-mono"
@@ -91,23 +99,23 @@ export default function LoginPage() {
                                 </div>
                             </div>
 
-                            {error && (
+                            {visibleError && (
                                 <motion.div
                                     initial={{ opacity: 0, scale: 0.95 }}
                                     animate={{ opacity: 1, scale: 1 }}
                                     className="flex items-center gap-3 text-red-400 text-xs font-bold bg-red-400/5 border border-red-400/20 rounded-2xl px-4 py-3"
                                 >
                                     <AlertCircle className="w-4 h-4 flex-shrink-0" />
-                                    <span>{error}</span>
+                                    <span>{visibleError}</span>
                                 </motion.div>
                             )}
 
                             <Button
                                 type="submit"
-                                disabled={loading}
+                                disabled={isSubmitting}
                                 className="w-full bg-white text-brand-black hover:bg-brand-yellow font-black h-14 text-lg rounded-full shadow-2xl transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 mt-4 group"
                             >
-                                {loading ? (
+                                {isSubmitting ? (
                                     <div className="flex items-center gap-3">
                                         <div className="w-5 h-5 border-3 border-brand-charcoal/20 border-t-brand-charcoal rounded-full animate-spin" />
                                         <span>Autenticando...</span>

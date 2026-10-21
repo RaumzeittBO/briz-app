@@ -81,6 +81,11 @@ try {
         await assertSucceeds(getDoc(doc(admin.firestore(), 'rentals', 'private-rental')));
         await assertFails(getDoc(doc(admin.firestore(), 'customers', 'legacy-customer')));
     });
+    await test('active admin and manager can read their own admin profile for AuthContext role resolution', async () => {
+        await assertSucceeds(getDoc(doc(admin.firestore(), 'adminUsers', 'root')));
+        await assertSucceeds(getDoc(doc(manager.firestore(), 'adminUsers', 'manager-cbba')));
+        await assertFails(getDoc(doc(disabled.firestore(), 'adminUsers', 'disabled')));
+    });
     await test('manager is scoped to their store for private rental reads', async () => {
         await assertSucceeds(getDoc(doc(manager.firestore(), 'rentals', 'private-rental')));
         await assertFails(getDoc(doc(otherStoreManager.firestore(), 'rentals', 'private-rental')));
