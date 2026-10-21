@@ -1,12 +1,14 @@
 # BRIZ (`briz.com.bo`) — DOCUMENTO DE HANDOFF TÉCNICO PARA CODEX
 
-## Estado verificado por Codex — 2026-10-20 (Bloque 3)
+## Estado verificado por Codex — 2026-10-20 (Bloque 3 y continuación visual)
 
 - Rama activa: `codex/briz-critical-stabilization-20261020`; se conservan los commits `70b85b3` y `bc501ca`.
 - Bloque 2: seguridad por rol/tienda, Firebase Auth para clientes, Functions con Admin SDK, reservas públicas y manuales atómicas/idempotentes, consulta sanitizada de clientes, historial propio, slots públicos y outbox Telegram.
 - Validación real aislada en Emulator: suite de reglas Firestore/Storage y suite integrada Auth/Firestore/Functions/Storage. Solo IDs y datos ficticios `demo-briz-security`; sin producción, billing, secretos o migraciones.
 - `npm run build`, `npm run build --prefix functions`, `npx tsc --noEmit` y `scripts/verify-briz-core.ts` pasan. `npm run lint` sigue con hallazgos previos amplios; resultado detallado en `BRIZ_MASTER_ROADMAP.md`.
-- Pendientes: configurar App Check antes del tráfico público; Blaze/APIs para desplegar Functions; secretos Telegram después de rotar el token; anexar una nueva línea a un grupo existente actualmente intenta una escritura directa y se bloquea con las reglas; ampliar pruebas de confirmación/entrega/devolución y datos históricos.
+- GitHub: credencial GCM reportó `pachaxbo-commits`; la UI de GitHub mostraba la invitación de colaborador como pendiente. `git push --dry-run` dio éxito, pero push real falló por timeout TCP a `github.com:443`; no hubo respuesta de permisos. Último SHA remoto observado antes del fallo: `db522d4949cc1b7ef7c2bcb0f15f09150dac151f`. No repetir push hasta que invitación esté aceptada y conectividad disponible.
+- Validación visual parcial: Vite `http://127.0.0.1:5173/admin/rentals`, Authentication/Firestore/Functions/Storage Emulator solo en `demo-briz-security`. Login ficticio y alta `BRIZ-2026-0012` con combo aro 27, bici aro 26 y candado comprobada en UI. Se corrigió la serialización del combo/accesorio. Detalle/edición abiertos; la automatización del campo de fecha no fue fiable. Confirmación, entrega, pago desde UI, cancelación, devolución, inventario, reportes y ciclo sincronizado quedan pendientes de validar visualmente. En 390 px el detalle requiere scroll vertical.
+- Pendientes: conciliación/migración histórica; preparación Blaze, App Check y credenciales; revisión integral de Admin; traducción completa ES/EN; diez artes ingleses; responsive completo; categorías/eventos móvil; gestor de imágenes Home; lint/optimización; preparación del despliegue solo con autorización.
 - **No desplegar a producción, no migrar usuarios ni tocar inventario real. No fusionar con main.**
 - Implementación bloque 2: `6a09918` (`feat(firebase): secure booking and customer auth flows`); documentación y validación registradas en `92e20d9`.
 
@@ -17,7 +19,7 @@
 - El panel administrativo y las funciones de alquiler exportadas por `StoreContext.tsx` llaman al backend; la UI ya no agrega o modifica directamente documentos de alquiler. El botón que antes borraba ahora cancela y conserva historial. Devoluciones usan cantidad dañada explícita y no incluyen recargos no autorizados.
 - Historial compatible: los estados de reserva en español funcionan; al editar un registro sin sede o sin `availabilityGroupId` se conserva lo que se conoce y el sistema genera solo el identificador técnico faltante. Si un combo multiaro no identifica sus componentes, la operación se bloquea en vez de inventar el aro. Managers sin sede verificable son denegados.
 - La conciliación `scripts/reconcile-rentals.ts` no escribe nunca y se niega a ejecutarse sin el Emulator `demo-briz-security`. Ejecutar con `npm run reconcile:rentals`.
-- `npm run test:firebase` pasó con casos de edición/altas/bajas/aros/stock, entrega/recojo y tarifa de zona, ciclo de estados, pagos históricos, permisos, historial legacy, accesorios compartidos y carreras cliente-cliente/edición administrativa-cliente. `verify-briz-core` 16/16; `tsc`, build web y build Functions pasaron.
+- `npm run test:firebase` pasó en la continuación tras incluir combo+accesorio con aro explícito. La suite cubre reglas, edición/altas/bajas/aros/stock, ciclo, pagos, historial legacy y carreras; el script reinicia el limitador ficticio entre escenarios solo en el emulador.
 - `npm run lint` continúa fallando globalmente; captura más reciente: 207 errores, 10 warnings (217 problemas). El ESLint dirigido a Functions/backend/scripts nuevos pasa. El build aún avisa por `/noise.png` y el bundle grande.
 - No se hizo recorrido visual del panel con navegador; la validación de este bloque es de transacciones/Functions contra Emulator. No hubo producción, despliegue, migración ni modificación de inventario real.
 - Próxima tarea exacta: recorrer `/admin/rentals` con navegador conectado solo a Emulator (crear y buscar cliente, crear manual, editar bici/combo/accesorio, confirmar, pagar, entregar, ampliar sin conflicto, devolver sana/dañada, cancelar y recargar); después ampliar casos de manager multi-sede y auditar disponibilidad/outbox con un dataset sintético de volumen.
@@ -145,9 +147,5 @@ src/
 
 ## 5. SIGUIENTE TAREA EJECUTABLE PARA CODEX
 
-1. **Validación E2E en Navegador (`npm run dev`):**
-   - Crear una reserva desde `RentalsPage.tsx` eligiendo fecha, hora, duración y accesorios.
-   - Entrar a `/admin/rentals`, confirmar la reserva (`Confirmado`), marcarla como entregada (`Entregado`) y luego devolverla (`Devuelto`) probando tanto condición `OK` como `Dañada / Mantenimiento`.
-   - Verificar en `/admin/reports` que el ingreso sigue contabilizado tras la devolución.
-2. **Implementación de Fase 7 (`ADMIN — GESTOR DE ARTES E IMÁGENES DE LA WEB`):**
-   - Seguir el diseño de la Sección 7 de `BRIZ_MASTER_ROADMAP.md`: conectar `artworkRegistry.ts` a una colección `site_assets` en Firestore y agregar una pestaña en `SettingsPage.tsx` para subir las versiones Web/Móvil en Español e Inglés desde el panel administrativo.
+1. **Conciliación y migración segura de datos históricos:** iniciar con inventario de inconsistencias en copia/emulador, acordar mapeos y producir plan reversible; no escribir producción sin autorización.
+2. Luego seguir las diez fases ordenadas al inicio de `BRIZ_MASTER_ROADMAP.md`. La revisión visual pendiente de `/admin/rentals` debe completar reserva pública → confirmación → entrega → edición → pago → devolución y comprobar reportes e inventario en desktop y 360–430 px.

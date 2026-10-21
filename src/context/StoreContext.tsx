@@ -596,21 +596,6 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
         }
     };
 
-    const seedDefaultRoutes = async () => {
-        try {
-            const batch = writeBatch(db);
-            DEFAULT_ROUTES.forEach(route => {
-                batch.set(doc(db, 'routes', route.id), {
-                    ...route,
-                    mapUrl: 'https://maps.google.com'
-                });
-            });
-            await batch.commit();
-        } catch (e) {
-            console.error('Failed to seed default routes:', e);
-        }
-    };
-
     // ---- Real-time Sync (Public Catalog & Settings) ----
     useEffect(() => {
         const unsubInv = onSnapshot(query(collection(db, 'inventory')), (snap) => {
@@ -635,10 +620,7 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
             console.error('Error fetching rental settings:', error);
         });
         const unsubRoutes = onSnapshot(query(collection(db, 'routes')), (snap) => {
-            setRoutes(snap.docs.map(d => ({ ...d.data() } as CyclingRoute)));
-            if (snap.empty) {
-                seedDefaultRoutes();
-            }
+            setRoutes(snap.empty ? DEFAULT_ROUTES : snap.docs.map(d => ({ ...d.data() } as CyclingRoute)));
         }, (error) => {
             console.error('Error fetching routes:', error);
         });

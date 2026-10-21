@@ -729,12 +729,18 @@ export default function AdminRentalsPage() {
     }
     if (newRentalCart.length === 0) { alert('El carrito del alquiler está vacío.'); return; }
 
-    const lines = newRentalCart.map(item => ({
+    const rentalCartItems = newRentalCart.filter(item => item.product.itemType !== 'accessory');
+    const accessoryCartItems = newRentalCart.filter(item => item.product.itemType === 'accessory');
+    if (rentalCartItems.length === 0) { alert('Agrega al menos una bicicleta o un combo al alquiler.'); return; }
+
+    const lines = rentalCartItems.map(item => ({
       productId: item.product.id,
       productType: (item.product.components !== undefined ? 'combo' : 'single') as 'combo' | 'single',
       quantity: item.quantity,
       ...(item.selectedWheelSize ? { wheelSize: item.selectedWheelSize } : {}),
+      ...(item.componentSelections?.length ? { componentSelections: item.componentSelections } : {}),
     }));
+    const accessories = accessoryCartItems.map(item => ({ itemId: item.product.id, quantity: item.quantity }));
     const paymentMethod: 'QR' | 'Transferencia' | 'Efectivo' = newRentalForm.paymentMethod.toLowerCase().includes('qr')
       ? 'QR' : newRentalForm.paymentMethod.toLowerCase().includes('transfer') ? 'Transferencia' : 'Efectivo';
     const adminCustomer = {
@@ -752,7 +758,7 @@ export default function AdminRentalsPage() {
       adminPickupService: newRentalForm.pickupService,
       adminMapsLink: newRentalForm.mapsLink,
       lines,
-      accessories: [],
+      accessories,
       date: newRentalForm.date,
       pickupTime: newRentalForm.pickupTime,
       duration: newRentalForm.duration,

@@ -28,7 +28,13 @@ const db = getFirestore();
 const TELEGRAM_BOT_TOKEN = defineSecret('TELEGRAM_BOT_TOKEN');
 const TELEGRAM_CHAT_ID = defineSecret('TELEGRAM_CHAT_ID');
 
-type BookingLine = { productId: string; productType: 'single' | 'combo'; quantity: number; wheelSize?: string };
+type BookingLine = {
+    productId: string;
+    productType: 'single' | 'combo';
+    quantity: number;
+    wheelSize?: string;
+    componentSelections?: Array<{ inventoryItemId: string; wheelSize?: string }>;
+};
 type BookingRequest = {
     idempotencyKey: string;
     lines: BookingLine[];
@@ -103,6 +109,18 @@ function validateBooking(data: unknown): BookingRequest {
             productType: line.productType as BookingLine['productType'],
             quantity: Number(line.quantity),
             ...(line.wheelSize ? { wheelSize: cleanString(line.wheelSize, 20) } : {}),
+            ...(Array.isArray(line.componentSelections) ? {
+                componentSelections: line.componentSelections.map((selection) => {
+                    if (!exactObject(selection) || typeof selection.inventoryItemId !== 'string'
+                        || (selection.wheelSize !== undefined && typeof selection.wheelSize !== 'string')) {
+                        throw new HttpsError('invalid-argument', 'La selección de aro de un combo no es válida.');
+                    }
+                    return {
+                        inventoryItemId: cleanString(selection.inventoryItemId, 100),
+                        ...(selection.wheelSize ? { wheelSize: cleanString(selection.wheelSize, 20) } : {}),
+                    };
+                }),
+            } : {}),
         };
     });
     const accessoriesInput = data.accessories === undefined ? [] : data.accessories;
@@ -500,19 +518,26 @@ export const createRentalGroup = onCall(callable(), async (request) => {
                 const combo = comboById.get(line.productId);
                 if (!combo || !combo.active || !combo.availableForRental) throw new HttpsError('failed-precondition', 'Uno de los combos ya no está disponible.');
                 if (!combo.components.length) throw new HttpsError('failed-precondition', 'El combo no tiene componentes configurados.');
+                const componentIds = new Set(combo.components.map((component) => component.inventoryItemId));
+                const selections = line.componentSelections || [];
+                if (selections.some((selection) => !componentIds.has(selection.inventoryItemId))
+                    || new Set(selections.map((selection) => selection.inventoryItemId)).size !== selections.length) {
+                    throw new HttpsError('invalid-argument', 'Las selecciones no coinciden con los componentes del combo.');
+                }
                 for (const component of combo.components) {
                     const componentItem = inventoryById.get(component.inventoryItemId);
+                    const selectedWheel = selections.find((selection) => selection.inventoryItemId === component.inventoryItemId)?.wheelSize || line.wheelSize;
                     if (!componentItem || !componentItem.active || !componentItem.availableForRental) {
                         throw new HttpsError('failed-precondition', 'Un componente del combo ya no está disponible.');
                     }
                     if ((component.requiresWheelSize || componentItem.hasWheelSizes)
                         && componentItem.hasWheelSizes
                         && componentItem.wheelSizes && componentItem.wheelSizes.length > 1
-                        && !line.wheelSize) {
+                        && !selectedWheel) {
                         throw new HttpsError('invalid-argument', 'Selecciona el aro para los componentes del combo.');
                     }
-                    if (line.wheelSize && componentItem.hasWheelSizes
-                        && !componentItem.wheelSizes?.some((wheel) => wheel.size === line.wheelSize)) {
+                    if (selectedWheel && componentItem.hasWheelSizes
+                        && !componentItem.wheelSizes?.some((wheel) => wheel.size === selectedWheel)) {
                         throw new HttpsError('invalid-argument', 'El aro seleccionado no está disponible en un componente del combo.');
                     }
                 }
@@ -540,7 +565,8 @@ export const createRentalGroup = onCall(callable(), async (request) => {
             const componentSelections = combo?.components.map((component) => {
                 const componentItem = inventoryById.get(component.inventoryItemId);
                 const needsWheel = component.requiresWheelSize || Boolean(componentItem?.hasWheelSizes);
-                return { inventoryItemId: component.inventoryItemId, ...(needsWheel && line.wheelSize ? { wheelSize: line.wheelSize } : {}) };
+                const selectedWheel = line.componentSelections?.find((selection) => selection.inventoryItemId === component.inventoryItemId)?.wheelSize || line.wheelSize;
+                return { inventoryItemId: component.inventoryItemId, ...(needsWheel && selectedWheel ? { wheelSize: selectedWheel } : {}) };
             });
             const rental = {
                 productType: line.productType,

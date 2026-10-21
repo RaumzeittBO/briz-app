@@ -176,6 +176,29 @@ try {
     assert.equal(manualRetry.rentalIds[0], manualResult.rentalIds[0]);
     pass('Administrative manual booking validates role, creates customer and rental atomically, and retries idempotently');
 
+    // Isolate later booking scenarios from the intentional per-user five-per-minute limiter.
+    await adminDb.doc(`_requestLimits/reservations_${createHash('sha256').update(userA.uid).digest('hex')}`).delete();
+    const manualCombo = await call<{ reservationCode: string; rentalIds: string[] }>(userA.functions, 'createRentalGroup', {
+        adminManual: true,
+        adminCustomer: { name: 'Combo UI Regression', phone: '+59170000010', ci: 'TEST-COMBO-1010', email: 'combo-ui@example.test' },
+        adminPaymentStatus: 'unpaid',
+        lines: [{ productId: 'combo-emulator', productType: 'combo', quantity: 1, componentSelections: [{ inventoryItemId: 'bike-emulator', wheelSize: '27' }] }],
+        accessories: [{ itemId: 'acc-emulator', quantity: 1 }],
+        date: new Intl.DateTimeFormat('en-CA', { timeZone: 'America/La_Paz' }).format(new Date(Date.now() + 60 * 24 * 60 * 60 * 1000)),
+        pickupTime: '10:00', duration: '2 horas', paymentMethod: 'QR', idempotencyKey: `manual_combo_${crypto.randomUUID()}`,
+    });
+    const manualComboRows = await adminDb.collection('rentals').where('reservationCode', '==', manualCombo.reservationCode).get();
+    assert.equal(manualComboRows.size, 2);
+    const comboRentalRow = manualComboRows.docs.find((doc) => doc.get('productType') === 'combo');
+    const accessoryRentalRow = manualComboRows.docs.find((doc) => doc.get('productId') === 'acc-emulator');
+    assert.ok(comboRentalRow);
+    assert.deepEqual(comboRentalRow.get('componentSelections'), [
+        { inventoryItemId: 'bike-emulator', wheelSize: '27' },
+        { inventoryItemId: 'acc-emulator' },
+    ]);
+    assert.ok(accessoryRentalRow);
+    pass('Manual combo booking accepts per-component wheel selections and stores selected accessories as inventory lines');
+
     const editable = await call<{ rentalIds: string[]; reservationCode: string }>(userA.functions, 'createRentalGroup', {
         adminManual: true,
         adminCustomer: { id: userA.uid },
