@@ -29,7 +29,7 @@ const db = getFirestore();
 const TELEGRAM_BOT_TOKEN = defineSecret('TELEGRAM_BOT_TOKEN');
 const TELEGRAM_CHAT_ID = defineSecret('TELEGRAM_CHAT_ID');
 
-// Runtime identity is provisioned at release with Firestore and Auth read roles;
+// Runtime identity is provisioned at release with Firestore data access and Auth user lookup;
 // Secret Manager access is scoped only to the reservation notification trigger.
 setGlobalOptions({ serviceAccount: 'briz-functions-runtime@briz-4ef3a.iam.gserviceaccount.com' });
 
