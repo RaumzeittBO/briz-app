@@ -49,4 +49,3 @@ Anotar fecha, ancho de viewport, código de reserva, estados, cantidades inicial
 | 12 | Escritorio y móvil a 390 px (también 360 y 430 si posible) | Botones y modales accesibles, formulario desplazable sin controles recortados, CTA operables y sin bloqueo de scroll | |
 
 Usar reservas distintas para devolución sana, devolución dañada y cancelación. Al terminar, verificar en Firestore Emulator que `stockDeducted`, estados del grupo, pagos, auditoría, proyección de disponibilidad e inventario concuerden. El ciclo UI queda pendiente hasta que estos pasos se recorran de verdad.
-
