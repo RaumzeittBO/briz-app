@@ -8,6 +8,7 @@ import { connectStorageEmulator } from "firebase/storage";
 import { connectFunctionsEmulator, getFunctions } from "firebase/functions";
 
 const useFirebaseEmulator = import.meta.env.VITE_USE_FIREBASE_EMULATOR === "true";
+export const isFirebaseEmulatorEnabled = useFirebaseEmulator;
 
 export const firebaseConfig = {
   apiKey: useFirebaseEmulator ? "demo-key" : "AIzaSyB7qnGS7dlZzJXJ-15WdxUaZu68pABC8go",

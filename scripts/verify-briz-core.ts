@@ -22,7 +22,7 @@ import {
     sanitizeRentalForPublicAvailability,
     sanitizeCustomerForSession,
 } from '../src/lib/security';
-import { toBoliviaDateString, getBoliviaYear } from '../src/lib/dateUtils';
+import { addDaysToDateString, toBoliviaDateString, getBoliviaYear } from '../src/lib/dateUtils';
 import { RENTAL_SEED_BIKES, RENTAL_SEED_ACCESSORIES, RENTAL_SEED_COMBOS } from '../src/data/rentalSeedData';
 import { t, getLocalizedField } from '../src/lib/translations';
 import { ARTWORK_REGISTRY, getLocalizedArtwork } from '../src/lib/artworkRegistry';
@@ -186,17 +186,19 @@ async function runTests() {
     });
 
     await test('No doble descuento de stock físico cuando una reserva pasa a confirmed/delivered', () => {
+        const rentalDate = addDaysToDateString(toBoliviaDateString(), 30);
+        const followingDate = addDaysToDateString(rentalDate, 1);
         // Simular que acc_ruedas_auxiliares_adulto (stock original 1) fue confirmado físicamente (stock en documento pasa a 0)
         const modifiedInventory = allInventory.map(i =>
             i.id === 'acc_ruedas_auxiliares_adulto' ? { ...i, stock: 0 } : i
         );
-        const confirmedToday: any = {
+        const confirmedRental: any = {
             id: 'r_conf_1',
             productId: 'acc_ruedas_auxiliares_adulto',
             productType: 'single',
             productName: 'Ruedas auxiliares para adulto',
             quantity: 1,
-            date: '2026-10-20',
+            date: rentalDate,
             pickupTime: '09:00',
             duration: '2 horas',
             status: 'confirmed',
@@ -206,9 +208,9 @@ async function runTests() {
         const availDuringConfirmed = getAvailableStockForInterval({
             inventory: modifiedInventory,
             combos: RENTAL_SEED_COMBOS,
-            rentals: [confirmedToday],
+            rentals: [confirmedRental],
             itemId: 'acc_ruedas_auxiliares_adulto',
-            date: '2026-10-20',
+            date: rentalDate,
             pickupTime: '09:30',
             duration: '2 horas',
         });
@@ -216,9 +218,9 @@ async function runTests() {
         const availTomorrow = getAvailableStockForInterval({
             inventory: modifiedInventory,
             combos: RENTAL_SEED_COMBOS,
-            rentals: [confirmedToday],
+            rentals: [confirmedRental],
             itemId: 'acc_ruedas_auxiliares_adulto',
-            date: '2026-10-21',
+            date: followingDate,
             pickupTime: '09:30',
             duration: '2 horas',
         });

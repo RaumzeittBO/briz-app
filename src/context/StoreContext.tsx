@@ -312,6 +312,7 @@ function mergeRoutes(remoteRoutes: CyclingRoute[], localRoutes: CyclingRoute[]) 
 }
 
 interface StoreContextType {
+    adminStoreScope: string;
     inventory: InventoryItem[];
     combos: ComboProduct[];
     rentals: Rental[];
@@ -771,23 +772,13 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
         };
     }, [isAdminSession, adminStoreScope, inventory]);
 
-    // ---- One-time Migration from LocalStorage ----
+    // ---- Legacy localStorage data detection (never auto-write to Firestore) ----
     useEffect(() => {
-        const migrate = async () => {
-            const hasMigrated = localStorage.getItem('briz_migrated_v1');
-            if (hasMigrated === 'true') return;
-
-            const localInv = safeJSON<InventoryItem[]>('briz_inventory', []);
-            if (localInv.length > 0) {
-                const batch = writeBatch(db);
-                localInv.forEach(item => {
-                    batch.set(doc(db, 'inventory', item.id), item);
-                });
-                await batch.commit();
-            }
-            localStorage.setItem('briz_migrated_v1', 'true');
-        };
-        if (isLoaded) migrate();
+        if (!isLoaded || localStorage.getItem('briz_migrated_v1') === 'true') return;
+        const hasLegacyInventory = safeJSON<InventoryItem[]>('briz_inventory', []).length > 0;
+        if (hasLegacyInventory) {
+            console.warn('Se encontraron datos locales antiguos de inventario; no se sincronizaron automáticamente. Requieren conciliación y migración autorizada.');
+        }
     }, [isLoaded]);
 
     const generateId = (prefix: string) => `${prefix}_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
@@ -1352,6 +1343,7 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
     const mergedRoutes = mergeRoutes(routes, localRoutes);
 
     const value: StoreContextType = {
+        adminStoreScope,
         inventory, combos, rentals, sales, customers, serviceOrders, isLoaded,
         rentalSettings, updateRentalSettings,
         addInventoryItem, updateInventoryItem, deleteInventoryItem,

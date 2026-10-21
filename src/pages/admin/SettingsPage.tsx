@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { initializeApp, getApp, getApps } from 'firebase/app';
-import { createUserWithEmailAndPassword, getAuth, sendPasswordResetEmail, signOut as signOutSecondary } from 'firebase/auth';
+import { connectAuthEmulator, createUserWithEmailAndPassword, getAuth, sendPasswordResetEmail, signOut as signOutSecondary, type Auth } from 'firebase/auth';
 import { collection, doc, onSnapshot, serverTimestamp, setDoc } from 'firebase/firestore';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -9,7 +9,7 @@ import { Label } from '@/components/ui/label';
 import { Save, Bell, Shield, Globe, CreditCard, Upload, Check, UserPlus, KeyRound, Mail, Users, Trash2 } from 'lucide-react';
 import { useStore } from '@/context/StoreContext';
 import { useAuth } from '@/context/AuthContext';
-import { auth, db, firebaseConfig } from '@/lib/firebase';
+import { auth, db, firebaseConfig, isFirebaseEmulatorEnabled } from '@/lib/firebase';
 import { provisionAdminUser } from '@/lib/backend';
 
 interface AdminUserRecord {
@@ -23,6 +23,7 @@ interface AdminUserRecord {
 }
 
 const LOCAL_ADMIN_DIRECTORY_KEY = 'briz_admin_directory';
+const connectedSecondaryAuth = new WeakSet<Auth>();
 
 export default function SettingsPage() {
     const { rentalSettings, updateRentalSettings } = useStore();
@@ -106,7 +107,12 @@ export default function SettingsPage() {
         const secondaryApp = getApps().some(app => app.name === 'briz-admin-creator')
             ? getApp('briz-admin-creator')
             : initializeApp(firebaseConfig, 'briz-admin-creator');
-        return getAuth(secondaryApp);
+        const secondaryAuth = getAuth(secondaryApp);
+        if (isFirebaseEmulatorEnabled && !connectedSecondaryAuth.has(secondaryAuth)) {
+            connectAuthEmulator(secondaryAuth, 'http://127.0.0.1:9099', { disableWarnings: true });
+            connectedSecondaryAuth.add(secondaryAuth);
+        }
+        return secondaryAuth;
     };
 
     const handleUnlockAdmins = (e: React.FormEvent) => {

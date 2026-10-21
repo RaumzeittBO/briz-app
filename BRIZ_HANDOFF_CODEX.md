@@ -1,17 +1,19 @@
 # BRIZ (`briz.com.bo`) — DOCUMENTO DE HANDOFF TÉCNICO PARA CODEX
 
-## Estado verificado por Codex — 2026-10-20 (Bloque 3 y continuación visual)
+## Estado verificado por Codex — 2026-10-21 (Bloque 4)
 
-- Rama activa: `codex/briz-critical-stabilization-20261020`; se conservan los commits `70b85b3` y `bc501ca`.
-- Continuación local basada en `2ac5d74199f80b523979c08f722de4dd92972498` (incluye `2697462`, `4394d02`, `2ac5d74`). Se añadieron pruebas/diagnóstico históricos en esta continuación; su commit local se identifica en `git log`.
+- Rama activa: `codex/briz-critical-stabilization-20261020`; HEAD inicial de este bloque `05dd70a`, alineado con la referencia `origin/...` local y publicación confirmada por el usuario.
 - Bloque 2: seguridad por rol/tienda, Firebase Auth para clientes, Functions con Admin SDK, reservas públicas y manuales atómicas/idempotentes, consulta sanitizada de clientes, historial propio, slots públicos y outbox Telegram.
 - Validación real aislada en Emulator: suite de reglas Firestore/Storage y suite integrada Auth/Firestore/Functions/Storage. Solo IDs y datos ficticios `demo-briz-security`; sin producción, billing, secretos o migraciones.
-- `npm run build`, `npm run build --prefix functions`, `npx tsc --noEmit` y `scripts/verify-briz-core.ts` pasan. `npm run lint` sigue con hallazgos previos amplios; resultado detallado en `BRIZ_MASTER_ROADMAP.md`.
-- GitHub: el usuario confirma que la invitación de `pachaxbo-commits` está aceptada; GCM confirma que la terminal utiliza esa cuenta. `origin` es `https://github.com/RaumzeittBO/briz-app.git`. DNS resuelve `github.com` a `140.82.113.3`, TCP/443 conecta, no hay proxy Git ni variables proxy, pero HTTPS a `github.com` y `api.github.com` expira y `git push origin codex/briz-critical-stabilization-20261020` falló por timeout conectando a 443. No hubo respuesta de autenticación/permisos. Último SHA remoto que se verificó exitosamente antes de los timeouts: `db522d4949cc1b7ef7c2bcb0f15f09150dac151f`; remoto actual no confirmado. Pendiente publicar commits locales tras recuperar HTTPS.
+- `npm run test:firebase` (reglas e integración), `npm run test:reconcile`, `npx tsx scripts/verify-briz-core.ts` (16/16), `npx tsc --noEmit`, `npm run build` y `npm run build --prefix functions` pasan. La primera suite Firebase paralela tuvo timeout de carga, pero la repetición secuencial pasó.
+- GitHub: el usuario confirma que el push previo se realizó; HEAD publicado `05dd70a`. No se repitió diagnóstico de cuenta/red. En este bloque solo se publican cambios nuevos después de las pruebas.
 - Validación visual parcial previa: Vite `http://127.0.0.1:5173/admin/rentals`, Auth/Firestore/Functions/Storage Emulator en `demo-briz-security`; login ficticio y creación `BRIZ-2026-0012` con combo aro 27, bici aro 26 y accesorio comprobadas. Detalle y editor se abrieron. La fecha no pudo manipularse fiablemente por automatización. La reapertura posterior fue bloqueada por la política URL del navegador, que prohíbe rodearla. Confirmación, pago, entrega, cancelación, devoluciones, inventario, reportes y ciclo tras recarga siguen pendientes visualmente. En 390 px el detalle requiere scroll vertical.
 - Reconciliación histórica preparada, solo con datos ficticios: `npm run test:reconcile` pasó con 8 alquileres y 22 hallazgos; la ejecución de solo lectura contra Emulator detectó 18 alquileres, 15 grupos, 3 inventarios, 5 clientes y 10 hallazgos. Cubre estados ES, falta de grupo/availabilityGroupId, combos ambiguos, pagos, estado/stock y enlace Auth ausente. El plan de migración con snapshot restringido, desidentificación, dry-run, aprobación de mapeos, lotes idempotentes, puntos de control, umbrales de parada, verificaciones posteriores y rollback se describe en `BRIZ_MASTER_ROADMAP.md`. Ninguna migración ni producción modificada.
+- Hallazgos del Bloque 4: Auth secundario de Settings ahora conecta al Auth Emulator; venta manual desde manager conserva campo de sede; `briz_inventory` heredado ya no se sube automáticamente y requiere migración autorizada; el fixture core ahora calcula fechas futuras. Auditoría técnica Admin en roadmap. No sustituye validación visual.
+- Para completar el click-through, sigue [`BRIZ_ADMIN_MANUAL_VALIDATION.md`](./BRIZ_ADMIN_MANUAL_VALIDATION.md). El seeder se restringe a `demo-briz-security` y endpoints de loopback. No se ha declarado probada visualmente ninguna operación adicional al alta manual previa.
+- Preparación de release y bloqueos concretos: [`BRIZ_RELEASE_READINESS.md`](./BRIZ_RELEASE_READINESS.md). En particular, App Check está desactivado por defecto y el outbox requiere política de recuperación para estados `sending`.
 - Pendientes: conciliación/migración histórica; preparación Blaze, App Check y credenciales; revisión integral de Admin; traducción completa ES/EN; diez artes ingleses; responsive completo; categorías/eventos móvil; gestor de imágenes Home; lint/optimización; preparación del despliegue solo con autorización.
-- Próximo paso exacto: completar el ciclo visual en `/admin/rentals` cuando el navegador permita abrir localhost; después iniciar inventario histórico autorizado en copia protegida/desidentificada, aplicando el plan reversible.
+- Próximo paso exacto: el propietario recorre `/admin/rentals` siguiendo el checklist manual solo con Emulator; después se prepara el dry-run de conciliación sobre copia sintética/desidentificada autorizada. Mantener abierta la validación visual móvil/escritorio.
 - **No desplegar a producción, no migrar usuarios ni tocar inventario real. No fusionar con main.**
 - Implementación bloque 2: `6a09918` (`feat(firebase): secure booking and customer auth flows`); documentación y validación registradas en `92e20d9`.
 
@@ -128,6 +130,8 @@ src/
 
 ## 4. RIESGOS CONOCIDOS Y LO QUE NO DEBE CONSIDERARSE VALIDADO EN PRODUCCIÓN TODAVÍA
 
+> **Corrección del estado histórico (2026-10-21):** los párrafos siguientes describían riesgos anteriores al Bloque 2 y están supersedidos. Auth de clientes ya usa Firebase Authentication/Functions; Firestore bloquea lectura cliente de `customers` y `rentals`, la disponibilidad pública usa `rentals_busy_slots` sanitizados, y el código actual no contiene secretos Telegram `VITE_*`. Esto no significa que el sistema esté aprobado para producción; ver `BRIZ_RELEASE_READINESS.md`.
+
 > **SEGURIDAD PENDIENTE:** la autenticación pública de clientes y el cálculo de disponibilidad todavía dependen de acceso directo a Firestore. Es obligatorio diseñar una solución de autenticación/autorización segura y una API o mecanismo de disponibilidad pública sin exponer datos privados. El hashing PBKDF2 en el cliente no resuelve este problema. También debe eliminarse el uso de tokens de Telegram en variables `VITE_` y rotarse cualquier token que haya sido expuesto.
 
 ### Lista Estricta de Pendientes de Validación y Desarrollo (No marcar como completamente terminados hasta superar validación integral):
@@ -148,7 +152,7 @@ src/
 
 ---
 
-## 5. SIGUIENTE TAREA EJECUTABLE PARA CODEX
+## 5. SIGUIENTE TAREA EJECUTABLE PARA CODEX (HISTÓRICO; VER ESTADO VIGENTE AL INICIO)
 
 1. **Conciliación y migración segura de datos históricos:** iniciar con inventario de inconsistencias en copia/emulador, acordar mapeos y producir plan reversible; no escribir producción sin autorización.
 2. Luego seguir las diez fases ordenadas al inicio de `BRIZ_MASTER_ROADMAP.md`. La revisión visual pendiente de `/admin/rentals` debe completar reserva pública → confirmación → entrega → edición → pago → devolución y comprobar reportes e inventario en desktop y 360–430 px.

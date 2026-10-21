@@ -19,7 +19,7 @@ const statusColors: Record<string, string> = {
 };
 
 export default function AdminSalesPage() {
-    const { sales, updateSaleStatus, deleteSale, inventory, shopCategories } = useStore();
+    const { sales, updateSaleStatus, deleteSale, inventory, shopCategories, adminStoreScope } = useStore();
 
     // Modal State
     const [selectedSale, setSelectedSale] = useState<Sale | null>(null);
@@ -120,6 +120,7 @@ export default function AdminSalesPage() {
                 status: 'Completado',
                 paymentMethod: newSaleForm.paymentMethod,
                 source: 'manual',
+                ...(adminStoreScope !== 'all' ? { store: adminStoreScope } : {}),
                 date: new Date().toISOString()
             };
 

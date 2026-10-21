@@ -1,10 +1,34 @@
 # BRIZ (`briz.com.bo`) — MASTER ROADMAP & ENGINEERING LOG
 
-> **ÚLTIMA ACTUALIZACIÓN:** 2026-10-20 (Bloque 3: backend transaccional; pruebas Emulator y validación visual parcial)
-> **ESTADO GENERAL DEL PROYECTO:** El ciclo administrativo tiene backend transaccional. `npm run test:firebase` y el fixture histórico sintético pasan; `tsc`, build web, build Functions y motor 16/16 pasan. La validación visual abrió `/admin/rentals` y creó un alquiler manual con combo, aro y accesorio; el ciclo visual sigue parcial. ESLint: 207 errores y 10 warnings. No se desplegó ni se modificó producción. La invitación de `pachaxbo-commits` está aceptada según el usuario y GCM confirma esa cuenta. Push falló por timeout TCP/HTTPS 443; última lectura remota exitosa antes de ese intento: `db522d4949cc1b7ef7c2bcb0f15f09150dac151f`; remoto actual no confirmado.
+> **ÚLTIMA ACTUALIZACIÓN:** 2026-10-21 (Bloque 4: auditoría funcional/código y preparación de release)
+> **ESTADO GENERAL:** Rama `codex/briz-critical-stabilization-20261020`, base publicada `05dd70a` según el usuario y `origin/...` local. Bloque 3 implementado; el recorrido visual previo abrió `/admin/rentals` y creó una reserva sintética, pero el navegador luego bloqueó localhost y el ciclo completo de UI sigue pendiente. En esta auditoría se corrigió el fixture de disponibilidad fechado que fallaba el 21-oct, se conectó Auth secundario al Emulator, las ventas manager ahora incluyen su tienda y se desactivó la sincronización automática potencialmente destructiva de inventario heredado desde localStorage. `test:firebase` (rules + integración) y `test:reconcile`, motor (16/16), `tsc`, build web y build Functions pasan. ESLint global: 207 errores, 10 warnings; mezcla binario/backups y archivos activos. Build avisa `/noise.png` y JS minificado ~1.96 MB. Sin producción, despliegue, migración ni billing. El 2026-10-21 quedan Emulator Auth/Firestore/Functions/Storage y Vite disponibles con cuenta ficticia; visual no ejecutado por el bloqueo del navegador.
 > **DOCUMENTO COMPLEMENTARIO OBLIGATORIO:** Ver [`BRIZ_HANDOFF_CODEX.md`](./BRIZ_HANDOFF_CODEX.md) y [`BRIZ_ARTES_EN_INGLES.md`](./BRIZ_ARTES_EN_INGLES.md).
 
 ## Continuación Codex Bloque 3 — 2026-10-20
+
+## Bloque 4 — auditoría y readiness — 2026-10-21
+
+- Estado Git base del bloque: rama publicada `codex/briz-critical-stabilization-20261020`, referencia local `origin/...` alineada en `05dd70a` según el contexto confirmado por el usuario. No se rehizo diagnóstico de GitHub ni push de commits anteriores.
+- Auditoría por código/rules: Dashboard, alquileres, clientes, inventario, tienda/combos, ventas, taller, reportes, Settings/usuarios, eventos/rutas/comunidad y seed. Reglas permiten lecturas públicas solo de catálogo/proyección; clientes se sirven con callable sanitizada; rentals/sales/serviceOrders consultan por sede para managers; alquileres y roles mutan vía Functions/Admin SDK. No se declara click-through visual de esos módulos.
+- Hallazgos corregidos: (1) `SettingsPage` creaba una Firebase Auth secundaria sin conectarla al Auth Emulator, por lo que los admins visuales no quedaban garantizados en el entorno aislado; ahora conecta una sola vez a loopback. (2) ventas manuales desde manager omitían `store` y chocaban con reglas; ahora se escribe el alcance activo. (3) migración automática de `briz_inventory` desde localStorage podía reescribir stock remoto con datos viejos y el cliente no tenía permisos en reglas; se reemplazó por aviso sin escritura. (4) fixture core fijaba una reserva pasada y fallaba correctamente como alquiler vencido aún fuera; usa fechas futuras dinámicas.
+- `scripts/seed-admin-visual.ts` crea solo una cuenta y catálogo ficticios en Auth/Firestore Emulator, después de comprobar endpoints loopback. Cuenta de prueba y pasos están en [`BRIZ_ADMIN_MANUAL_VALIDATION.md`](./BRIZ_ADMIN_MANUAL_VALIDATION.md). La política de navegador impidió completar la revisión visual en este turno, por lo que el recorrido UI no se marca terminado.
+- Calidad de esta revisión: reconciliación sintética pasó (8 registros/22 hallazgos); motor core 16/16; TypeScript y ambos builds pasan. `npm run test:firebase` primero falló por carga concurrente, pero la repetición secuencial pasó completa. ESLint 217 problemas (207 errores/10 warnings), con errores en `initial_store.tsx` binario, `src_backup` y módulos operativos. No se masificó un lint cleanup.
+- Readiness no productivo creado en [`BRIZ_RELEASE_READINESS.md`](./BRIZ_RELEASE_READINESS.md): Blaze/costos, App Check, dominios Auth, Secret Manager/rotación Telegram, recovery outbox, bootstrap de Admin, rules/indexes, Vercel, orden reversible y autorizaciones requeridas. Hallazgo outbox: crash luego de `sending` deja un registro sin reclamar; recuperación automática podría duplicar Telegram por resultado ambiguo, requiere política del propietario.
+- No se ejecutó migración histórica, backup de producción, App Check, billing, secreto real, despliegue ni cambios a `main`.
+- **Siguiente paso ejecutable:** completar [`BRIZ_ADMIN_MANUAL_VALIDATION.md`](./BRIZ_ADMIN_MANUAL_VALIDATION.md) desde el navegador del propietario conectado solo al Emulator; después preparar el dry-run de conciliación sobre copia autorizada y desidentificada. Ver orden completa y demás fases al final de este roadmap.
+
+### Fases siguientes (orden mantenido)
+
+1. Cerrar la auditoría funcional del Admin (bloque actual) y registrar correcciones.
+2. Completar validación visual de alquileres en Emulator.
+3. Conciliar y migrar datos históricos solo con autorización, respaldo, dry-run y rollback.
+4. Preparar Firebase Blaze, App Check, dominios, Secret Manager/Telegram y roles iniciales.
+5. Completar traducción pública ES/EN natural.
+6. Incorporar los diez artes pendientes en inglés.
+7. Revisar responsive de todas las páginas en móvil y escritorio.
+8. Validar categorías/eventos en alquileres móvil.
+9. Crear gestor Admin de imágenes Home en ES/EN y escritorio/móvil (no iniciar antes de cerrar alquileres críticos).
+10. Limpiar ESLint, optimizar de forma segura y preparar despliegue coordinado solo tras autorización.
 
 - Rama activa: `codex/briz-critical-stabilization-20261020`; parte de `db522d4`. No se reescribieron los commits de los bloques anteriores.
 - `updateRentalGroup` (Functions/Admin SDK) sustituye la secuencia navegador de borrar/editar/anexar líneas. Lee el grupo, catálogo, inventario y reservas activas dentro de una transacción; valida sede, estados, combos/aros, horarios y stock; aplica deltas físicos si el grupo ya retenía stock; escribe altas/cambios/bajas, auditoría y bloqueos en el mismo commit. Ignora importes enviados por el navegador, calcula precios del catálogo y protege importes de pedidos pagados. Cambiar entrega/recojo sincroniza sus líneas de servicio y calcula el importe de zona cuando el enlace de Maps aporta coordenadas.
@@ -153,27 +177,18 @@ Siguiendo la Regla Obligatoria #11, **no se han inventado tarifas de multas ni b
 
 ## 5. RIESGOS DE SEGURIDAD Y DESPLIEGUE (`BLOQUEADO` PARA PRODUCCIÓN)
 
-> [!CAUTION]
-> **SEGURIDAD PENDIENTE:** la autenticación pública de clientes y el cálculo de disponibilidad todavía dependen de acceso directo a Firestore. Es obligatorio diseñar una solución de autenticación/autorización segura y una API o mecanismo de disponibilidad pública sin exponer datos privados. El hashing PBKDF2 en el cliente no resuelve este problema. También debe eliminarse el uso de tokens de Telegram en variables `VITE_` y rotarse cualquier token que haya sido expuesto.
+> **Nota de actualización:** la advertencia antigua de esta sección describía el estado anterior al Bloque 2 y está supersedida. Hoy clientes autentican con Firebase Auth y usan callables; `customers`/`rentals` permanecen privados para clientes en Firestore rules y la disponibilidad pública usa `rentals_busy_slots` sanitizados. El código actual no contiene `VITE_TELEGRAM_*`; notificaciones salen por Functions y Secret Manager. Esto no significa que producción esté lista.
 
-### Pendientes Obligatorios de Validación y Cierre (No considerar terminados por tener solo pruebas unitarias):
-- **Pruebas integrales con Firebase Emulator.**
-- **Reserva → confirmación → entrega → devolución.**
-- **Conciliación real de stock y reportes.**
-- **Validación visual móvil y escritorio.**
-- **Revisión manual completa de traducciones.**
-- **Diez artes pendientes en inglés.**
-- **Gestor de imágenes de la página principal desde Admin.**
+### Pendientes Obligatorios de Validación y Cierre
 
-> [!WARNING]
-> **DETALLE TÉCNICO ANTES DE EJECUTAR `firebase deploy --only firestore:rules`:**
-> 1. **Autenticación de Clientes (`customers`) y Alquileres (`rentals`):**
->    - Actualmente, el login de clientes (`CustomerAuthModal.tsx` y `StoreContext.tsx`) consulta directamente la colección `customers` desde el navegador (`where('email', '==', ...)` o leyendo la colección) sin usar Firebase Authentication (`request.auth == null` para clientes públicos), y el motor público de disponibilidad necesita conocer los intervalos ocupados de `rentals`.
->    - Si en `firestore.rules` se bloquea hoy `allow read` en `customers` y `rentals` exigiendo `request.auth != null`, **se romperá inmediatamente el inicio de sesión de clientes, el perfil de cliente y el cálculo de disponibilidad en la web pública**.
->    - **Solución definitiva requerida antes de cerrar `allow read` en producción:**
->      1. Diseñar e implementar autenticación/autorización segura para clientes (Firebase Auth o Cloud Functions) y una API o colección pública sanitizada de disponibilidad (`rentals_busy_slots`) sin exponer PII (`customerName`, `customerPhone`, `customerDoc`), y entonces activar `allow read: if isAdmin()` sobre `customers` y `rentals`.
-> 2. **Tokens de Telegram:**
->    - Eliminar por completo el uso de `VITE_TELEGRAM_BOT_TOKEN` en el cliente (moviendo el envío a un endpoint/Cloud Function backend) y rotar inmediatamente en BotFather cualquier token que haya estado expuesto.
+- Completar el ciclo visual Admin de `/admin/rentals` en escritorio y móvil; seguir [`BRIZ_ADMIN_MANUAL_VALIDATION.md`](./BRIZ_ADMIN_MANUAL_VALIDATION.md).
+- Firebase Emulator se validó en repetición secuencial completa; la primera ejecución paralela tuvo timeout al cargar Functions.
+- Conciliación histórica real solo después de autorización, respaldo protegido, desidentificación cuando posible y dry-run aprobado.
+- App Check, Blaze/APIs/costos, dominios Auth, Secret Manager y bootstrap Admin según [`BRIZ_RELEASE_READINESS.md`](./BRIZ_RELEASE_READINESS.md).
+- Resolver recovery del outbox `sending` sin una política que introduzca duplicados inadvertidos.
+- Revisión manual de traducciones, diez artes ingleses, responsive de todas las páginas, categorías/eventos móvil, ESLint/build warnings y gestor de imágenes (en su orden de roadmap).
+
+Las reglas Firestore/Storage y el flujo cliente/Admin están cubiertos en Emulator, no desplegados. La ausencia de `firestore.indexes.json` debe resolverse en staging, inspeccionando índices requeridos por las consultas reales.
 
 ---
 
@@ -227,6 +242,4 @@ Para permitir que el administrador cambie banners y artes en español/inglés (W
 
 1. Lee [`BRIZ_HANDOFF_CODEX.md`](./BRIZ_HANDOFF_CODEX.md) para ver el detalle técnico completo.
 2. Ejecuta `npx tsx scripts/verify-briz-core.ts` y `npx tsc --noEmit` para comprobar que los tests unitarios del motor y la compilación están en verde.
-3. **Siguiente tarea ejecutable inmediata:**
-   - Levantar el entorno local (`npm run dev`) o Firebase Emulator Suite y realizar la **Validación Integral E2E (UI + Firestore)** de los flujos marcados como `PENDIENTE DE VALIDACIÓN` (creación de reserva en Wizard -> confirmación en Admin -> entrega -> devolución sana y con daño -> verificación de reportes).
-   - Cuando el diseñador gráfico entregue los 10 artes en inglés listados en [`BRIZ_ARTES_EN_INGLES.md`](./BRIZ_ARTES_EN_INGLES.md), colocarlos en las rutas indicadas y cambiar `hasVerifiedEnWeb` / `hasVerifiedEnMobile` a `true` en `src/lib/artworkRegistry.ts` (o implementar la interfaz de subida en `SettingsPage.tsx` según el diseño de la Sección 7).
+3. **Siguiente tarea ejecutable inmediata:** el propietario completa [`BRIZ_ADMIN_MANUAL_VALIDATION.md`](./BRIZ_ADMIN_MANUAL_VALIDATION.md) en Emulator, ya que la política de URL impidió al agente volver a abrir localhost. Después preparar dry-run de conciliación de datos sintéticos/protegidos, sin migrar producción. Mantener las fases futuras al inicio de este roadmap; no iniciar el gestor de imágenes todavía.
