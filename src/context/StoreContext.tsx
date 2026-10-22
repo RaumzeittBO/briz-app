@@ -226,6 +226,7 @@ export interface SaleItem {
     price: number;
     quantity: number;
     wheelSize?: string;
+    wheelSizeAllocations?: Array<{ size: string; quantity: number }>;
     image?: string;
 }
 
@@ -303,6 +304,13 @@ export interface ReturnRentalOptions {
     conditionNotes?: string;
     lateFee?: number;
     actor?: string;
+}
+
+export interface AdminNavigationLink {
+    key: string;
+    label: string;
+    href: string;
+    icon: string;
 }
 
 const LOCAL_ROUTES_KEY = 'briz_local_routes';
@@ -432,10 +440,12 @@ interface StoreContextType {
         remember: boolean
     ) => Promise<Customer>;
     logoutCustomer: () => void;
-    adminNavigationLinks: any[];
-    updateAdminNavigationLinks: (links: any[]) => Promise<void>;
+    adminNavigationLinks: AdminNavigationLink[];
+    updateAdminNavigationLinks: (links: AdminNavigationLink[]) => Promise<void>;
 }
 
+// Context is exported alongside its provider because non-component consumers use it directly.
+// eslint-disable-next-line react-refresh/only-export-components
 export const StoreContext = createContext<StoreContextType | null>(null);
 
 function customerFromPublicProfile(profile: {
@@ -458,6 +468,7 @@ function fileExtension(file: File): string {
     return /^[a-z0-9]{1,8}$/.test(extension) ? extension : 'jpg';
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export const useStore = () => {
     const context = useContext(StoreContext);
     if (!context) throw new Error('useStore must be used within StoreProvider');
@@ -471,7 +482,8 @@ export const useStore = () => {
 const DEFAULT_INVENTORY: InventoryItem[] = RENTAL_SEED_INVENTORY;
 const DEFAULT_COMBOS: ComboProduct[] = RENTAL_SEED_COMBOS;
 
-export const DEFAULT_ADMIN_LINKS = [
+// eslint-disable-next-line react-refresh/only-export-components
+export const DEFAULT_ADMIN_LINKS: AdminNavigationLink[] = [
     { key: 'dashboard', label: 'Dashboard', href: '/admin', icon: 'LayoutDashboard' },
     { key: 'rentals', label: 'Alquileres', href: '/admin/rentals', icon: 'Bike' },
     { key: 'shop', label: 'Tienda', href: '/admin/shop', icon: 'ShoppingBag' },
@@ -499,7 +511,7 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
     const [localRoutes, setLocalRoutes] = useState<CyclingRoute[]>(() => safeJSON<CyclingRoute[]>(LOCAL_ROUTES_KEY, []));
     const [bikeCategories, setBikeCategories] = useState<string[]>([]);
     const [shopCategories, setShopCategories] = useState<string[]>([]);
-    const [adminNavigationLinks, setAdminNavigationLinks] = useState<any[]>([]);
+    const [adminNavigationLinks, setAdminNavigationLinks] = useState<AdminNavigationLink[]>([]);
     const [isLoaded, setIsLoaded] = useState(false);
     const [isAdminSession, setIsAdminSession] = useState(false);
     const [adminStoreScope, setAdminStoreScope] = useState<string>('all');
@@ -1276,7 +1288,7 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
         await deleteDoc(doc(db, 'serviceOrders', id));
     };
 
-    const updateAdminNavigationLinks = async (links: any[]) => {
+    const updateAdminNavigationLinks = async (links: AdminNavigationLink[]) => {
         await setDoc(doc(db, 'settings', 'admin_navigation'), { links });
     };
 

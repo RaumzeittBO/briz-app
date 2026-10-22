@@ -69,6 +69,19 @@ service cloud.firestore {
       allow list: if isAdmin();
       // Roles are provisioned only by a trusted Admin SDK function/CLI migration.
       allow create, update, delete: if false;
+
+      // Private idempotency markers for a manager's own manually-created sales.
+      match /manualSaleOperations/{operationId} {
+        allow get: if activeAdmin() && isCommercialManager() && request.auth.uid == adminUserId;
+        allow list: if false;
+        allow create: if activeAdmin()
+          && isCommercialManager()
+          && request.auth.uid == adminUserId
+          && request.resource.data.keys().hasOnly(['saleId', 'createdAt'])
+          && request.resource.data.saleId == operationId
+          && request.resource.data.createdAt is string;
+        allow update, delete: if false;
+      }
     }
 
     match /settings/{settingId} {
