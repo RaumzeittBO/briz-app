@@ -25,9 +25,69 @@ service cloud.firestore {
       return hasRole(['admin']);
     }
 
+    function validArtworkVariant(variants, variant) {
+      return !(variant in variants)
+        || (variants[variant] is map
+          && (!('sourceVariant' in variants[variant])
+            || variants[variant].sourceVariant in ['esDesktop', 'esMobile', 'enDesktop', 'enMobile']));
+    }
+
+    function nextArtworkVariant(variants, variant) {
+      return variant in ['esDesktop', 'esMobile', 'enDesktop', 'enMobile']
+        && variant in variants
+        && variants[variant] is map
+        && 'sourceVariant' in variants[variant]
+        && variants[variant].sourceVariant in ['esDesktop', 'esMobile', 'enDesktop', 'enMobile']
+        ? variants[variant].sourceVariant
+        : '';
+    }
+
+    function noArtworkCycleFrom(variants, start) {
+      let first = nextArtworkVariant(variants, start);
+      let second = nextArtworkVariant(variants, first);
+      let third = nextArtworkVariant(variants, second);
+      let fourth = nextArtworkVariant(variants, third);
+      return (first == '' || first != start)
+        && (second == '' || (second != start && second != first))
+        && (third == '' || (third != start && third != first && third != second))
+        && (fourth == '' || (fourth != start && fourth != first && fourth != second && fourth != third));
+    }
+
+    function noArtworkVariantCycles(variants) {
+      return variants is map
+        && validArtworkVariant(variants, 'esDesktop')
+        && validArtworkVariant(variants, 'esMobile')
+        && validArtworkVariant(variants, 'enDesktop')
+        && validArtworkVariant(variants, 'enMobile')
+        && noArtworkCycleFrom(variants, 'esDesktop')
+        && noArtworkCycleFrom(variants, 'esMobile')
+        && noArtworkCycleFrom(variants, 'enDesktop')
+        && noArtworkCycleFrom(variants, 'enMobile');
+    }
+
+    function artworkFileLockAfter(slotId, variant, variants) {
+      return !(variant in variants)
+        || !(variants[variant] is map)
+        || !('storagePath' in variants[variant])
+        || (variants[variant].storagePath is string
+          && variants[variant].publicationFileName is string
+          && variants[variant].publicationId == slotId + '__' + variant + '__' + variants[variant].publicationFileName
+          && variants[variant].storagePath == 'public-assets/artworks/' + slotId + '/' + variant + '/' + variants[variant].publicationFileName
+          && existsAfter(/databases/$(database)/documents/publishedArtworkFiles/$(variants[variant].publicationId)));
+    }
+
+    function artworkFilesLockedAfter(slotId, variants) {
+      return artworkFileLockAfter(slotId, 'esDesktop', variants)
+        && artworkFileLockAfter(slotId, 'esMobile', variants)
+        && artworkFileLockAfter(slotId, 'enDesktop', variants)
+        && artworkFileLockAfter(slotId, 'enMobile', variants);
+    }
+
     function writesNewArtworkVersion(slotId) {
       return request.resource.data.currentVersionId is string
         && request.resource.data.variants is map
+        && noArtworkVariantCycles(request.resource.data.variants)
+        && artworkFilesLockedAfter(slotId, request.resource.data.variants)
         && !exists(/databases/$(database)/documents/publicArtworkConfig/$(slotId)/versions/$(request.resource.data.currentVersionId))
         && existsAfter(/databases/$(database)/documents/publicArtworkConfig/$(slotId)/versions/$(request.resource.data.currentVersionId))
         && getAfter(/databases/$(database)/documents/publicArtworkConfig/$(slotId)/versions/$(request.resource.data.currentVersionId)).data.variants == request.resource.data.variants;
@@ -115,6 +175,29 @@ service cloud.firestore {
           && request.resource.data.createdAt is timestamp;
         allow update, delete: if false;
       }
+    }
+
+    // A marker is created atomically with the first config version that
+    // references a Storage object. It is immutable so historical assets can
+    // never become deletable after they stop being the active variant.
+    match /publishedArtworkFiles/{publicationId} {
+      allow get: if isAdmin();
+      allow list: if false;
+      allow create: if isAdmin()
+        && !exists(/databases/$(database)/documents/publishedArtworkFiles/$(publicationId))
+        && request.resource.data.keys().hasOnly(['id', 'slotId', 'variant', 'storagePath', 'fileName', 'createdAt'])
+        && request.resource.data.id == publicationId
+        && request.resource.data.slotId is string
+        && request.resource.data.variant in ['esDesktop', 'esMobile', 'enDesktop', 'enMobile']
+        && request.resource.data.fileName.matches('[A-Za-z0-9_-]+\\.(png|jpg|webp)')
+        && publicationId == request.resource.data.slotId + '__' + request.resource.data.variant + '__' + request.resource.data.fileName
+        && request.resource.data.storagePath == 'public-assets/artworks/' + request.resource.data.slotId + '/' + request.resource.data.variant + '/' + request.resource.data.fileName
+        && request.resource.data.createdAt is timestamp
+        && existsAfter(/databases/$(database)/documents/publicArtworkConfig/$(request.resource.data.slotId))
+        && getAfter(/databases/$(database)/documents/publicArtworkConfig/$(request.resource.data.slotId)).data.variants[request.resource.data.variant].storagePath == request.resource.data.storagePath
+        && getAfter(/databases/$(database)/documents/publicArtworkConfig/$(request.resource.data.slotId)).data.variants[request.resource.data.variant].publicationId == publicationId
+        && getAfter(/databases/$(database)/documents/publicArtworkConfig/$(request.resource.data.slotId)).data.variants[request.resource.data.variant].publicationFileName == request.resource.data.fileName;
+      allow update, delete: if false;
     }
 
     // Draft metadata never reaches the public artwork feed.

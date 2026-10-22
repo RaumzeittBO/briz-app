@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { ARTWORK_REGISTRY, resolveArtwork, type ArtworkOverrides } from '../src/lib/artworkRegistry';
+import { ARTWORK_REGISTRY, hasArtworkVariantCycle, resolveArtwork, type ArtworkOverrides } from '../src/lib/artworkRegistry';
 import { ALLOWED_ARTWORK_TYPES, MAX_ARTWORK_BYTES, validateArtworkFile, validateArtworkFileContent } from '../src/lib/artworkFileValidation';
 
 for (const item of Object.values(ARTWORK_REGISTRY)) {
@@ -33,6 +33,8 @@ assert.deepEqual(resolveArtwork('home_hero_vive', 'en', 'mobile', overrides), {
     src: 'https://storage.example/vive-english.webp', status: 'shared', translated: true, sourceVariant: 'enDesktop', sourceAvailable: true, fallbackSrc: '/vive.webp', fallbackAvailable: true,
 });
 const cyclic: ArtworkOverrides = { home_hero_vive: { enDesktop: { sourceVariant: 'enMobile' }, enMobile: { sourceVariant: 'enDesktop' } } };
+assert.equal(hasArtworkVariantCycle(cyclic.home_hero_vive ?? {}), true, 'mutually shared variants must be rejected before publication');
+assert.equal(hasArtworkVariantCycle({ enDesktop: { sourceVariant: 'esDesktop' }, enMobile: { sourceVariant: 'esMobile' } }), false);
 assert.equal(resolveArtwork('home_hero_vive', 'en', 'desktop', cyclic).status, 'spanish-fallback');
 assert.equal(resolveArtwork('home_texture', 'es', 'desktop').sourceAvailable, false);
 assert.equal(resolveArtwork('home_texture', 'es', 'desktop', { home_texture: { esDesktop: { url: 'https://storage.example/paper.webp' } } }).sourceAvailable, true);

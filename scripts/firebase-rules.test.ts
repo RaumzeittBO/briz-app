@@ -134,6 +134,11 @@ try {
             transaction.set(doc(adminDb, 'publicArtworkConfig', 'home_welcome_badge', 'versions', 'version-3'), { id: 'version-3', variants: restoredVariants, actorUid: 'root', action: 'restore', restoredFrom: 'version-1', createdAt: Timestamp.now() });
             transaction.set(configRef, { slotId: 'home_welcome_badge', variants: restoredVariants, currentVersionId: 'version-3' });
         }));
+        const cyclicVariants = { esDesktop: { sourceVariant: 'esMobile' }, esMobile: { sourceVariant: 'esDesktop' } };
+        await assertFails(runTransaction(adminDb, async (transaction) => {
+            transaction.set(doc(adminDb, 'publicArtworkConfig', 'home_welcome_badge', 'versions', 'version-cycle'), { id: 'version-cycle', variants: cyclicVariants, actorUid: 'root', action: 'share', createdAt: Timestamp.now() });
+            transaction.set(configRef, { slotId: 'home_welcome_badge', variants: cyclicVariants, currentVersionId: 'version-cycle' });
+        }));
         assert.deepEqual((await assertSucceeds(getDoc(doc(anonymous.firestore(), 'publicArtworkConfig', 'home_welcome_badge')))).data()?.variants, restoredVariants);
     });
     await test('artwork draft metadata is restricted to active Admin', async () => {
@@ -311,25 +316,37 @@ try {
         await assertSucceeds(artwork.putString(pngOne, 'raw', { contentType: 'image/png' }));
         await assertFails(anonymous.storage().ref('public-assets/artworks/home_welcome_badge/esDesktop/version_1.png').getDownloadURL());
         const configRef = doc(admin.firestore(), 'publicArtworkConfig', 'home_welcome_badge');
-        const publishedVariants = { esDesktop: { url: 'https://artwork.invalid/version_1.png', storagePath: 'public-assets/artworks/home_welcome_badge/esDesktop/version_1.png' } };
+        const publicationId = 'home_welcome_badge__esDesktop__version_1.png';
+        const publishedVariants = { esDesktop: { url: 'https://artwork.invalid/version_1.png', storagePath: 'public-assets/artworks/home_welcome_badge/esDesktop/version_1.png', publicationFileName: 'version_1.png', publicationId } };
         await assertSucceeds(runTransaction(admin.firestore(), async (transaction) => {
             transaction.set(doc(admin.firestore(), 'publicArtworkConfig', 'home_welcome_badge', 'versions', 'version-4'), {
                 id: 'version-4', variants: publishedVariants, actorUid: 'root', action: 'publish', createdAt: Timestamp.now(),
             });
             transaction.set(configRef, { slotId: 'home_welcome_badge', variants: publishedVariants, currentVersionId: 'version-4' });
+            transaction.set(doc(admin.firestore(), 'publishedArtworkFiles', publicationId), {
+                id: publicationId, slotId: 'home_welcome_badge', variant: 'esDesktop', storagePath: publishedVariants.esDesktop.storagePath, fileName: 'version_1.png', createdAt: Timestamp.now(),
+            });
         }));
+        await assertSucceeds(getDoc(doc(admin.firestore(), 'publishedArtworkFiles', publicationId)));
+        await assertFails(getDoc(doc(anonymous.firestore(), 'publishedArtworkFiles', publicationId)));
+        await assertFails(deleteDoc(doc(admin.firestore(), 'publishedArtworkFiles', publicationId)));
         assert.equal(await fetch(await assertSucceeds(anonymous.storage().ref('public-assets/artworks/home_welcome_badge/esDesktop/version_1.png').getDownloadURL())).then((response) => response.text()), pngOne);
         const nextArtworkPath = 'public-assets/artworks/home_welcome_badge/esDesktop/version_2.png';
         await assertSucceeds(admin.storage().ref(nextArtworkPath).putString(pngTwo, 'raw', { contentType: 'image/png' }));
         await assertFails(anonymous.storage().ref(nextArtworkPath).getDownloadURL());
-        const nextVariants = { esDesktop: { url: 'https://artwork.invalid/version_2.png', storagePath: nextArtworkPath } };
+        const nextPublicationId = 'home_welcome_badge__esDesktop__version_2.png';
+        const nextVariants = { esDesktop: { url: 'https://artwork.invalid/version_2.png', storagePath: nextArtworkPath, publicationFileName: 'version_2.png', publicationId: nextPublicationId } };
         await assertSucceeds(runTransaction(admin.firestore(), async (transaction) => {
             transaction.set(doc(admin.firestore(), 'publicArtworkConfig', 'home_welcome_badge', 'versions', 'version-5'), {
                 id: 'version-5', variants: nextVariants, actorUid: 'root', action: 'publish', createdAt: Timestamp.now(),
             });
             transaction.set(configRef, { slotId: 'home_welcome_badge', variants: nextVariants, currentVersionId: 'version-5' });
+            transaction.set(doc(admin.firestore(), 'publishedArtworkFiles', nextPublicationId), {
+                id: nextPublicationId, slotId: 'home_welcome_badge', variant: 'esDesktop', storagePath: nextArtworkPath, fileName: 'version_2.png', createdAt: Timestamp.now(),
+            });
         }));
         await assertFails(anonymous.storage().ref('public-assets/artworks/home_welcome_badge/esDesktop/version_1.png').getDownloadURL());
+        await assertFails(artwork.delete());
         assert.equal(await fetch(await assertSucceeds(anonymous.storage().ref(nextArtworkPath).getDownloadURL())).then((response) => response.text()), pngTwo);
         await assertSucceeds(runTransaction(admin.firestore(), async (transaction) => {
             transaction.set(doc(admin.firestore(), 'publicArtworkConfig', 'home_welcome_badge', 'versions', 'version-6'), {
@@ -339,6 +356,7 @@ try {
         }));
         assert.equal(await fetch(await assertSucceeds(anonymous.storage().ref('public-assets/artworks/home_welcome_badge/esDesktop/version_1.png').getDownloadURL())).then((response) => response.text()), pngOne);
         await assertFails(anonymous.storage().ref(nextArtworkPath).getDownloadURL());
+        await assertFails(admin.storage().ref(nextArtworkPath).delete());
         await assertFails(artwork.putString(pngTwo, 'raw', { contentType: 'image/png' }));
         await assertFails(artwork.delete());
         await assertSucceeds(admin.storage().ref('public-assets/artworks/home_welcome_badge/enMobile/version_2.jpg').putString(pngTwo, 'raw', { contentType: 'image/jpeg' }));

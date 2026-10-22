@@ -1,11 +1,38 @@
 import { collection, deleteDoc, doc, getDoc, getDocs, orderBy, query, runTransaction, serverTimestamp, setDoc } from 'firebase/firestore';
 import { deleteObject, getDownloadURL, ref, uploadBytes } from 'firebase/storage';
 import { db, storage } from '@/lib/firebase';
-import { ARTWORK_REGISTRY, type ArtworkOverride, type ArtworkOverrides, type ArtworkSlotId, type ArtworkVariant } from '@/lib/artworkRegistry';
+import { ARTWORK_REGISTRY, ARTWORK_VARIANTS, assertArtworkVariantsAcyclic, type ArtworkOverride, type ArtworkOverrides, type ArtworkSlotId, type ArtworkVariant } from '@/lib/artworkRegistry';
 import { validateArtworkFileContent } from '@/lib/artworkFileValidation';
 export { ALLOWED_ARTWORK_TYPES, MAX_ARTWORK_BYTES, validateArtworkFile, validateArtworkFileContent } from '@/lib/artworkFileValidation';
 export type ArtworkDraft = { id: string; ownerUid: string; slotId: ArtworkSlotId; variant: ArtworkVariant; storagePath: string; contentType: string; size: number; width: number; height: number; updatedAt?: unknown };
 export type ArtworkVersion = { id: string; variants: Partial<Record<ArtworkVariant, ArtworkOverride>>; actorUid: string; action: 'publish' | 'restore' | 'share'; createdAt?: unknown; restoredFrom?: string };
+
+export function artworkPublicationId(slotId: ArtworkSlotId, variant: ArtworkVariant, storagePath: string) {
+    const prefix = `public-assets/artworks/${slotId}/${variant}/`;
+    const fileName = storagePath.startsWith(prefix) ? storagePath.slice(prefix.length) : '';
+    if (!/^[A-Za-z0-9_-]+\.(png|jpg|webp)$/.test(fileName)) {
+        throw new Error('La ruta del arte publicado no es válida. Vuelve a subir la imagen.');
+    }
+    return `${slotId}__${variant}__${fileName}`;
+}
+
+function withPublicationIds(slotId: ArtworkSlotId, variants: Partial<Record<ArtworkVariant, ArtworkOverride>>) {
+    const normalized = { ...variants };
+    for (const variant of ARTWORK_VARIANTS) {
+        const override = normalized[variant];
+        if (override?.storagePath) {
+            const prefix = `public-assets/artworks/${slotId}/${variant}/`;
+            const publicationFileName = override.storagePath.slice(prefix.length);
+            normalized[variant] = {
+                ...override,
+                publicationFileName,
+                publicationId: artworkPublicationId(slotId, variant, override.storagePath),
+            };
+        }
+    }
+    assertArtworkVariantsAcyclic(normalized);
+    return normalized;
+}
 
 export function artworkDraftId(uid: string, slotId: ArtworkSlotId, variant: ArtworkVariant) {
     return `${uid}_${slotId}_${variant}`;
@@ -53,9 +80,29 @@ async function writeVersion(slotId: ArtworkSlotId, buildVariants: (current: Part
     await runTransaction(db, async (transaction) => {
         const current = await transaction.get(configRef);
         const currentVariants = (current.exists() ? current.data().variants : {}) as Partial<Record<ArtworkVariant, ArtworkOverride>>;
-        const variants = buildVariants(currentVariants);
+        // Validate before any write so a cyclic shared configuration can never
+        // become the current version, even if resolution has a fallback.
+        const variants = withPublicationIds(slotId, buildVariants(currentVariants));
+        const locks = ARTWORK_VARIANTS.flatMap((variant) => {
+            const override = variants[variant];
+            if (!override?.storagePath || !override.publicationId) return [];
+            return [{ variant, override, ref: doc(db, 'publishedArtworkFiles', override.publicationId) }];
+        });
+        const lockSnapshots = await Promise.all(locks.map(({ ref: lockRef }) => transaction.get(lockRef)));
         transaction.set(versionRef, { id: versionId, variants, actorUid, action, ...(restoredFrom ? { restoredFrom } : {}), createdAt: serverTimestamp() });
         transaction.set(configRef, { slotId, variants, currentVersionId: versionId, updatedAt: serverTimestamp() });
+        locks.forEach(({ variant, override, ref: lockRef }, index) => {
+            if (!lockSnapshots[index].exists()) {
+                transaction.set(lockRef, {
+                    id: override.publicationId,
+                    slotId,
+                    variant,
+                    storagePath: override.storagePath,
+                    fileName: override.publicationFileName,
+                    createdAt: serverTimestamp(),
+                });
+            }
+        });
     });
     return versionId;
 }

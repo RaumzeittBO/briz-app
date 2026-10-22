@@ -30,6 +30,11 @@ service firebase.storage {
           == 'public-assets/artworks/' + slotId + '/' + variant + '/' + fileName;
     }
 
+    function isHistoricallyPublishedArtwork(slotId, variant, fileName) {
+      let publicationId = slotId + '__' + variant + '__' + fileName;
+      return firestore.exists(/databases/(default)/documents/publishedArtworkFiles/$(publicationId));
+    }
+
     match /customerUploads/{uid}/{allPaths=**} {
       allow read: if (signedIn() && request.auth.uid == uid) || hasRole(['admin']);
       allow create, update: if signedIn() && request.auth.uid == uid && isValidUpload();
@@ -88,9 +93,11 @@ service firebase.storage {
         && variant in ['esDesktop', 'esMobile', 'enDesktop', 'enMobile']
         && fileName.matches('[A-Za-z0-9_-]+\\.(png|jpg|webp)');
       allow update: if false;
-      // Draft objects can be discarded. Published versions remain immutable and
-      // are retained for restoration by historical Firestore references.
-      allow delete: if hasRole(['admin']) && !isPublishedArtwork(slotId, variant, fileName);
+      // Unpublished drafts can be discarded. An immutable Firestore marker
+      // protects every version that has ever been published, even after restore.
+      allow delete: if hasRole(['admin'])
+        && !isPublishedArtwork(slotId, variant, fileName)
+        && !isHistoricallyPublishedArtwork(slotId, variant, fileName);
     }
 
     // Drafts are private to the Admin who uploaded them. Public readers cannot

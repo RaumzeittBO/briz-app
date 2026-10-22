@@ -7,6 +7,9 @@ export type ArtworkOverrides = Partial<Record<ArtworkSlotId, Partial<Record<Artw
 export interface ArtworkOverride {
     url?: string;
     storagePath?: string;
+    /** Immutable Storage deletion lock created with the published version. */
+    publicationId?: string;
+    publicationFileName?: string;
     /** Reuse another language/device variant without creating a duplicate file. */
     sourceVariant?: ArtworkVariant;
 }
@@ -21,6 +24,30 @@ export type ArtworkSlotId =
     | 'home_experience_tours' | 'home_experience_family' | 'home_experience_urban' | 'home_experience_accessible'
     | 'about_texture'
     | 'service_hero' | 'service_texture' | 'routes_texture';
+
+export const ARTWORK_VARIANTS: readonly ArtworkVariant[] = ['esDesktop', 'esMobile', 'enDesktop', 'enMobile'];
+
+export function hasArtworkVariantCycle(variants: Partial<Record<ArtworkVariant, ArtworkOverride>>): boolean {
+    const visited = new Set<ArtworkVariant>();
+    const active = new Set<ArtworkVariant>();
+    const visit = (variant: ArtworkVariant): boolean => {
+        if (active.has(variant)) return true;
+        if (visited.has(variant)) return false;
+        visited.add(variant);
+        active.add(variant);
+        const source = variants[variant]?.sourceVariant;
+        if (source && visit(source)) return true;
+        active.delete(variant);
+        return false;
+    };
+    return ARTWORK_VARIANTS.some(visit);
+}
+
+export function assertArtworkVariantsAcyclic(variants: Partial<Record<ArtworkVariant, ArtworkOverride>>): void {
+    if (hasArtworkVariantCycle(variants)) {
+        throw new Error('Las variantes compartidas forman un ciclo. Elige otra variante de origen antes de publicar.');
+    }
+}
 
 export type ArtworkPreviewKind = 'hero' | 'framed-card' | 'about-slide' | 'full-width' | 'texture' | 'sticker' | 'logo' | 'photo-banner';
 
