@@ -432,6 +432,7 @@ interface StoreContextType {
     // Customer Authentication state & methods
     currentCustomer: Customer | null;
     loginCustomer: (email: string, password: string, remember: boolean) => Promise<Customer | null>;
+    resendCustomerVerification: (email: string, password: string) => Promise<'sent' | 'verified'>;
     registerCustomer: (
         customerData: Omit<Customer, 'id' | 'rentalsCount' | 'purchasesCount' | 'firstVisit' | 'lastVisit' | 'notes'>,
         selfieBlob: Blob | null,
@@ -903,12 +904,26 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
         const credential = await signInWithEmailAndPassword(auth, email.trim().toLowerCase(), password);
         if (!credential.user.emailVerified) {
             await signOut(auth);
-            throw new Error('Verifica tu correo electrónico con el enlace que te enviamos antes de iniciar sesión.');
+            const error = new Error('Este correo todavía no está verificado. Solicita un nuevo enlace y confírmalo antes de iniciar sesión.') as Error & { code: string };
+            error.code = 'auth/email-not-verified';
+            throw error;
         }
         const profile = await createCustomerProfileBackend();
         const customer = customerFromPublicProfile(profile);
         setCurrentCustomer(customer);
         return customer;
+    };
+
+    const resendCustomerVerification = async (email: string, password: string): Promise<'sent' | 'verified'> => {
+        await setPersistence(auth, browserSessionPersistence);
+        const credential = await signInWithEmailAndPassword(auth, email.trim().toLowerCase(), password);
+        try {
+            if (credential.user.emailVerified) return 'verified';
+            await sendEmailVerification(credential.user);
+            return 'sent';
+        } finally {
+            await signOut(auth);
+        }
     };
 
     const verifyCustomerRecovery = async (email: string): Promise<boolean> => {
@@ -1389,7 +1404,7 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
         getItemStock, getComboAvailability,
         getAvailableStockForInterval, getComboAvailabilityForInterval,
         calculatePrice, resetAllData,
-        currentCustomer, loginCustomer, registerCustomer, logoutCustomer, getMyRentalHistory, createRentalGroup,
+        currentCustomer, loginCustomer, resendCustomerVerification, registerCustomer, logoutCustomer, getMyRentalHistory, createRentalGroup,
         routes: mergedRoutes, addRoute, updateRoute, deleteRoute,
         events, addEvent, updateEvent, deleteEvent,
         bikeCategories, addBikeCategory, deleteBikeCategory, updateBikeCategory, reorderBikeCategories,

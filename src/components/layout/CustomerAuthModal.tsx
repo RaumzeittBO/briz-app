@@ -104,7 +104,7 @@ const COUNTRIES_LIST = [
 ];
 
 export default function CustomerAuthModal({ isOpen, onClose, onSuccess }: CustomerAuthModalProps) {
-    const { loginCustomer, registerCustomer, verifyCustomerRecovery } = useStore();
+    const { loginCustomer, resendCustomerVerification, registerCustomer, verifyCustomerRecovery } = useStore();
     const { language } = useLanguage();
     
     // Auth Mode: 'login' | 'register' | 'forgot' | 'reset'
@@ -112,6 +112,7 @@ export default function CustomerAuthModal({ isOpen, onClose, onSuccess }: Custom
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [successMessage, setSuccessMessage] = useState<string | null>(null);
+    const [verificationPending, setVerificationPending] = useState(false);
 
     // Common fields
     const [email, setEmail] = useState('');
@@ -168,6 +169,7 @@ export default function CustomerAuthModal({ isOpen, onClose, onSuccess }: Custom
             setCameraActive(false);
             setError(null);
             setSuccessMessage(null);
+            setVerificationPending(false);
             setCapturedSelfie(null);
             setSelfieBlob(null);
             setDocFileAnverso(null);
@@ -278,6 +280,8 @@ export default function CustomerAuthModal({ isOpen, onClose, onSuccess }: Custom
     const handleLoginSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setError(null);
+        setSuccessMessage(null);
+        setVerificationPending(false);
         setLoading(true);
         
         try {
@@ -293,7 +297,34 @@ export default function CustomerAuthModal({ isOpen, onClose, onSuccess }: Custom
             }
         } catch (err) {
             console.error(err);
+            if (err && typeof err === 'object' && 'code' in err && err.code === 'auth/email-not-verified') {
+                setVerificationPending(true);
+            }
             setError(err instanceof Error ? err.message : "Ocurrió un error inesperado al intentar iniciar sesión.");
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleResendVerification = async () => {
+        setError(null);
+        setSuccessMessage(null);
+        setLoading(true);
+        try {
+            const result = await resendCustomerVerification(email, password);
+            setVerificationPending(false);
+            setSuccessMessage(result === 'sent'
+                ? (language === 'es'
+                    ? 'Enviamos un nuevo enlace de verificación. Revisa tu bandeja de entrada y correo no deseado.'
+                    : 'A new verification link was sent. Check your inbox and spam folder.')
+                : (language === 'es'
+                    ? 'Este correo ya figura como verificado. Intenta iniciar sesión nuevamente.'
+                    : 'This email is already verified. Please try signing in again.'));
+        } catch (err) {
+            console.error(err);
+            setError(err instanceof Error
+                ? err.message
+                : (language === 'es' ? 'No se pudo enviar el enlace. Revisa tus datos e intenta nuevamente.' : 'Could not send the link. Check your credentials and try again.'));
         } finally {
             setLoading(false);
         }
@@ -461,7 +492,7 @@ export default function CustomerAuthModal({ isOpen, onClose, onSuccess }: Custom
                                         type="email" 
                                         required 
                                         value={email}
-                                        onChange={e => setEmail(e.target.value)}
+                                        onChange={e => { setEmail(e.target.value); setVerificationPending(false); }}
                                         placeholder="ejemplo@briz.com" 
                                         className="pl-12 bg-white border border-brand-charcoal/15 h-12 text-sm text-brand-black font-bold rounded-xl focus-visible:ring-brand-yellow focus-visible:border-brand-yellow font-sans shadow-sm"
                                     />
@@ -476,7 +507,7 @@ export default function CustomerAuthModal({ isOpen, onClose, onSuccess }: Custom
                                         type="password" 
                                         required 
                                         value={password}
-                                        onChange={e => setPassword(e.target.value)}
+                                        onChange={e => { setPassword(e.target.value); setVerificationPending(false); }}
                                         placeholder="••••••••" 
                                         className="pl-12 bg-white border border-brand-charcoal/15 h-12 text-sm text-brand-black font-bold rounded-xl focus-visible:ring-brand-yellow focus-visible:border-brand-yellow font-sans shadow-sm"
                                     />
@@ -509,6 +540,19 @@ export default function CustomerAuthModal({ isOpen, onClose, onSuccess }: Custom
                             >
                                 {loading ? (language === 'es' ? 'Iniciando sesión...' : 'Signing in...') : (language === 'es' ? 'INICIAR SESIÓN' : 'SIGN IN')}
                             </Button>
+
+                            {verificationPending && (
+                                <Button
+                                    type="button"
+                                    onClick={handleResendVerification}
+                                    disabled={loading || !email.trim() || !password}
+                                    className="w-full bg-white text-brand-charcoal border border-brand-charcoal/15 hover:bg-brand-yellow/10 font-bold rounded-xl h-11 text-xs tracking-wide transition-all font-sans"
+                                >
+                                    {loading
+                                        ? (language === 'es' ? 'Enviando enlace...' : 'Sending link...')
+                                        : (language === 'es' ? 'REENVIAR ENLACE DE VERIFICACIÓN' : 'RESEND VERIFICATION LINK')}
+                                </Button>
+                            )}
 
                             <div className="text-center pt-3 border-t border-brand-charcoal/5 mt-4">
                                 <p className="text-xs text-red-600 font-semibold font-maiandra">{language === 'es' ? '¿No tienes una cuenta aún?' : 'Don’t have an account yet?'}</p>
