@@ -19,6 +19,17 @@ service firebase.storage {
         && (request.resource.contentType.matches('image/.*') || request.resource.contentType == 'application/pdf');
     }
 
+    function isPublishedArtwork(slotId, variant, fileName) {
+      let configPath = /databases/(default)/documents/publicArtworkConfig/$(slotId);
+      return firestore.exists(configPath)
+        && firestore.get(configPath).data.variants is map
+        && firestore.get(configPath).data.variants[variant] is map
+        && 'storagePath' in firestore.get(configPath).data.variants[variant]
+        && firestore.get(configPath).data.variants[variant].storagePath is string
+        && firestore.get(configPath).data.variants[variant].storagePath
+          == 'public-assets/artworks/' + slotId + '/' + variant + '/' + fileName;
+    }
+
     match /customerUploads/{uid}/{allPaths=**} {
       allow read: if (signedIn() && request.auth.uid == uid) || hasRole(['admin']);
       allow create, update: if signedIn() && request.auth.uid == uid && isValidUpload();
@@ -50,10 +61,51 @@ service firebase.storage {
       allow delete: if hasRole(['admin']);
     }
 
-    match /public-assets/{allPaths=**} {
+    // Keep the legacy root-level assets unchanged.
+    match /public-assets/{fileName} {
       allow read: if true;
       allow create, update: if hasRole(['admin']) && isValidUpload();
       allow delete: if hasRole(['admin']);
+    }
+
+    // General public assets remain readable/writable by Admin, except artwork
+    // paths which use the publication-aware rule below. Storage grants are OR-combined.
+    match /public-assets/{category}/{allPaths=**} {
+      allow read: if category != 'artworks';
+      allow create, update: if category != 'artworks' && hasRole(['admin']) && isValidUpload();
+      allow delete: if category != 'artworks' && hasRole(['admin']);
+    }
+
+    match /public-assets/artworks/{slotId}/{variant}/{fileName} {
+      allow read: if hasRole(['admin']) || isPublishedArtwork(slotId, variant, fileName);
+      allow create: if hasRole(['admin'])
+        && resource == null
+        && request.resource != null
+        && request.resource.size > 0
+        && request.resource.size <= 8 * 1024 * 1024
+        && request.resource.contentType in ['image/png', 'image/jpeg', 'image/webp']
+        && slotId.matches('[a-z0-9_]+')
+        && variant in ['esDesktop', 'esMobile', 'enDesktop', 'enMobile']
+        && fileName.matches('[A-Za-z0-9_-]+\\.(png|jpg|webp)');
+      allow update: if false;
+      // Draft objects can be discarded. Published versions remain immutable and
+      // are retained for restoration by historical Firestore references.
+      allow delete: if hasRole(['admin']) && !isPublishedArtwork(slotId, variant, fileName);
+    }
+
+    // Drafts are private to the Admin who uploaded them. Public readers cannot
+    // discover or fetch unapproved artwork.
+    match /artwork-drafts/{uid}/{slotId}/{variant}/{fileName} {
+      allow read, delete: if hasRole(['admin']) && request.auth.uid == uid;
+      allow create: if hasRole(['admin']) && request.auth.uid == uid
+        && resource == null
+          && request.resource.size > 0
+          && request.resource.size <= 8 * 1024 * 1024
+          && request.resource.contentType in ['image/png', 'image/jpeg', 'image/webp']
+          && slotId.matches('[a-z0-9_]+')
+          && variant in ['esDesktop', 'esMobile', 'enDesktop', 'enMobile']
+          && fileName.matches('[A-Za-z0-9_-]+\\.(png|jpg|webp)');
+      allow update: if false;
     }
 
     match /{allPaths=**} {

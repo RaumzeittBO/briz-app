@@ -11,6 +11,7 @@ import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useStore } from '@/context/StoreContext';
 import { useLanguage } from '@/context/LanguageContext';
+import ArtworkPicture from '@/components/ArtworkPicture';
 
 interface CustomerAuthModalProps {
     isOpen: boolean;
@@ -399,7 +400,7 @@ export default function CustomerAuthModal({ isOpen, onClose, onSuccess }: Custom
 
                 {/* Form header */}
                 <div className="p-8 pb-5 border-b border-brand-charcoal/5 flex flex-col items-center justify-center bg-brand-yellow/10">
-                    <img src="/logoamarillo.png" alt="Briz logo" className="h-20 w-auto object-contain mb-3" />
+                    <ArtworkPicture slotId="customer_auth_logo" language={language} alt="Briz logo" className="mb-3" imageClassName="h-20 w-auto object-contain" />
                     <DialogTitle className="text-lg sm:text-xl md:text-2xl font-tangkiwood uppercase tracking-wide text-brand-charcoal text-center px-4 w-full break-words">
                         {mode === 'login' 
                             ? (language === 'es' ? 'INICIAR SESIÓN' : 'SIGN IN') 

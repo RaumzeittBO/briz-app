@@ -3,7 +3,9 @@ import { motion, useScroll, useTransform, useSpring, useMotionValue } from 'fram
 import { Bike, Sparkles, Heart, ArrowRight } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useLanguage } from '@/context/LanguageContext';
-import { getLocalizedArtwork } from '@/lib/artworkRegistry';
+import ArtworkBackground from '@/components/ArtworkBackground';
+import ArtworkPicture from '@/components/ArtworkPicture';
+import type { ArtworkSlotId } from '@/lib/artworkRegistry';
 
 // Crinkled Translucent Washi Tape Sticker Component
 function WashiTape({ className }: { className: string }) {
@@ -90,14 +92,13 @@ function AboutBackgroundDecorations() {
 
 // 3D Tilt Hover Card Component
 interface TiltCardProps {
-    webSrc: string;
-    mobileSrc: string;
+    slotId: ArtworkSlotId;
     alt: string;
     idx: number;
     language: 'es' | 'en';
 }
 
-function TiltCard({ webSrc, mobileSrc, alt, idx, language }: TiltCardProps) {
+function TiltCard({ slotId, alt, idx, language }: TiltCardProps) {
     const cardRef = useRef<HTMLDivElement>(null);
     const x = useMotionValue(0);
     const y = useMotionValue(0);
@@ -212,20 +213,7 @@ function TiltCard({ webSrc, mobileSrc, alt, idx, language }: TiltCardProps) {
                     <div className="pointer-events-none absolute inset-0 bg-gradient-to-tr from-transparent via-white/5 to-white/10 z-10 mix-blend-overlay" />
                     
                     {/* Responsive picture structure to auto-switch web/mobile images */}
-                    <picture className="w-full h-auto block select-none">
-                        <source media="(min-width: 768px)" srcSet={webSrc} />
-                        <img 
-                            src={mobileSrc} 
-                            alt={alt}
-                            className="w-full h-auto block border-b-2 border-brand-black"
-                            style={{ 
-                                transform: 'translateZ(0)',
-                                backfaceVisibility: 'hidden',
-                                WebkitFontSmoothing: 'antialiased'
-                            }}
-                            loading="eager"
-                        />
-                    </picture>
+                    <ArtworkPicture slotId={slotId} language={language} alt={alt} className="w-full select-none" imageClassName="block h-auto w-full border-b-2 border-brand-black" loading="eager" style={{ transform: 'translateZ(0)', backfaceVisibility: 'hidden', WebkitFontSmoothing: 'antialiased' }} />
                 </div>
             </motion.div>
         </div>
@@ -308,15 +296,12 @@ function BikeTreadConnector({ language }: { language: 'es' | 'en' }) {
 
 export default function AboutPage() {
     const { language } = useLanguage();
-    const slide1 = getLocalizedArtwork('about_slide_1', language);
-    const slide2 = getLocalizedArtwork('about_slide_2', language);
-    const slide3 = getLocalizedArtwork('about_slide_3', language);
 
     return (
         <div className="pt-20 min-h-screen bg-[#FFFDF3] relative overflow-hidden flex flex-col">
             {/* Subtle paper texture overlay */}
             <div className="pointer-events-none absolute inset-0 -z-10 opacity-[0.11]">
-                <img src="/menu-principal-web/fondo-textura.webp" alt="" className="w-full h-full object-cover mix-blend-multiply" />
+                <ArtworkBackground slotId="about_texture" language={language} className="mix-blend-multiply" />
             </div>
 
             {/* Background decorations with sparkles and bike tracks */}
@@ -349,9 +334,8 @@ export default function AboutPage() {
             <main className="mx-auto max-w-[1600px] w-full flex-1 flex flex-col items-center py-6 relative z-10">
                 {/* SECTION 1 */}
                 <TiltCard 
-                    webSrc={slide1.webSrc}
-                    mobileSrc={slide1.mobileSrc}
-                    alt={slide1.alt}
+                    slotId="about_slide_1"
+                    alt="Nuestra historia Briz"
                     idx={0}
                     language={language}
                 />
@@ -361,9 +345,8 @@ export default function AboutPage() {
 
                 {/* SECTION 2 */}
                 <TiltCard 
-                    webSrc={slide2.webSrc}
-                    mobileSrc={slide2.mobileSrc}
-                    alt={slide2.alt}
+                    slotId="about_slide_2"
+                    alt="Misión y visión de Briz"
                     idx={1}
                     language={language}
                 />
@@ -373,9 +356,8 @@ export default function AboutPage() {
 
                 {/* SECTION 3 */}
                 <TiltCard 
-                    webSrc={slide3.webSrc}
-                    mobileSrc={slide3.mobileSrc}
-                    alt={slide3.alt}
+                    slotId="about_slide_3"
+                    alt="Valores de Briz"
                     idx={2}
                     language={language}
                 />
@@ -385,7 +367,7 @@ export default function AboutPage() {
             <section className="bg-[#0C4E40] text-white py-16 px-6 relative overflow-hidden flex flex-col items-center text-center mt-12 z-10">
                 {/* Paper texture overlay */}
                 <div className="pointer-events-none absolute inset-0 -z-10 opacity-[0.09] mix-blend-multiply">
-                    <img src="/menu-principal-web/fondo-textura.webp" alt="" className="w-full h-full object-cover" />
+                    <ArtworkBackground slotId="about_texture" language={language} />
                 </div>
                 
                 {/* Floating particle design */}

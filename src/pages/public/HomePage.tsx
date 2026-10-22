@@ -28,9 +28,10 @@ import {
 
 import { useLanguage } from '@/context/LanguageContext';
 import { useCart } from '@/context/CartContext';
-import { getLocalizedArtwork } from '@/lib/artworkRegistry';
+import { useArtwork } from '@/context/ArtworkContext';
+import ArtworkBackground from '@/components/ArtworkBackground';
+import ArtworkPicture from '@/components/ArtworkPicture';
 
-const assetBase = '/menu-principal-web';
 const designStorageKey = 'briz-home-design-editor-v4';
 const designEditorEnabled = import.meta.env.DEV;
 
@@ -397,59 +398,6 @@ function DesignEditorPanel({
     );
 }
 
-type SmartImageProps = {
-    src: string;
-    fallbackSrcs?: string[];
-    alt: string;
-    className?: string;
-    placeholderClassName?: string;
-    placeholderLabel: string;
-    loading?: 'eager' | 'lazy';
-    fetchPriority?: 'high' | 'low' | 'auto';
-    decoding?: 'async' | 'sync' | 'auto';
-};
-
-function SmartImage({
-    src,
-    fallbackSrcs = [],
-    alt,
-    className = '',
-    placeholderClassName = '',
-    placeholderLabel,
-    loading = 'lazy',
-    fetchPriority,
-    decoding = 'async',
-}: SmartImageProps) {
-    const sources = [src, ...fallbackSrcs];
-    const [sourceIndex, setSourceIndex] = useState(0);
-    const missing = sourceIndex >= sources.length;
-
-    if (missing) {
-        return (
-            <div className={`flex h-full w-full items-center justify-center ${placeholderClassName}`}>
-                <div className="max-w-[18rem] px-5 text-center">
-                    <p className="font-tangkiwood text-base text-brand-black sm:text-lg">Espacio reservado</p>
-                    <p className="mt-2 break-words font-maiandra text-xs leading-relaxed text-brand-black/55">
-                        Sube <span className="font-cocon text-brand-black">{placeholderLabel}</span>
-                    </p>
-                </div>
-            </div>
-        );
-    }
-
-    return (
-        <img
-            src={sources[sourceIndex]}
-            alt={alt}
-            className={className}
-            loading={loading}
-            decoding={decoding}
-            fetchPriority={fetchPriority}
-            onError={() => setSourceIndex((index) => index + 1)}
-        />
-    );
-}
-
 const serviceMenu: Array<{ icon: LucideIcon; label: string; color: string; href: string }> = [
     { icon: Bike, label: 'Alquiler', color: '#FFD200', href: '/rentals' },
     { icon: Store, label: 'Tienda', color: '#FA0E95', href: '/shop' },
@@ -461,7 +409,7 @@ const serviceMenu: Array<{ icon: LucideIcon; label: string; color: string; href:
 const experiences: Array<{
     title: string;
     subtitle: string;
-    image: string;
+    artwork: 'home_experience_tours' | 'home_experience_family' | 'home_experience_urban' | 'home_experience_accessible';
     file: string;
     icon: LucideIcon;
     color: string;
@@ -470,7 +418,7 @@ const experiences: Array<{
     {
         title: 'Ciclotours',
         subtitle: 'Aventura y naturaleza',
-        image: `${assetBase}/card-ciclotours.webp`,
+        artwork: 'home_experience_tours',
         file: 'card-ciclotours.webp',
         icon: Bike,
         color: '#FFD200',
@@ -479,7 +427,7 @@ const experiences: Array<{
     {
         title: 'En familia',
         subtitle: 'Diversión para todos',
-        image: `${assetBase}/card-familia.webp`,
+        artwork: 'home_experience_family',
         file: 'card-familia.webp',
         icon: HeartHandshake,
         color: '#62B851',
@@ -488,7 +436,7 @@ const experiences: Array<{
     {
         title: 'Paseos urbanos',
         subtitle: 'Descubre la ciudad',
-        image: `${assetBase}/card-urbanos.webp`,
+        artwork: 'home_experience_urban',
         file: 'card-urbanos.webp',
         icon: UsersRound,
         color: '#FD7B2C',
@@ -497,7 +445,7 @@ const experiences: Array<{
     {
         title: 'Para todos',
         subtitle: 'Sin límites de edad',
-        image: `${assetBase}/card-todos.webp`,
+        artwork: 'home_experience_accessible',
         file: 'card-todos.webp',
         icon: ShieldCheck,
         color: '#247EBC',
@@ -690,9 +638,6 @@ function HeroSection() {
         item.label.toLowerCase().includes(searchQuery.toLowerCase())
     );
 
-    const webSrc = '/menu-principal-web/2.webp';
-    const mobileSrc = '/menu-principal-celular/2.webp';
-    const bienvenidosSrc = language === 'es' ? '/Bienvenidos.png' : '/welcome.png';
 
     const handleCartClick = () => {
         if (totalItems > 0) {
@@ -705,13 +650,7 @@ function HeroSection() {
     return (
         <section className="relative isolate overflow-hidden bg-[#FFF8DF] pt-[86px] lg:pt-[104px]">
             {/* Texture background */}
-            <SmartImage
-                src={`${assetBase}/fondo-textura.webp`}
-                alt=""
-                placeholderLabel="fondo-textura.webp"
-                className="pointer-events-none absolute inset-0 -z-10 h-full w-full object-cover opacity-[0.13] mix-blend-multiply"
-                placeholderClassName="hidden"
-            />
+            <ArtworkBackground slotId="home_texture" language={language} className="-z-10 opacity-[0.13] mix-blend-multiply" />
             <div className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(circle_at_24%_20%,rgba(255,210,0,0.34),transparent_34%),radial-gradient(circle_at_82%_36%,rgba(255,210,0,0.28),transparent_30%),radial-gradient(circle_at_66%_74%,rgba(255,210,0,0.14),transparent_28%),linear-gradient(180deg,#FFF9E8_0%,#FFFDF3_100%)]" />
             
             {/* Background elements */}
@@ -798,9 +737,7 @@ function HeroSection() {
                         </div>
 
                         {/* Animated overlay images */}
-                        <motion.img
-                            src={bienvenidosSrc}
-                            alt="Bienvenidos"
+                        <motion.div
                             animate={{ 
                                 y: [0, -6, 0],
                                 rotate: [-0.5, 0.5, -0.5],
@@ -812,11 +749,9 @@ function HeroSection() {
                                 ease: 'easeInOut'
                             }}
                             className="absolute left-[-7.5%] top-[-3.5%] w-[90%] sm:w-[65%] lg:left-[-13%] lg:top-[45%] lg:w-[72%] lg:-translate-y-1/2 z-30 pointer-events-none drop-shadow-[0_8px_16px_rgba(0,0,0,0.15)]"
-                        />
+                        ><ArtworkPicture slotId="home_welcome_badge" language={language} alt="Bienvenidos" className="w-full" imageClassName="w-full" loading="eager" /></motion.div>
 
-                        <motion.img
-                            src="/vive.webp"
-                            alt="Vive la experiencia Briz"
+                        <motion.div
                             animate={{ 
                                 y: [0, 6, 0],
                                 rotate: [0.5, -0.5, 0.5],
@@ -829,26 +764,13 @@ function HeroSection() {
                                 delay: 0.5
                             }}
                             className="absolute bottom-[4%] left-1/2 -translate-x-1/2 w-[65%] sm:w-[45%] lg:bottom-[5%] lg:left-1/2 lg:-translate-x-1/2 lg:w-[22%] z-30 pointer-events-none drop-shadow-[0_8px_16px_rgba(0,0,0,0.15)]"
-                        />
+                        ><ArtworkPicture slotId="home_hero_vive" language={language} alt="Vive la experiencia Briz" className="w-full" imageClassName="w-full" loading="eager" /></motion.div>
 
                         {/* Inner image container */}
                         <div className="w-full h-full overflow-hidden rounded-[1.25rem] sm:rounded-[1.65rem] relative aspect-[10/17.5] md:aspect-auto">
                             <div className="pointer-events-none absolute inset-0 bg-gradient-to-tr from-transparent via-white/5 to-white/10 z-10 mix-blend-overlay" />
                             
-                            <picture className="w-full h-auto block select-none">
-                                <source media="(min-width: 768px)" srcSet={webSrc} />
-                                <img 
-                                    src={mobileSrc} 
-                                    alt="Menu Principal Briz"
-                                    className="w-full h-auto block border-b-2 border-brand-black"
-                                    style={{ 
-                                        transform: 'translateZ(0)',
-                                        backfaceVisibility: 'hidden',
-                                        WebkitFontSmoothing: 'antialiased'
-                                    }}
-                                    loading="eager"
-                                />
-                            </picture>
+                            <ArtworkPicture slotId="home_bento_2_service" language={language} alt="Menú principal Briz" className="block h-auto w-full select-none" imageClassName="block h-auto w-full border-b-2 border-brand-black" loading="eager" style={{ transform: 'translateZ(0)', backfaceVisibility: 'hidden', WebkitFontSmoothing: 'antialiased' }} />
                         </div>
                     </motion.div>
                 </div>
@@ -1031,12 +953,7 @@ function ServiceStrip() {
                         {/* Inner image container */}
                         <div className="w-full h-auto overflow-hidden rounded-[1.65rem] relative">
                             <div className="pointer-events-none absolute inset-0 bg-gradient-to-tr from-transparent via-white/5 to-white/10 z-10 mix-blend-overlay" />
-                            <img 
-                                src={language === "en" ? "/menu-principal-web/Ingles/1.png" : "/menu-principal-web/1.webp"} 
-                                alt="Servicios Briz PC"
-                                className="w-full h-auto block border-b-2 border-brand-black"
-                                loading="lazy"
-                            />
+                            <ArtworkPicture slotId="home_bento_1_rentals" language={language} alt="Alquila una bicicleta" className="w-full" imageClassName="w-full h-auto border-b-2 border-brand-black" />
                         </div>
                     </motion.div>
                 </EditableLayer>
@@ -1079,12 +996,7 @@ function MobileServicesCardSection() {
                         {/* Inner image container */}
                         <div className="w-full h-full overflow-hidden rounded-[1.25rem] relative aspect-[10/17.5]">
                             <div className="pointer-events-none absolute inset-0 bg-gradient-to-tr from-transparent via-white/5 to-white/10 z-10 mix-blend-overlay" />
-                            <img 
-                                src={language === "en" ? "/menu-principal-celular/Ingles/1.png" : "/menu-principal-celular/1.webp"} 
-                                alt="Servicios Briz Celular"
-                                className="w-full h-auto block border-b-2 border-brand-black"
-                                loading="lazy"
-                            />
+                            <ArtworkPicture slotId="home_bento_1_rentals" language={language} alt="Alquila una bicicleta" className="w-full" imageClassName="w-full h-auto border-b-2 border-brand-black" />
                         </div>
                     </motion.div>
                 </div>
@@ -1145,21 +1057,25 @@ function ContinuousSectionDivider({ absolute = false }: { absolute?: boolean }) 
 
 function AnimatedArtworkDivider() { return <ContinuousSectionDivider absolute />; }
 
-function AnimatedArtworkSection({ desktopSrc, mobileSrc, alt, tone }: { desktopSrc: string; mobileSrc: string; alt: string; tone: 'cream' | 'green' }) {
+function AnimatedArtworkSection({ slotId, alt, tone, language }: { slotId: 'home_bento_3_shop' | 'home_bento_4_routes'; alt: string; tone: 'cream' | 'green'; language: 'es' | 'en' }) {
     return <section className={`relative isolate overflow-hidden ${tone === 'cream' ? 'bg-[#FFF7E8]' : 'bg-[#50C879]'}`}>
         <motion.div initial={{ opacity: 0, scale: .985 }} whileInView={{ opacity: 1, scale: 1 }} viewport={{ once: true, amount: .18 }} transition={{ duration: .8, ease: 'easeOut' }} className="relative w-full max-w-none overflow-hidden">
             <div className="pointer-events-none absolute inset-0 z-10 bg-[linear-gradient(115deg,rgba(255,255,255,.08),transparent_24%,transparent_76%,rgba(255,255,255,.06))] shadow-[inset_0_0_50px_rgba(255,255,255,.10)]" />
             <motion.div animate={{ x: ['-35%', '135%'] }} transition={{ duration: 10, repeat: Infinity, repeatDelay: 4, ease: 'easeInOut' }} className="pointer-events-none absolute inset-y-0 z-10 w-[15%] -skew-x-12 bg-gradient-to-r from-transparent via-white/12 to-transparent blur-lg" />
-            <picture><source media="(max-width: 767px)" srcSet={mobileSrc} /><img src={desktopSrc} alt={alt} className="block h-auto min-w-full w-full" loading="lazy" /></picture>
+            <ArtworkPicture slotId={slotId} language={language} alt={alt} className="w-full" imageClassName="block h-auto min-w-full w-full" />
         </motion.div>
         <AnimatedArtworkDivider />
     </section>;
 }
 function WhyChooseBrizSection() {
     const { language } = useLanguage();
-    const { webSrc: desktopSrc, mobileSrc } = getLocalizedArtwork('home_bento_3_shop', language);
+    const tape = useArtwork('home_why_tape', language, 'desktop');
+    const splashRed = useArtwork('home_splash_red', language, 'desktop');
+    const splashYellow = useArtwork('home_splash_yellow', language, 'desktop');
+    const purposeBike = useArtwork('home_purpose_bike', language, 'desktop');
+    const handsHeart = useArtwork('home_hands_heart', language, 'desktop');
 
-    return <AnimatedArtworkSection desktopSrc={desktopSrc} mobileSrc={mobileSrc} alt="Por qué elegir Briz y nuestro propósito" tone="green" />;
+    return <AnimatedArtworkSection slotId="home_bento_3_shop" language={language} alt="Por qué elegir Briz y nuestro propósito" tone="green" />;
     return (
         <section className="relative isolate overflow-hidden scroll-mt-28 bg-[#50C879] pt-24 sm:pt-28 lg:pt-[112px]">
             <div className="absolute inset-y-0 right-0 -z-10 hidden w-[54%] rounded-l-[48%] border-y-2 border-l-2 border-white/80 bg-[#A45D33] lg:block" />
@@ -1218,7 +1134,7 @@ function WhyChooseBrizSection() {
                         className="pointer-events-none absolute left-[11%] top-0 hidden sm:block h-20 w-[22rem] sm:h-28 sm:w-[32rem] z-20"
                     >
                         <OptionalSticker
-                            src={`${assetBase}/sticker-porque-tape.webp`}
+                            src={tape.src}
                             alt=""
                             className="w-full h-full object-contain"
                         />
@@ -1229,7 +1145,7 @@ function WhyChooseBrizSection() {
                         className="pointer-events-none absolute left-[-2rem] top-[17rem] hidden sm:block h-28 w-36 sm:top-[24rem] z-20"
                     >
                         <OptionalSticker
-                            src={`${assetBase}/sticker-splash-rojo.webp`}
+                            src={splashRed.src}
                             alt=""
                             className="w-full h-full object-contain"
                         />
@@ -1240,7 +1156,7 @@ function WhyChooseBrizSection() {
                         className="pointer-events-none absolute right-[4%] top-[9rem] hidden sm:block h-24 w-28 sm:top-[12rem] sm:h-32 sm:w-36 z-20"
                     >
                         <OptionalSticker
-                            src={`${assetBase}/sticker-splash-amarillo.webp`}
+                            src={splashYellow.src}
                             alt=""
                             className="w-full h-full object-contain"
                         />
@@ -1303,7 +1219,7 @@ function WhyChooseBrizSection() {
                         className="pointer-events-none absolute left-[5%] top-[10%] hidden sm:block h-36 w-40 sm:h-44 sm:w-52 lg:left-[2%] lg:top-[14%] z-20"
                     >
                         <OptionalSticker
-                            src={`${assetBase}/sticker-proposito-bici.webp`}
+                            src={purposeBike.src}
                             alt=""
                             className="w-full h-full object-contain"
                         />
@@ -1314,7 +1230,7 @@ function WhyChooseBrizSection() {
                         className="pointer-events-none absolute left-1/2 top-[39%] hidden sm:block h-28 w-44 -translate-x-1/2 sm:h-36 sm:w-56 lg:top-[37%] z-20"
                     >
                         <OptionalSticker
-                            src={`${assetBase}/sticker-manos-corazon.webp`}
+                            src={handsHeart.src}
                             alt=""
                             className="w-full h-full object-contain"
                         />
@@ -1349,9 +1265,10 @@ function WhyChooseBrizSection() {
 
 function BrandSection() {
     const { language } = useLanguage();
-    const { webSrc: desktopSrc, mobileSrc } = getLocalizedArtwork('home_bento_4_routes', language);
+    const brandLogo = useArtwork('home_brand_logo', language, 'desktop');
+    const brandSticker = useArtwork('home_brand_sticker', language, 'desktop');
 
-    return <AnimatedArtworkSection desktopSrc={desktopSrc} mobileSrc={mobileSrc} alt="La marca Briz" tone="cream" />;
+    return <AnimatedArtworkSection slotId="home_bento_4_routes" language={language} alt="La marca Briz" tone="cream" />;
     return (
         <section className="relative isolate overflow-hidden bg-[#FFD957] pt-20 lg:pt-24">
             <div className="pointer-events-none absolute inset-x-0 top-0 z-10 h-16 text-[#50C879]" aria-hidden="true">
@@ -1433,7 +1350,7 @@ function BrandSection() {
                             className="w-full h-full"
                         >
                             <OptionalSticker
-                                src="/logo de briz.png"
+                                src={brandLogo.src}
                                 alt="Logo Briz"
                                 className="h-auto w-full object-contain brightness-0 invert opacity-90 drop-shadow-[0_18px_28px_rgba(0,0,0,0.08)]"
                             />
@@ -1457,7 +1374,7 @@ function BrandSection() {
                             className="w-full h-full"
                         >
                             <OptionalSticker
-                                src="/menu-principal-web/sticker-marca.webp"
+                                src={brandSticker.src}
                                 alt="Sticker de marca Briz"
                                 className="block h-full w-full object-contain drop-shadow-[0_18px_35px_rgba(0,0,0,0.16)]"
                             />
@@ -1488,6 +1405,7 @@ function BrandSection() {
 }
 
 export function ExperienceSection({ embedded = false }: { embedded?: boolean }) {
+    const { language } = useLanguage();
     return (
         <section id="experiencias" className={`relative overflow-hidden px-0 py-8 sm:py-12 ${embedded ? 'bg-transparent' : 'bg-[#FFFDF3]'}`}>
             <div className="mx-auto max-w-[1320px]">
@@ -1522,12 +1440,13 @@ export function ExperienceSection({ embedded = false }: { embedded?: boolean }) 
                                     to={experience.href}
                                     className="group relative block h-20 overflow-hidden rounded-[1.15rem] bg-[#F5ECCE] shadow-[0_10px_22px_rgba(74,50,0,0.12)] transition duration-300 hover:-translate-y-1 hover:scale-[1.02] sm:aspect-[0.82/1] sm:h-auto sm:rounded-[1.55rem] sm:shadow-[0_16px_32px_rgba(74,50,0,0.12)]"
                                 >
-                                    <SmartImage
-                                        src={experience.image}
+                                    <ArtworkPicture
+                                        slotId={experience.artwork}
+                                        language={language}
                                         alt={experience.title}
                                         placeholderLabel={experience.file}
-                                        className="absolute inset-0 h-full w-full object-cover transition duration-500 group-hover:scale-105"
-                                        placeholderClassName="absolute inset-0 bg-[linear-gradient(135deg,#FFF4B8,#F6EACB,#DFF3EF)]"
+                                        className="absolute inset-0 h-full w-full transition duration-500 group-hover:scale-105"
+                                        imageClassName="h-full w-full object-cover"
                                     />
                                     <div className="absolute inset-0 bg-gradient-to-t from-black/74 via-black/16 to-transparent" />
                                     <span
@@ -1767,13 +1686,7 @@ function CommunitySection() {
     return (
         <section className="relative isolate overflow-hidden bg-[#62C5B0] px-4 py-14 sm:px-6 sm:py-24 lg:px-8 lg:py-32">
             {/* Subtle grain texture overlay */}
-            <SmartImage
-                src={`${assetBase}/fondo-textura.webp`}
-                alt=""
-                placeholderLabel="fondo-textura.webp"
-                className="pointer-events-none absolute inset-0 -z-10 h-full w-full object-cover opacity-[0.12] mix-blend-multiply"
-                placeholderClassName="hidden"
-            />
+            <ArtworkBackground slotId="home_texture" language={language} className="-z-10 opacity-[0.12] mix-blend-multiply" />
             {/* Organic ambient gradients */}
             <div className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(circle_at_20%_20%,rgba(255,210,0,0.18),transparent_25%),radial-gradient(circle_at_80%_80%,rgba(250,14,149,0.12),transparent_30%)]" />
             
@@ -1879,13 +1792,7 @@ function CommunitySection() {
 
                         {/* Interactive Polaroid Image */}
                         <div className="overflow-hidden bg-[#E6F5F2] relative aspect-[1.15/1]">
-                            <SmartImage
-                                src={`${assetBase}/comunidad.webp?v=2`}
-                                fallbackSrcs={[`/menu-principal-celular/comunidad.webp`, `${assetBase}/web2.webp`]}
-                                alt="Ciclistas en la comunidad Briz"
-                                placeholderLabel="comunidad.webp"
-                                className="w-full h-full object-cover rounded-sm grayscale-[15%] group-hover:grayscale-0 transition-all duration-500 scale-102 group-hover:scale-105"
-                            />
+                            <ArtworkPicture slotId="home_community_art" language={language} alt="Ciclistas en la comunidad Briz" className="h-full w-full" imageClassName="w-full h-full object-cover rounded-sm grayscale-[15%] group-hover:grayscale-0 transition-all duration-500 scale-102 group-hover:scale-105" />
                         </div>
 
                         {/* Caption in Gochi Hand */}
@@ -1911,7 +1818,7 @@ function CommunitySection() {
                             transition={{ duration: 4.8, repeat: Infinity, ease: "easeInOut" }}
                             className="absolute -left-1.5 sm:-left-7 -bottom-4 sm:-bottom-6 w-16 h-16 sm:w-20 sm:h-20 bg-brand-yellow border-3 border-brand-black rounded-full flex items-center justify-center shadow-[5px_5px_0_rgba(0,0,0,1)] z-20"
                         >
-                            <img src="/logo_bicicleta_principal.png" alt="Bicicleta Briz Sticker" className="w-10 h-10 sm:w-12 sm:h-12 object-contain" />
+                            <ArtworkPicture slotId="home_bike_logo" language={language} alt="Bicicleta Briz Sticker" className="h-10 w-10 sm:h-12 sm:w-12" imageClassName="h-full w-full object-contain" />
                         </motion.div>
                     </motion.div>
 
@@ -1937,13 +1844,7 @@ function FinalInspirationalSection() {
     return (
         <section className="relative isolate overflow-hidden bg-[#0C4E40] py-20 sm:py-28 lg:py-32 px-4 sm:px-6 lg:px-8">
             {/* Subtle paper texture overlay */}
-            <SmartImage
-                src={`${assetBase}/fondo-textura.webp`}
-                alt=""
-                placeholderLabel="fondo-textura.webp"
-                className="pointer-events-none absolute inset-0 -z-10 h-full w-full object-cover opacity-[0.11] mix-blend-multiply"
-                placeholderClassName="hidden"
-            />
+            <ArtworkBackground slotId="home_texture" language={language} className="-z-10 opacity-[0.11] mix-blend-multiply" />
             {/* Background routes drawing effect */}
             <div className="pointer-events-none absolute inset-0 -z-10 opacity-30">
                 <svg className="absolute left-[5%] top-[10%] w-[38rem] h-44 text-[#FFD200]/40" viewBox="0 0 680 170" fill="none" aria-hidden="true">
@@ -2053,12 +1954,7 @@ function FinalInspirationalSection() {
                         transition={{ duration: 0.6, ease: 'easeOut' }}
                         className="relative w-full max-w-[88vw] sm:max-w-[440px] z-20"
                     >
-                        <SmartImage
-                            src="/vive.webp?v=1"
-                            alt="Vive la experiencia Briz"
-                            placeholderLabel="vive.webp"
-                            className="h-auto w-full object-contain rotate-[-2deg]"
-                        />
+                        <ArtworkPicture slotId="home_hero_vive" language={language} alt="Vive la experiencia Briz" className="w-full" imageClassName="h-auto w-full object-contain rotate-[-2deg]" />
                     </motion.div>
 
                     {/* Main Polaroid Image Container */}
@@ -2071,12 +1967,7 @@ function FinalInspirationalSection() {
                     >
                         {/* Polaroid Image Area */}
                         <div className="overflow-hidden bg-[#FFEEC7] relative aspect-[1.12/1]">
-                            <SmartImage
-                                src="/pedalea.webp?v=1"
-                                alt="Pedalea Conecta Inspira"
-                                placeholderLabel="pedalea.webp"
-                                className="w-full h-full object-cover scale-102 group-hover:scale-105 transition-transform duration-500 rounded-sm"
-                            />
+                            <ArtworkPicture slotId="home_pedalea_art" language={language} alt="Pedalea Conecta Inspira" className="h-full w-full" imageClassName="w-full h-full object-cover scale-102 group-hover:scale-105 transition-transform duration-500 rounded-sm" />
                         </div>
 
                         {/* Small hand-written sticker on Polaroid */}

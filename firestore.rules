@@ -25,6 +25,14 @@ service cloud.firestore {
       return hasRole(['admin']);
     }
 
+    function writesNewArtworkVersion(slotId) {
+      return request.resource.data.currentVersionId is string
+        && request.resource.data.variants is map
+        && !exists(/databases/$(database)/documents/publicArtworkConfig/$(slotId)/versions/$(request.resource.data.currentVersionId))
+        && existsAfter(/databases/$(database)/documents/publicArtworkConfig/$(slotId)/versions/$(request.resource.data.currentVersionId))
+        && getAfter(/databases/$(database)/documents/publicArtworkConfig/$(slotId)/versions/$(request.resource.data.currentVersionId)).data.variants == request.resource.data.variants;
+    }
+
     function isCommercialManager() {
       return hasRole(['admin', 'manager']);
     }
@@ -87,6 +95,31 @@ service cloud.firestore {
     match /settings/{settingId} {
       allow read: if settingId in ['rental_settings', 'bike_categories', 'shop_categories', 'admin_navigation'] || isAdmin();
       allow write: if isAdmin();
+    }
+
+    // Published artwork metadata is the only part of this module public.
+    match /publicArtworkConfig/{slotId} {
+      allow get, list: if true;
+      allow create, update: if isAdmin() && writesNewArtworkVersion(slotId);
+      allow delete: if false;
+
+      // Version snapshots are retained for Admin rollback, not exposed to visitors.
+      match /versions/{versionId} {
+        allow read: if isAdmin();
+        allow create: if isAdmin()
+          && request.resource.data.keys().hasOnly(['id', 'variants', 'actorUid', 'action', 'restoredFrom', 'createdAt'])
+          && request.resource.data.id == versionId
+          && request.resource.data.actorUid == request.auth.uid
+          && request.resource.data.action in ['publish', 'restore', 'share']
+          && request.resource.data.variants is map
+          && request.resource.data.createdAt is timestamp;
+        allow update, delete: if false;
+      }
+    }
+
+    // Draft metadata never reaches the public artwork feed.
+    match /artworkDrafts/{draftId} {
+      allow read, write: if isAdmin();
     }
 
     match /inventory/{itemId} {

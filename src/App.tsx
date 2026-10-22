@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { AuthProvider, useAuth } from '@/context/AuthContext';
 import { CommunityProvider } from '@/context/CommunityContext';
+import { ArtworkProvider } from '@/context/ArtworkContext';
 import PublicLayout from '@/components/layout/PublicLayout';
 import AdminLayout from '@/components/layout/AdminLayout';
 
@@ -31,6 +32,7 @@ import AdminRoutesPage from '@/pages/admin/AdminRoutesPage';
 import AdminSeedPage from '@/pages/admin/AdminSeedPage';
 import AdminCommunityPage from '@/pages/admin/AdminCommunityPage';
 import AdminEventsPage from '@/pages/admin/AdminEventsPage';
+import AdminArtworksPage from '@/pages/admin/AdminArtworksPage';
 
 // Protected route wrapper
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -41,6 +43,13 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   if (!isAuthenticated) {
     return <LoginPage />;
   }
+  return <>{children}</>;
+}
+
+function AdminRoleRoute({ children }: { children: React.ReactNode }) {
+  const { adminProfile, isLoading } = useAuth();
+  if (isLoading) return <div role="status" className="min-h-screen flex items-center justify-center bg-brand-charcoal text-white/70">Verificando acceso al panel…</div>;
+  if (adminProfile?.role !== 'admin') return <div role="alert" className="min-h-screen grid place-items-center bg-[#FFF9E8] p-6 text-center"><div><h1 className="text-xl font-black">Acceso reservado a Admin</h1><p className="mt-2 text-sm text-stone-600">Tu perfil no tiene permiso para administrar artes públicos.</p></div></div>;
   return <>{children}</>;
 }
 
@@ -75,6 +84,7 @@ function AppRoutes() {
         <Route path="reports" element={<ReportsPage />} />
         <Route path="settings" element={<SettingsPage />} />
         <Route path="seed" element={<AdminSeedPage />} />
+        <Route path="artes" element={<AdminRoleRoute><AdminArtworksPage /></AdminRoleRoute>} />
       </Route>
 
       {/* Catch-all */}
@@ -95,13 +105,15 @@ function App() {
       <LanguageProvider>
         <StoreProvider>
           <CartProvider>
-            <CommunityProvider>
+              <CommunityProvider>
+                <ArtworkProvider>
               <BrowserRouter>
                 <ScrollToTop />
                 <AuthProvider>
                   <AppRoutes />
                 </AuthProvider>
               </BrowserRouter>
+                </ArtworkProvider>
             </CommunityProvider>
           </CartProvider>
         </StoreProvider>

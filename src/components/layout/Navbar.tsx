@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { useLanguage } from '@/context/LanguageContext';
 import { t } from '@/lib/translations';
+import ArtworkPicture from '@/components/ArtworkPicture';
 
 type NavLinkItem = {
     label: string;
@@ -347,18 +348,8 @@ export default function Navbar() {
                             className="group flex items-center shrink-0" 
                             aria-label={language === 'es' ? 'BRIZ Centro de la Bicicleta' : 'BRIZ Bicycle Center'}
                         >
-                            <img
-                                src="/logo_bicicleta_principal.png"
-                                alt="Bicicleta BRIZ"
-                                className="w-auto shrink-0 object-contain brightness-0 invert transition-transform duration-200 group-hover:scale-[1.02]"
-                                style={{ height: 80 }}
-                            />
-                            <img
-                                src="/logo_briz_principal.png"
-                                alt="BRIZ"
-                                className="w-auto shrink-0 object-contain brightness-0 invert"
-                                style={{ height: 56, marginLeft: -6 }}
-                            />
+                            <ArtworkPicture slotId="home_bike_logo" language={language} alt="Bicicleta BRIZ" className="shrink-0 transition-transform duration-200 group-hover:scale-[1.02]" imageClassName="w-auto shrink-0 object-contain brightness-0 invert" style={{ height: 80 }} />
+                            <ArtworkPicture slotId="site_brand_logo" language={language} alt="BRIZ" className="shrink-0" imageClassName="w-auto shrink-0 object-contain brightness-0 invert" style={{ height: 56, marginLeft: -6 }} />
                         </Link>
 
                         {/* Tire Track 1 */}
@@ -554,18 +545,8 @@ export default function Navbar() {
                             className="group flex items-center shrink-0" 
                             aria-label={language === 'es' ? 'BRIZ Centro de la Bicicleta' : 'BRIZ Bicycle Center'}
                         >
-                            <img
-                                src="/logo_bicicleta_principal.png"
-                                alt="Bicicleta BRIZ"
-                                className="w-auto shrink-0 object-contain brightness-0 invert"
-                                style={{ height: 58 }}
-                            />
-                            <img
-                                src="/logo_briz_principal.png"
-                                alt="BRIZ"
-                                className="w-auto shrink-0 object-contain brightness-0 invert"
-                                style={{ height: 34, marginLeft: -4 }}
-                            />
+                            <ArtworkPicture slotId="home_bike_logo" language={language} alt="Bicicleta BRIZ" className="shrink-0" imageClassName="w-auto shrink-0 object-contain brightness-0 invert" style={{ height: 58 }} />
+                            <ArtworkPicture slotId="site_brand_logo" language={language} alt="BRIZ" className="shrink-0" imageClassName="w-auto shrink-0 object-contain brightness-0 invert" style={{ height: 34, marginLeft: -4 }} />
                         </Link>
 
                         {/* Tire Track separator - mobile */}
