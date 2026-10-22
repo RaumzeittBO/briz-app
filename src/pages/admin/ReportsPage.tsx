@@ -20,10 +20,11 @@ import {
   MapPin
 } from 'lucide-react';
 import { useStore } from '@/context/StoreContext';
-import type { Rental } from '@/context/StoreContext';
+import type { Rental, Sale, ServiceOrder } from '@/context/StoreContext';
 import { toBoliviaDateString, addDaysToDateString, parseBoliviaDateTime } from '@/lib/dateUtils';
 import { parseDurationToHours } from '@/lib/rentalPricing';
 import { filterRentalMoneyByStore, summarizeRentalMoney } from '@/lib/rentalReportMoney';
+import { filterCompletedSales, filterCompletedServiceOrders, serviceOrderRevenue, sumServiceOrderRevenue } from '@/lib/adminReportScope';
 
 type DateRangePreset = 'today' | 'yesterday' | 'last7' | 'thisMonth' | 'lastMonth' | 'custom' | 'all';
 
@@ -87,12 +88,12 @@ export default function ReportsPage() {
       ? r.date
       : toBoliviaDateString(r.createdAt || r.createdDate || new Date());
 
-  const getSaleDateStr = (s: any) =>
+  const getSaleDateStr = (s: Sale) =>
     s.date && /^\d{4}-\d{2}-\d{2}$/.test(s.date)
       ? s.date
       : toBoliviaDateString(s.date || new Date());
 
-  const getServiceDateStr = (so: any) =>
+  const getServiceDateStr = (so: ServiceOrder) =>
     so.date && /^\d{4}-\d{2}-\d{2}$/.test(so.date)
       ? so.date
       : toBoliviaDateString(so.date || new Date());
@@ -135,21 +136,11 @@ export default function ReportsPage() {
   );
 
   const periodSales = useMemo(() => {
-    return sales.filter(s => {
-      if (s.status !== 'Completado') return false;
-      if (selectedStore !== 'all' && (s.store || 'Cochabamba') !== selectedStore) return false;
-      const d = getSaleDateStr(s);
-      return d >= dateBounds.start && d <= dateBounds.end;
-    });
+    return filterCompletedSales(sales, dateBounds, selectedStore, getSaleDateStr);
   }, [sales, dateBounds, selectedStore]);
 
   const periodServices = useMemo(() => {
-    return (serviceOrders || []).filter(so => {
-      if (so.status !== 'Entregado' && so.status !== 'Listo' && (so.status as string) !== 'Terminado') return false;
-      if (selectedStore !== 'all' && (so.store || 'Cochabamba') !== selectedStore) return false;
-      const d = getServiceDateStr(so);
-      return d >= dateBounds.start && d <= dateBounds.end;
-    });
+    return filterCompletedServiceOrders(serviceOrders || [], dateBounds, selectedStore, getServiceDateStr);
   }, [serviceOrders, dateBounds, selectedStore]);
 
   // 1, 2, 3, 4: Financial metrics (Alquileres, Tienda, Taller, Cobrado vs Pendiente)
@@ -166,7 +157,7 @@ export default function ReportsPage() {
     [periodSales]
   );
   const serviceIncome = useMemo(
-    () => periodServices.reduce((sum, so) => sum + (Number(so.costEstimate ?? (so as any).price) || 0), 0),
+    () => sumServiceOrderRevenue(periodServices),
     [periodServices]
   );
   const totalConsolidatedIncome = rentalMoney.netRecognized + rentalMoney.collectedDateUnknown + salesIncome + serviceIncome;
@@ -364,7 +355,7 @@ export default function ReportsPage() {
     periodServices.forEach(so => {
       const d = getServiceDateStr(so);
       const curr = dayMap.get(d) || { date: d, alquileres: 0, reembolsos: 0, correcciones: 0, ventas: 0, taller: 0 };
-      curr.taller += Number(so.costEstimate ?? (so as any).price) || 0;
+      curr.taller += serviceOrderRevenue(so);
       dayMap.set(d, curr);
     });
 
@@ -374,7 +365,7 @@ export default function ReportsPage() {
   // 17: Export to CSV/Excel and Printable PDF
   const handleExportCSV = () => {
     const lines: string[] = [];
-    const esc = (v: any) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+    const esc = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`;
 
     lines.push([esc('REPORTE INTEGRAL BRIZ'), esc(dateBounds.label), esc(`Sede: ${selectedStore === 'all' ? 'Todas' : selectedStore}`)].join(','));
     lines.push('');

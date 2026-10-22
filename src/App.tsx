@@ -34,7 +34,10 @@ import AdminEventsPage from '@/pages/admin/AdminEventsPage';
 
 // Protected route wrapper
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, isLoading } = useAuth();
+  if (isLoading) {
+    return <div role="status" className="min-h-screen flex items-center justify-center bg-brand-charcoal text-white/70">Verificando acceso al panel…</div>;
+  }
   if (!isAuthenticated) {
     return <LoginPage />;
   }

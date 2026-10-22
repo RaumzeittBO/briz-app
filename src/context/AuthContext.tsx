@@ -7,6 +7,7 @@ import {
 } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
 import { auth, db } from '../lib/firebase';
+import { loadAdminProfile, profileReadFailure, type AdminProfileFailure } from './adminAuth';
 
 export type AdminRole = 'admin' | 'manager' | 'mechanic' | 'viewer';
 
@@ -29,54 +30,56 @@ interface AuthContextType {
     login: (email: string, pass: string) => Promise<void>;
     logout: () => Promise<void>;
     isLoading: boolean;
+    authError: AdminProfileFailure | null;
+    clearAuthError: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
-
-const ALLOWED_ROLES: AdminRole[] = ['admin', 'manager', 'mechanic', 'viewer'];
 
 export function AuthProvider({ children }: { children: ReactNode }) {
     const [user, setUser] = useState<User | null>(null);
     const [adminProfile, setAdminProfile] = useState<AdminProfile | null>(null);
     const [isLoading, setIsLoading] = useState(true);
+    const [authError, setAuthError] = useState<AdminProfileFailure | null>(null);
     const [isEditMode, setIsEditMode] = useState(() => {
         return sessionStorage.getItem('briz_edit_mode') === 'true';
     });
 
     useEffect(() => {
+        let latestEvent = 0;
         const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+            const eventId = ++latestEvent;
             setIsLoading(true);
-            try {
-                setUser(currentUser);
-                setAdminProfile(null);
-                if (currentUser) {
-                    const adminRef = doc(db, 'adminUsers', currentUser.uid);
-                    const snap = await getDoc(adminRef);
-                    if (snap.exists()) {
-                        const data = snap.data() as Partial<AdminProfile>;
-                        if (ALLOWED_ROLES.includes(data.role as AdminRole)) {
-                            setAdminProfile({
-                                uid: currentUser.uid,
-                                email: data.email || currentUser.email || '',
-                                name: data.name || currentUser.displayName || 'Administrador',
-                                role: data.role as AdminRole,
-                                store: data.store || 'all',
-                                active: data.active !== false
-                            });
-                        }
-                    } else {
-                        setAdminProfile(null);
-                    }
-                }
-            } catch (error) {
-                console.error('No se pudo verificar el rol admin:', error);
-                // Deny by default on error instead of granting blind admin access
-                setAdminProfile(null);
-            } finally {
+            setUser(currentUser);
+            setAdminProfile(null);
+            setAuthError(null);
+            if (!currentUser) {
                 setIsLoading(false);
+                return;
+            }
+
+            try {
+                const result = await loadAdminProfile(currentUser, async (uid) => {
+                    const snap = await getDoc(doc(db, 'adminUsers', uid));
+                    return snap.exists() ? snap.data() as Partial<AdminProfile> : null;
+                });
+                if (eventId !== latestEvent) return;
+                setAdminProfile(result.profile);
+                setAuthError(result.failure);
+            } catch (error) {
+                if (eventId !== latestEvent) return;
+                console.error('No se pudo leer el perfil Admin en Firestore:', error);
+                // Deny by default and expose the Firestore error separately from Auth errors.
+                setAdminProfile(null);
+                setAuthError(profileReadFailure(error));
+            } finally {
+                if (eventId === latestEvent) setIsLoading(false);
             }
         });
-        return unsubscribe;
+        return () => {
+            latestEvent += 1;
+            unsubscribe();
+        };
     }, []);
 
     const setEditMode = (mode: boolean) => {
@@ -89,17 +92,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
 
     const login = async (email: string, pass: string) => {
+        setAuthError(null);
         await signInWithEmailAndPassword(auth, email, pass);
     };
 
     const logout = async () => {
         await signOut(auth);
         setAdminProfile(null);
+        setAuthError(null);
         setIsEditMode(false);
         sessionStorage.removeItem('briz_edit_mode');
     };
 
-    const isAdmin = !!user && !!adminProfile && adminProfile.active !== false && ALLOWED_ROLES.includes(adminProfile.role);
+    const isAdmin = !!user && !!adminProfile && adminProfile.active === true;
 
     return (
         <AuthContext.Provider value={{
@@ -111,13 +116,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             setEditMode,
             login,
             logout,
-            isLoading
+            isLoading,
+            authError,
+            clearAuthError: () => setAuthError(null)
         }}>
-            {!isLoading && children}
+            {children}
         </AuthContext.Provider>
     );
 }
 
+// The hook intentionally shares this module with its provider/context; it is not a component export.
+// eslint-disable-next-line react-refresh/only-export-components
 export function useAuth() {
     const context = useContext(AuthContext);
     if (!context) throw new Error('useAuth must be used within AuthProvider');

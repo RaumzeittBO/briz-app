@@ -7,6 +7,8 @@
  * 4. Utilidades de fecha y hora en zona horaria Bolivia (America/La_Paz, UTC-4).
  */
 import assert from 'node:assert/strict';
+import { existsSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { calculateProductRentalPrice, parseDurationToHours, getAccessoryAddonUnitPrice } from '../src/lib/rentalPricing';
 import {
     computeRentalWindow,
@@ -26,6 +28,32 @@ import { addDaysToDateString, toBoliviaDateString, getBoliviaYear } from '../src
 import { RENTAL_SEED_BIKES, RENTAL_SEED_ACCESSORIES, RENTAL_SEED_COMBOS } from '../src/data/rentalSeedData';
 import { t, getLocalizedField } from '../src/lib/translations';
 import { ARTWORK_REGISTRY, getLocalizedArtwork } from '../src/lib/artworkRegistry';
+import type { Customer, Rental } from '../src/context/StoreContext';
+
+function makeRental(overrides: Partial<Rental>): Rental {
+    return {
+        id: 'test-rental',
+        reservationCode: 'BRIZ-TEST-ONLY',
+        customerName: 'Fictional Customer',
+        customerPhone: '',
+        customerCI: '',
+        productType: 'single',
+        productId: '',
+        productName: 'Fictional Product',
+        quantity: 1,
+        duration: '2 horas',
+        date: '2026-10-28',
+        pickupTime: '09:00',
+        total: 0,
+        paymentMethod: '',
+        paymentStatus: 'unpaid',
+        notes: '',
+        status: 'pending',
+        createdAt: '',
+        updatedAt: '',
+        ...overrides,
+    };
+}
 
 async function runTests() {
     let passed = 0;
@@ -99,7 +127,7 @@ async function runTests() {
 
     await test('Reserva futura pendiente bloquea su propio intervalo horario pero no otros horarios', () => {
         // acc_ruedas_auxiliares_adulto tiene stock = 1
-        const pendingTomorrow: any = {
+        const pendingTomorrow = makeRental({
             id: 'r_future_1',
             productId: 'acc_ruedas_auxiliares_adulto',
             productType: 'single',
@@ -109,7 +137,7 @@ async function runTests() {
             pickupTime: '10:00',
             duration: '2 horas',
             status: 'pending',
-        };
+        });
 
         const availSame = getAvailableStockForInterval({
             inventory: allInventory,
@@ -158,7 +186,7 @@ async function runTests() {
     await test('Combo comparte componente con accesorio individual sin crear unidades ficticias', () => {
         // Si se reserva combo_urbana_cuadro_bajo_ruedas_auxiliares_adulto (que usa acc_ruedas_auxiliares_adulto, stock 1),
         // el stock disponible de acc_ruedas_auxiliares_adulto en ese horario pasa a 0.
-        const comboRental: any = {
+        const comboRental = makeRental({
             id: 'r_combo_1',
             productId: comboAdultWheels.id,
             productType: 'combo',
@@ -170,7 +198,7 @@ async function runTests() {
             pickupTime: '09:00',
             duration: '4 horas',
             status: 'pending',
-        };
+        });
 
         const remainingAccessory = getAvailableStockForInterval({
             inventory: allInventory,
@@ -192,7 +220,7 @@ async function runTests() {
         const modifiedInventory = allInventory.map(i =>
             i.id === 'acc_ruedas_auxiliares_adulto' ? { ...i, stock: 0 } : i
         );
-        const confirmedRental: any = {
+        const confirmedRental = makeRental({
             id: 'r_conf_1',
             productId: 'acc_ruedas_auxiliares_adulto',
             productType: 'single',
@@ -202,7 +230,7 @@ async function runTests() {
             pickupTime: '09:00',
             duration: '2 horas',
             status: 'confirmed',
-        };
+        });
 
         // En el mismo horario de hoy: está ocupado (0 disponible)
         const availDuringConfirmed = getAvailableStockForInterval({
@@ -239,7 +267,7 @@ async function runTests() {
                 }
                 : i
         );
-        const legacyRentalWithoutWheelSize: any = {
+        const legacyRentalWithoutWheelSize = makeRental({
             id: 'r_legacy_no_ws',
             productId: 'bike_urbana',
             productType: 'single',
@@ -250,7 +278,7 @@ async function runTests() {
             pickupTime: '09:00',
             duration: '2 horas',
             status: 'confirmed',
-        };
+        });
         const avail26 = getAvailableStockForInterval({
             inventory: modifiedInventory,
             combos: RENTAL_SEED_COMBOS,
@@ -299,7 +327,7 @@ async function runTests() {
     });
 
     await test('Sanitización de reservas públicas (oculta CI, teléfono, dirección y comprobantes)', () => {
-        const rawRental: any = {
+        const rawRental = makeRental({
             id: 'rental_test_1',
             reservationCode: 'BRIZ-2026-0042',
             customerName: 'Juan Pérez',
@@ -317,7 +345,7 @@ async function runTests() {
             status: 'confirmed',
             total: 90,
             notes: 'Notas privadas',
-        };
+        });
 
         const sanitized = sanitizeRentalForPublicAvailability(rawRental);
         assert.equal(sanitized.customerName, 'Reservado');
@@ -331,7 +359,12 @@ async function runTests() {
     });
 
     await test('Sanitización de sesión de cliente (nunca persiste password en localStorage)', () => {
-        const cust: any = {
+        const cust: Customer = {
+            rentalsCount: 0,
+            purchasesCount: 0,
+            firstVisit: '',
+            lastVisit: '',
+            notes: '',
             id: 'cust_1',
             name: 'María',
             phone: '70011223',
@@ -376,10 +409,25 @@ async function runTests() {
         assert.equal(bento3En.webSrc, '/menu-principal-web/Ingles/3.png');
         assert.equal(bento3En.mobileSrc, '/menu-principal-celular/3.webp');
 
-        // Bento 1: web y móvil en inglés están verificadas (/menu-principal-web/Ingles/1.png y /menu-principal-celular/Ingles/1.png)
+        // Bento 1: los artes ingleses aún no existen; debe utilizar el fallback español sin producir 404.
         const bento1En = getLocalizedArtwork('home_bento_1_rentals', 'en');
-        assert.equal(bento1En.webSrc, '/menu-principal-web/Ingles/1.png');
-        assert.equal(bento1En.mobileSrc, '/menu-principal-celular/Ingles/1.png');
+        assert.equal(bento1En.webSrc, '/menu-principal-web/1.webp');
+        assert.equal(bento1En.mobileSrc, '/menu-principal-celular/1.webp');
+        assert.equal(bento1En.isTranslatedWeb, false);
+        assert.equal(bento1En.isTranslatedMobile, false);
+
+        for (const slot of Object.values(ARTWORK_REGISTRY)) {
+            for (const source of [slot.esWebSrc, slot.esMobileSrc]) {
+                const path = source.split('?')[0].replace(/^\//, '');
+                assert.equal(existsSync(resolve('public', path)), true, `Debe existir el fallback de arte ${source}`);
+            }
+            if (slot.hasVerifiedEnWeb) {
+                assert.equal(existsSync(resolve('public', slot.enWebTargetSrc.replace(/^\//, ''))), true, `El arte inglés verificado debe existir: ${slot.enWebTargetSrc}`);
+            }
+            if (slot.hasVerifiedEnMobile) {
+                assert.equal(existsSync(resolve('public', slot.enMobileTargetSrc.replace(/^\//, ''))), true, `El arte inglés móvil verificado debe existir: ${slot.enMobileTargetSrc}`);
+            }
+        }
 
         // About 2: antes apuntaba a /Conocenos-web/Ingles/2.webp (404), ahora hace fallback seguro a /Conocenos-web/2.webp?v=2 y /Conocenos-celular/2.webp?v=2 hasta que se entregue el arte en inglés
         const about2En = getLocalizedArtwork('about_slide_2', 'en');

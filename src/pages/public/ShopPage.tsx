@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef, useEffect } from 'react';
+import { useState, useMemo, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Search, ShoppingCart, MessageCircle, X, Plus, Minus, ChevronRight, Bike, Wrench } from 'lucide-react';
@@ -11,6 +11,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 
 import { useStore } from '@/context/StoreContext';
+import type { ComboProduct } from '@/context/StoreContext';
 import { useCart } from '@/context/CartContext';
 import { useLanguage } from '@/context/LanguageContext';
 import { t, getLocalizedField } from '@/lib/translations';
@@ -34,48 +35,42 @@ type ShopItem = {
     image: string;
 };
 
+function sortShopCategories(a: string, b: string, categories: string[]): number {
+    const indexA = categories.indexOf(a);
+    const indexB = categories.indexOf(b);
+    if (indexA !== -1 && indexB !== -1) return indexA - indexB;
+    if (indexA !== -1) return -1;
+    if (indexB !== -1) return 1;
+    return a.localeCompare(b);
+}
 
 
 export default function ShopPage() {
-    const { inventory, combos, addSale, addOrUpdateCustomer, shopCategories } = useStore();
+    const { inventory, combos, shopCategories } = useStore();
     const { language } = useLanguage();
 
-    const sortShopCategories = (a: string, b: string) => {
-        const indexA = shopCategories.indexOf(a);
-        const indexB = shopCategories.indexOf(b);
-        if (indexA !== -1 && indexB !== -1) return indexA - indexB;
-        if (indexA !== -1) return -1;
-        if (indexB !== -1) return 1;
-        return a.localeCompare(b);
-    };
     const { items: cartItems, addToCart, removeFromCart, updateQuantity, clearCart, totalItems, totalPrice } = useCart();
 
-    const [search, setSearch] = useState('');
-    const [category, setCategory] = useState('Todas');
-    const [expandedCategory, setExpandedCategory] = useState<string | null>(null);
-    const [showCart, setShowCart] = useState(false);
-    const [checkoutStep, setCheckoutStep] = useState<'cart' | 'checkout'>('cart');
-
     const [searchParams] = useSearchParams();
+    const urlCategory = searchParams.get('category');
+    const initialUrlCategory = urlCategory ? decodeURIComponent(urlCategory) : null;
+    const [categorySelection, setCategorySelection] = useState<{ source: string | null; value: string } | null>(null);
+    const category = categorySelection?.source === urlCategory
+        ? categorySelection.value
+        : initialUrlCategory || 'Todas';
+    const setCategory = (value: string) => setCategorySelection({ source: urlCategory, value });
+    const [expandedCategorySelection, setExpandedCategorySelection] = useState<{ source: string | null; value: string | null } | null>(null);
+    const expandedCategory = expandedCategorySelection?.source === urlCategory
+        ? expandedCategorySelection.value
+        : initialUrlCategory;
+    const setExpandedCategory = (value: string | null) => setExpandedCategorySelection({ source: urlCategory, value });
 
-    // Initialize and update selected category from URL search params
-    useEffect(() => {
-        const cat = searchParams.get('category');
-        if (cat) {
-            const decodedCat = decodeURIComponent(cat);
-            setCategory(decodedCat);
-            setExpandedCategory(decodedCat);
-        } else {
-            setCategory('Todas');
-            setExpandedCategory(null);
-        }
-    }, [searchParams]);
-
-    useEffect(() => {
-        if (searchParams.get('cart') === 'open') {
-            setShowCart(true);
-        }
-    }, [searchParams]);
+    const cartQuery = searchParams.get('cart');
+    const [cartSelection, setCartSelection] = useState<{ source: string | null; open: boolean } | null>(null);
+    const showCart = cartSelection?.source === cartQuery ? cartSelection.open : cartQuery === 'open';
+    const setShowCart = (open: boolean) => setCartSelection({ source: cartQuery, open });
+    const [search, setSearch] = useState('');
+    const [checkoutStep, setCheckoutStep] = useState<'cart' | 'checkout'>('cart');
 
     // Dynamic Scroll Container Refs
     const scrollRefs = useRef<Record<string, HTMLDivElement | null>>({});
@@ -94,7 +89,7 @@ export default function ShopPage() {
     const [ci, setCi] = useState('');
     const [notes, setNotes] = useState('');
 
-    const productItems: ShopItem[] = inventory
+    const productItems = useMemo<ShopItem[]>(() => inventory
         .filter(i => i.availableForSale && i.active)
         .map(i => ({
             id: i.id,
@@ -104,29 +99,29 @@ export default function ShopPage() {
             price: i.salePrice ?? 0,
             description: getLocalizedField(i.description, i.descriptionEn, language),
             image: i.imageUrl,
-        }));
+        })), [inventory, language]);
 
-    const comboItems: ShopItem[] = combos
-        .filter((c: any) => c.availableForSale && c.active)
-        .map((c: any) => ({
+    const comboItems = useMemo<ShopItem[]>(() => combos
+        .filter((c: ComboProduct) => c.availableForSale && c.active)
+        .map((c: ComboProduct) => ({
             id: c.id,
-            itemType: 'product' as any,
+            itemType: 'product',
             name: getLocalizedField(c.name, c.nameEn, language),
             category: c.category || 'Bicicletas',
             price: c.salePrice ?? 0,
             description: getLocalizedField(c.description, c.descriptionEn, language),
             image: c.imageUrl,
-        }));
+        })), [combos, language]);
 
-    const allItems: ShopItem[] = [...productItems, ...comboItems];
+    const allItems = useMemo(() => [...productItems, ...comboItems], [productItems, comboItems]);
 
     const productCategories = useMemo(() => {
         const categorySet = new Set<string>();
         allItems.forEach(item => {
             categorySet.add(item.category || (item.itemType === 'bike' ? 'Bicicletas' : 'Accesorios'));
         });
-        return ['Todas', ...Array.from(categorySet).sort(sortShopCategories)];
-    }, [allItems]);
+        return ['Todas', ...Array.from(categorySet).sort((a, b) => sortShopCategories(a, b, shopCategories))];
+    }, [allItems, shopCategories]);
 
     const filtered = useMemo(() => {
         return allItems.filter(item => {
@@ -152,9 +147,9 @@ export default function ShopPage() {
 
     const categoriesToRender = useMemo(() => {
         return Object.keys(productsByCategory).sort((a, b) => {
-            return sortShopCategories(a, b);
+            return sortShopCategories(a, b, shopCategories);
         });
-    }, [productsByCategory]);
+    }, [productsByCategory, shopCategories]);
 
     const expandedProducts = useMemo(() => {
         if (!expandedCategory) return [];
@@ -180,30 +175,15 @@ export default function ShopPage() {
         e.preventDefault();
 
         const customerFullName = `${name} ${lastName}`.trim();
-
-        addOrUpdateCustomer({ name: customerFullName, phone, ci }, true);
-
-        const sale = {
+        const link = generateShopWhatsAppLink({
             customerName: customerFullName,
             customerPhone: phone,
             customerCI: ci,
-            items: cartItems.map(item => ({
-                id: item.id,
-                name: item.name,
-                type: item.itemType,
-                price: item.price,
-                quantity: item.quantity,
-                image: item.image || '',
-            })),
+            items: cartItems.map(item => ({ name: item.name, price: item.price, quantity: item.quantity })),
             total: totalPrice,
-            paymentMethod: 'Por definir (WhatsApp)',
-            notes
-        };
-
-        addSale(sale);
-
-        const fullSaleRecord = { ...sale, id: 'temp', status: 'Pendiente', date: new Date().toISOString(), language };
-        const link = generateShopWhatsAppLink(fullSaleRecord as any);
+            notes,
+            language,
+        });
         window.open(link, '_blank');
 
         clearCart();
@@ -230,7 +210,7 @@ export default function ShopPage() {
                         <h2 
                             className="font-tan text-[0.77rem] xs:text-[0.875rem] sm:text-[1.85rem] sm:leading-[1.22] lg:text-[2.2rem] uppercase tracking-normal text-brand-yellow [-webkit-text-stroke:1px_#000] drop-shadow-[1.2px_1.2px_0_rgba(0,0,0,1)] whitespace-nowrap sm:whitespace-normal"
                         >
-                            {t(title, language as any)}
+                            {t(title, language)}
                         </h2>
                         <p className="text-[10px] sm:text-xs font-black uppercase text-gray-400 tracking-widest font-maiandra">
                             {productsList.length} {language === 'es' ? (productsList.length === 1 ? 'Producto' : 'Productos') : (productsList.length === 1 ? 'Product' : 'Products')}
@@ -287,10 +267,10 @@ export default function ShopPage() {
                                     <CardContent className="p-5 flex-1 flex flex-col justify-between bg-white">
                                         <div>
                                             <h3 className="font-tangkiwood text-lg sm:text-xl text-brand-black leading-tight truncate">
-                                                {t(item.name, language as any)}
+                                                {t(item.name, language)}
                                             </h3>
                                             <p className="text-xs font-sans text-gray-400 mt-1 line-clamp-2 leading-relaxed">
-                                                {t(item.description, language as any) || t('Disponible para compra', language as any)}
+                                                {t(item.description, language) || t('Disponible para compra', language)}
                                             </p>
                                         </div>
 
@@ -361,10 +341,10 @@ export default function ShopPage() {
             <CardContent className="p-5 flex-1 flex flex-col justify-between bg-white">
                 <div>
                     <h3 className="font-tangkiwood text-lg sm:text-xl text-brand-black leading-tight">
-                        {t(item.name, language as any)}
+                        {t(item.name, language)}
                     </h3>
                     <p className="text-xs font-sans text-gray-400 mt-1 line-clamp-2 leading-relaxed">
-                        {t(item.description, language as any) || t('Disponible para compra', language as any)}
+                        {t(item.description, language) || t('Disponible para compra', language)}
                     </p>
                 </div>
                 <div className="pt-4 border-t border-gray-50 mt-4">
@@ -377,7 +357,7 @@ export default function ShopPage() {
                             className="h-10 bg-brand-yellow text-brand-black hover:bg-brand-yellow-light shadow-md hover:-translate-y-0.5 transition-all rounded-full border-0 font-black text-xs flex items-center justify-center gap-1"
                             onClick={() => addToCart({ id: item.id, name: item.name, price: item.price, itemType: item.itemType, image: item.image })}
                         >
-                            <ShoppingCart className="w-3.5 h-3.5" strokeWidth={2} /> {t('Añadir', language as any)}
+                            <ShoppingCart className="w-3.5 h-3.5" strokeWidth={2} /> {t('Añadir', language)}
                         </Button>
                         <a href="https://wa.me/59177860277" target="_blank" rel="noopener noreferrer" className="block">
                             <Button variant="outline" className="w-full h-10 text-brand-charcoal border-gray-100 hover:border-brand-yellow hover:bg-brand-yellow/5 transition-all rounded-full font-black text-xs flex items-center justify-center gap-1">
@@ -433,7 +413,7 @@ export default function ShopPage() {
                                     onClick={() => {
                                         setExpandedCategory(null);
                                         setCategory(c);
-                                    }}>{t(c, language as any)}</Button>
+                                    }}>{t(c, language)}</Button>
                             ))}
                         </motion.div>
                     </div>
@@ -457,7 +437,7 @@ export default function ShopPage() {
                                     <h1 
                                         className="font-tan text-[0.875rem] xs:text-[1rem] sm:text-[2.2rem] sm:leading-[1.18] lg:text-[2.6rem] uppercase tracking-normal text-brand-yellow [-webkit-text-stroke:1.1px_#000] drop-shadow-[1.5px_1.5px_0_rgba(0,0,0,1)] whitespace-nowrap sm:whitespace-normal"
                                     >
-                                        {t(expandedCategory, language as any)}
+                                        {t(expandedCategory, language)}
                                     </h1>
                                     <p className="mt-3.5 sm:mt-2 text-[10px] sm:text-xs font-black uppercase text-gray-400 tracking-widest font-maiandra">
                                         {expandedProducts.length} {language === 'es' ? (expandedProducts.length === 1 ? 'producto' : 'productos') : (expandedProducts.length === 1 ? 'product' : 'products')}
@@ -529,8 +509,8 @@ export default function ShopPage() {
                                                 <div className="flex-1 flex flex-col justify-between">
                                                     <div className="flex justify-between items-start">
                                                         <div>
-                                                            <h4 className="font-extrabold text-brand-charcoal leading-tight">{t(item.name, language as any)}</h4>
-                                                            <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mt-1">{t(item.itemType, language as any)}</p>
+                                                            <h4 className="font-extrabold text-brand-charcoal leading-tight">{t(item.name, language)}</h4>
+                                                            <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mt-1">{t(item.itemType, language)}</p>
                                                         </div>
                                                         <button onClick={() => removeFromCart(item.id)} className="w-8 h-8 rounded-full flex items-center justify-center bg-gray-100 text-gray-400 hover:bg-red-50 hover:text-red-500 transition-colors">
                                                             <X className="w-4 h-4" strokeWidth={2} />

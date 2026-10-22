@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -6,11 +6,12 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import type { Sale } from '@/context/StoreContext';
+import type { InventoryItem, Sale } from '@/context/StoreContext';
 import { useStore } from '@/context/StoreContext';
 import { Trash2, ShoppingBag, Receipt, PackageOpen, Plus, Search, ChevronRight, Printer } from 'lucide-react';
-import { db } from '@/lib/firebase';
-import { writeBatch, doc } from 'firebase/firestore';
+import { auth, db } from '@/lib/firebase';
+import { collection, doc } from 'firebase/firestore';
+import { createManualSale, transitionManualSaleStatus, type ManualSale, type ManualSaleStatus } from '@/lib/manualSales';
 
 const statusColors: Record<string, string> = {
     'Completado': 'bg-green-500/15 text-green-600 border-0',
@@ -19,7 +20,7 @@ const statusColors: Record<string, string> = {
 };
 
 export default function AdminSalesPage() {
-    const { sales, updateSaleStatus, deleteSale, inventory, shopCategories, adminStoreScope } = useStore();
+    const { sales, inventory, shopCategories, adminStoreScope } = useStore();
 
     // Modal State
     const [selectedSale, setSelectedSale] = useState<Sale | null>(null);
@@ -27,7 +28,7 @@ export default function AdminSalesPage() {
     // Manual Sale Wizard States
     const [newSaleModalOpen, setNewSaleModalOpen] = useState(false);
     const [newSaleStep, setNewSaleStep] = useState<1 | 2 | 3>(1);
-    const [newSaleCart, setNewSaleCart] = useState<Array<{ product: any; quantity: number }>>([]);
+    const [newSaleCart, setNewSaleCart] = useState<Array<{ product: InventoryItem; quantity: number }>>([]);
     const [newSaleForm, setNewSaleForm] = useState({
         customerName: '',
         customerNIT: '',
@@ -35,10 +36,13 @@ export default function AdminSalesPage() {
     });
     const [wizardSearch, setWizardSearch] = useState('');
     const [wizardCategory, setWizardCategory] = useState('all');
-    const [completedSaleData, setCompletedSaleData] = useState<any>(null);
+    const [completedSaleData, setCompletedSaleData] = useState<ManualSale | null>(null);
     const [isSaving, setIsSaving] = useState(false);
+    const [updatingSaleId, setUpdatingSaleId] = useState<string | null>(null);
+    const saveSaleInFlight = useRef(false);
+    const pendingSaleId = useRef<string | null>(null);
 
-    const addToCart = (product: any) => {
+    const addToCart = (product: InventoryItem) => {
         setNewSaleCart(prev => {
             const existing = prev.find(item => item.product.id === product.id);
             if (existing) {
@@ -71,9 +75,9 @@ export default function AdminSalesPage() {
     const cartTotal = newSaleCart.reduce((acc, item) => acc + (item.product.salePrice || 0) * item.quantity, 0);
 
     // Helper: get total available stock for an item (handles bikes with wheelSizes)
-    const getItemStock = (item: any): number => {
+    const getItemStock = (item: InventoryItem): number => {
         if (item.hasWheelSizes && Array.isArray(item.wheelSizes)) {
-            return item.wheelSizes.reduce((sum: number, ws: any) => sum + (ws.stock || 0), 0);
+            return item.wheelSizes.reduce((sum, wheelSize) => sum + (wheelSize.stock || 0), 0);
         }
         return item.stock ?? 0;
     };
@@ -94,74 +98,33 @@ export default function AdminSalesPage() {
     });
 
     const handleSaveSale = async () => {
-        if (newSaleCart.length === 0) return;
+        if (newSaleCart.length === 0 || saveSaleInFlight.current) return;
+        saveSaleInFlight.current = true;
         setIsSaving(true);
         try {
-            const batch = writeBatch(db);
-            const saleId = 'sale_' + Math.random().toString(36).substring(2, 9);
-            const saleDocRef = doc(db, 'sales', saleId);
-
-            const saleItems = newSaleCart.map(c => ({
-                id: c.product.id,
-                name: c.product.name,
-                price: c.product.salePrice || 0,
-                quantity: c.quantity,
-                type: c.product.itemType || 'accessory'
-            }));
-
-            // 1. Write the sale document directly as Completed
-            const salePayload = {
-                id: saleId,
-                customerName: newSaleForm.customerName.trim() || 'Cliente General',
-                customerPhone: 'N/A',
-                customerCI: newSaleForm.customerNIT.trim() || 'N/A',
-                items: saleItems,
-                total: cartTotal,
-                status: 'Completado',
+            pendingSaleId.current ??= doc(collection(db, 'sales')).id;
+            const operatorUid = auth.currentUser?.uid;
+            if (!operatorUid) throw new Error('La sesión Admin expiró. Inicia sesión e inténtalo nuevamente.');
+            const salePayload = await createManualSale(db, pendingSaleId.current, operatorUid, {
+                customerName: newSaleForm.customerName,
+                customerCI: newSaleForm.customerNIT,
                 paymentMethod: newSaleForm.paymentMethod,
-                source: 'manual',
                 ...(adminStoreScope !== 'all' ? { store: adminStoreScope } : {}),
-                date: new Date().toISOString()
-            };
-
-            batch.set(saleDocRef, salePayload);
-
-            // 2. Decrement inventory stock (handle bikes with wheelSizes)
-            newSaleCart.forEach(c => {
-                const itemDocRef = doc(db, 'inventory', c.product.id);
-                if (c.product.hasWheelSizes && Array.isArray(c.product.wheelSizes)) {
-                    // Distribute decrement proportionally across wheelSizes (largest first)
-                    let remaining = c.quantity;
-                    const updatedWheelSizes = [...c.product.wheelSizes].map((ws: any) => ({ ...ws }));
-                    // Sort by stock descending to take from most-stocked size first
-                    updatedWheelSizes.sort((a: any, b: any) => (b.stock || 0) - (a.stock || 0));
-                    for (const ws of updatedWheelSizes) {
-                        if (remaining <= 0) break;
-                        const take = Math.min(remaining, ws.stock || 0);
-                        ws.stock = (ws.stock || 0) - take;
-                        remaining -= take;
-                    }
-                    batch.update(itemDocRef, { wheelSizes: updatedWheelSizes });
-                } else {
-                    const currentStock = c.product.stock ?? 0;
-                    batch.update(itemDocRef, {
-                        stock: Math.max(0, currentStock - c.quantity)
-                    });
-                }
+                items: newSaleCart.map(({ product, quantity }) => ({ id: product.id, quantity })),
             });
-
-            await batch.commit();
 
             // Store completed data to show receipt first
             setCompletedSaleData(salePayload);
             setNewSaleStep(3); // Advance to final receipt print page
+            pendingSaleId.current = null;
             
             // Clean cart
             setNewSaleCart([]);
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error('Error saving manual sale:', error);
-            alert('No se pudo registrar la venta: ' + error.message);
+            alert('No se pudo registrar la venta: ' + (error instanceof Error ? error.message : String(error)));
         } finally {
+            saveSaleInFlight.current = false;
             setIsSaving(false);
         }
     };
@@ -354,14 +317,14 @@ export default function AdminSalesPage() {
                     <div className="space-y-2 pt-2">
                         <Label className="text-white/70 text-xs font-bold uppercase tracking-wider block mb-2">Método de Pago</Label>
                         <div className="grid grid-cols-2 gap-4">
-                            {[
+                            {([
                                 { id: 'efectivo', label: '💸 Efectivo' },
                                 { id: 'qr', label: '📱 QR Digital / Transf.' }
-                            ].map(method => (
+                            ] as const).map(method => (
                                 <button
                                     key={method.id}
                                     type="button"
-                                    onClick={() => setNewSaleForm({ ...newSaleForm, paymentMethod: method.id as any })}
+                                    onClick={() => setNewSaleForm({ ...newSaleForm, paymentMethod: method.id })}
                                     className={`py-3 rounded-xl border font-bold text-xs uppercase transition-all flex items-center justify-center gap-2 cursor-pointer ${
                                         newSaleForm.paymentMethod === method.id
                                             ? 'bg-brand-yellow text-brand-black border-brand-yellow font-black shadow-md'
@@ -457,7 +420,7 @@ export default function AdminSalesPage() {
                     <div className="pt-3 border-t border-dashed border-gray-300">
                         <span className="font-bold text-gray-500 block text-[9px] uppercase tracking-wider mb-2">Artículos:</span>
                         <div className="space-y-2">
-                            {sale.items.map((item: any, idx: number) => (
+                            {sale.items.map((item, idx) => (
                                 <div key={idx} className="flex justify-between items-start text-[11px]">
                                     <div className="pr-4">
                                         <p className="font-bold text-black">{item.name}</p>
@@ -529,49 +492,27 @@ export default function AdminSalesPage() {
     };
 
     const handleDelete = async (id: string) => {
-        if (!confirm('¿Estás seguro de eliminar esta venta? El stock de los artículos será restaurado.')) return;
+        if (!confirm('¿Cancelar esta venta? Se conservará el registro y, si estaba completada, se restaurará el stock.')) return;
         try {
-            // Find the sale to restore stock
-            const sale = sales.find(s => s.id === id);
-            if (sale && sale.items && sale.items.length > 0) {
-                const batch = writeBatch(db);
-                for (const saleItem of sale.items) {
-                    if (!saleItem.id) continue;
-                    const invItem = (inventory || []).find((inv: any) => inv.id === saleItem.id);
-                    if (!invItem) continue;
-                    const itemDocRef = doc(db, 'inventory', saleItem.id);
-                    if (invItem.hasWheelSizes && Array.isArray(invItem.wheelSizes)) {
-                        // Restore stock to wheelSizes proportionally (largest stock first)
-                        let remaining = saleItem.quantity;
-                        const updatedWheelSizes = invItem.wheelSizes.map((ws: any) => ({ ...ws }));
-                        updatedWheelSizes.sort((a: any, b: any) => (b.stock || 0) - (a.stock || 0));
-                        for (const ws of updatedWheelSizes) {
-                            if (remaining <= 0) break;
-                            ws.stock = (ws.stock || 0) + remaining;
-                            remaining = 0;
-                        }
-                        batch.update(itemDocRef, { wheelSizes: updatedWheelSizes });
-                    } else {
-                        const currentStock = invItem.stock ?? 0;
-                        batch.update(itemDocRef, { stock: currentStock + saleItem.quantity });
-                    }
-                }
-                // Delete the sale
-                batch.delete(doc(db, 'sales', id));
-                await batch.commit();
-            } else {
-                // No items to restore, just delete
-                await deleteSale(id);
-            }
+            await transitionManualSaleStatus(db, id, 'Cancelado');
             if (selectedSale?.id === id) setSelectedSale(null);
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error('Error al eliminar venta:', error);
-            alert('No se pudo eliminar la venta: ' + error.message);
+            alert('No se pudo cancelar la venta: ' + (error instanceof Error ? error.message : String(error)));
         }
     };
 
-    const handleStatusChange = (sale: Sale, newStatus: string) => {
-        updateSaleStatus(sale.id, newStatus as any);
+    const handleStatusChange = async (sale: Sale, newStatus: string) => {
+        if (updatingSaleId) return;
+        setUpdatingSaleId(sale.id);
+        try {
+            await transitionManualSaleStatus(db, sale.id, newStatus as ManualSaleStatus);
+        } catch (error: unknown) {
+            console.error('Error al actualizar venta:', error);
+            alert('No se pudo actualizar la venta: ' + (error instanceof Error ? error.message : String(error)));
+        } finally {
+            setUpdatingSaleId(null);
+        }
     };
 
     return (
@@ -630,6 +571,7 @@ export default function AdminSalesPage() {
                                         <TableCell className="py-4">
                                             <select
                                                 value={s.status}
+                                                disabled={updatingSaleId === s.id}
                                                 onChange={(e) => handleStatusChange(s, e.target.value)}
                                                 className={`text-xs px-4 py-2 flex items-center justify-between rounded-full outline-none appearance-none cursor-pointer font-bold transition-all border border-transparent hover:border-white/20 shadow-sm ${statusColors[s.status]}`}
                                                 style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E")`, backgroundPosition: 'right 0.5rem center', backgroundRepeat: 'no-repeat', paddingRight: '2rem' }}
@@ -642,7 +584,7 @@ export default function AdminSalesPage() {
                                         <TableCell className="text-right py-4 pr-6">
                                             <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                                                 <Button variant="ghost" size="sm" className="h-9 px-4 rounded-full text-white hover:text-brand-charcoal hover:bg-white font-bold transition-all shadow-sm" onClick={() => setSelectedSale(s)}>Recibo</Button>
-                                                <Button variant="ghost" size="icon" className="h-9 w-9 rounded-full text-red-400/80 hover:text-white hover:bg-red-500 transition-all shadow-sm" onClick={() => handleDelete(s.id)}><Trash2 className="w-4 h-4" /></Button>
+                                                <Button variant="ghost" size="icon" disabled={s.status === 'Cancelado'} aria-label="Cancelar venta" title="Cancelar venta y restaurar stock" className="h-9 w-9 rounded-full text-red-400/80 hover:text-white hover:bg-red-500 transition-all shadow-sm" onClick={() => handleDelete(s.id)}><Trash2 className="w-4 h-4" /></Button>
                                             </div>
                                         </TableCell>
                                     </TableRow>

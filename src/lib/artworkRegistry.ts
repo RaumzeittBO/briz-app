@@ -72,8 +72,9 @@ export const ARTWORK_REGISTRY: Record<ArtworkSlotId, ArtworkSlotConfig> = {
         esMobileSrc: '/menu-principal-celular/1.webp',
         enWebTargetSrc: '/menu-principal-web/Ingles/1.png',
         enMobileTargetSrc: '/menu-principal-celular/Ingles/1.png',
-        hasVerifiedEnWeb: true,
-        hasVerifiedEnMobile: true,
+        // These files are not present yet; keep English on the existing Spanish fallback.
+        hasVerifiedEnWeb: false,
+        hasVerifiedEnMobile: false,
         webDimensions: '1467x959',
         mobileDimensions: '1027x1018',
     },
