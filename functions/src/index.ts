@@ -532,7 +532,10 @@ export const createRentalGroup = onCall(callable(), async (request) => {
                 for (const component of combo.components) {
                     const componentItem = inventoryById.get(component.inventoryItemId);
                     const selectedWheel = selections.find((selection) => selection.inventoryItemId === component.inventoryItemId)?.wheelSize || line.wheelSize;
-                    if (!componentItem || !componentItem.active || !componentItem.availableForRental) {
+                    // A combo may use an active component that is not offered for standalone rental.
+                    // The combo's own availability flag controls the offer; component inventory is
+                    // still reserved below through the shared physical-demand calculation.
+                    if (!componentItem || !componentItem.active) {
                         throw new HttpsError('failed-precondition', 'Un componente del combo ya no está disponible.');
                     }
                     if ((component.requiresWheelSize || componentItem.hasWheelSizes)
@@ -548,7 +551,7 @@ export const createRentalGroup = onCall(callable(), async (request) => {
                 }
             } else {
                 const item = inventoryById.get(line.productId);
-                if (!item || !item.active || !item.availableForRental || item.itemType === 'accessory') throw new HttpsError('failed-precondition', 'Uno de los productos ya no está disponible para alquiler.');
+                if (!item || !item.active || !item.availableForRental) throw new HttpsError('failed-precondition', 'Uno de los productos ya no está disponible para alquiler.');
                 if (item.hasWheelSizes && (!line.wheelSize || !item.wheelSizes?.some((wheel) => wheel.size === line.wheelSize))) {
                     throw new HttpsError('invalid-argument', 'Selecciona un aro disponible para cada bicicleta.');
                 }
@@ -565,7 +568,9 @@ export const createRentalGroup = onCall(callable(), async (request) => {
         let subtotal = 0;
         for (const line of input.lines) {
             const product = line.productType === 'combo' ? comboById.get(line.productId) : inventoryById.get(line.productId);
-            const lineTotal = sumLinePrice(product, input.duration, line.quantity);
+            const lineTotal = product && 'itemType' in product && product.itemType === 'accessory'
+                ? accessoryUnitPrice(product, input.duration) * line.quantity
+                : sumLinePrice(product, input.duration, line.quantity);
             const combo = line.productType === 'combo' ? comboById.get(line.productId) : undefined;
             const componentSelections = combo?.components.map((component) => {
                 const componentItem = inventoryById.get(component.inventoryItemId);

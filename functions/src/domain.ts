@@ -132,7 +132,7 @@ export const DEFAULT_ACCESSORY_PRICES: Record<string, number> = {
 };
 
 export function accessoryUnitPrice(item: CatalogItem, duration: string): number {
-    if (typeof item.addonFlatPrice === 'number' && item.addonFlatPrice >= 0) return item.addonFlatPrice;
+    if (typeof item.addonFlatPrice === 'number' && item.addonFlatPrice > 0) return item.addonFlatPrice;
     const configured = [item.price1Hour, item.price24Hours, item.pricePerHour, item.pricePerDay].some(value => Number(value || 0) > 0);
     if (configured) return calculatePrice(item, duration, 1);
     return DEFAULT_ACCESSORY_PRICES[item.id] ?? Math.max(0, item.pricePerDay || item.pricePerHour || 0);

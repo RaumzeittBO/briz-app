@@ -106,6 +106,8 @@ async function runTests() {
         assert.equal(getAccessoryAddonUnitPrice(linterna, '2 horas'), 10);
         const customAcc = { ...casco, addonFlatPrice: 12 };
         assert.equal(getAccessoryAddonUnitPrice(customAcc, '2 horas'), 12);
+        assert.equal(calculateProductRentalPrice(customAcc, '2 horas'), 12, 'El precio fijo debe coincidir en la ficha y en el extra');
+        assert.equal(getAccessoryAddonUnitPrice({ ...linterna, addonFlatPrice: 0 }, '2 horas'), 10, 'Cero debe usar la tarifa configurada, según la ayuda de Admin');
     });
 
     // 2. AVAILABILITY BY TIME INTERVALS & COMBOS
@@ -211,6 +213,32 @@ async function runTests() {
             includePendingReservations: true,
         });
         assert.equal(remainingAccessory, 0, 'El accesorio individual debe quedar en 0 cuando el combo lo ocupa');
+    });
+
+    await test('Alquiler individual de accesorio reduce disponibilidad del combo que comparte stock', () => {
+        const accessoryRental = makeRental({
+            id: 'r_accessory_shared_1',
+            productId: 'acc_ruedas_auxiliares_adulto',
+            productType: 'single',
+            productName: 'Ruedas auxiliares para adulto',
+            quantity: 1,
+            date: '2026-10-30',
+            pickupTime: '09:00',
+            duration: '4 horas',
+            status: 'pending',
+        });
+        const comboAvailability = getComboAvailabilityForInterval({
+            inventory: allInventory,
+            combos: RENTAL_SEED_COMBOS,
+            rentals: [accessoryRental],
+            comboId: comboAdultWheels.id,
+            wheelSize: '26',
+            date: '2026-10-30',
+            pickupTime: '09:00',
+            duration: '4 horas',
+            includePendingReservations: true,
+        });
+        assert.equal(comboAvailability, 0, 'El combo debe reconocer que su accesorio compartido está reservado individualmente');
     });
 
     await test('No doble descuento de stock físico cuando una reserva pasa a confirmed/delivered', () => {
@@ -443,10 +471,12 @@ async function runTests() {
             },
         };
         assert.deepEqual(resolveArtwork('home_hero_vive', 'en', 'desktop', remote), {
-            src: 'https://storage.example/live-en.webp', status: 'own', translated: true, sourceVariant: 'enDesktop',
+            src: 'https://storage.example/live-en.webp', status: 'own', translated: true,
+            sourceVariant: 'enDesktop', sourceAvailable: true, fallbackAvailable: true, fallbackSrc: '/vive.webp',
         });
         assert.deepEqual(resolveArtwork('home_hero_vive', 'en', 'mobile', remote), {
-            src: 'https://storage.example/live-en.webp', status: 'shared', translated: true, sourceVariant: 'enDesktop',
+            src: 'https://storage.example/live-en.webp', status: 'shared', translated: true,
+            sourceVariant: 'enDesktop', sourceAvailable: true, fallbackAvailable: true, fallbackSrc: '/vive.webp',
         });
         assert.equal(resolveArtwork('about_slide_1', 'en', 'mobile').status, 'spanish-fallback');
     });

@@ -138,28 +138,66 @@ try {
     assert.ok(ownHistory.rentals.some((rental) => rental.reservationCode === first.reservationCode));
     pass('Booking is priced on server, atomic, idempotent and emits private outbox/public sanitized slots; Telegram absence does not block booking');
 
+    // A combo can reserve an active component even when that component is not rentable by itself.
+    await adminDb.collection('inventory').doc('acc-emulator').update({ availableForRental: false });
     const comboDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/La_Paz' }).format(new Date(Date.now() + 3 * 24 * 60 * 60 * 1000));
     const comboBooking = {
         idempotencyKey: `combo_${crypto.randomUUID()}`,
         lines: [{ productId: 'combo-emulator', productType: 'combo', quantity: 1, wheelSize: '26' }],
-        accessories: [{ itemId: 'acc-emulator', quantity: 1 }],
         date: comboDate,
         pickupTime: '14:00', duration: '1 hora', paymentMethod: 'QR',
     };
     const comboResult = await call<{ reservationCode: string; total: number }>(userA.functions, 'createRentalGroup', comboBooking);
-    assert.equal(comboResult.total, 37);
+    assert.equal(comboResult.total, 30);
     const comboDoc = await adminDb.collection('rentals').where('reservationCode', '==', comboResult.reservationCode).get();
-    assert.equal(comboDoc.size, 2);
+    assert.equal(comboDoc.size, 1, 'A combo without separately selected add-ons is stored as one rental line.');
     assert.deepEqual(comboDoc.docs[0].data().componentSelections, [
         { inventoryItemId: 'bike-emulator', wheelSize: '26' }, { inventoryItemId: 'acc-emulator' },
     ]);
+    await adminDb.collection('inventory').doc('acc-emulator').update({ availableForRental: true });
+    const comboWithAccessory = await call<{ reservationCode: string; total: number }>(userA.functions, 'createRentalGroup', {
+        ...comboBooking,
+        idempotencyKey: `combo_addon_${crypto.randomUUID()}`,
+        accessories: [{ itemId: 'acc-emulator', quantity: 1 }],
+    });
+    assert.equal(comboWithAccessory.total, 37);
     await assert.rejects(() => call(userA.functions, 'createRentalGroup', {
         idempotencyKey: `shared_${crypto.randomUUID()}`,
         lines: [{ productId: 'combo-emulator', productType: 'combo', quantity: 1, wheelSize: '26' }],
-        accessories: [{ itemId: 'acc-emulator', quantity: 2 }], date: comboDate,
+        accessories: [{ itemId: 'acc-emulator', quantity: 1 }], date: comboDate,
         pickupTime: '14:00', duration: '1 hora', paymentMethod: 'QR',
     }));
-    pass('Combo booking validates component aro and aggregates shared combo/accessory stock without double counting');
+    await assert.rejects(() => call(userA.functions, 'createRentalGroup', {
+        idempotencyKey: `standalone_conflict_${crypto.randomUUID()}`,
+        lines: [{ productId: 'acc-emulator', productType: 'single', quantity: 1 }],
+        date: comboDate, pickupTime: '14:00', duration: '1 hora', paymentMethod: 'QR',
+    }), /disponible|stock|inventario|quedan/i, 'Combo inventory demand must block an independent accessory rental.');
+
+    const directAccessoryDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/La_Paz' }).format(new Date(Date.now() + 6 * 24 * 60 * 60 * 1000));
+    const directAccessory = await call<{ reservationCode: string; total: number }>(userA.functions, 'createRentalGroup', {
+        idempotencyKey: `direct_accessory_${crypto.randomUUID()}`,
+        lines: [{ productId: 'acc-emulator', productType: 'single', quantity: 1 }],
+        date: directAccessoryDate, pickupTime: '14:00', duration: '1 hora', paymentMethod: 'QR',
+    });
+    assert.equal(directAccessory.total, 7, 'Standalone accessory uses the same fixed price as the rental UI.');
+
+    const standaloneDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/La_Paz' }).format(new Date(Date.now() + 5 * 24 * 60 * 60 * 1000));
+    await call(userA.functions, 'createRentalGroup', {
+        idempotencyKey: `bike_with_standalone_accessories_${crypto.randomUUID()}`,
+        lines: [{ productId: 'bike-race-emulator', productType: 'single', quantity: 1 }],
+        accessories: [{ itemId: 'acc-emulator', quantity: 3 }],
+        date: standaloneDate, pickupTime: '14:00', duration: '1 hora', paymentMethod: 'QR',
+    });
+    // Isolated test fixture: keep the inventory assertion independent from the callable's
+    // production rate limit when this integration suite runs in a tight window.
+    const rentalRateLimitId = `reservations_${createHash('sha256').update(userA.uid).digest('hex')}`;
+    await adminDb.collection('_requestLimits').doc(rentalRateLimitId).delete();
+    await assert.rejects(() => call(userA.functions, 'createRentalGroup', {
+        idempotencyKey: `combo_conflict_with_standalone_addon_${crypto.randomUUID()}`,
+        lines: [{ productId: 'combo-emulator', productType: 'combo', quantity: 1, wheelSize: '26' }],
+        date: standaloneDate, pickupTime: '14:00', duration: '1 hora', paymentMethod: 'QR',
+    }), /disponible|stock|inventario|quedan/i, 'Combo demand must see accessories reserved separately with another rental.');
+    pass('Combo-only components can be booked; combo and standalone add-on reservations share one physical accessory stock');
 
     const manualBooking = {
         adminManual: true,

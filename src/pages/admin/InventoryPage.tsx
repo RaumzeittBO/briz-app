@@ -685,7 +685,14 @@ export default function InventoryPage() {
                       <Checkbox checked={editItem.active} onCheckedChange={v=>setEditItem({...editItem,active:Boolean(v)})} className="data-[state=checked]:bg-green-500 data-[state=checked]:border-green-500"/>
                       <span className="text-xs font-bold text-white/60">Activo</span>
                     </label>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <Checkbox checked={Boolean(editItem.availableForRental)} onCheckedChange={v=>setEditItem({...editItem,availableForRental:Boolean(v)})} className="data-[state=checked]:bg-brand-yellow data-[state=checked]:border-brand-yellow"/>
+                      <span className="text-xs font-bold text-white/60">Disponible para alquiler individual</span>
+                    </label>
                   </div>
+                  <p className="text-[11px] text-white/45">
+                    Los componentes de combos comparten el mismo stock físico. Activa el alquiler individual y define su tarifa para ofrecer un accesorio por separado.
+                  </p>
                 </div>
 
                 {/* RIGHT COLUMN — Stock / Components + Pricing */}

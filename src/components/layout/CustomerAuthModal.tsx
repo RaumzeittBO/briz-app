@@ -374,7 +374,9 @@ export default function CustomerAuthModal({ isOpen, onClose, onSuccess }: Custom
             };
 
             await registerCustomer(customerData, selfieBlob, docFileAnverso, docFileReverso, remember);
-            setSuccessMessage("Cuenta creada. Revisa tu correo y confirma la dirección antes de iniciar sesión.");
+            setSuccessMessage(language === 'es'
+                ? 'Cuenta creada. Revisa tu bandeja de entrada y confirma tu correo antes de iniciar sesión. Si no ves el mensaje, revisa Spam o Correo no deseado. Abre el enlace de verificación del correo para activar tu cuenta.'
+                : 'Account created. Check your inbox and verify your email before signing in. If you do not see the message, check Spam or Junk. Open the verification link in the email to activate your account.');
             setMode('login');
             setEmail(email.trim().toLowerCase());
             setPassword('');
