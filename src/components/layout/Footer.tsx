@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
 import { Facebook, Instagram, MapPin, MessageCircle } from 'lucide-react';
 import { useLanguage } from '@/context/LanguageContext';
+import ArtworkPicture from '@/components/ArtworkPicture';
 
 const contactLinks = [
     {
@@ -79,11 +80,7 @@ export default function Footer() {
                 </div>
 
                 <Link to="/" className="flex shrink-0 items-center justify-center" aria-label={language === 'es' ? 'BRIZ inicio' : 'BRIZ home'}>
-                    <img
-                        src="/logo de briz.png"
-                        alt="BRIZ"
-                        className="h-[72px] w-auto max-w-[195px] object-contain brightness-0 invert sm:h-[84px] sm:max-w-[235px] lg:h-[94px] lg:max-w-[286px]"
-                    />
+                    <ArtworkPicture slotId="home_brand_logo" language={language} alt="BRIZ" imageClassName="h-[72px] w-auto max-w-[195px] object-contain brightness-0 invert sm:h-[84px] sm:max-w-[235px] lg:h-[94px] lg:max-w-[286px]" />
                 </Link>
             </div>
         </footer>

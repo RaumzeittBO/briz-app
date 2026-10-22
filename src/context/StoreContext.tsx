@@ -495,7 +495,8 @@ export const DEFAULT_ADMIN_LINKS: AdminNavigationLink[] = [
     { key: 'routes', label: 'Ciclotours', href: '/admin/routes', icon: 'MapPinned' },
     { key: 'community', label: 'Comunidad', href: '/admin/community', icon: 'MessagesSquare' },
     { key: 'reports', label: 'Reportes', href: '/admin/reports', icon: 'BarChart3' },
-    { key: 'settings', label: 'Configuración', href: '/admin/settings', icon: 'Settings' }
+    { key: 'settings', label: 'Configuración', href: '/admin/settings', icon: 'Settings' },
+    { key: 'artworks', label: 'Imágenes y Artes', href: '/admin/artes', icon: 'Image' }
 ];
 
 export const StoreProvider = ({ children }: { children: React.ReactNode }) => {

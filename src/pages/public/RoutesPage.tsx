@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { useStore } from '@/context/StoreContext';
 import { useLanguage } from '@/context/LanguageContext';
 import { getLocalizedField, t } from '@/lib/translations';
+import ArtworkBackground from '@/components/ArtworkBackground';
 
 const fadeUp = { initial: { opacity: 0, y: 30 }, whileInView: { opacity: 1, y: 0 }, viewport: { once: true }, transition: { duration: 0.6 } };
 
@@ -169,7 +170,7 @@ export default function RoutesPage() {
 
             {/* CTA */}
             <section className="py-24 sm:py-32 bg-brand-yellow relative overflow-hidden">
-                <div className="absolute inset-0 bg-[url('/noise.png')] opacity-[0.04] mix-blend-overlay"></div>
+                <ArtworkBackground slotId="routes_texture" language={language} className="opacity-[0.04] mix-blend-overlay" />
                 <div className="absolute top-[-10%] left-[-5%] w-[400px] h-[400px] bg-white/30 rounded-full blur-[100px]" />
                 <div className="absolute bottom-[-15%] right-[-6%] w-[360px] h-[360px] bg-brand-pink/15 rounded-full blur-[90px]" />
                 <div className="max-w-4xl mx-auto px-4 text-center space-y-12 relative z-10">

@@ -9,6 +9,8 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { useStore } from '@/context/StoreContext';
 import { useLanguage } from '@/context/LanguageContext';
+import ArtworkBackground from '@/components/ArtworkBackground';
+import ArtworkPicture from '@/components/ArtworkPicture';
 
 const fadeUp = {
     initial: { opacity: 0, y: 30 },
@@ -195,11 +197,7 @@ export default function ServicePage() {
                         transition={{ duration: 0.7, ease: 'easeOut' }}
                         className="group relative overflow-hidden rounded-[2rem] bg-brand-charcoal shadow-[0_28px_80px_rgba(0,0,0,0.12)] sm:rounded-[2.6rem]"
                     >
-                        <img
-                            src="/images/mechanics-hero-briz.jpg"
-                            alt="Taller mecanico Briz"
-                            className="h-[340px] w-full object-cover transition duration-700 group-hover:scale-105 sm:h-[430px] lg:h-[500px]"
-                        />
+                        <ArtworkPicture slotId="service_hero" language={language} alt="Taller mecanico Briz" className="h-full w-full transition duration-700 group-hover:scale-105" imageClassName="h-[340px] w-full object-cover sm:h-[430px] lg:h-[500px]" />
                     </motion.div>
 
                 </div>
@@ -464,7 +462,7 @@ export default function ServicePage() {
 
             {/* Trust indicators */}
             <section className="py-24 sm:py-32 bg-brand-charcoal text-white overflow-hidden relative">
-                <div className="absolute inset-0 bg-[url('/noise.png')] opacity-[0.03] mix-blend-overlay"></div>
+                <ArtworkBackground slotId="service_texture" language={language} className="opacity-[0.03] mix-blend-overlay" />
                 <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[1000px] h-[1000px] bg-brand-yellow/5 rounded-full blur-[150px] mix-blend-screen" />
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
                     <div className="grid grid-cols-2 lg:grid-cols-4 gap-12 lg:gap-20 text-center">

@@ -27,7 +27,7 @@ import {
 import { addDaysToDateString, toBoliviaDateString, getBoliviaYear } from '../src/lib/dateUtils';
 import { RENTAL_SEED_BIKES, RENTAL_SEED_ACCESSORIES, RENTAL_SEED_COMBOS } from '../src/data/rentalSeedData';
 import { t, getLocalizedField } from '../src/lib/translations';
-import { ARTWORK_REGISTRY, getLocalizedArtwork } from '../src/lib/artworkRegistry';
+import { ARTWORK_REGISTRY, getLocalizedArtwork, resolveArtwork } from '../src/lib/artworkRegistry';
 import type { Customer, Rental } from '../src/context/StoreContext';
 
 function makeRental(overrides: Partial<Rental>): Rental {
@@ -403,7 +403,7 @@ async function runTests() {
     });
 
     await test('Registro de artes (artworkRegistry) aplica fallback seguro cuando la versión en inglés no está verificada o falta en disco', () => {
-        assert.equal(Object.keys(ARTWORK_REGISTRY).length, 9, 'El registro de artes debe contener los 9 slots principales de Home y Conócenos');
+        assert.equal(Object.keys(ARTWORK_REGISTRY).length >= 25, true, 'El registro debe incluir todos los artes públicos inventariados');
         // Bento 3: web en inglés verificada (/menu-principal-web/Ingles/3.png), móvil en inglés NO verificada (debe hacer fallback a /menu-principal-celular/3.webp)
         const bento3En = getLocalizedArtwork('home_bento_3_shop', 'en');
         assert.equal(bento3En.webSrc, '/menu-principal-web/Ingles/3.png');
@@ -417,15 +417,17 @@ async function runTests() {
         assert.equal(bento1En.isTranslatedMobile, false);
 
         for (const slot of Object.values(ARTWORK_REGISTRY)) {
-            for (const source of [slot.esWebSrc, slot.esMobileSrc]) {
+            for (const source of [slot.defaults.esDesktop.src, slot.defaults.esMobile.src]) {
                 const path = source.split('?')[0].replace(/^\//, '');
-                assert.equal(existsSync(resolve('public', path)), true, `Debe existir el fallback de arte ${source}`);
+                const sourceExists = existsSync(resolve('public', path));
+                if (slot.originalAvailable === false) assert.equal(sourceExists, false, `La fuente ausente debe seguir documentada: ${source}`);
+                else assert.equal(sourceExists, true, `Debe existir el fallback de arte ${source}`);
             }
-            if (slot.hasVerifiedEnWeb) {
-                assert.equal(existsSync(resolve('public', slot.enWebTargetSrc.replace(/^\//, ''))), true, `El arte inglés verificado debe existir: ${slot.enWebTargetSrc}`);
-            }
-            if (slot.hasVerifiedEnMobile) {
-                assert.equal(existsSync(resolve('public', slot.enMobileTargetSrc.replace(/^\//, ''))), true, `El arte inglés móvil verificado debe existir: ${slot.enMobileTargetSrc}`);
+            for (const [variant, asset] of Object.entries(slot.defaults)) {
+                if (asset.translated) {
+                    const path = asset.src.split('?')[0].replace(/^\//, '');
+                    assert.equal(existsSync(resolve('public', path)), true, `El arte inglés verificado debe existir (${variant}): ${asset.src}`);
+                }
             }
         }
 
@@ -433,6 +435,20 @@ async function runTests() {
         const about2En = getLocalizedArtwork('about_slide_2', 'en');
         assert.equal(about2En.webSrc, '/Conocenos-web/2.webp?v=2');
         assert.equal(about2En.mobileSrc, '/Conocenos-celular/2.webp?v=2');
+
+        const remote = {
+            home_hero_vive: {
+                enDesktop: { url: 'https://storage.example/live-en.webp' },
+                enMobile: { sourceVariant: 'enDesktop' as const },
+            },
+        };
+        assert.deepEqual(resolveArtwork('home_hero_vive', 'en', 'desktop', remote), {
+            src: 'https://storage.example/live-en.webp', status: 'own', translated: true, sourceVariant: 'enDesktop',
+        });
+        assert.deepEqual(resolveArtwork('home_hero_vive', 'en', 'mobile', remote), {
+            src: 'https://storage.example/live-en.webp', status: 'shared', translated: true, sourceVariant: 'enDesktop',
+        });
+        assert.equal(resolveArtwork('about_slide_1', 'en', 'mobile').status, 'spanish-fallback');
     });
 
     console.log(`\n🎉 TODAS LAS PRUEBAS PASARON EXITOSAMENTE (${passed}/${passed})\n`);

@@ -3,16 +3,16 @@ import { Link, Outlet, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
     LayoutDashboard, Bike, Package, ShoppingCart, Wrench, Users, BarChart3,
-    Settings, Menu, ChevronLeft, LogOut, Bell, Lock, MapPinned, MessagesSquare,
-    Calendar, ShoppingBag, GripVertical, Edit3, Check
+    Settings, Menu, ChevronLeft, LogOut, Bell, Lock, MapPinned, MessagesSquare, Image,
+    Calendar, ShoppingBag, GripVertical, Edit3, Check, type LucideIcon
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { useAuth } from '@/context/AuthContext';
-import { useStore, DEFAULT_ADMIN_LINKS } from '@/context/StoreContext';
+import { useStore, DEFAULT_ADMIN_LINKS, type AdminNavigationLink } from '@/context/StoreContext';
 import { useCommunity } from '@/context/CommunityContext';
 
-const iconMap: Record<string, React.ComponentType<any>> = {
+const iconMap: Record<string, LucideIcon> = {
     LayoutDashboard,
     Bike,
     Package,
@@ -24,23 +24,32 @@ const iconMap: Record<string, React.ComponentType<any>> = {
     MapPinned,
     MessagesSquare,
     Calendar,
-    ShoppingBag
+    ShoppingBag,
+    Image
 };
 
 export default function AdminLayout() {
     const [sidebarOpen, setSidebarOpen] = useState(true);
     const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
     const location = useLocation();
-    const { logout, setEditMode } = useAuth();
+    const { logout, setEditMode, adminProfile } = useAuth();
     const { 
         rentals, 
         adminNavigationLinks, 
         updateAdminNavigationLinks 
     } = useStore();
     const { items } = useCommunity();
+    const canManageArtworks = adminProfile?.role === 'admin';
+    const configuredLinks = adminNavigationLinks.length > 0 ? adminNavigationLinks : DEFAULT_ADMIN_LINKS;
+    const artworkLink = DEFAULT_ADMIN_LINKS.find((link) => link.key === 'artworks')!;
+    const visibleLinks = canManageArtworks
+        ? configuredLinks.some((link) => link.key === 'artworks')
+            ? configuredLinks.map((link) => link.key === 'artworks' ? { ...link, href: artworkLink.href, icon: artworkLink.icon } : link)
+            : [...configuredLinks, artworkLink]
+        : configuredLinks.filter((link) => link.key !== 'artworks');
 
     const [isEditingMenu, setIsEditingMenu] = useState(false);
-    const [tempLinks, setTempLinks] = useState<any[]>([]);
+    const [tempLinks, setTempLinks] = useState<AdminNavigationLink[]>([]);
     const [editingLinkKey, setEditingLinkKey] = useState<string | null>(null);
     const [editingLabelVal, setEditingLabelVal] = useState("");
     const [draggedIdx, setDraggedIdx] = useState<number | null>(null);
@@ -50,7 +59,7 @@ export default function AdminLayout() {
     const totalNotifications = pendingRentals + pendingCommunity;
 
     const startEditingMenu = () => {
-        setTempLinks([...(adminNavigationLinks.length > 0 ? adminNavigationLinks : DEFAULT_ADMIN_LINKS)]);
+        setTempLinks([...visibleLinks]);
         setIsEditingMenu(true);
     };
 
@@ -96,7 +105,7 @@ export default function AdminLayout() {
         return location.pathname.startsWith(href);
     };
 
-    const SidebarContent = () => (
+    const renderSidebarContent = () => (
         <div className="flex flex-col h-full">
             {/* Logo */}
             <div className="p-6 flex items-center justify-between border-b border-brand-yellow/20 mb-2">
@@ -137,7 +146,7 @@ export default function AdminLayout() {
                     )}
                 </div>
 
-                {(isEditingMenu ? tempLinks : (adminNavigationLinks.length > 0 ? adminNavigationLinks : DEFAULT_ADMIN_LINKS)).map((link, idx) => {
+                {(isEditingMenu ? tempLinks : visibleLinks).map((link, idx) => {
                     const Icon = iconMap[link.icon] || Package;
                     const active = !isEditingMenu && isActive(link.href);
                     const badge = getBadge(link.key);
@@ -258,7 +267,7 @@ export default function AdminLayout() {
             {/* Desktop sidebar */}
             <aside className={`hidden lg:flex flex-col border-r border-brand-yellow/25 bg-white/65 backdrop-blur-xl transition-all duration-500 ease-in-out ${sidebarOpen ? 'w-72' : 'w-20'
                 }`}>
-                <SidebarContent />
+                {renderSidebarContent()}
             </aside>
 
             {/* Mobile sidebar overlay */}
@@ -279,7 +288,7 @@ export default function AdminLayout() {
                             transition={{ type: 'spring', damping: 25 }}
                             className="fixed left-0 top-0 bottom-0 w-64 bg-[#FFF9E8] z-50 lg:hidden"
                         >
-                            <SidebarContent />
+                            {renderSidebarContent()}
                         </motion.aside>
                     </>
                 )}
