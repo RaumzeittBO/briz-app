@@ -88,7 +88,7 @@ export function parseDurationToHours(duration: string | number): number {
  */
 export function getAccessoryAddonUnitPrice(item: InventoryItem, duration: string = '1 Hora'): number {
     const customFlat = (item as PricingSource).addonFlatPrice;
-    if (typeof customFlat === 'number' && customFlat >= 0) {
+    if (typeof customFlat === 'number' && customFlat > 0) {
         return customFlat;
     }
     const hasConfiguredTier =
@@ -126,6 +126,8 @@ export function calculateProductRentalPrice(
     if (safeQty === 0) return 0;
 
     if ('itemType' in pricing && pricing.itemType === 'accessory') {
+        const customFlat = Number(pricing.addonFlatPrice || 0);
+        if (customFlat > 0) return customFlat * safeQty;
         const p1hCheck = Number(pricing.price1Hour || 0);
         const p24hCheck = Number(pricing.price24Hours || 0);
         const pHrCheck = Number(pricing.pricePerHour || 0);
