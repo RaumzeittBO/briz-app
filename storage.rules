@@ -21,7 +21,8 @@ service firebase.storage {
 
     match /customerUploads/{uid}/{allPaths=**} {
       allow read: if (signedIn() && request.auth.uid == uid) || hasRole(['admin']);
-      allow write: if signedIn() && request.auth.uid == uid && isValidUpload();
+      allow create, update: if signedIn() && request.auth.uid == uid && isValidUpload();
+      allow delete: if signedIn() && request.auth.uid == uid;
     }
 
     // Legacy paths remain available only to the principal administrator.
@@ -31,7 +32,8 @@ service firebase.storage {
 
     match /rentals/{allPaths=**} {
       allow read: if hasRole(['admin', 'manager', 'viewer']);
-      allow write: if hasRole(['admin', 'manager']) && isValidUpload();
+      allow create, update: if hasRole(['admin', 'manager']) && isValidUpload();
+      allow delete: if hasRole(['admin', 'manager']);
     }
 
     match /serviceOrders/{store}/{allPaths=**} {
@@ -44,12 +46,14 @@ service firebase.storage {
     // Payment QR uploads are intentionally public because renters need them at checkout.
     match /settings/{fileName} {
       allow read: if true;
-      allow write: if hasRole(['admin']) && isValidUpload();
+      allow create, update: if hasRole(['admin']) && isValidUpload();
+      allow delete: if hasRole(['admin']);
     }
 
     match /public-assets/{allPaths=**} {
       allow read: if true;
-      allow write: if hasRole(['admin']) && isValidUpload();
+      allow create, update: if hasRole(['admin']) && isValidUpload();
+      allow delete: if hasRole(['admin']);
     }
 
     match /{allPaths=**} {
