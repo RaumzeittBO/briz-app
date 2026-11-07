@@ -36,7 +36,7 @@ import {
     RENTAL_SEED_INVENTORY,
 } from '../data/rentalSeedData';
 import { SHOP_SEED_CATEGORIES } from '../data/shopSeedData';
-import { DEFAULT_PUBLIC_BUSINESS_CONFIG, mergePublicBusinessConfig, type PublicBusinessConfig, type PublicBusinessConfigUpdate } from '../lib/businessConfig';
+import { createInitialPublicBusinessConfig, DEFAULT_PUBLIC_BUSINESS_CONFIG, mergePublicBusinessConfig, type PublicBusinessConfig, type PublicBusinessConfigUpdate } from '../lib/businessConfig';
 import { beginCustomerRegistration, createCustomerProfile as createCustomerProfileBackend, getMyRentals as getMyRentalsBackend, getAdminCustomers as getAdminCustomersBackend, createRentalGroup as createRentalGroupBackend, createServiceOrder as createServiceOrderBackend, type ReservationGroupInput } from '../lib/backend';
 import { calculateProductRentalPrice } from '../lib/rentalPricing';
 import {
@@ -1380,7 +1380,7 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
                     : [[key, value]]);
                 transaction.update(settingsRef, Object.fromEntries([...fields, ['updatedAt', updatedAt]]));
             } else {
-                transaction.set(settingsRef, { ...DEFAULT_PUBLIC_BUSINESS_CONFIG, ...updates, updatedAt }, { merge: true });
+                transaction.set(settingsRef, createInitialPublicBusinessConfig(updates, updatedAt), { merge: true });
             }
             transaction.set(auditRef, { actorUid, changedFields: auditFields, createdAt: serverTimestamp() });
         });

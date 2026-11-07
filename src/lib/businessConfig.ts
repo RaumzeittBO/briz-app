@@ -92,3 +92,20 @@ export function mergePublicBusinessConfig(remote: Partial<PublicBusinessConfig>)
   }, {} as BusinessHours);
   return { ...DEFAULT_PUBLIC_BUSINESS_CONFIG, ...remote, hours };
 }
+
+export function createInitialPublicBusinessConfig(
+  updates: PublicBusinessConfigUpdate,
+  updatedAt: unknown,
+): PublicBusinessConfig {
+  return {
+    ...mergePublicBusinessConfig({
+      businessName: updates.businessName ?? DEFAULT_PUBLIC_BUSINESS_CONFIG.businessName,
+      phone: updates.phone ?? DEFAULT_PUBLIC_BUSINESS_CONFIG.phone,
+      address: updates.address ?? DEFAULT_PUBLIC_BUSINESS_CONFIG.address,
+      email: updates.email ?? DEFAULT_PUBLIC_BUSINESS_CONFIG.email,
+      whatsapp: updates.whatsapp ?? DEFAULT_PUBLIC_BUSINESS_CONFIG.whatsapp,
+      hours: { ...DEFAULT_PUBLIC_BUSINESS_CONFIG.hours, ...updates.hours },
+    }),
+    updatedAt,
+  };
+}

@@ -108,7 +108,7 @@ export default function ContactPage() {
                     <div className="pt-1">
                         <a href={businessWhatsAppUrl(publicBusinessConfig.whatsapp)} target="_blank" rel="noopener noreferrer">
                             <Button size="sm" className="bg-green-500 hover:bg-green-600 text-white rounded-full font-black text-sm px-6 h-12 shadow-md flex items-center gap-2 border-0 transition-all hover:scale-105 active:scale-95">
-                                <MessageCircle className="w-5 h-5 text-white" /> {publicBusinessConfig.phone}
+                                <MessageCircle className="w-5 h-5 text-white" /> {publicBusinessConfig.whatsapp}
                             </Button>
                         </a>
                     </div>
@@ -256,7 +256,7 @@ export default function ContactPage() {
                                             <p className="text-[10px] sm:text-base text-gray-400 font-bold uppercase tracking-widest mt-0.5 sm:mt-1">
                                                 {language === 'es' ? 'Respuesta inmediata' : 'Immediate response'}
                                             </p>
-                                            <p className="text-green-600 font-black text-base sm:text-xl mt-2 sm:mt-3 tracking-tighter">{publicBusinessConfig.phone}</p>
+                                            <p className="text-green-600 font-black text-base sm:text-xl mt-2 sm:mt-3 tracking-tighter">{publicBusinessConfig.whatsapp}</p>
                                         </div>
                                     </CardContent>
                                 </Card>
