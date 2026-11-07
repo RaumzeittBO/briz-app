@@ -153,8 +153,39 @@ service cloud.firestore {
     }
 
     match /settings/{settingId} {
-      allow read: if settingId in ['rental_settings', 'bike_categories', 'shop_categories', 'admin_navigation'] || isAdmin();
-      allow write: if isAdmin();
+      allow read: if settingId in ['rental_settings', 'public_business', 'bike_categories', 'shop_categories', 'admin_navigation'] || isAdmin();
+      allow write: if isAdmin() && settingId != 'public_business';
+
+      match /audit/{entryId} {
+        allow read: if isAdmin();
+        allow create: if isAdmin()
+          && request.resource.data.keys().hasOnly(['actorUid', 'changedFields', 'createdAt'])
+          && request.resource.data.actorUid == request.auth.uid
+          && request.resource.data.changedFields is list
+          && request.resource.data.changedFields.hasOnly(['businessName', 'phone', 'address', 'email', 'whatsapp', 'hours'])
+          && request.resource.data.createdAt is timestamp;
+        allow update, delete: if false;
+      }
+    }
+
+    match /settings/public_business {
+      allow read: if true;
+      allow create, update: if isAdmin()
+        && request.resource.data.keys().hasOnly(['businessName', 'phone', 'address', 'email', 'whatsapp', 'hours', 'updatedAt'])
+        && request.resource.data.businessName is string
+        && request.resource.data.phone is string
+        && request.resource.data.address is string
+        && request.resource.data.email is string
+        && request.resource.data.whatsapp is string
+        && request.resource.data.businessName.size() > 0
+        && request.resource.data.businessName.size() <= 80
+        && request.resource.data.phone.size() <= 40
+        && request.resource.data.address.size() <= 240
+        && request.resource.data.email.size() <= 120
+        && request.resource.data.whatsapp.size() <= 40
+        && request.resource.data.hours is map
+        && request.resource.data.updatedAt is timestamp;
+      allow delete: if false;
     }
 
     // Published artwork metadata is the only part of this module public.

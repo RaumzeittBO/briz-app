@@ -392,8 +392,8 @@ export default function Navbar() {
 
                                         {/* Desktop Dropdown on Hover - Horizontal strip style */}
                                         {categoriesList.length > 0 && (
-                                            <div className="absolute left-0 right-0 top-[55px] pt-[27px] opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto transition-all duration-200 z-40">
-                                                <div className="bg-brand-yellow border-t border-white/20 py-3.5 shadow-lg flex items-center justify-center gap-x-8 gap-y-3 flex-wrap px-6 rounded-b-[1.5rem]">
+                                            <div className="absolute left-0 right-0 top-[55px] pt-[12px] opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto group-focus-within:opacity-100 group-focus-within:pointer-events-auto transition-all duration-200 z-40">
+                                                <div className="bg-brand-yellow border-t border-white/20 py-2 shadow-lg flex items-center justify-center gap-x-5 gap-y-1.5 flex-wrap px-5 rounded-b-[1.25rem]">
                                                     {categoriesList.map((cat: any) => (
                                                         <Link
                                                             key={cat.label}
@@ -406,7 +406,7 @@ export default function Navbar() {
                                                                     document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
                                                                 }
                                                             }}
-                                                            className="text-xs font-black text-white hover:text-brand-charcoal transition-all duration-150 font-tangkiwood uppercase tracking-widest leading-normal notranslate drop-shadow-[0_1.5px_1.5px_rgba(0,0,0,0.65)] cursor-pointer"
+                                                            className="rounded px-1 py-1 text-sm font-bold text-brand-black hover:text-brand-charcoal hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-black transition-colors duration-150 font-maiandra uppercase tracking-wide leading-tight notranslate cursor-pointer"
                                                         >
                                                             {translateLabel(cat.label, language)}
                                                         </Link>
@@ -582,9 +582,9 @@ export default function Navbar() {
                         animate={{ opacity: 1, y: 0 }}
                         exit={{ opacity: 0, y: -10 }}
                         transition={{ duration: 0.2 }}
-                        className="bg-brand-yellow px-4 pb-5 pt-3 shadow-[0_16px_30px_rgba(102,76,0,0.16)] lg:hidden"
+                        className="max-h-[calc(100dvh-4.5rem)] overflow-y-auto overscroll-contain bg-brand-yellow px-4 pb-4 pt-2 shadow-[0_16px_30px_rgba(102,76,0,0.16)] lg:hidden"
                     >
-                        <div className="flex flex-col gap-1.5 font-cocon text-base font-bold text-brand-black">
+                        <div className="flex flex-col gap-1 font-cocon text-base font-bold text-brand-black">
                             {/* NUESTROS SERVICIOS Dropdown Header */}
                             <div className="flex flex-col">
                                 <button

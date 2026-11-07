@@ -66,6 +66,20 @@ service firebase.storage {
       allow delete: if hasRole(['admin']);
     }
 
+    // Public product photography. Uploads are Admin/Manager-only and immutable
+    // paths avoid replacing or deleting images already referenced by products.
+    match /inventory/{allPaths=**} {
+      allow read: if true;
+      allow create: if hasRole(['admin', 'manager'])
+        && resource == null
+        && request.resource != null
+        && request.resource.size > 0
+        && request.resource.size <= 10 * 1024 * 1024
+        && request.resource.contentType in ['image/jpeg', 'image/png', 'image/webp'];
+      allow update: if false;
+      allow delete: if false;
+    }
+
     // Keep the legacy root-level assets unchanged.
     match /public-assets/{fileName} {
       allow read: if true;

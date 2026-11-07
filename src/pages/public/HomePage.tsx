@@ -569,6 +569,7 @@ function WashiTape({ className }: { className: string }) {
 
 function HeroSection() {
     const { language } = useLanguage();
+    const { publicBusinessConfig } = useStore();
     
     // Mouse values locally inside HeroSection
     const cardRef = useRef<HTMLDivElement>(null);
@@ -699,7 +700,7 @@ function HeroSection() {
                             <div className="relative w-full">
                                 <input
                                     type="text"
-                                    placeholder={language === 'es' ? 'Buscar en Briz...' : 'Search in Briz...'}
+                                    placeholder={language === 'es' ? `Buscar en ${publicBusinessConfig.businessName}...` : `Search in ${publicBusinessConfig.businessName}...`}
                                     value={searchQuery}
                                     onChange={(e) => setSearchQuery(e.target.value)}
                                     onFocus={() => setIsSearchFocused(true)}
@@ -1683,6 +1684,7 @@ function CommunityReviewsCarousel() {
 
 function CommunitySection() {
     const { language } = useLanguage();
+    const { publicBusinessConfig } = useStore();
     return (
         <section className="relative isolate overflow-hidden bg-[#62C5B0] px-4 py-14 sm:px-6 sm:py-24 lg:px-8 lg:py-32">
             {/* Subtle grain texture overlay */}
@@ -1787,7 +1789,7 @@ function CommunitySection() {
                     >
                         {/* Writable tape tape-sticker effect */}
                         <div className="absolute -top-4 left-1/3 -translate-x-1/2 w-28 h-8 sm:w-36 sm:h-9 bg-[#FFFDF3]/88 border-x-2 border-dashed border-brand-black/20 backdrop-blur-sm shadow-sm rotate-[-6deg] z-20 flex items-center justify-center">
-                            <span className="font-maiandra text-[9px] sm:text-[10px] text-brand-black/50 uppercase tracking-widest font-black">{language === 'es' ? 'Comunidad Briz' : 'Briz Community'}</span>
+                            <span className="font-maiandra text-[9px] sm:text-[10px] text-brand-black/50 uppercase tracking-widest font-black">{language === 'es' ? `Comunidad ${publicBusinessConfig.businessName}` : `${publicBusinessConfig.businessName} Community`}</span>
                         </div>
 
                         {/* Interactive Polaroid Image */}

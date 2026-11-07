@@ -1,4 +1,4 @@
-const PHONE_NUMBER = '59177860277';
+import { businessWhatsAppUrl, DEFAULT_PUBLIC_BUSINESS_CONFIG } from '@/lib/businessConfig';
 
 export const generateRentalWhatsAppLink = (data: {
     reservationCode: string;
@@ -15,6 +15,8 @@ export const generateRentalWhatsAppLink = (data: {
     paymentMethod: string;
     notes: string;
     language?: 'es' | 'en';
+    businessPhone?: string;
+    businessName?: string;
 }) => {
     const formatDate = (dateStr: string) => {
         if (!dateStr) return '';
@@ -25,8 +27,8 @@ export const generateRentalWhatsAppLink = (data: {
     const isEn = data.language === 'en';
 
     let msg = isEn
-        ? `Hello Briz 👋,\nI would like to book a bike rental:\n`
-        : `Hola Briz 👋,\nQuiero realizar una reserva de alquiler:\n`;
+        ? `Hello ${data.businessName || DEFAULT_PUBLIC_BUSINESS_CONFIG.businessName} 👋,\nI would like to book a bike rental:\n`
+        : `Hola ${data.businessName || DEFAULT_PUBLIC_BUSINESS_CONFIG.businessName} 👋,\nQuiero realizar una reserva de alquiler:\n`;
     msg += isEn
         ? `*Reservation Code:* ${data.reservationCode}\n\n`
         : `*Código de Reserva:* ${data.reservationCode}\n\n`;
@@ -50,8 +52,7 @@ export const generateRentalWhatsAppLink = (data: {
     msg += isEn ? `\n*ESTIMATED TOTAL: Bs. ${data.total}*\n` : `\n*TOTAL ESTIMADO: Bs. ${data.total}*\n`;
     if (data.notes) msg += isEn ? `\n*Notes:* ${data.notes}\n` : `\n*Notas:* ${data.notes}\n`;
 
-    const encodedMsg = encodeURIComponent(msg).replace(/%2A/g, '*');
-    return `https://api.whatsapp.com/send?phone=${PHONE_NUMBER}&text=${encodedMsg}`;
+    return businessWhatsAppUrl(data.businessPhone || DEFAULT_PUBLIC_BUSINESS_CONFIG.whatsapp, msg);
 };
 
 export const generateShopWhatsAppLink = (data: {
@@ -62,11 +63,13 @@ export const generateShopWhatsAppLink = (data: {
     total: number;
     notes?: string;
     language?: 'es' | 'en';
+    businessPhone?: string;
+    businessName?: string;
 }) => {
     const isEn = data.language === 'en';
     let msg = isEn
-        ? `Hello Briz 👋,\nI would like to confirm my purchase:\n\n`
-        : `Hola Briz 👋,\nQuiero confirmar mi compra:\n\n`;
+        ? `Hello ${data.businessName || DEFAULT_PUBLIC_BUSINESS_CONFIG.businessName} 👋,\nI would like to confirm my purchase:\n\n`
+        : `Hola ${data.businessName || DEFAULT_PUBLIC_BUSINESS_CONFIG.businessName} 👋,\nQuiero confirmar mi compra:\n\n`;
 
     msg += isEn ? `*CUSTOMER DETAILS*\n` : `*DATOS DEL CLIENTE*\n`;
     msg += isEn ? `- Name: ${data.customerName}\n` : `- Nombre: ${data.customerName}\n`;
@@ -81,18 +84,17 @@ export const generateShopWhatsAppLink = (data: {
     msg += `\n*TOTAL: Bs. ${data.total}*\n`;
     if (data.notes) msg += isEn ? `\n*Notes:* ${data.notes}\n` : `\n*Notas:* ${data.notes}\n`;
 
-    const encodedMsg = encodeURIComponent(msg).replace(/%2A/g, '*');
-    return `https://api.whatsapp.com/send?phone=${PHONE_NUMBER}&text=${encodedMsg}`;
+    return businessWhatsAppUrl(data.businessPhone || DEFAULT_PUBLIC_BUSINESS_CONFIG.whatsapp, msg);
 };
 
-export const generateAdminReplyWhatsAppLink = (phone: string, reservationCode: string, customerName: string, status: string) => {
-    let msg = `Hola ${customerName} 👋, te escribimos de Briz.\n\n`;
+export const generateAdminReplyWhatsAppLink = (phone: string, reservationCode: string, customerName: string, status: string, businessName = DEFAULT_PUBLIC_BUSINESS_CONFIG.businessName) => {
+    let msg = `Hola ${customerName} 👋, te escribimos de ${businessName}.\n\n`;
     if (status === 'confirmed' || status === 'Confirmado') {
         msg += `Te confirmamos que tu reserva *${reservationCode}* ha sido confirmada con éxito. ¡Te esperamos! 🚲`;
     } else if (status === 'delivered' || status === 'Entregado') {
-        msg += `Tu alquiler *${reservationCode}* ya se encuentra activo y entregado. ¡Disfruta el paseo con Briz! 🚲✨`;
+        msg += `Tu alquiler *${reservationCode}* ya se encuentra activo y entregado. ¡Disfruta el paseo con ${businessName}! 🚲✨`;
     } else if (status === 'returned' || status === 'Devuelto') {
-        msg += `Hemos registrado la devolución de tu alquiler *${reservationCode}*. ¡Muchas gracias por pedalear con Briz! 💛🚲`;
+        msg += `Hemos registrado la devolución de tu alquiler *${reservationCode}*. ¡Muchas gracias por pedalear con ${businessName}! 💛🚲`;
     } else if (status === 'cancelled' || status === 'Cancelado') {
         msg += `Te informamos que tu reserva *${reservationCode}* ha sido cancelada. Si tienes alguna duda, por favor avísanos por este medio.`;
     } else if (status === 'expired' || status === 'Expirado') {

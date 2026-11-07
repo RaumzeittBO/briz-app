@@ -294,7 +294,8 @@ export default function AdminRentalsPage() {
     createRentalGroup,
     rentalPaymentMovements,
     recordRentalPaymentMovement,
-    bikeCategories
+    bikeCategories,
+    publicBusinessConfig
   } = useStore();
 
   const [search, setSearch] = useState('');
@@ -1815,7 +1816,7 @@ export default function AdminRentalsPage() {
                       <Button
                         size="sm"
                         variant="outline"
-                        onClick={() => window.open(generateAdminReplyWhatsAppLink(g.customerPhone, g.reservationCode || '', g.customerName, g.status), '_blank')}
+                        onClick={() => window.open(generateAdminReplyWhatsAppLink(g.customerPhone, g.reservationCode || '', g.customerName, g.status, publicBusinessConfig.businessName), '_blank')}
                         className="border-green-500/20 text-green-400 hover:bg-green-500/10 rounded-full h-11 text-xs font-black uppercase flex items-center justify-center gap-1"
                       >
                         <Phone className="w-4 h-4" /> WhatsApp

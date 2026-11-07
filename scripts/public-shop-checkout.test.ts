@@ -46,9 +46,8 @@ const link = new URL(generateShopWhatsAppLink({
     notes: 'Entrega a coordinar',
 }));
 const message = link.searchParams.get('text') || '';
-assert.equal(link.hostname, 'api.whatsapp.com');
-assert.equal(link.pathname, '/send');
-assert.equal(link.searchParams.get('phone'), '59177860277');
+assert.equal(link.hostname, 'wa.me');
+assert.equal(link.pathname, '/59177860277');
 assert.match(message, /2x Bicicleta Urbana \(Bs\. 120 c\/u\) = Bs\. 240/);
 assert.match(message, /1x Casco \(Bs\. 35 c\/u\) = Bs\. 35/);
 assert.match(message, /TOTAL: Bs\. 275/);

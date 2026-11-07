@@ -16,6 +16,8 @@
     "test:reports": "npx tsx scripts/rental-report-money.test.ts",
     "test:reservation-receipt": "npx tsx scripts/reservation-receipt-copy.test.ts",
     "test:public-shop-checkout": "npx tsx scripts/public-shop-checkout.test.ts",
+    "test:public-business-config": "npx tsx scripts/public-business-config.test.ts",
+    "test:catalog-upload-validation": "npx tsx scripts/catalog-upload-validation.test.ts",
     "test:sales": "firebase emulators:exec --project demo-briz-sales --only firestore \"npx tsx scripts/manual-sales-emulator.test.ts\"",
     "seed:admin-visual": "npx tsx scripts/seed-admin-visual.ts",
     "reconcile:rentals": "firebase emulators:exec --project demo-briz-security --only firestore \"npx tsx scripts/reconcile-rentals.ts\"",

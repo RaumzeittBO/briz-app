@@ -17,6 +17,7 @@ import DeliveryMapPicker from './DeliveryMapPicker';
 import { addDaysToDateString, toBoliviaDateString } from '@/lib/dateUtils';
 import { getAccessoryAddonUnitPrice, parseDurationToHours } from '@/lib/rentalPricing';
 import { getRentalInventoryDemands } from '@/lib/rentalAvailability';
+import { businessMapUrl, businessWhatsAppUrl } from '@/lib/businessConfig';
 
 // Types for wizard cart
 export interface RentalCartItem {
@@ -37,9 +38,6 @@ interface RentalCheckoutWizardProps {
     setAuthOpen: (open: boolean) => void;
 }
 
-const STORE_ADDRESS = 'Av. Rodriguez Morales (Zona el pueblito)';
-const STORE_MAP_URL = 'https://maps.app.goo.gl/WeUipumWSXCMwPqL9';
-const WHATSAPP_NUMBER = '59177860277';
 const PRICE_TIER_DEFS = [
     { label: '1 Hora', value: '1 hora', accent: false },
     { label: '2 Horas', value: '2 horas', accent: false },
@@ -102,6 +100,7 @@ export default function RentalCheckoutWizard({
         createRentalGroup,
         calculatePrice,
         rentalSettings,
+        publicBusinessConfig,
         getAvailableStockForInterval,
         getComboAvailabilityForInterval
     } = useStore();
@@ -461,8 +460,8 @@ export default function RentalCheckoutWizard({
                 `ID: ${currentCustomer?.ci || ''}`,
                 `Total: Bs. ${amountToShow.toFixed(2)}`
             ].join('\n');
-        return `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(message)}`;
-    }, [reservationCode, currentCustomer, amountToShow, language]);
+        return businessWhatsAppUrl(publicBusinessConfig.whatsapp, message);
+    }, [reservationCode, currentCustomer, amountToShow, language, publicBusinessConfig.whatsapp]);
 
     const addSelectedProductToCart = () => {
         if (!selectedProduct) return false;
@@ -1582,7 +1581,7 @@ export default function RentalCheckoutWizard({
                                         : 'If you need to change the date, time, bicycle, accessories, or delivery address of your booking, just message us on WhatsApp and we will update it right away.'}
                                 </p>
                                 <a
-                                    href={`https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(language === 'es' ? `Hola Briz, acabo de realizar mi pedido con código ${reservationCode} y me gustaría realizar una modificación.` : `Hello Briz, I just placed booking ${reservationCode} and I would like to make a change.`)}`}
+                                    href={businessWhatsAppUrl(publicBusinessConfig.whatsapp, language === 'es' ? `Hola ${publicBusinessConfig.businessName}, acabo de realizar mi pedido con código ${reservationCode} y me gustaría realizar una modificación.` : `Hello ${publicBusinessConfig.businessName}, I just placed booking ${reservationCode} and I would like to make a change.`)}
                                     target="_blank"
                                     rel="noreferrer"
                                     className="mt-1.5 inline-flex items-center gap-1.5 bg-brand-yellow text-brand-black px-5 py-2.5 rounded-xl font-black uppercase text-[10px] tracking-widest hover:bg-brand-yellow-light transition-all shadow-md cursor-pointer hover:scale-102"
@@ -1626,11 +1625,11 @@ export default function RentalCheckoutWizard({
                                     <MapPin className="w-5 h-5 text-brand-yellow-vibrant shrink-0 mt-0.5" />
                                     <div>
                                         <p className="font-black text-brand-black text-sm">{language === 'es' ? 'Mapa de la tienda' : 'Store location'}</p>
-                                        <p className="font-bold text-brand-charcoal/70 mt-1">{STORE_ADDRESS}</p>
+                                        <p className="font-bold text-brand-charcoal/70 mt-1">{publicBusinessConfig.address}</p>
                                     </div>
                                 </div>
                                 <a
-                                    href={STORE_MAP_URL}
+                                    href={businessMapUrl(publicBusinessConfig.address)}
                                     target="_blank"
                                     rel="noreferrer"
                                     className="inline-flex w-full items-center justify-center rounded-2xl bg-brand-yellow px-4 py-3 text-xs font-black uppercase tracking-widest text-brand-black hover:bg-brand-yellow-light"
@@ -1659,7 +1658,7 @@ export default function RentalCheckoutWizard({
 
                             <div className="pt-2 text-center border-t border-brand-yellow/10">
                                 <a
-                                    href={`https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(language === 'es' ? `Hola Briz, acabo de realizar una solicitud de alquiler. Código: ${reservationCode}` : `Hello Briz, I just submitted a rental booking. Code: ${reservationCode}`)}`}
+                                    href={businessWhatsAppUrl(publicBusinessConfig.whatsapp, language === 'es' ? `Hola ${publicBusinessConfig.businessName}, acabo de realizar una solicitud de alquiler. Código: ${reservationCode}` : `Hello ${publicBusinessConfig.businessName}, I just submitted a rental booking. Code: ${reservationCode}`)}
                                     target="_blank"
                                     rel="noreferrer"
                                     className="text-xs font-black text-brand-yellow hover:text-brand-yellow-light inline-flex items-center gap-1.5 bg-brand-charcoal px-4 py-2 rounded-xl"

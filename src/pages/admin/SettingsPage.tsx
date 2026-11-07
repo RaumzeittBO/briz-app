@@ -6,11 +6,12 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Save, Bell, Shield, Globe, CreditCard, Upload, Check, UserPlus, KeyRound, Mail, Users, Trash2 } from 'lucide-react';
+import { Save, Bell, Shield, Globe, CreditCard, Upload, Check, UserPlus, KeyRound, Mail, Users } from 'lucide-react';
 import { useStore } from '@/context/StoreContext';
 import { useAuth } from '@/context/AuthContext';
 import { auth, db, firebaseConfig, isFirebaseEmulatorEnabled } from '@/lib/firebase';
 import { provisionAdminUser } from '@/lib/backend';
+import { BUSINESS_DAY_KEYS, BUSINESS_DAY_LABELS, DEFAULT_PUBLIC_BUSINESS_CONFIG, validatePublicBusinessConfig, type PublicBusinessConfig, type PublicBusinessConfigUpdate } from '@/lib/businessConfig';
 
 interface AdminUserRecord {
     uid: string;
@@ -22,21 +23,13 @@ interface AdminUserRecord {
     source?: 'firestore' | 'local';
 }
 
-const LOCAL_ADMIN_DIRECTORY_KEY = 'briz_admin_directory';
 const connectedSecondaryAuth = new WeakSet<Auth>();
 
 export default function SettingsPage() {
-    const { rentalSettings, updateRentalSettings } = useStore();
+    const { rentalSettings, rentalSettingsLoaded, rentalSettingsLoadError, updateRentalSettings, publicBusinessConfig, updatePublicBusinessConfig } = useStore();
     const { user, isAdmin } = useAuth();
     
     const [admins, setAdmins] = useState<AdminUserRecord[]>([]);
-    const [localAdmins, setLocalAdmins] = useState<AdminUserRecord[]>(() => {
-        try {
-            return JSON.parse(localStorage.getItem(LOCAL_ADMIN_DIRECTORY_KEY) || '[]') as AdminUserRecord[];
-        } catch {
-            return [];
-        }
-    });
     const [adminPin, setAdminPin] = useState('1234');
     const [pinInput, setPinInput] = useState('');
     const [pinUnlocked, setPinUnlocked] = useState(false);
@@ -54,6 +47,13 @@ export default function SettingsPage() {
     const [qrPreview, setQrPreview] = useState('');
     const [saving, setSaving] = useState(false);
     const [successMessage, setSuccessMessage] = useState('');
+    const [paymentError, setPaymentError] = useState('');
+    const [businessDraft, setBusinessDraft] = useState<PublicBusinessConfig>(DEFAULT_PUBLIC_BUSINESS_CONFIG);
+    const [businessBase, setBusinessBase] = useState<PublicBusinessConfig>(DEFAULT_PUBLIC_BUSINESS_CONFIG);
+    const [businessDirty, setBusinessDirty] = useState(false);
+    const [businessSaving, setBusinessSaving] = useState(false);
+    const [businessMessage, setBusinessMessage] = useState('');
+    const [businessError, setBusinessError] = useState('');
 
     useEffect(() => {
         if (rentalSettings) {
@@ -64,6 +64,17 @@ export default function SettingsPage() {
             setQrPreview(rentalSettings.qrCodeUrl || '');
         }
     }, [rentalSettings]);
+
+    useEffect(() => {
+        if (!businessDirty) {
+            setBusinessDraft(publicBusinessConfig);
+            setBusinessBase(publicBusinessConfig);
+        }
+    }, [businessDirty, publicBusinessConfig]);
+
+    useEffect(() => () => {
+        if (qrPreview.startsWith('blob:')) URL.revokeObjectURL(qrPreview);
+    }, [qrPreview]);
 
     useEffect(() => {
         if (!isAdmin) return;
@@ -84,24 +95,7 @@ export default function SettingsPage() {
         };
     }, [isAdmin]);
 
-    const saveLocalAdmins = (nextAdmins: AdminUserRecord[]) => {
-        setLocalAdmins(nextAdmins);
-        localStorage.setItem(LOCAL_ADMIN_DIRECTORY_KEY, JSON.stringify(nextAdmins));
-    };
-
-    const rememberAdminLocally = (admin: AdminUserRecord) => {
-        const normalizedEmail = admin.email.toLowerCase().trim();
-        const nextAdmins = [
-            ...localAdmins.filter(item => item.email.toLowerCase().trim() !== normalizedEmail),
-            { ...admin, email: normalizedEmail, source: 'local' as const }
-        ];
-        saveLocalAdmins(nextAdmins);
-    };
-
-    const displayedAdmins = [
-        ...admins,
-        ...localAdmins.filter(localAdmin => !admins.some(admin => admin.email.toLowerCase().trim() === localAdmin.email.toLowerCase().trim()))
-    ];
+    const displayedAdmins = admins;
 
     const getSecondaryAuth = () => {
         const secondaryApp = getApps().some(app => app.name === 'briz-admin-creator')
@@ -146,11 +140,12 @@ export default function SettingsPage() {
         e.preventDefault();
         setAdminSaving(true);
         setAdminMessage('');
+        let secondaryAuth: Auth | null = null;
         try {
             if (adminPassword.length < 6) {
                 throw new Error('La contraseña temporal debe tener al menos 6 caracteres.');
             }
-            const secondaryAuth = getSecondaryAuth();
+            secondaryAuth = getSecondaryAuth();
             const credential = await createUserWithEmailAndPassword(secondaryAuth, adminEmail.trim(), adminPassword);
             const createdAdmin: AdminUserRecord = {
                 uid: credential.user.uid,
@@ -160,28 +155,16 @@ export default function SettingsPage() {
                 active: true
             };
             await provisionAdminUser({ uid: createdAdmin.uid, role: 'admin', name: createdAdmin.name, active: true });
-            rememberAdminLocally(createdAdmin);
-            await signOutSecondary(secondaryAuth);
             setAdminName('');
             setAdminEmail('');
             setAdminPassword('');
             setAdminMessage('Admin creado. Ya puede entrar con ese correo y contraseña temporal.');
         } catch (error) {
             const errorCode = typeof error === 'object' && error && 'code' in error ? String((error as { code?: unknown }).code) : '';
-            if (errorCode === 'auth/email-already-in-use') {
-                const existingAdmin: AdminUserRecord = {
-                    uid: `local-${adminEmail.trim().toLowerCase()}`,
-                    email: adminEmail.trim().toLowerCase(),
-                    name: adminName.trim() || 'Administrador',
-                    role: 'admin',
-                    active: true
-                };
-                rememberAdminLocally(existingAdmin);
-                setAdminMessage('Ese correo ya existÃ­a en Firebase Auth. Lo agreguÃ© a la lista visible; puede entrar si tiene su contraseÃ±a o puedes enviar Reset.');
-            } else {
-                setAdminMessage(error instanceof Error ? error.message : 'No se pudo crear el usuario admin.');
-            }
+            if (errorCode === 'auth/email-already-in-use') setAdminMessage('Ese correo ya existe en Firebase Authentication. No se creó un perfil local; revisa la lista sincronizada o usa recuperación de contraseña.');
+            else setAdminMessage(error instanceof Error ? error.message : 'No se pudo crear el usuario admin. Si Firebase Auth alcanzó a crear la cuenta, falta completar su perfil con soporte.');
         } finally {
+            if (secondaryAuth?.currentUser) await signOutSecondary(secondaryAuth).catch(() => undefined);
             setAdminSaving(false);
         }
     };
@@ -196,69 +179,102 @@ export default function SettingsPage() {
             setAdminMessage('No puedes desactivar tu propio usuario mientras estás conectado.');
             return;
         }
-        if (admin.source === 'local' || admin.uid.startsWith('local-')) {
-            saveLocalAdmins(localAdmins.map(item => item.email.toLowerCase().trim() === admin.email.toLowerCase().trim() ? { ...item, active: !admin.active } : item));
-            setAdminMessage(admin.active ? 'Admin oculto/desactivado en la lista local.' : 'Admin activado en la lista local.');
-            return;
-        }
         try {
             await provisionAdminUser({ uid: admin.uid, role: admin.role, name: admin.name, active: !admin.active });
+            setAdminMessage(admin.active ? 'Perfil administrador desactivado.' : 'Perfil administrador activado.');
         } catch (error) {
-            console.warn('No se pudo actualizar adminUsers, usando lista local:', error);
-            rememberAdminLocally({ ...admin, active: !admin.active });
-        }
-        setAdminMessage(admin.active ? 'Admin desactivado.' : 'Admin activado.');
-    };
-
-    const handleDeleteAdmin = async (admin: AdminUserRecord) => {
-        if (admin.uid === user?.uid) {
-            setAdminMessage('No puedes eliminar tu propio usuario mientras estás conectado.');
-            return;
-        }
-        if (window.confirm(`¿Estás seguro de que deseas eliminar al administrador ${admin.name || admin.email}?`)) {
-            try {
-                if (admin.source !== 'local' && !admin.uid.startsWith('local-')) {
-                    await provisionAdminUser({ uid: admin.uid, role: admin.role, name: admin.name, active: false });
-                }
-                const cleanLocal = localAdmins.filter(item => item.email.toLowerCase().trim() !== admin.email.toLowerCase().trim());
-                saveLocalAdmins(cleanLocal);
-                setAdminMessage('Usuario administrador eliminado con éxito.');
-            } catch (error) {
-                console.error('Error al eliminar admin:', error);
-                setAdminMessage('Error al eliminar de Firestore. Se removió de la lista local.');
-                const cleanLocal = localAdmins.filter(item => item.email.toLowerCase().trim() !== admin.email.toLowerCase().trim());
-                saveLocalAdmins(cleanLocal);
-            }
+            setAdminMessage(error instanceof Error ? error.message : 'No se pudo actualizar el perfil administrador.');
         }
     };
 
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files && e.target.files[0]) {
             const file = e.target.files[0];
+            if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type) || file.size <= 0 || file.size > 3 * 1024 * 1024) {
+                setPaymentError('El QR debe ser JPG, PNG o WebP y pesar como máximo 3 MB. El archivo anterior se conserva.');
+                if (qrPreview.startsWith('blob:')) URL.revokeObjectURL(qrPreview);
+                setQrFile(null);
+                setQrPreview(rentalSettings.qrCodeUrl || '');
+                e.target.value = '';
+                return;
+            }
+            if (qrPreview.startsWith('blob:')) URL.revokeObjectURL(qrPreview);
             setQrFile(file);
             setQrPreview(URL.createObjectURL(file));
+            setPaymentError('');
         }
     };
 
     const handleSaveRentalSettings = async (e: React.FormEvent) => {
         e.preventDefault();
+        if (saving || !rentalSettingsLoaded) return;
         setSaving(true);
         setSuccessMessage('');
+        setPaymentError('');
         try {
-            await updateRentalSettings({
+            const savedSettings = await updateRentalSettings({
                 bankName,
                 accountNumber,
                 accountOwner,
                 ownerCI
             }, qrFile);
             setSuccessMessage('Configuración de pagos de alquiler guardada con éxito.');
+            if (qrPreview.startsWith('blob:')) URL.revokeObjectURL(qrPreview);
+            setQrPreview(savedSettings.qrCodeUrl || '');
             setQrFile(null);
             setTimeout(() => setSuccessMessage(''), 5000);
         } catch (error) {
             console.error(error);
-            alert(error instanceof Error ? error.message : 'Error al guardar la configuración de pagos.');
+            setPaymentError(error instanceof Error ? error.message : 'Error al guardar la configuración de pagos.');
+            if (qrPreview.startsWith('blob:')) URL.revokeObjectURL(qrPreview);
+            setQrPreview(rentalSettings.qrCodeUrl || '');
+            setQrFile(null);
         } finally {
             setSaving(false);
+        }
+    };
+
+    const updateBusinessDraft = (patch: Partial<PublicBusinessConfig>) => {
+        setBusinessDirty(true);
+        setBusinessMessage('');
+        setBusinessError('');
+        setBusinessDraft(current => ({ ...current, ...patch }));
+    };
+
+    const handleSaveBusiness = async (event: React.FormEvent) => {
+        event.preventDefault();
+        if (businessSaving) return;
+        const validationError = validatePublicBusinessConfig(businessDraft);
+        if (validationError) {
+            setBusinessError(validationError);
+            setBusinessMessage('');
+            return;
+        }
+        setBusinessSaving(true);
+        setBusinessMessage('');
+        setBusinessError('');
+        try {
+            const updates: PublicBusinessConfigUpdate = {};
+            (['businessName', 'phone', 'address', 'email', 'whatsapp'] as const).forEach(field => {
+                if (businessDraft[field] !== businessBase[field]) updates[field] = businessDraft[field];
+            });
+            const changedHours = Object.fromEntries(BUSINESS_DAY_KEYS
+                .filter(day => JSON.stringify(businessDraft.hours[day]) !== JSON.stringify(businessBase.hours[day]))
+                .map(day => [day, businessDraft.hours[day]]));
+            if (Object.keys(changedHours).length > 0) updates.hours = changedHours;
+            if (Object.keys(updates).length === 0) {
+                setBusinessDirty(false);
+                setBusinessMessage('No hay cambios nuevos para guardar.');
+                return;
+            }
+            await updatePublicBusinessConfig(updates);
+            setBusinessBase(businessDraft);
+            setBusinessDirty(false);
+            setBusinessMessage('Configuración del negocio guardada correctamente.');
+        } catch (error) {
+            setBusinessError(error instanceof Error ? error.message : 'No se pudo guardar la configuración del negocio.');
+        } finally {
+            setBusinessSaving(false);
         }
     };
 
@@ -370,13 +386,10 @@ export default function SettingsPage() {
                                                 <Button type="button" onClick={() => handleToggleAdmin(admin)} className="bg-white/5 text-white hover:bg-brand-yellow hover:text-brand-black rounded-full h-10 px-4 text-xs font-black">
                                                     {admin.active ? 'Desactivar' : 'Activar'}
                                                 </Button>
-                                                <Button type="button" onClick={() => handleDeleteAdmin(admin)} className="bg-red-500/10 text-red-400 hover:bg-red-500 hover:text-white rounded-full h-10 px-4 text-xs font-black transition-all">
-                                                    <Trash2 className="mr-2 h-4 w-4" /> Borrar
-                                                </Button>
                                             </div>
                                         </div>
                                     ))}
-                                    {displayedAdmins.length === 0 && <p className="text-sm font-bold text-white/35">Aún no hay admins registrados. Si ya creaste uno en Firebase Auth, intenta registrarlo aquÃ­ con el mismo correo para agregarlo a la lista visible.</p>}
+                                    {displayedAdmins.length === 0 && <p className="text-sm font-bold text-white/35">No hay perfiles administradores de Firebase para mostrar.</p>}
                                 </div>
                             </div>
                         </div>
@@ -392,31 +405,63 @@ export default function SettingsPage() {
                         <Globe className="w-4 h-4 text-brand-yellow/30" /> Información del Negocio
                     </CardTitle>
                 </CardHeader>
-                <CardContent className="p-8 space-y-6">
+                <CardContent className="p-8">
+                  <form onSubmit={handleSaveBusiness} className="space-y-6">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <div className="space-y-2">
                             <Label className="text-white/30 font-bold uppercase tracking-widest text-[10px]">Nombre del negocio</Label>
-                            <Input defaultValue="Briz" className="h-12 bg-black/40 border-white/5 rounded-xl text-white font-bold focus:ring-brand-yellow/50" />
+                            <Input value={businessDraft.businessName} onChange={event => updateBusinessDraft({ businessName: event.target.value })} className="h-12 bg-black/40 border-white/5 rounded-xl text-white font-bold focus:ring-brand-yellow/50" />
                         </div>
                         <div className="space-y-2">
                             <Label className="text-white/30 font-bold uppercase tracking-widest text-[10px]">Teléfono Principal</Label>
-                            <Input defaultValue="+591 77860277" className="h-12 bg-black/40 border-white/5 rounded-xl text-white font-bold focus:ring-brand-yellow/50" />
+                            <Input type="tel" value={businessDraft.phone} onChange={event => updateBusinessDraft({ phone: event.target.value })} className="h-12 bg-black/40 border-white/5 rounded-xl text-white font-bold focus:ring-brand-yellow/50" />
                         </div>
                     </div>
                     <div className="space-y-2">
                         <Label className="text-white/30 font-bold uppercase tracking-widest text-[10px]">Dirección Física</Label>
-                        <Input defaultValue="Av. Heroínas #1234, Cochabamba, Bolivia" className="h-12 bg-black/40 border-white/5 rounded-xl text-white font-bold focus:ring-brand-yellow/50" />
+                        <Input value={businessDraft.address} onChange={event => updateBusinessDraft({ address: event.target.value })} className="h-12 bg-black/40 border-white/5 rounded-xl text-white font-bold focus:ring-brand-yellow/50" />
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <div className="space-y-2">
                             <Label className="text-white/30 font-bold uppercase tracking-widest text-[10px]">Email de Contacto</Label>
-                            <Input defaultValue="hola@briz.bo" className="h-12 bg-black/40 border-white/5 rounded-xl text-white font-bold focus:ring-brand-yellow/50" />
+                            <Input type="email" value={businessDraft.email} onChange={event => updateBusinessDraft({ email: event.target.value })} className="h-12 bg-black/40 border-white/5 rounded-xl text-white font-bold focus:ring-brand-yellow/50" />
                         </div>
                         <div className="space-y-2">
                             <Label className="text-white/30 font-bold uppercase tracking-widest text-[10px]">Enlace WhatsApp</Label>
-                            <Input defaultValue="+59177860277" className="h-12 bg-black/40 border-white/5 rounded-xl text-white font-bold focus:ring-brand-yellow/50" />
+                            <Input type="tel" value={businessDraft.whatsapp} onChange={event => updateBusinessDraft({ whatsapp: event.target.value })} className="h-12 bg-black/40 border-white/5 rounded-xl text-white font-bold focus:ring-brand-yellow/50" />
                         </div>
                     </div>
+                    <div className="space-y-4 border-t border-white/5 pt-5">
+                        <div>
+                            <h3 className="text-sm font-black text-white">Horarios de atención</h3>
+                            <p className="mt-1 text-[11px] font-medium text-white/40">Configura cada día por separado. Puedes marcar días cerrados.</p>
+                        </div>
+                        <div className="grid gap-3 sm:grid-cols-2">
+                            {BUSINESS_DAY_KEYS.map((dayKey, index) => {
+                                const day = businessDraft.hours[dayKey];
+                                return <div key={dayKey} className="grid grid-cols-[1fr_auto_auto] items-center gap-2 rounded-xl border border-white/5 bg-black/20 p-3">
+                                    <Label className="text-xs font-bold text-white/80">{BUSINESS_DAY_LABELS.es[index]}</Label>
+                                    <label className="flex items-center gap-1.5 text-[10px] font-bold text-white/50">
+                                        <input type="checkbox" checked={day.closed} onChange={event => updateBusinessDraft({ hours: { ...businessDraft.hours, [dayKey]: { ...day, closed: event.target.checked } } })} />
+                                        Cerrado
+                                    </label>
+                                    {day.closed ? <span className="w-[8.5rem] text-center text-xs font-bold text-white/30">—</span> : <span className="flex items-center gap-1">
+                                        <Input aria-label={`${BUSINESS_DAY_LABELS.es[index]} abre`} type="time" value={day.open} onChange={event => updateBusinessDraft({ hours: { ...businessDraft.hours, [dayKey]: { ...day, open: event.target.value } } })} className="h-9 w-[4.25rem] px-1 text-xs text-white" />
+                                        <span className="text-white/40">–</span>
+                                        <Input aria-label={`${BUSINESS_DAY_LABELS.es[index]} cierra`} type="time" value={day.close} onChange={event => updateBusinessDraft({ hours: { ...businessDraft.hours, [dayKey]: { ...day, close: event.target.value } } })} className="h-9 w-[4.25rem] px-1 text-xs text-white" />
+                                    </span>}
+                                </div>;
+                            })}
+                        </div>
+                    </div>
+                    <div className="flex flex-col-reverse gap-3 border-t border-white/5 pt-5 sm:flex-row sm:items-center">
+                        <p role="status" className="flex-1 text-xs font-bold text-emerald-300">{businessMessage}</p>
+                        {businessError && <p role="alert" className="flex-1 text-xs font-bold text-red-300">{businessError}</p>}
+                        <Button type="submit" disabled={businessSaving || !businessDirty} className="h-11 rounded-full bg-brand-yellow px-7 font-black text-brand-black hover:bg-white disabled:opacity-50">
+                            {businessSaving ? 'Guardando…' : 'Guardar información del negocio'}
+                        </Button>
+                    </div>
+                  </form>
                 </CardContent>
             </Card>
 
@@ -429,6 +474,7 @@ export default function SettingsPage() {
                 </CardHeader>
                 <CardContent className="p-8">
                     <form onSubmit={handleSaveRentalSettings} className="space-y-6">
+                        {!rentalSettingsLoaded && <p role={rentalSettingsLoadError ? 'alert' : 'status'} className={`text-xs font-bold ${rentalSettingsLoadError ? 'text-red-300' : 'text-white/40'}`}>{rentalSettingsLoadError || 'Cargando configuración actual de Firebase…'}</p>}
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                             <div className="space-y-2">
                                 <Label className="text-white/30 font-bold uppercase tracking-widest text-[10px]">Banco</Label>
@@ -488,13 +534,13 @@ export default function SettingsPage() {
                                 <div className="space-y-3 flex-1 w-full text-center sm:text-left">
                                     <h4 className="text-white font-bold text-sm">Sube la imagen de tu código QR</h4>
                                     <p className="text-[10px] font-bold text-white/30 uppercase tracking-widest">
-                                        Formatos soportados: JPG, PNG. Máx. 3MB.
+                                        Formatos soportados: JPG, PNG o WebP. Máx. 3 MB.
                                     </p>
                                     <div className="relative inline-block">
                                         <input 
                                             type="file" 
                                             onChange={handleFileChange} 
-                                            accept="image/*" 
+                                            accept="image/jpeg,image/png,image/webp"
                                             className="hidden" 
                                             id="qr-upload-input" 
                                         />
@@ -518,37 +564,17 @@ export default function SettingsPage() {
                                     <Check className="w-4 h-4" /> {successMessage}
                                 </p>
                             )}
+                            {paymentError && <p role="alert" className="flex-1 text-xs font-bold text-red-300">{paymentError}</p>}
                             <div className="flex-1" />
                             <Button 
                                 type="submit" 
-                                disabled={saving}
+                                disabled={saving || !rentalSettingsLoaded}
                                 className="bg-brand-yellow text-brand-black hover:bg-white font-black h-12 px-8 rounded-full shadow-lg transition-all cursor-pointer"
                             >
-                                {saving ? 'Guardando...' : 'Guardar Información de Pago'}
+                                    {saving ? 'Guardando...' : 'Guardar Información de Pago'}
                             </Button>
                         </div>
                     </form>
-                </CardContent>
-            </Card>
-
-            {/* Hours */}
-            <Card className="bg-[#1A1A1A] border-white/5 rounded-[1.5rem] shadow-xl overflow-hidden">
-                <CardHeader className="p-8 border-b border-white/5 bg-white/[0.01]">
-                    <CardTitle className="text-[10px] font-black uppercase tracking-[0.2em] text-white/40 flex items-center gap-2">
-                        <Shield className="w-4 h-4 text-brand-yellow/30" /> Horarios de Atención
-                    </CardTitle>
-                </CardHeader>
-                <CardContent className="p-8">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div className="space-y-2">
-                            <Label className="text-white/30 font-bold uppercase tracking-widest text-[10px]">Lunes a Sábado</Label>
-                            <Input defaultValue="08:00 - 19:00" className="h-12 bg-black/40 border-white/5 rounded-xl text-white font-bold focus:ring-brand-yellow/50" />
-                        </div>
-                        <div className="space-y-2">
-                            <Label className="text-white/30 font-bold uppercase tracking-widest text-[10px]">Domingo</Label>
-                            <Input defaultValue="09:00 - 14:00" className="h-12 bg-black/40 border-white/5 rounded-xl text-white font-bold focus:ring-brand-yellow/50" />
-                        </div>
-                    </div>
                 </CardContent>
             </Card>
 
@@ -561,26 +587,21 @@ export default function SettingsPage() {
                 </CardHeader>
                 <CardContent className="p-8 space-y-2">
                     {[
-                        { label: 'Nuevas reservas', desc: 'Alertas en tiempo real por cada reserva entrante.' },
-                        { label: 'Stock bajo', desc: 'Notificar cuando los productos bajen del nivel mínimo.' },
-                        { label: 'Alquiler atrasado', desc: 'Recordatorios automáticos de devoluciones pendientes.' },
-                    ].map((item, i) => (
-                        <div key={i} className="flex items-center justify-between p-4 rounded-2xl hover:bg-white/[0.02] transition-colors group">
+                        { label: 'Nuevas reservas', desc: 'La notificación automática existente se gestiona en el backend; esta preferencia personal aún no está disponible.' },
+                        { label: 'Stock bajo', desc: 'Próximamente: aún no existe una preferencia configurable para esta alerta.' },
+                        { label: 'Alquiler atrasado', desc: 'Próximamente: aún no existe una preferencia configurable para este recordatorio.' },
+                    ].map((item) => (
+                        <div key={item.label} className="flex items-center justify-between p-4 rounded-2xl hover:bg-white/[0.02] transition-colors group">
                             <div>
                                 <p className="text-white font-black text-sm">{item.label}</p>
                                 <p className="text-[10px] font-bold text-white/30 uppercase tracking-widest mt-1">{item.desc}</p>
                             </div>
-                            <div className="w-12 h-6 bg-white/5 rounded-full cursor-pointer relative group-hover:bg-white/10 transition-colors">
-                                <div className="w-4 h-4 bg-brand-yellow rounded-full absolute top-1 right-1 shadow-lg shadow-brand-yellow/20" />
-                            </div>
+                            <span className="rounded-full border border-white/10 px-3 py-1 text-[9px] font-black uppercase tracking-wider text-white/40">{item.label === 'Nuevas reservas' ? 'Backend' : 'Próximamente'}</span>
                         </div>
                     ))}
                 </CardContent>
             </Card>
 
-            <Button className="bg-white text-brand-black hover:bg-brand-yellow font-black h-14 px-10 rounded-full shadow-2xl transition-all hover:scale-105 active:scale-95 group">
-                <Save className="w-5 h-5 mr-3 group-hover:rotate-12 transition-transform" strokeWidth={3} /> Guardar Configuración
-            </Button>
         </div>
     );
 }

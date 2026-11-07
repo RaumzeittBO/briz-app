@@ -280,7 +280,7 @@ export default function AdminRoutesPage() {
                             <Label className="text-white/40 font-bold uppercase tracking-widest text-[10px]">Enlace de Imagen (URL)</Label>
                             <div className="flex gap-2">
                                 <Input value={image} onChange={e => setImage(e.target.value)} className="h-12 bg-black/40 border-white/10 rounded-xl focus:ring-brand-yellow/50 text-white flex-1" placeholder="Ej. https://images.unsplash.com/... o /vive.webp" />
-                                <FileUploader onUpload={(url) => setImage(url)} folder="routes" className="h-12 px-4 flex items-center justify-center gap-1.5 rounded-xl border border-white/10 hover:border-brand-yellow/50 bg-white/5 hover:bg-white/10 text-xs font-bold text-white transition-all cursor-pointer shrink-0" />
+                                <FileUploader onUpload={(url) => setImage(url)} folder="public-assets/routes" className="h-12 px-4 flex items-center justify-center gap-1.5 rounded-xl border border-white/10 hover:border-brand-yellow/50 bg-white/5 hover:bg-white/10 text-xs font-bold text-white transition-all cursor-pointer shrink-0" />
                             </div>
                         </div>
 

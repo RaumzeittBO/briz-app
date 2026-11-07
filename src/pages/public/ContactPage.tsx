@@ -8,11 +8,14 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { useLanguage } from '@/context/LanguageContext';
+import { useStore } from '@/context/StoreContext';
+import { BUSINESS_DAY_KEYS, BUSINESS_DAY_LABELS, businessMapUrl, businessWhatsAppUrl, formatBusinessHours } from '@/lib/businessConfig';
 
 const fadeUp = { initial: { opacity: 0, y: 30 }, whileInView: { opacity: 1, y: 0 }, viewport: { once: true }, transition: { duration: 0.6 } };
 
 export default function ContactPage() {
     const { language } = useLanguage();
+    const { publicBusinessConfig } = useStore();
 
     const customFaqs = [
         {
@@ -103,9 +106,9 @@ export default function ContactPage() {
                             : 'Send us photos, a short video, and your asking price via our WhatsApp customer support line:'}
                     </p>
                     <div className="pt-1">
-                        <a href="https://wa.me/59177860277" target="_blank" rel="noopener noreferrer">
+                        <a href={businessWhatsAppUrl(publicBusinessConfig.whatsapp)} target="_blank" rel="noopener noreferrer">
                             <Button size="sm" className="bg-green-500 hover:bg-green-600 text-white rounded-full font-black text-sm px-6 h-12 shadow-md flex items-center gap-2 border-0 transition-all hover:scale-105 active:scale-95">
-                                <MessageCircle className="w-5 h-5 text-white" /> +591 77860277
+                                <MessageCircle className="w-5 h-5 text-white" /> {publicBusinessConfig.phone}
                             </Button>
                         </a>
                     </div>
@@ -239,7 +242,7 @@ export default function ContactPage() {
                         {/* Contact Info */}
                         <motion.div {...fadeUp} transition={{ delay: 0.2 }} className="space-y-8 order-1 lg:order-2">
                             {/* WhatsApp CTA */}
-                            <a href="https://wa.me/59177860277" target="_blank" rel="noopener noreferrer" className="block group">
+                            <a href={businessWhatsAppUrl(publicBusinessConfig.whatsapp)} target="_blank" rel="noopener noreferrer" className="block group">
                                 <Card className="border-0 bg-white hover:bg-green-50/30 transition-all duration-500 cursor-pointer rounded-[2.5rem] shadow-[0_20px_50px_rgba(0,0,0,0.04)] hover:shadow-[0_40px_80px_rgba(34,197,94,0.12)] hover:-translate-y-2 relative overflow-hidden group">
                                     <div className="absolute top-0 right-0 w-32 h-32 bg-green-500/5 rounded-bl-full group-hover:bg-green-500/10 transition-colors" />
                                     <CardContent className="p-5 sm:p-10 flex items-center gap-4 sm:gap-8 relative z-10">
@@ -253,7 +256,7 @@ export default function ContactPage() {
                                             <p className="text-[10px] sm:text-base text-gray-400 font-bold uppercase tracking-widest mt-0.5 sm:mt-1">
                                                 {language === 'es' ? 'Respuesta inmediata' : 'Immediate response'}
                                             </p>
-                                            <p className="text-green-600 font-black text-base sm:text-xl mt-2 sm:mt-3 tracking-tighter">+591 77860277</p>
+                                            <p className="text-green-600 font-black text-base sm:text-xl mt-2 sm:mt-3 tracking-tighter">{publicBusinessConfig.phone}</p>
                                         </div>
                                     </CardContent>
                                 </Card>
@@ -268,30 +271,26 @@ export default function ContactPage() {
                                             title: language === 'es' ? 'Dirección' : 'Location',
                                             color: 'brand-yellow',
                                             content: (
-                                                <a href="https://maps.app.goo.gl/tgqw7ZK51Y68Q7L7A?g_st=iwb" target="_blank" rel="noopener noreferrer" className="text-[13px] sm:text-lg font-black text-brand-charcoal hover:text-brand-yellow transition-colors block leading-tight">
-                                                    Cochabamba, Bolivia{' '}
+                                                <a href={businessMapUrl(publicBusinessConfig.address)} target="_blank" rel="noopener noreferrer" className="text-[13px] sm:text-lg font-black text-brand-charcoal hover:text-brand-yellow transition-colors block leading-tight">
+                                                    {publicBusinessConfig.address}{' '}
                                                     <span className="text-brand-yellow text-[9px] sm:text-xs mt-2 sm:mt-0 sm:ml-2 font-black uppercase tracking-widest bg-brand-yellow/10 px-3 py-1 rounded-full inline-block">
                                                         {language === 'es' ? 'Ver Mapa' : 'View Map'}
                                                     </span>
                                                 </a>
                                             )
                                         },
-                                        { icon: Phone, title: language === 'es' ? 'Teléfono' : 'Phone', color: 'brand-cyan', content: <p className="text-[13px] sm:text-lg font-black text-brand-charcoal">+591 77860277</p> },
-                                        { icon: Mail, title: 'Email', color: 'brand-pink', content: <p className="text-[13px] sm:text-lg font-black text-brand-charcoal break-all">brizbolivia@gmail.com</p> },
+                                        { icon: Phone, title: language === 'es' ? 'Teléfono' : 'Phone', color: 'brand-cyan', content: <p className="text-[13px] sm:text-lg font-black text-brand-charcoal">{publicBusinessConfig.phone}</p> },
+                                        { icon: Mail, title: 'Email', color: 'brand-pink', content: <a href={`mailto:${publicBusinessConfig.email}`} className="text-[13px] sm:text-lg font-black text-brand-charcoal break-all">{publicBusinessConfig.email}</a> },
                                         {
                                             icon: Clock,
                                             title: language === 'es' ? 'Horario' : 'Opening Hours',
                                             color: 'brand-charcoal',
                                             content: (
-                                                <div className="text-[13px] sm:text-lg font-black text-brand-charcoal space-y-1">
-                                                    <p>
-                                                        {language === 'es' ? 'Lunes a Sábado:' : 'Monday to Saturday:'}{' '}
-                                                        <span className="text-brand-yellow block sm:inline">8:00 - 19:00</span>
-                                                    </p>
-                                                    <p>
-                                                        {language === 'es' ? 'Domingo:' : 'Sunday:'}{' '}
-                                                        <span className="text-brand-yellow block sm:inline">9:00 - 14:00</span>
-                                                    </p>
+                                                <div className="grid grid-cols-1 gap-1 text-[13px] sm:text-base">
+                                                    {BUSINESS_DAY_KEYS.map((dayKey, index) => <p key={dayKey} className="flex justify-between gap-3">
+                                                        <span>{BUSINESS_DAY_LABELS[language][index]}</span>
+                                                        <span className="text-brand-yellow text-right">{formatBusinessHours(publicBusinessConfig.hours[dayKey], language)}</span>
+                                                    </p>)}
                                                 </div>
                                             )
                                         }
@@ -314,7 +313,7 @@ export default function ContactPage() {
                                 <div className="absolute inset-0 bg-gradient-to-br from-brand-yellow/20 via-transparent to-brand-pink/20 opacity-30 group-hover:opacity-50 transition-opacity duration-700" />
                                 <CardContent className="p-8 sm:p-10 relative z-10 flex flex-col sm:flex-row items-center justify-between gap-8">
                                     <div className="text-center sm:text-left">
-                                        <h4 className="font-black text-2xl mb-1">Briz Community</h4>
+                                        <h4 className="font-black text-2xl mb-1">{publicBusinessConfig.businessName} Community</h4>
                                         <p className="text-white/50 font-bold text-sm uppercase tracking-widest">
                                             {language === 'es' ? 'Síguenos en redes' : 'Follow us on social media'}
                                         </p>
