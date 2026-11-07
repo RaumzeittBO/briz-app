@@ -74,6 +74,12 @@ const fixtures = [
     },
 ];
 for (const item of fixtures) await db.doc(`inventory/${item.id}`).set(item);
+await db.doc('inventory/visual-shop-bike').set({
+    id: 'visual-shop-bike', itemType: 'bike', name: 'Bicicleta demo para tienda', category: 'Bicicletas',
+    description: 'Producto sintético para validar filtros de tienda en Emulator.', imageUrl: '', active: true,
+    availableForRental: false, availableForSale: true, hasWheelSizes: true,
+    wheelSizes: [{ size: '26', stock: 4 }], salePrice: 1234,
+});
 await db.doc('combos/visual-combo').set({
     id: 'visual-combo', name: 'Combo visual con candado', active: true,
     availableForRental: true,
@@ -82,6 +88,23 @@ await db.doc('combos/visual-combo').set({
         { inventoryItemId: 'visual-lock', quantity: 1, requiresWheelSize: false },
     ],
     price1Hour: 25, price24Hours: 80, pricePerHour: 25, pricePerDay: 80,
+});
+await db.doc('settings/public_business').set({
+    businessName: 'BRIZ Demo',
+    phone: '+591 70000001',
+    address: 'Dirección de prueba, Emulator',
+    email: 'demo@example.test',
+    whatsapp: '+591 70000002',
+    hours: {
+        monday: { closed: false, open: '08:00', close: '17:00' },
+        tuesday: { closed: false, open: '08:00', close: '17:00' },
+        wednesday: { closed: false, open: '08:00', close: '17:00' },
+        thursday: { closed: false, open: '08:00', close: '17:00' },
+        friday: { closed: false, open: '08:00', close: '17:00' },
+        saturday: { closed: true, open: '08:00', close: '17:00' },
+        sunday: { closed: true, open: '09:00', close: '14:00' },
+    },
+    updatedAt: new Date(),
 });
 
 console.log(`Emulator-only admin fixture ready in ${projectId}.`);

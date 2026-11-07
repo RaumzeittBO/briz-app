@@ -101,6 +101,24 @@ try {
         await assertSucceeds(getDoc(doc(manager.firestore(), 'adminUsers', 'manager-cbba')));
         await assertFails(getDoc(doc(disabled.firestore(), 'adminUsers', 'disabled')));
     });
+    await test('business public settings are readable by visitors, admin-writable, audited, and reject extra/private fields', async () => {
+        const publicBusiness = doc(admin.firestore(), 'settings', 'public_business');
+        const businessData = {
+            businessName: 'BRIZ test', phone: '+59170000000', address: 'Cochabamba',
+            email: 'contact@example.invalid', whatsapp: '+59170000000',
+            hours: { monday: { closed: true, open: '08:00', close: '18:00' } },
+            updatedAt: Timestamp.now(),
+        };
+        await assertSucceeds(setDoc(publicBusiness, businessData));
+        await assertSucceeds(getDoc(doc(anonymous.firestore(), 'settings', 'public_business')));
+        await assertFails(updateDoc(doc(anonymous.firestore(), 'settings', 'public_business'), { phone: '+59170000001' }));
+        await assertFails(updateDoc(doc(manager.firestore(), 'settings', 'public_business'), { phone: '+59170000001' }));
+        await assertFails(updateDoc(publicBusiness, { telegramToken: 'must-not-be-public' }));
+        const audit = doc(admin.firestore(), 'settings', 'public_business', 'audit', 'entry-1');
+        await assertSucceeds(setDoc(audit, { actorUid: 'root', changedFields: ['phone'], createdAt: Timestamp.now() }));
+        await assertFails(getDoc(doc(anonymous.firestore(), 'settings', 'public_business', 'audit', 'entry-1')));
+        await assertFails(updateDoc(audit, { changedFields: ['phone', 'email'] }));
+    });
     await test('manual sale idempotency records are private to their active admin/manager owner', async () => {
         const operation = doc(manager.firestore(), 'adminUsers', 'manager-cbba', 'manualSaleOperations', 'sale-op-1');
         await assertSucceeds(getDoc(operation));
@@ -388,6 +406,19 @@ try {
         await assertSucceeds(mechanic.storage().ref('serviceOrders/cochabamba/order-1/photo.png').delete());
         await assertFails(mechanic.storage().ref('serviceOrders/lapaz/order-2/photo.png').putString(pngOne, 'raw', { contentType: 'image/png' }));
         await assertFails(viewer.storage().ref('serviceOrders/cochabamba/order-1/photo.png').putString(pngOne, 'raw', { contentType: 'image/png' }));
+    });
+    await test('inventory photographs are public to read, Admin/Manager upload-only, and immutable after upload', async () => {
+        const adminImage = admin.storage().ref('inventory/test-main-image.jpg');
+        const managerImage = manager.storage().ref('inventory/test-additional-image.jpg');
+        const imageBytes = 'emulator-only-catalog-photo';
+        await assertSucceeds(adminImage.putString(imageBytes, 'raw', { contentType: 'image/jpeg' }));
+        await assertSucceeds(managerImage.putString(imageBytes, 'raw', { contentType: 'image/jpeg' }));
+        assert.equal(await fetch(await assertSucceeds(anonymous.storage().ref('inventory/test-main-image.jpg').getDownloadURL())).then(response => response.text()), imageBytes);
+        await assertFails(viewer.storage().ref('inventory/viewer.jpg').putString(imageBytes, 'raw', { contentType: 'image/jpeg' }));
+        await assertFails(anonymous.storage().ref('inventory/visitor.png').putString(imageBytes, 'raw', { contentType: 'image/png' }));
+        await assertFails(admin.storage().ref('inventory/invalid.gif').putString(imageBytes, 'raw', { contentType: 'image/gif' }));
+        await assertFails(adminImage.putString('replacement', 'raw', { contentType: 'image/jpeg' }));
+        await assertFails(adminImage.delete());
     });
     await test('publicly served Storage assets remain readable', async () => {
         const path = 'settings/qr-test.png';

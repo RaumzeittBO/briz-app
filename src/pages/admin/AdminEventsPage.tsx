@@ -361,7 +361,7 @@ export default function AdminEventsPage() {
                                             <p className="text-[10px] text-white/40 font-bold">Selecciona varias fotos a la vez. Se subirán de a una.</p>
                                         </div>
                                         <FileUploader 
-                                            folder="events" 
+                                            folder="public-assets/events"
                                             multiple={true}
                                             onUploadMultiple={handleUploadMultiple} 
                                             className="h-9 px-4 flex items-center justify-center gap-1.5 rounded-xl border border-brand-yellow bg-brand-yellow/5 hover:bg-brand-yellow/10 text-[10px] font-black uppercase text-brand-yellow transition-all cursor-pointer whitespace-nowrap"

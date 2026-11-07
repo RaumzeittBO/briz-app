@@ -17,6 +17,7 @@ import { useLanguage } from '@/context/LanguageContext';
 import { t, getLocalizedField } from '@/lib/translations';
 
 import { generateShopWhatsAppLink } from '@/lib/whatsapp';
+import { businessWhatsAppUrl } from '@/lib/businessConfig';
 
 const fadeUp = {
     initial: { opacity: 0, y: 30 },
@@ -46,7 +47,7 @@ function sortShopCategories(a: string, b: string, categories: string[]): number 
 
 
 export default function ShopPage() {
-    const { inventory, combos, shopCategories } = useStore();
+    const { inventory, combos, shopCategories, publicBusinessConfig } = useStore();
     const { language } = useLanguage();
 
     const { items: cartItems, addToCart, removeFromCart, updateQuantity, clearCart, totalItems, totalPrice } = useCart();
@@ -183,6 +184,8 @@ export default function ShopPage() {
             total: totalPrice,
             notes,
             language,
+            businessPhone: publicBusinessConfig.whatsapp,
+            businessName: publicBusinessConfig.businessName,
         });
         window.open(link, '_blank');
 
@@ -291,7 +294,7 @@ export default function ShopPage() {
                                                     <ShoppingCart className="w-3.5 h-3.5" strokeWidth={2} /> {language === 'es' ? 'Añadir' : 'Add'}
                                                 </Button>
                                                 <a 
-                                                    href="https://wa.me/59177860277" 
+                                                    href={businessWhatsAppUrl(publicBusinessConfig.whatsapp)}
                                                     target="_blank" 
                                                     rel="noopener noreferrer" 
                                                     className="block"
@@ -359,7 +362,7 @@ export default function ShopPage() {
                         >
                             <ShoppingCart className="w-3.5 h-3.5" strokeWidth={2} /> {t('Añadir', language)}
                         </Button>
-                        <a href="https://wa.me/59177860277" target="_blank" rel="noopener noreferrer" className="block">
+                        <a href={businessWhatsAppUrl(publicBusinessConfig.whatsapp)} target="_blank" rel="noopener noreferrer" className="block">
                             <Button variant="outline" className="w-full h-10 text-brand-charcoal border-gray-100 hover:border-brand-yellow hover:bg-brand-yellow/5 transition-all rounded-full font-black text-xs flex items-center justify-center gap-1">
                                 <MessageCircle className="w-3.5 h-3.5" strokeWidth={2} /> {language === 'es' ? 'Consultar' : 'Inquire'}
                             </Button>
@@ -372,44 +375,33 @@ export default function ShopPage() {
 
     return (
         <div className="pt-[80px] lg:pt-[120px] bg-[#FFFDF3] min-h-screen flex flex-col">
-            <div className="relative sm:sticky top-[80px] lg:top-[120px] z-40 bg-[#FFFDF3]/95 backdrop-blur-md border-b border-gray-100">
-                <section className="pt-6 pb-6">
+            <div className="relative border-b border-gray-100 bg-[#FFFDF3]">
+                <section className="py-3 sm:py-4">
                     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                        <motion.div {...fadeUp} className="max-w-4xl mx-auto relative z-30 mb-6">
-                            <Card className="rounded-[2.5rem] shadow-2xl border-0 overflow-hidden bg-white">
-                                <CardContent className="p-4 sm:p-2">
-                                    <div className="flex flex-col sm:flex-row items-center gap-2">
-                                        <div className="relative flex-1 w-full group">
-                                            <div className="absolute left-5 top-1/2 -translate-y-1/2 w-10 h-10 rounded-xl bg-gray-50 flex items-center justify-center text-gray-400 group-focus-within:bg-brand-yellow/10 group-focus-within:text-brand-yellow transition-colors">
-                                                <Search className="w-5 h-5" strokeWidth={1.5} />
+                        <motion.div {...fadeUp} className="max-w-4xl mx-auto relative z-10 mb-3">
+                            <Card className="rounded-2xl shadow-sm border border-gray-100 overflow-hidden bg-white">
+                                <CardContent className="p-2">
+                                    <div className="flex items-center gap-2">
+                                        <form onSubmit={event => { event.preventDefault(); setSearch((event.currentTarget.elements.namedItem('shop-search') as HTMLInputElement).value); }} className="relative min-w-0 flex-1 group">
+                                            <div className="absolute left-3 top-1/2 -translate-y-1/2 flex h-8 w-8 items-center justify-center rounded-lg bg-gray-50 text-gray-400 group-focus-within:bg-brand-yellow/10 group-focus-within:text-brand-yellow transition-colors">
+                                                <Search className="w-4 h-4" strokeWidth={1.8} />
                                             </div>
-                                            <Input
-                                                placeholder={language === 'es' ? 'Buscar repuestos, accesorios...' : 'Search parts, accessories...'}
-                                                className="h-16 pl-18 border-0 bg-transparent text-lg focus-visible:ring-0 focus-visible:ring-offset-0 placeholder:text-gray-400 font-medium"
-                                                value={search}
-                                                onChange={(e) => setSearch(e.target.value)}
-                                            />
-                                        </div>
-                                        <div className="w-px h-10 bg-gray-100 hidden sm:block" />
-                                        <div className="px-4 w-full sm:w-auto pb-4 sm:pb-0 flex flex-col sm:flex-row items-center gap-2">
-                                            <Button variant="outline" className="relative group w-full sm:w-auto rounded-full h-12 px-6 border-gray-200 bg-white shadow-sm hover:border-brand-yellow hover:bg-brand-yellow/5 transition-all text-brand-charcoal font-bold" onClick={() => setShowCart(true)}>
-                                                <ShoppingCart className="w-5 h-5 mr-2 group-hover:scale-110 transition-transform" strokeWidth={1.5} /> 
-                                                {language === 'es' ? 'Carrito' : 'Cart'}
-                                                {totalItems > 0 && <Badge className="absolute -top-1 -right-1 bg-brand-yellow text-brand-black font-black text-xs min-w-5 h-5 flex items-center justify-center p-0 rounded-full shadow-md animate-in zoom-in">{totalItems}</Badge>}
-                                            </Button>
-                                            <Button className="w-full sm:w-auto h-12 px-8 rounded-full bg-brand-yellow text-brand-black hover:bg-brand-yellow-light transition-all font-black text-base shadow-lg hover:shadow-xl hover:-translate-y-0.5 border-0">
-                                                {language === 'es' ? 'Buscar' : 'Search'}
-                                            </Button>
-                                        </div>
+                                            <Input name="shop-search" placeholder={language === 'es' ? 'Buscar repuestos, accesorios...' : 'Search parts, accessories...'} className="h-10 pl-12 border-0 bg-transparent text-sm sm:h-11 sm:text-base focus-visible:ring-0 focus-visible:ring-offset-0 placeholder:text-gray-400 font-medium" value={search} onChange={(e) => setSearch(e.target.value)} />
+                                        </form>
+                                        <Button type="button" variant="outline" aria-label={language === 'es' ? 'Abrir carrito' : 'Open cart'} className="relative h-10 shrink-0 rounded-full border-gray-200 px-3 text-brand-charcoal sm:h-11 sm:px-4" onClick={() => setShowCart(true)}>
+                                            <ShoppingCart className="h-4 w-4 sm:mr-2" strokeWidth={1.8} />
+                                            <span className="hidden sm:inline">{language === 'es' ? 'Carrito' : 'Cart'}</span>
+                                            {totalItems > 0 && <Badge className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-brand-yellow p-0 text-xs font-black text-brand-black">{totalItems}</Badge>}
+                                        </Button>
                                     </div>
                                 </CardContent>
                             </Card>
                         </motion.div>
 
-                        <motion.div {...fadeUp} transition={{ delay: 0.1 }} className="briz-horizontal-slider flex gap-2 overflow-x-auto pb-2 sm:pb-0 w-full justify-start snap-x px-4 py-1 scroll-ps-4">
+                        <motion.div {...fadeUp} transition={{ delay: 0.1 }} role="group" aria-label={language === 'es' ? 'Categorías de productos' : 'Product categories'} className="briz-horizontal-slider flex gap-1.5 overflow-x-auto overscroll-x-contain pb-1 w-full justify-start snap-x px-0.5 py-0.5">
                             {productCategories.map(c => (
                                 <Button key={c} variant={category === c ? 'default' : 'outline'} size="sm"
-                                    className={`rounded-full px-6 h-10 font-bold tracking-wide shadow-sm whitespace-nowrap snap-start flex-shrink-0 transition-all ${category === c ? 'bg-brand-yellow text-brand-black border-brand-yellow shadow-[0_4px_14px_rgba(255,210,0,0.4)] scale-105' : 'bg-white text-gray-600 border-gray-200 hover:border-brand-charcoal hover:text-brand-charcoal hover:bg-gray-50'}`}
+                                    className={`rounded-full px-3 sm:px-4 h-8 sm:h-9 text-xs font-bold tracking-wide shadow-sm whitespace-nowrap snap-start flex-shrink-0 transition-colors ${category === c ? 'bg-brand-yellow text-brand-black border-brand-yellow' : 'bg-white text-gray-600 border-gray-200 hover:border-brand-charcoal hover:text-brand-charcoal hover:bg-gray-50'}`}
                                     onClick={() => {
                                         setExpandedCategory(null);
                                         setCategory(c);

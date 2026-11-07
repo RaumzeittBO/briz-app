@@ -11,6 +11,7 @@ import { useStore } from '@/context/StoreContext';
 import { useLanguage } from '@/context/LanguageContext';
 import ArtworkBackground from '@/components/ArtworkBackground';
 import ArtworkPicture from '@/components/ArtworkPicture';
+import { businessWhatsAppUrl } from '@/lib/businessConfig';
 
 const fadeUp = {
     initial: { opacity: 0, y: 30 },
@@ -131,7 +132,7 @@ export default function ServicePage() {
     const [request, setRequest] = useState({ name: '', phone: '', bikeType: '', issue: '', date: '' });
     const [bikeImageUrl, setBikeImageUrl] = useState('');
     const [isSending, setIsSending] = useState(false);
-    const { addServiceOrder } = useStore();
+    const { addServiceOrder, publicBusinessConfig } = useStore();
     const { language } = useLanguage();
     const selectedPlan = popularServices[selectedPlanIndex];
     const quoteTotal = quoteItems.reduce((total, item) => {
@@ -140,7 +141,7 @@ export default function ServicePage() {
     }, { min: 0, max: 0 });
     const addToQuote = (item: QuoteItem) => setQuoteItems(current => current.some(entry => entry.id === item.id) ? current : [...current, item]);
     const removeFromQuote = (id: string) => setQuoteItems(current => current.filter(item => item.id !== id));
-    const quoteLink = `https://wa.me/59177860277?text=${encodeURIComponent(`Hola Briz, deseo una cotización mecánica.\n\nServicios:\n${quoteItems.map(item => `- ${item.name}: Bs. ${item.price}`).join('\n')}\n\nTotal estimado: Bs. ${quoteTotal.min}${quoteTotal.max !== quoteTotal.min ? ` - ${quoteTotal.max}` : ''}`)}`;
+    const quoteLink = businessWhatsAppUrl(publicBusinessConfig.whatsapp, `Hola ${publicBusinessConfig.businessName}, deseo una cotización mecánica.\n\nServicios:\n${quoteItems.map(item => `- ${item.name}: Bs. ${item.price}`).join('\n')}\n\nTotal estimado: Bs. ${quoteTotal.min}${quoteTotal.max !== quoteTotal.min ? ` - ${quoteTotal.max}` : ''}`);
 
     const handleBikeImage = (event: ChangeEvent<HTMLInputElement>) => {
         const file = event.target.files?.[0];

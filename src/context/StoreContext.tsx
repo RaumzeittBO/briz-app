@@ -11,6 +11,8 @@ import {
     orderBy,
     where,
     writeBatch,
+    serverTimestamp,
+    runTransaction,
 } from 'firebase/firestore';
 import {
     browserLocalPersistence,
@@ -34,6 +36,7 @@ import {
     RENTAL_SEED_INVENTORY,
 } from '../data/rentalSeedData';
 import { SHOP_SEED_CATEGORIES } from '../data/shopSeedData';
+import { createInitialPublicBusinessConfig, DEFAULT_PUBLIC_BUSINESS_CONFIG, mergePublicBusinessConfig, type PublicBusinessConfig, type PublicBusinessConfigUpdate } from '../lib/businessConfig';
 import { beginCustomerRegistration, createCustomerProfile as createCustomerProfileBackend, getMyRentals as getMyRentalsBackend, getAdminCustomers as getAdminCustomersBackend, createRentalGroup as createRentalGroupBackend, createServiceOrder as createServiceOrderBackend, type ReservationGroupInput } from '../lib/backend';
 import { calculateProductRentalPrice } from '../lib/rentalPricing';
 import {
@@ -314,7 +317,6 @@ export interface AdminNavigationLink {
 }
 
 const LOCAL_ROUTES_KEY = 'briz_local_routes';
-const LOCAL_RENTAL_SETTINGS_KEY = 'briz_rental_settings';
 
 function mergeRoutes(remoteRoutes: CyclingRoute[], localRoutes: CyclingRoute[]) {
     const byId = new Map<string, CyclingRoute>();
@@ -338,7 +340,11 @@ interface StoreContextType {
     shopCategories: string[];
     isLoaded: boolean;
     rentalSettings: RentalSettings;
-    updateRentalSettings: (updates: Partial<RentalSettings>, qrFile: File | null) => Promise<void>;
+    rentalSettingsLoaded: boolean;
+    rentalSettingsLoadError: string | null;
+    updateRentalSettings: (updates: Partial<RentalSettings>, qrFile: File | null) => Promise<RentalSettings>;
+    publicBusinessConfig: PublicBusinessConfig;
+    updatePublicBusinessConfig: (updates: PublicBusinessConfigUpdate) => Promise<void>;
 
     // Routes CRUD
     addRoute: (route: CyclingRoute) => Promise<void>;
@@ -518,13 +524,16 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
     const [isAdminSession, setIsAdminSession] = useState(false);
     const [adminStoreScope, setAdminStoreScope] = useState<string>('all');
 
-    const [rentalSettings, setRentalSettings] = useState<RentalSettings>(() => safeJSON<RentalSettings>(LOCAL_RENTAL_SETTINGS_KEY, {
+    const [rentalSettings, setRentalSettings] = useState<RentalSettings>({
         bankName: 'Banco Nacional de Bolivia (BNB)',
         accountNumber: '3501818797',
         accountOwner: 'Litzy Jhoselyn Gutierrez Jarillo',
         ownerCI: '9399367 CB',
         qrCodeUrl: '/images/qr_pago.png'
-    }));
+    });
+    const [rentalSettingsLoaded, setRentalSettingsLoaded] = useState(false);
+    const [rentalSettingsLoadError, setRentalSettingsLoadError] = useState<string | null>(null);
+    const [publicBusinessConfig, setPublicBusinessConfig] = useState<PublicBusinessConfig>(DEFAULT_PUBLIC_BUSINESS_CONFIG);
 
     // Customer Session state
     const [currentCustomer, setCurrentCustomer] = useState<Customer | null>(null);
@@ -631,14 +640,23 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
                 seedDefaultCombos();
             }
         });
-        const unsubSettings = onSnapshot(doc(db, 'settings', 'rental_settings'), (snap) => {
+        const unsubSettings = onSnapshot(doc(db, 'settings', 'rental_settings'), { includeMetadataChanges: true }, (snap) => {
+            setRentalSettingsLoaded(!snap.metadata.fromCache);
+            if (snap.metadata.fromCache) return;
+            setRentalSettingsLoadError(null);
             if (snap.exists()) {
                 const remoteSettings = snap.data() as RentalSettings;
                 setRentalSettings(remoteSettings);
-                localStorage.setItem(LOCAL_RENTAL_SETTINGS_KEY, JSON.stringify(remoteSettings));
             }
         }, (error) => {
             console.error('Error fetching rental settings:', error);
+            setRentalSettingsLoaded(false);
+            setRentalSettingsLoadError('No se pudo cargar la configuración de pagos desde Firebase.');
+        });
+        const unsubBusiness = onSnapshot(doc(db, 'settings', 'public_business'), (snap) => {
+            if (snap.exists()) setPublicBusinessConfig(mergePublicBusinessConfig(snap.data() as Partial<PublicBusinessConfig>));
+        }, (error) => {
+            console.error('Error fetching public business settings:', error);
         });
         const unsubRoutes = onSnapshot(query(collection(db, 'routes')), (snap) => {
             setRoutes(snap.empty ? DEFAULT_ROUTES : snap.docs.map(d => ({ ...d.data() } as CyclingRoute)));
@@ -698,6 +716,7 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
             unsubInv();
             unsubCombos();
             unsubSettings();
+            unsubBusiness();
             unsubRoutes();
             unsubBikeCats();
             unsubShopCats();
@@ -1308,35 +1327,6 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
         await setDoc(doc(db, 'settings', 'admin_navigation'), { links });
     };
 
-    const fileToCompressedDataUrl = (file: File) => new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => {
-            const image = new Image();
-            image.onload = () => {
-                const maxSide = 900;
-                const scale = Math.min(1, maxSide / Math.max(image.width, image.height));
-                const width = Math.max(1, Math.round(image.width * scale));
-                const height = Math.max(1, Math.round(image.height * scale));
-                const canvas = document.createElement('canvas');
-                canvas.width = width;
-                canvas.height = height;
-                const ctx = canvas.getContext('2d');
-                if (!ctx) {
-                    reject(new Error('No se pudo procesar la imagen del QR.'));
-                    return;
-                }
-                ctx.fillStyle = '#ffffff';
-                ctx.fillRect(0, 0, width, height);
-                ctx.drawImage(image, 0, 0, width, height);
-                resolve(canvas.toDataURL('image/png'));
-            };
-            image.onerror = () => reject(new Error('No se pudo leer la imagen del QR.'));
-            image.src = String(reader.result || '');
-        };
-        reader.onerror = () => reject(reader.error);
-        reader.readAsDataURL(file);
-    });
-
     const withTimeout = async <T,>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> => {
         let timeoutId: ReturnType<typeof setTimeout> | undefined;
         const timeout = new Promise<never>((_, reject) => {
@@ -1349,32 +1339,51 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
         }
     };
 
-    const updateRentalSettings = async (updates: Partial<RentalSettings>, qrFile: File | null) => {
-        let qrCodeUrl = updates.qrCodeUrl || rentalSettings.qrCodeUrl;
+    const updateRentalSettings = async (updates: Partial<RentalSettings>, qrFile: File | null): Promise<RentalSettings> => {
+        let qrCodeUrl: string | undefined;
         if (qrFile) {
-            try {
-                const fileExt = qrFile.name.split('.').pop() || 'png';
-                const pathRef = storageRef(storage, `settings/qr_pago_${Date.now()}.${fileExt}`);
-                const result = await withTimeout(uploadBytes(pathRef, qrFile), 15000, 'La subida del QR tardó demasiado.');
-                qrCodeUrl = await withTimeout(getDownloadURL(result.ref), 10000, 'No se pudo obtener el enlace del QR.');
-            } catch (error) {
-                console.warn('QR upload failed; saving compressed Firestore fallback:', error);
-                qrCodeUrl = await fileToCompressedDataUrl(qrFile);
-            }
+            if (!['image/png', 'image/jpeg', 'image/webp'].includes(qrFile.type)) throw new Error('El QR debe ser una imagen JPG, PNG o WebP.');
+            if (qrFile.size <= 0 || qrFile.size > 3 * 1024 * 1024) throw new Error('El QR debe pesar como máximo 3 MB.');
+            const fileExt = qrFile.type === 'image/png' ? 'png' : qrFile.type === 'image/webp' ? 'webp' : 'jpg';
+            const pathRef = storageRef(storage, `settings/payment-qr-${Date.now()}-${crypto.randomUUID().slice(0, 8)}.${fileExt}`);
+            const result = await withTimeout(uploadBytes(pathRef, qrFile, { contentType: qrFile.type }), 20000, 'La subida del QR tardó demasiado.');
+            qrCodeUrl = await withTimeout(getDownloadURL(result.ref), 10000, 'No se pudo obtener el enlace del QR.');
         }
-        const newSettings = {
-            ...rentalSettings,
-            ...updates,
-            qrCodeUrl
-        };
+        const patch = { ...updates, ...(qrCodeUrl ? { qrCodeUrl } : {}) };
         try {
-            await withTimeout(setDoc(doc(db, 'settings', 'rental_settings'), newSettings), 12000, 'La configuración tardó demasiado en guardarse.');
-            setRentalSettings(newSettings);
-            localStorage.setItem(LOCAL_RENTAL_SETTINGS_KEY, JSON.stringify(newSettings));
+            await withTimeout(setDoc(doc(db, 'settings', 'rental_settings'), patch, { merge: true }), 12000, 'La configuración tardó demasiado en guardarse.');
+            const current = { ...rentalSettings, ...patch };
+            setRentalSettings(existing => ({ ...existing, ...patch }));
+            return current;
         } catch (error) {
             console.error('Firestore rental settings save failed:', error);
-            throw new Error('No se pudo guardar el QR globalmente. Revisa permisos de Firestore o intenta con una imagen más liviana.');
+            throw new Error('No se guardaron los cambios. El QR anterior y la configuración existente se mantienen; verifica permisos y conexión.');
         }
+    };
+
+    const updatePublicBusinessConfig = async (updates: PublicBusinessConfigUpdate) => {
+        const actorUid = auth.currentUser?.uid;
+        if (!actorUid) throw new Error('Tu sesión expiró. Inicia sesión nuevamente.');
+        const changedFields = Object.keys(updates).filter(key => key !== 'updatedAt');
+        if (changedFields.length === 0) return;
+        const settingsRef = doc(db, 'settings', 'public_business');
+        const auditRef = doc(collection(db, 'settings', 'public_business', 'audit'));
+        await runTransaction(db, async transaction => {
+            const current = await transaction.get(settingsRef);
+            const updatedAt = serverTimestamp();
+            const auditFields = current.exists()
+                ? changedFields
+                : ['businessName', 'phone', 'address', 'email', 'whatsapp', 'hours'];
+            if (current.exists()) {
+                const fields = Object.entries(updates).flatMap(([key, value]) => key === 'hours' && value && typeof value === 'object'
+                    ? Object.entries(value).map(([day, hours]) => [`hours.${day}`, hours])
+                    : [[key, value]]);
+                transaction.update(settingsRef, Object.fromEntries([...fields, ['updatedAt', updatedAt]]));
+            } else {
+                transaction.set(settingsRef, createInitialPublicBusinessConfig(updates, updatedAt), { merge: true });
+            }
+            transaction.set(auditRef, { actorUid, changedFields: auditFields, createdAt: serverTimestamp() });
+        });
     };
 
     const resetAllData = async () => {
@@ -1391,7 +1400,7 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
     const value: StoreContextType = {
         adminStoreScope,
         inventory, combos, rentals, rentalPaymentMovements, sales, customers, serviceOrders, isLoaded,
-        rentalSettings, updateRentalSettings,
+        rentalSettings, rentalSettingsLoaded, rentalSettingsLoadError, updateRentalSettings, publicBusinessConfig, updatePublicBusinessConfig,
         addInventoryItem, updateInventoryItem, deleteInventoryItem,
         addCombo, updateCombo, deleteCombo,
         confirmRental, confirmRentalGroup, deliverRentalGroup,

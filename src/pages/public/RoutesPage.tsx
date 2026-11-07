@@ -7,6 +7,7 @@ import { useStore } from '@/context/StoreContext';
 import { useLanguage } from '@/context/LanguageContext';
 import { getLocalizedField, t } from '@/lib/translations';
 import ArtworkBackground from '@/components/ArtworkBackground';
+import { businessWhatsAppUrl } from '@/lib/businessConfig';
 
 const fadeUp = { initial: { opacity: 0, y: 30 }, whileInView: { opacity: 1, y: 0 }, viewport: { once: true }, transition: { duration: 0.6 } };
 
@@ -19,7 +20,7 @@ const difficultyColor: Record<string, string> = {
 };
 
 export default function RoutesPage() {
-    const { routes } = useStore();
+    const { routes, publicBusinessConfig } = useStore();
     const { language } = useLanguage();
 
     return (
@@ -193,7 +194,7 @@ export default function RoutesPage() {
                                     {language === 'es' ? 'Alquilar una bici' : 'Rent a bike'}
                                 </Button>
                             </a>
-                            <a href="https://wa.me/59177860277" target="_blank" rel="noopener noreferrer" className="w-full sm:w-auto">
+                            <a href={businessWhatsAppUrl(publicBusinessConfig.whatsapp)} target="_blank" rel="noopener noreferrer" className="w-full sm:w-auto">
                                 <Button variant="outline" className="h-20 px-12 rounded-full bg-brand-cyan/15 border-white/70 text-[#203253] hover:bg-white hover:border-white hover:text-[#203253] font-black text-xl backdrop-blur-md shadow-lg hover:-translate-y-2 transition-all w-full border-2">
                                     {language === 'es' ? 'Consultar WhatsApp' : 'Ask via WhatsApp'}
                                 </Button>

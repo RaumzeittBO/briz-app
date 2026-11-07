@@ -1,101 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { Upload, Loader2, CheckCircle2, XCircle, ImageIcon } from 'lucide-react';
-import { auth } from '@/lib/firebase';
-
-// ── Image Compression ────────────────────────────────────────────────────────
-export const compressImage = (file: File, maxW = 1200, maxH = 1200, quality = 0.78): Promise<Blob> => {
-    return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = (event) => {
-            const img = new Image();
-            img.onload = () => {
-                try {
-                    const canvas = document.createElement('canvas');
-                    let width = img.width;
-                    let height = img.height;
-
-                    if (width > height) {
-                        if (width > maxW) {
-                            height = Math.round((height * maxW) / width);
-                            width = maxW;
-                        }
-                    } else {
-                        if (height > maxH) {
-                            width = Math.round((width * maxH) / height);
-                            height = maxH;
-                        }
-                    }
-
-                    canvas.width = width;
-                    canvas.height = height;
-                    const ctx = canvas.getContext('2d');
-                    ctx?.drawImage(img, 0, 0, width, height);
-
-                    canvas.toBlob((blob) => {
-                        if (blob) resolve(blob);
-                        else reject(new Error('Error al comprimir imagen'));
-                    }, 'image/jpeg', quality);
-                } catch (err) {
-                    reject(err);
-                }
-            };
-            img.onerror = () => reject(new Error('Error al cargar imagen'));
-            img.src = event.target?.result as string;
-        };
-        reader.onerror = () => reject(new Error('Error al leer archivo'));
-        reader.readAsDataURL(file);
-    });
-};
-
-// ── Upload via REST API with auth token (bypasses CORS SDK issue) ─────────────
-const BUCKET = 'briz-4ef3a.firebasestorage.app';
-
-export const uploadCompressedImage = async (file: File, folder: string): Promise<string> => {
-    const currentUser = auth.currentUser;
-    console.log('[Upload] currentUser:', currentUser?.uid ?? 'NULL');
-    if (!currentUser) {
-        throw new Error('No autenticado. Recarga la página.');
-    }
-
-    // Get a fresh auth token to include in the request header
-    const idToken = await currentUser.getIdToken(true);
-    console.log('[Upload] Token obtenido. Comprimiendo:', file.name);
-
-    const compressedBlob = await compressImage(file);
-    console.log('[Upload] Comprimido:', `${(compressedBlob.size / 1024).toFixed(0)} KB`);
-
-    const fileName = `${Date.now()}_${Math.random().toString(36).substring(2, 7)}.jpg`;
-    const objectPath = encodeURIComponent(`${folder}/${fileName}`);
-    const uploadUrl = `https://firebasestorage.googleapis.com/v0/b/${BUCKET}/o?name=${objectPath}&uploadType=media`;
-
-    console.log('[Upload] Enviando a:', uploadUrl);
-
-    const response = await fetch(uploadUrl, {
-        method: 'POST',
-        headers: {
-            'Authorization': `Bearer ${idToken}`,
-            'Content-Type': 'image/jpeg',
-        },
-        body: compressedBlob,
-    });
-
-    if (!response.ok) {
-        const errorText = await response.text();
-        console.error('[Upload] Error HTTP:', response.status, errorText);
-        throw new Error(`Error ${response.status}: ${errorText}`);
-    }
-
-    const data = await response.json();
-    console.log('[Upload] Respuesta:', data);
-
-    // Build the download URL from the response
-    const downloadToken = data.downloadTokens;
-    const encodedPath = encodeURIComponent(`${folder}/${fileName}`);
-    const downloadUrl = `https://firebasestorage.googleapis.com/v0/b/${BUCKET}/o/${encodedPath}?alt=media&token=${downloadToken}`;
-
-    console.log('[Upload] URL lista:', downloadUrl);
-    return downloadUrl;
-};
+import { validateCatalogImage } from '@/lib/imageUpload';
+import { uploadCompressedImage } from '@/lib/catalogImageUpload';
 
 // ── Per-file status ──────────────────────────────────────────────────────────
 type FileStatus = 'pending' | 'uploading' | 'done' | 'error';
@@ -143,6 +49,7 @@ export function FileUploader({
         });
 
     const handleChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (isUploading) return;
         const files = Array.from(e.target.files || []);
         if (files.length === 0) return;
 
@@ -150,13 +57,15 @@ export function FileUploader({
         if (inputRef.current) inputRef.current.value = '';
 
         // Build previews first
-        const initialEntries: FileEntry[] = await Promise.all(
-            files.map(async f => ({
-                name: f.name,
-                status: 'pending' as FileStatus,
-                preview: await buildPreview(f),
-            }))
-        );
+        const initialEntries: FileEntry[] = await Promise.all(files.map(async f => {
+            const validationError = validateCatalogImage(f);
+            if (validationError) return { name: f.name, status: 'error' as FileStatus, error: validationError };
+            try {
+                return { name: f.name, status: 'pending' as FileStatus, preview: await buildPreview(f) };
+            } catch {
+                return { name: f.name, status: 'error' as FileStatus, error: 'No se pudo leer el archivo.' };
+            }
+        }));
         setEntries(initialEntries);
         setIsRunning(true);
 
@@ -164,14 +73,14 @@ export function FileUploader({
 
         // Upload SEQUENTIALLY — one at a time to avoid bandwidth & connection limits
         for (let i = 0; i < files.length; i++) {
+            if (initialEntries[i].status === 'error') continue;
             patchEntry(i, { status: 'uploading' });
             try {
                 const url = await uploadCompressedImage(files[i], folder);
                 patchEntry(i, { status: 'done' });
                 successUrls.push(url);
-            } catch (err: any) {
-                console.error(`Error subiendo ${files[i].name}:`, err);
-                patchEntry(i, { status: 'error', error: err.message || 'Error desconocido' });
+            } catch (err) {
+                patchEntry(i, { status: 'error', error: err instanceof Error ? err.message : 'No se pudo subir el archivo.' });
             }
         }
 
@@ -214,7 +123,7 @@ export function FileUploader({
                 <input
                     ref={inputRef}
                     type="file"
-                    accept="image/*"
+                    accept="image/jpeg,image/png,image/webp"
                     multiple={multiple}
                     onChange={handleChange}
                     className="hidden"
@@ -262,7 +171,7 @@ export function FileUploader({
                                     <>
                                         <XCircle className="w-4 h-4 text-red-400" />
                                         <span
-                                            className="text-[9px] text-red-400 font-bold hidden sm:block truncate max-w-[100px]"
+                                            className="text-[9px] text-red-300 font-bold block whitespace-normal max-w-[150px]"
                                             title={entry.error}
                                         >
                                             {entry.error}

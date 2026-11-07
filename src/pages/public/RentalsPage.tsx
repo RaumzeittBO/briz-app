@@ -13,6 +13,7 @@ import RentalCheckoutWizard from '@/components/rentals/RentalCheckoutWizard';
 import type { RentalCartItem } from '@/components/rentals/RentalCheckoutWizard';
 import { useLanguage } from '@/context/LanguageContext';
 import { t, getLocalizedField, type Language } from '@/lib/translations';
+import { businessWhatsAppUrl } from '@/lib/businessConfig';
 
 const RENTAL_CART_STORAGE_KEY = 'briz_rental_cart_v1';
 
@@ -68,7 +69,7 @@ const translateProductName = (product: Pick<DisplayProduct, 'name' | 'nameEn'>, 
 
 export default function RentalsPage() {
   const { language } = useLanguage();
-  const { inventory, combos, getComboAvailability, currentCustomer, events, bikeCategories } = useStore();
+  const { inventory, combos, getComboAvailability, currentCustomer, events, bikeCategories, publicBusinessConfig } = useStore();
 
   const sortCategories = (a: string, b: string) => {
     const indexA = bikeCategories.indexOf(a);
@@ -637,7 +638,7 @@ export default function RentalsPage() {
           )}
 
           {selectedEvent ? (
-            <EventSpecialView event={selectedEvent} onClose={closeCategoryView} language={language} />
+            <EventSpecialView event={selectedEvent} onClose={closeCategoryView} language={language} businessPhone={publicBusinessConfig.whatsapp} businessName={publicBusinessConfig.businessName} />
           ) : (expandedCategory === 'Eventos' || category === 'Eventos') ? (
             <div className="py-8">
               <div className="mb-7 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
@@ -822,7 +823,7 @@ export default function RentalsPage() {
   );
 }
 
-function EventSpecialView({ event, onClose, language }: { event: any; onClose: () => void; language: Language }) {
+function EventSpecialView({ event, onClose, language, businessPhone, businessName }: { event: any; onClose: () => void; language: Language; businessPhone: string; businessName: string }) {
     const [activeSubIndex, setActiveSubIndex] = useState(0);
     const [activeIndex, setActiveIndex] = useState(0);
 
@@ -851,11 +852,9 @@ function EventSpecialView({ event, onClose, language }: { event: any; onClose: (
     const eventName = getLocalizedField(event.name, event.nameEn, language);
     const eventDesc = getLocalizedField(event.description, event.descriptionEn, language);
 
-    const waLink = `https://wa.me/59177860277?text=${encodeURIComponent(
-        language === 'es' 
-            ? `Hola Briz, deseo consultar sobre el evento especial de alquiler: ${event.name} (Subcategoría: ${hasSubcategories ? subcategories[activeSubIndex]?.name : 'General'})`
-            : `Hello Briz, I want to inquire about the special rental event: ${eventName} (Subcategory: ${hasSubcategories ? subcategories[activeSubIndex]?.name : 'General'})`
-    )}`;
+    const waLink = businessWhatsAppUrl(businessPhone, language === 'es'
+        ? `Hola ${businessName}, deseo consultar sobre el evento especial de alquiler: ${event.name} (Subcategoría: ${hasSubcategories ? subcategories[activeSubIndex]?.name : 'General'})`
+        : `Hello ${businessName}, I want to inquire about the special rental event: ${eventName} (Subcategory: ${hasSubcategories ? subcategories[activeSubIndex]?.name : 'General'})`);
 
     return (
         <div className="py-6">

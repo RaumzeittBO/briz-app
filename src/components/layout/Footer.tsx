@@ -2,6 +2,8 @@ import { Link } from 'react-router-dom';
 import { Facebook, Instagram, MapPin, MessageCircle } from 'lucide-react';
 import { useLanguage } from '@/context/LanguageContext';
 import ArtworkPicture from '@/components/ArtworkPicture';
+import { useStore } from '@/context/StoreContext';
+import { businessMapUrl, businessWhatsAppUrl } from '@/lib/businessConfig';
 
 const contactLinks = [
     {
@@ -13,7 +15,7 @@ const contactLinks = [
     {
         labelEs: 'WhatsApp',
         labelEn: 'WhatsApp',
-        href: 'https://wa.me/59177860277',
+        href: '',
         icon: MessageCircle,
     },
     {
@@ -40,6 +42,7 @@ function TikTokIcon({ className }: { className?: string }) {
 
 export default function Footer() {
     const { language } = useLanguage();
+    const { publicBusinessConfig } = useStore();
     return (
         <footer className="relative mt-auto bg-brand-yellow text-white font-cocon">
             <div className="mx-auto flex min-h-[72px] max-w-[1480px] flex-col items-center justify-between gap-5 px-5 py-4 sm:flex-row sm:px-10 lg:px-12">
@@ -56,7 +59,7 @@ export default function Footer() {
                             return (
                                 <a
                                     key={link.labelEs}
-                                    href={link.href}
+                                    href={link.labelEs === 'WhatsApp' ? businessWhatsAppUrl(publicBusinessConfig.whatsapp) : link.labelEs === 'Ubicación' ? businessMapUrl(publicBusinessConfig.address) : link.href}
                                     target="_blank"
                                     rel="noopener noreferrer"
                                     aria-label={label}
