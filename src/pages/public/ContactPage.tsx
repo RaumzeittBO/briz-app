@@ -289,7 +289,7 @@ export default function ContactPage() {
                                                 <div className="grid grid-cols-1 gap-1 text-[13px] sm:text-base">
                                                     {BUSINESS_DAY_KEYS.map((dayKey, index) => <p key={dayKey} className="flex justify-between gap-3">
                                                         <span>{BUSINESS_DAY_LABELS[language][index]}</span>
-                                                        <span className="text-brand-yellow text-right">{formatBusinessHours(publicBusinessConfig.hours[dayKey], language)}</span>
+                                                        <span className="whitespace-pre-line break-words text-right text-brand-yellow">{formatBusinessHours(publicBusinessConfig.hours[dayKey], language)}</span>
                                                     </p>)}
                                                 </div>
                                             )

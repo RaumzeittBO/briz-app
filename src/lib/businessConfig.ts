@@ -2,6 +2,11 @@ export type BusinessDay = {
   closed: boolean;
   open: string;
   close: string;
+  /** Optional second shift; legacy open/close documents remain continuous. */
+  secondShift?: {
+    open: string;
+    close: string;
+  };
 };
 
 export type BusinessHours = Record<
@@ -67,7 +72,8 @@ export function businessMapUrl(address: string): string {
 
 export function formatBusinessHours(day: BusinessDay, language: 'es' | 'en'): string {
   if (day.closed) return language === 'es' ? 'Cerrado' : 'Closed';
-  return `${day.open} – ${day.close}`;
+  const firstShift = `${day.open} – ${day.close}`;
+  return day.secondShift ? `${firstShift}\n${day.secondShift.open} – ${day.secondShift.close}` : firstShift;
 }
 
 export function validatePublicBusinessConfig(config: PublicBusinessConfig): string | null {
@@ -76,13 +82,22 @@ export function validatePublicBusinessConfig(config: PublicBusinessConfig): stri
   if (!config.address.trim()) return 'La dirección es obligatoria.';
   if (!/^\S+@\S+\.\S+$/.test(config.email.trim())) return 'Ingresa un correo de contacto válido.';
   if (normalizeBusinessPhone(config.whatsapp).length < 7) return 'Ingresa un número de WhatsApp válido.';
-  for (const key of BUSINESS_DAY_KEYS) {
+  for (const [index, key] of BUSINESS_DAY_KEYS.entries()) {
     const day = config.hours[key];
-    if (!day.closed && (!/^([01]\d|2[0-3]):[0-5]\d$/.test(day.open) || !/^([01]\d|2[0-3]):[0-5]\d$/.test(day.close) || day.open >= day.close)) {
-      return 'Revisa los horarios: cada día abierto debe tener horas válidas y consecutivas.';
-    }
+    const dayLabel = BUSINESS_DAY_LABELS.es[index];
+    if (day.closed) continue;
+    if (!isValidTime(day.open) || !isValidTime(day.close)) return `${dayLabel}: completa las horas del primer turno.`;
+    if (day.open >= day.close) return `${dayLabel}: la apertura debe ser anterior al cierre del primer turno.`;
+    if (!day.secondShift) continue;
+    if (!isValidTime(day.secondShift.open) || !isValidTime(day.secondShift.close)) return `${dayLabel}: completa las horas del segundo turno.`;
+    if (day.secondShift.open < day.close) return `${dayLabel}: la reapertura no puede ser anterior al cierre del primer turno.`;
+    if (day.secondShift.open >= day.secondShift.close) return `${dayLabel}: la reapertura debe ser anterior al cierre final.`;
   }
   return null;
+}
+
+function isValidTime(value: string): boolean {
+  return /^([01]\d|2[0-3]):[0-5]\d$/.test(value);
 }
 
 export function mergePublicBusinessConfig(remote: Partial<PublicBusinessConfig>): PublicBusinessConfig {

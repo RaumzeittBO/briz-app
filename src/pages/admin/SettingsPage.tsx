@@ -241,6 +241,10 @@ export default function SettingsPage() {
         setBusinessDraft(current => ({ ...current, ...patch }));
     };
 
+    const updateBusinessDay = (dayKey: typeof BUSINESS_DAY_KEYS[number], day: PublicBusinessConfig['hours'][typeof BUSINESS_DAY_KEYS[number]]) => {
+        updateBusinessDraft({ hours: { ...businessDraft.hours, [dayKey]: day } });
+    };
+
     const handleSaveBusiness = async (event: React.FormEvent) => {
         event.preventDefault();
         if (businessSaving) return;
@@ -400,12 +404,12 @@ export default function SettingsPage() {
 
             {/* Business info */}
             <Card className="bg-[#1A1A1A] border-white/5 rounded-[1.5rem] shadow-xl overflow-hidden group">
-                <CardHeader className="p-8 border-b border-white/5 bg-white/[0.01]">
+                <CardHeader className="p-5 sm:p-8 border-b border-white/5 bg-white/[0.01]">
                     <CardTitle className="text-[10px] font-black uppercase tracking-[0.2em] text-white/40 flex items-center gap-2">
                         <Globe className="w-4 h-4 text-brand-yellow/30" /> Información del Negocio
                     </CardTitle>
                 </CardHeader>
-                <CardContent className="p-8">
+                <CardContent className="p-4 sm:p-8">
                   <form onSubmit={handleSaveBusiness} className="space-y-6">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <div className="space-y-2">
@@ -434,22 +438,60 @@ export default function SettingsPage() {
                     <div className="space-y-4 border-t border-white/5 pt-5">
                         <div>
                             <h3 className="text-sm font-black text-white">Horarios de atención</h3>
-                            <p className="mt-1 text-[11px] font-medium text-white/40">Configura cada día por separado. Puedes marcar días cerrados.</p>
+                            <p className="mt-1 text-[11px] font-medium text-white/40">Configura cada día por separado, con horario continuo o dos turnos.</p>
                         </div>
                         <div className="grid gap-3 sm:grid-cols-2">
                             {BUSINESS_DAY_KEYS.map((dayKey, index) => {
                                 const day = businessDraft.hours[dayKey];
-                                return <div key={dayKey} className="grid grid-cols-[1fr_auto_auto] items-center gap-2 rounded-xl border border-white/5 bg-black/20 p-3">
-                                    <Label className="text-xs font-bold text-white/80">{BUSINESS_DAY_LABELS.es[index]}</Label>
-                                    <label className="flex items-center gap-1.5 text-[10px] font-bold text-white/50">
-                                        <input type="checkbox" checked={day.closed} onChange={event => updateBusinessDraft({ hours: { ...businessDraft.hours, [dayKey]: { ...day, closed: event.target.checked } } })} />
-                                        Cerrado
-                                    </label>
-                                    {day.closed ? <span className="w-[8.5rem] text-center text-xs font-bold text-white/30">—</span> : <span className="flex items-center gap-1">
-                                        <Input aria-label={`${BUSINESS_DAY_LABELS.es[index]} abre`} type="time" value={day.open} onChange={event => updateBusinessDraft({ hours: { ...businessDraft.hours, [dayKey]: { ...day, open: event.target.value } } })} className="h-9 w-[4.25rem] px-1 text-xs text-white" />
-                                        <span className="text-white/40">–</span>
-                                        <Input aria-label={`${BUSINESS_DAY_LABELS.es[index]} cierra`} type="time" value={day.close} onChange={event => updateBusinessDraft({ hours: { ...businessDraft.hours, [dayKey]: { ...day, close: event.target.value } } })} className="h-9 w-[4.25rem] px-1 text-xs text-white" />
-                                    </span>}
+                                const dayName = BUSINESS_DAY_LABELS.es[index];
+                                const timeInputClass = 'h-11 min-w-0 w-full px-2 text-sm text-white';
+                                return <div key={dayKey} role="group" aria-label={dayName} className="min-w-0 rounded-xl border border-white/5 bg-black/20 p-3 sm:p-4">
+                                    <div className="flex flex-wrap items-center justify-between gap-3">
+                                        <h4 className="px-1 text-sm font-black text-white/90">{dayName}</h4>
+                                        <label className="flex min-h-10 cursor-pointer items-center gap-2 rounded-lg px-2 text-xs font-bold text-white/65 hover:bg-white/5">
+                                            <input type="checkbox" checked={day.closed} onChange={event => updateBusinessDay(dayKey, { ...day, closed: event.target.checked })} className="h-4 w-4 accent-[#FFD500]" />
+                                            Cerrado todo el día
+                                        </label>
+                                    </div>
+                                    {day.closed ? <p className="py-3 text-center text-xs font-semibold text-white/35">Cerrado</p> : <div className="mt-3 space-y-3">
+                                        <div className="space-y-2">
+                                            <p className="text-[10px] font-black uppercase tracking-wider text-white/45">{day.secondShift ? 'Primer turno' : 'Horario'}</p>
+                                            <div className="grid grid-cols-1 min-[480px]:grid-cols-2 gap-2">
+                                                <label className="min-w-0 space-y-1 text-[10px] font-semibold text-white/50">
+                                                    <span>Abre</span>
+                                                    <Input aria-label={`${dayName} abre primer turno`} type="time" value={day.open} disabled={day.closed} onChange={event => updateBusinessDay(dayKey, { ...day, open: event.target.value })} className={timeInputClass} />
+                                                </label>
+                                                <label className="min-w-0 space-y-1 text-[10px] font-semibold text-white/50">
+                                                    <span>Cierra</span>
+                                                    <Input aria-label={`${dayName} cierra primer turno`} type="time" value={day.close} disabled={day.closed} onChange={event => updateBusinessDay(dayKey, { ...day, close: event.target.value })} className={timeInputClass} />
+                                                </label>
+                                            </div>
+                                        </div>
+                                        <label className="flex min-h-10 cursor-pointer items-center gap-2 rounded-lg px-2 text-xs font-bold text-white/65 hover:bg-white/5">
+                                            <input type="checkbox" checked={Boolean(day.secondShift)} disabled={day.closed} onChange={event => {
+                                                if (event.target.checked) updateBusinessDay(dayKey, { ...day, secondShift: { open: '', close: '' } });
+                                                else {
+                                                    const continuousDay = { ...day };
+                                                    delete continuousDay.secondShift;
+                                                    updateBusinessDay(dayKey, continuousDay);
+                                                }
+                                            }} className="h-4 w-4 accent-[#FFD500] disabled:opacity-40" />
+                                            Agregar segundo turno
+                                        </label>
+                                        {day.secondShift && <div className="space-y-2 rounded-lg border border-white/5 bg-white/[0.02] p-2.5">
+                                            <p className="text-[10px] font-black uppercase tracking-wider text-white/45">Segundo turno</p>
+                                            <div className="grid grid-cols-1 min-[480px]:grid-cols-2 gap-2">
+                                                <label className="min-w-0 space-y-1 text-[10px] font-semibold text-white/50">
+                                                    <span>Reabre</span>
+                                                    <Input aria-label={`${dayName} reabre segundo turno`} type="time" value={day.secondShift.open} disabled={day.closed} onChange={event => updateBusinessDay(dayKey, { ...day, secondShift: { ...day.secondShift!, open: event.target.value } })} className={timeInputClass} />
+                                                </label>
+                                                <label className="min-w-0 space-y-1 text-[10px] font-semibold text-white/50">
+                                                    <span>Cierre final</span>
+                                                    <Input aria-label={`${dayName} cierra segundo turno`} type="time" value={day.secondShift.close} disabled={day.closed} onChange={event => updateBusinessDay(dayKey, { ...day, secondShift: { ...day.secondShift!, close: event.target.value } })} className={timeInputClass} />
+                                                </label>
+                                            </div>
+                                        </div>}
+                                    </div>}
                                 </div>;
                             })}
                         </div>
