@@ -18,6 +18,8 @@ import {
     Timestamp,
 } from 'firebase/firestore';
 import { filterCompletedServiceOrders, serviceOrderRevenue } from '../src/lib/adminReportScope';
+import { savePublicBusinessConfig } from '../src/lib/publicBusinessSettings';
+import { DEFAULT_PUBLIC_BUSINESS_CONFIG } from '../src/lib/businessConfig';
 
 const projectId = 'demo-briz-security';
 let env: RulesTestEnvironment;
@@ -106,11 +108,25 @@ try {
         const businessData = {
             businessName: 'BRIZ test', phone: '+59170000000', address: 'Cochabamba',
             email: 'contact@example.invalid', whatsapp: '+59170000000',
-            hours: { monday: { closed: true, open: '08:00', close: '18:00' } },
-            updatedAt: Timestamp.now(),
+            hours: { monday: { closed: false, open: '08:00', close: '19:00' } },
         };
-        await assertSucceeds(setDoc(publicBusiness, businessData));
-        await assertSucceeds(getDoc(doc(anonymous.firestore(), 'settings', 'public_business')));
+        await assertSucceeds(savePublicBusinessConfig(admin.firestore(), 'root', businessData));
+        const publicContinuousHours = await assertSucceeds(getDoc(doc(anonymous.firestore(), 'settings', 'public_business')));
+        assert.equal(publicContinuousHours.data()?.hours.monday.close, '19:00');
+        const splitHours = {
+            monday: { closed: false, open: '08:00', close: '12:00', secondShift: { open: '13:00', close: '19:00' } },
+            tuesday: { closed: false, open: '09:00', close: '12:00', secondShift: { open: '14:00', close: '18:00' } },
+            sunday: { closed: true, open: '09:00', close: '14:00' },
+        };
+        await assertSucceeds(savePublicBusinessConfig(admin.firestore(), 'root', { hours: splitHours }));
+        const publiclyReadableSplitHours = await assertSucceeds(getDoc(doc(anonymous.firestore(), 'settings', 'public_business')));
+        assert.deepEqual(publiclyReadableSplitHours.data()?.hours, { ...DEFAULT_PUBLIC_BUSINESS_CONFIG.hours, ...splitHours });
+        assert.equal(publiclyReadableSplitHours.data()?.hours.monday.open, '08:00');
+        assert.deepEqual(publiclyReadableSplitHours.data()?.hours.wednesday, { closed: false, open: '08:00', close: '19:00' });
+        const businessAudit = await assertSucceeds(getDocs(collection(admin.firestore(), 'settings', 'public_business', 'audit')));
+        assert.equal(businessAudit.size, 2);
+        assert.equal(businessAudit.docs.every(entry => entry.data().actorUid === 'root'), true);
+        await assertFails(updateDoc(doc(anonymous.firestore(), 'settings', 'public_business'), { 'hours.monday.secondShift.close': '20:00' }));
         await assertFails(updateDoc(doc(anonymous.firestore(), 'settings', 'public_business'), { phone: '+59170000001' }));
         await assertFails(updateDoc(doc(manager.firestore(), 'settings', 'public_business'), { phone: '+59170000001' }));
         await assertFails(updateDoc(publicBusiness, { telegramToken: 'must-not-be-public' }));

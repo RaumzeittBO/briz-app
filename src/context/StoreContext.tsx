@@ -11,8 +11,6 @@ import {
     orderBy,
     where,
     writeBatch,
-    serverTimestamp,
-    runTransaction,
 } from 'firebase/firestore';
 import {
     browserLocalPersistence,
@@ -36,7 +34,8 @@ import {
     RENTAL_SEED_INVENTORY,
 } from '../data/rentalSeedData';
 import { SHOP_SEED_CATEGORIES } from '../data/shopSeedData';
-import { createInitialPublicBusinessConfig, DEFAULT_PUBLIC_BUSINESS_CONFIG, mergePublicBusinessConfig, type PublicBusinessConfig, type PublicBusinessConfigUpdate } from '../lib/businessConfig';
+import { DEFAULT_PUBLIC_BUSINESS_CONFIG, mergePublicBusinessConfig, type PublicBusinessConfig, type PublicBusinessConfigUpdate } from '../lib/businessConfig';
+import { savePublicBusinessConfig } from '../lib/publicBusinessSettings';
 import { beginCustomerRegistration, createCustomerProfile as createCustomerProfileBackend, getMyRentals as getMyRentalsBackend, getAdminCustomers as getAdminCustomersBackend, createRentalGroup as createRentalGroupBackend, createServiceOrder as createServiceOrderBackend, type ReservationGroupInput } from '../lib/backend';
 import { calculateProductRentalPrice } from '../lib/rentalPricing';
 import {
@@ -1364,26 +1363,7 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
     const updatePublicBusinessConfig = async (updates: PublicBusinessConfigUpdate) => {
         const actorUid = auth.currentUser?.uid;
         if (!actorUid) throw new Error('Tu sesión expiró. Inicia sesión nuevamente.');
-        const changedFields = Object.keys(updates).filter(key => key !== 'updatedAt');
-        if (changedFields.length === 0) return;
-        const settingsRef = doc(db, 'settings', 'public_business');
-        const auditRef = doc(collection(db, 'settings', 'public_business', 'audit'));
-        await runTransaction(db, async transaction => {
-            const current = await transaction.get(settingsRef);
-            const updatedAt = serverTimestamp();
-            const auditFields = current.exists()
-                ? changedFields
-                : ['businessName', 'phone', 'address', 'email', 'whatsapp', 'hours'];
-            if (current.exists()) {
-                const fields = Object.entries(updates).flatMap(([key, value]) => key === 'hours' && value && typeof value === 'object'
-                    ? Object.entries(value).map(([day, hours]) => [`hours.${day}`, hours])
-                    : [[key, value]]);
-                transaction.update(settingsRef, Object.fromEntries([...fields, ['updatedAt', updatedAt]]));
-            } else {
-                transaction.set(settingsRef, createInitialPublicBusinessConfig(updates, updatedAt), { merge: true });
-            }
-            transaction.set(auditRef, { actorUid, changedFields: auditFields, createdAt: serverTimestamp() });
-        });
+        await savePublicBusinessConfig(db, actorUid, updates);
     };
 
     const resetAllData = async () => {
