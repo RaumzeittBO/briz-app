@@ -445,19 +445,44 @@ export const getAdminCustomerFiles = onCall(callable(), async (request) => {
     ]);
     const privateData = privateSnap.data() || {};
     const legacyData = legacySnap.data() || {};
+    const bucket = getStorage().bucket();
     const resolveObjectPath = (value: unknown): string => {
-        let candidate = cleanString(value, 1500);
-        if (!candidate) return '';
-        if (candidate.startsWith('gs://')) candidate = candidate.slice(candidate.indexOf('/', 5) + 1);
-        const encodedPath = candidate.match(/\/o\/([^?]+)/);
-        if (encodedPath) {
-            try { candidate = decodeURIComponent(encodedPath[1]); } catch { return ''; }
+        const reference = cleanString(value, 1500);
+        if (!reference) return '';
+
+        let objectPath = reference;
+        if (reference.startsWith('gs://')) {
+            const match = /^gs:\/\/([^/]+)\/(.+)$/.exec(reference);
+            if (!match || match[1] !== bucket.name) return '';
+            objectPath = match[2];
+        } else if (/^https?:\/\//i.test(reference)) {
+            try {
+                const url = new URL(reference);
+                if (url.protocol !== 'https:' || url.hostname !== 'firebasestorage.googleapis.com') return '';
+                const match = /^\/v0\/b\/([^/]+)\/o\/(.+)$/.exec(url.pathname);
+                if (!match || match[1] !== bucket.name) return '';
+                objectPath = decodeURIComponent(match[2]);
+            } catch {
+                return '';
+            }
+        } else if (reference.includes('?') || reference.includes('#')) {
+            return '';
         }
-        if (candidate.startsWith(`customerUploads/${ownerUid}/`) && !candidate.includes('..')) return candidate;
-        if (candidate.startsWith('customers/') && !candidate.includes('..')) return candidate;
+
+        // Refuse ambiguous encodings and path traversal rather than guessing how
+        // a legacy URL was normalized by Storage or an intermediary.
+        if (objectPath.includes('%') || objectPath.includes('\\') || [...objectPath].some((character) => {
+            const code = character.charCodeAt(0);
+            return code <= 0x1f || code === 0x7f;
+        })) return '';
+        const segments = objectPath.split('/');
+        if (segments.length < 3 || segments.some((segment) => !segment || segment === '.' || segment === '..')) return '';
+
+        const ownedLegacyRoots = new Set([customerId, ownerUid].map((id) => `customers/${id}/`));
+        if (objectPath.startsWith(`customerUploads/${ownerUid}/`)) return objectPath;
+        if ([...ownedLegacyRoots].some((root) => objectPath.startsWith(root))) return objectPath;
         return '';
     };
-    const bucket = getStorage().bucket();
     const signFile = async (...candidates: unknown[]): Promise<{ url: string | null; state: 'available' | 'missing' }> => {
         const path = candidates.map(resolveObjectPath).find(Boolean);
         if (!path) return { url: null, state: 'missing' };
