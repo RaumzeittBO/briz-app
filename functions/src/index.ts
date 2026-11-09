@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { initializeApp, getApps } from 'firebase-admin/app';
 import { FieldPath, FieldValue, Timestamp, getFirestore, type DocumentData, type DocumentReference, type DocumentSnapshot, type QueryDocumentSnapshot } from 'firebase-admin/firestore';
 import { getAuth } from 'firebase-admin/auth';
+import { getStorage } from 'firebase-admin/storage';
 import { defineSecret } from 'firebase-functions/params';
 import { setGlobalOptions } from 'firebase-functions/v2';
 import { onCall, onRequest, HttpsError, type CallableRequest } from 'firebase-functions/v2/https';
@@ -55,6 +56,20 @@ type BookingRequest = {
 
 const ACTIVE_STATUSES = ['pending', 'Pendiente', 'confirmed', 'Confirmado', 'delivered', 'Entregado'];
 const MAX_REQUEST_BYTES = 24_000;
+const LEGACY_STRUCTURAL_ADDONS = new Set([
+    'acc_canasta_metalica', 'acc_canasta_mimbre', 'acc_ruedas_auxiliares_adulto',
+    'acc_silla_delantera_urbana', 'acc_silla_delantera_mamachari', 'acc_silla_mediana_trasera',
+    'acc_silla_trasera_grande', 'acc_set_silla_delantera_canasta_mamachari',
+    'acc_ruedas_apoyo_nino_16', 'acc_canasta_trasera_carga',
+]);
+
+function canOfferRentalAddon(item: CatalogItem): boolean {
+    if (item.availableAsRentalAddon !== undefined) return item.availableAsRentalAddon === true;
+    if (!item.availableForRental) return false;
+    if (!LEGACY_STRUCTURAL_ADDONS.has(item.id)) return true;
+    return Number(item.price1Hour || 0) > 0 || Number(item.price24Hours || 0) > 0
+        || Number(item.pricePerHour || 0) > 0 || Number(item.pricePerDay || 0) > 0;
+}
 
 function callable(options: { enforceAppCheck?: boolean } = {}) {
     return { region: 'us-central1', maxInstances: 10, enforceAppCheck: options.enforceAppCheck ?? false } as const;
@@ -407,6 +422,70 @@ export const getAdminCustomers = onCall(callable(), async (request) => {
     return { customers, nextCursor: page.size === 200 ? page.docs.at(-1)?.id || null : null };
 });
 
+export const getAdminCustomerFiles = onCall(callable(), async (request) => {
+    const { uid } = requireAuth(request);
+    if (!exactObject(request.data)) throw new HttpsError('invalid-argument', 'Cliente inválido.');
+    const roleSnap = await db.doc(`adminUsers/${uid}`).get();
+    const role = roleSnap.data();
+    if (!roleSnap.exists || role?.active !== true || !['admin', 'manager'].includes(String(role.role))) {
+        throw new HttpsError('permission-denied', 'No tienes permiso para consultar archivos de clientes.');
+    }
+    const customerId = cleanString(request.data.customerId, 150);
+    if (!customerId || customerId.includes('/')) throw new HttpsError('invalid-argument', 'Cliente inválido.');
+    const customerSnap = await db.doc(`customers/${customerId}`).get();
+    if (!customerSnap.exists) throw new HttpsError('not-found', 'No se encontró el cliente.');
+    const customer = customerSnap.data()!;
+    if (role.role === 'manager' && role.store !== 'all' && (!customer.store || customer.store !== role.store)) {
+        throw new HttpsError('permission-denied', 'El cliente pertenece a otra sucursal.');
+    }
+    const ownerUid = cleanString(customer.authUid, 150) || customerId;
+    const [privateSnap, legacySnap] = await Promise.all([
+        db.doc(`customerPrivate/${ownerUid}`).get(),
+        db.doc(`customers/${customerId}`).get(),
+    ]);
+    const privateData = privateSnap.data() || {};
+    const legacyData = legacySnap.data() || {};
+    const resolveObjectPath = (value: unknown): string => {
+        let candidate = cleanString(value, 1500);
+        if (!candidate) return '';
+        if (candidate.startsWith('gs://')) candidate = candidate.slice(candidate.indexOf('/', 5) + 1);
+        const encodedPath = candidate.match(/\/o\/([^?]+)/);
+        if (encodedPath) {
+            try { candidate = decodeURIComponent(encodedPath[1]); } catch { return ''; }
+        }
+        if (candidate.startsWith(`customerUploads/${ownerUid}/`) && !candidate.includes('..')) return candidate;
+        if (candidate.startsWith('customers/') && !candidate.includes('..')) return candidate;
+        return '';
+    };
+    const bucket = getStorage().bucket();
+    const signFile = async (...candidates: unknown[]): Promise<{ url: string | null; state: 'available' | 'missing' }> => {
+        const path = candidates.map(resolveObjectPath).find(Boolean);
+        if (!path) return { url: null, state: 'missing' };
+        const file = bucket.file(path);
+        const [exists] = await file.exists();
+        if (!exists) return { url: null, state: 'missing' };
+        // The Storage Emulator has no signing identity. In local tests only,
+        // return the already-authorized bytes through this callable response;
+        // production always uses a five-minute signed URL.
+        if (process.env.FUNCTIONS_EMULATOR === 'true' || process.env.FIREBASE_STORAGE_EMULATOR_HOST) {
+            const [[contents], [metadata]] = await Promise.all([file.download(), file.getMetadata()]);
+            return { url: `data:${metadata.contentType || 'application/octet-stream'};base64,${contents.toString('base64')}`, state: 'available' };
+        }
+        const [url] = await file.getSignedUrl({ action: 'read', expires: Date.now() + 5 * 60 * 1000, version: 'v4' });
+        return { url, state: 'available' };
+    };
+    const fields = [
+        ['autofoto', ['autofotoPath', 'autofotoUrl', 'selfiePath', 'selfieUrl', 'photoPath', 'photoUrl']],
+        ['documento', ['documentoPath', 'documentoUrl', 'documentFrontPath', 'documentFrontUrl']],
+        ['documentoReverso', ['documentoReversoPath', 'documentoReversoUrl', 'documentBackPath', 'documentBackUrl']],
+    ] as const;
+    const files: Record<string, { url: string | null; state: 'available' | 'missing' }> = {};
+    for (const [name, pathFields] of fields) {
+        files[name] = await signFile(...pathFields.flatMap((field) => [privateData[field], legacyData[field]]));
+    }
+    return { files, expiresInSeconds: 300 };
+});
+
 export const createRentalGroup = onCall(callable(), async (request) => {
     const { uid, email } = requireAuth(request, true);
     if (!exactObject(request.data)) throw new HttpsError('invalid-argument', 'Solicitud inválida.');
@@ -559,7 +638,7 @@ export const createRentalGroup = onCall(callable(), async (request) => {
         }
         for (const accessory of input.accessories || []) {
             const item = inventoryById.get(accessory.itemId);
-            if (!item || !item.active || !item.availableForRental || item.itemType !== 'accessory') throw new HttpsError('failed-precondition', 'Uno de los accesorios ya no está disponible.');
+            if (!item || !item.active || !canOfferRentalAddon(item) || item.itemType !== 'accessory') throw new HttpsError('failed-precondition', 'Uno de los accesorios ya no está disponible como complemento.');
         }
 
         const rentalLines: Array<Record<string, unknown>> = [];
@@ -1404,6 +1483,250 @@ export const createServiceOrder = onCall(callable(), async (request) => {
     return { ok: true, id };
 });
 
+const SERVICE_STATUSES = ['Recibido', 'En revisión', 'En reparación', 'Listo', 'Entregado'];
+
+export const createBrizMaintenanceOrder = onCall(callable(), async (request) => {
+    const { uid } = requireAuth(request);
+    if (!exactObject(request.data)) throw new HttpsError('invalid-argument', 'Orden de mantenimiento inválida.');
+    const roleSnap = await db.doc(`adminUsers/${uid}`).get();
+    const role = roleSnap.data();
+    if (!roleSnap.exists || role?.active !== true || !['admin', 'manager'].includes(String(role.role))) {
+        throw new HttpsError('permission-denied', 'No tienes permiso para registrar mantenimiento de flota.');
+    }
+    const input = request.data;
+    const itemId = cleanString(input.inventoryItemId, 150);
+    const requestedStore = cleanString(input.store, 100);
+    const wheelSize = input.wheelSize === undefined ? '' : cleanString(input.wheelSize, 20);
+    const entryDate = cleanString(input.maintenanceEntryDate, 10) || new Intl.DateTimeFormat('en-CA', { timeZone: 'America/La_Paz' }).format(new Date());
+    const quantity = Number(input.quantity);
+    const customer = cleanString(input.customer, 120);
+    const phone = cleanString(input.phone, 40);
+    const bikeType = cleanString(input.bikeType, 120);
+    const issue = cleanString(input.issue, 1000);
+    const estimatedDelivery = cleanString(input.estimatedDelivery, 20);
+    if (!itemId || !requestedStore || !customer || !issue || phone.replace(/\D/g, '').length < 7
+        || !Number.isInteger(quantity) || quantity < 1 || !/^\d{4}-\d{2}-\d{2}$/.test(estimatedDelivery)
+        || !/^\d{4}-\d{2}-\d{2}$/.test(entryDate)) {
+        throw new HttpsError('invalid-argument', 'Completa bicicleta BRIZ, sucursal, cantidad, cliente, problema y fecha estimada.');
+    }
+    if (entryDate > new Intl.DateTimeFormat('en-CA', { timeZone: 'America/La_Paz' }).format(new Date())) throw new HttpsError('invalid-argument', 'La fecha de ingreso no puede ser futura.');
+    if (role.role === 'manager' && role.store !== 'all' && role.store !== requestedStore) {
+        throw new HttpsError('permission-denied', 'No tienes permiso para esta sucursal.');
+    }
+    const id = db.collection('serviceOrders').doc().id;
+    const now = new Date().toISOString();
+    await db.runTransaction(async (tx) => {
+        const itemRef = db.doc(`inventory/${itemId}`);
+        const [itemSnap, inventorySnap, comboSnap, activeSnap] = await Promise.all([
+            tx.get(itemRef),
+            tx.get(db.collection('inventory')),
+            tx.get(db.collection('combos')),
+            tx.get(db.collection('rentals').where('status', 'in', ACTIVE_STATUSES)),
+        ]);
+        const item = itemSnap.data() as CatalogItem | undefined;
+        if (!itemSnap.exists || !item || item.itemType !== 'bike' || item.active !== true) {
+            throw new HttpsError('failed-precondition', 'Selecciona una bicicleta activa del inventario de BRIZ.');
+        }
+        if (role.role === 'manager' && role.store !== 'all' && item.store !== requestedStore) {
+            throw new HttpsError('permission-denied', 'La bicicleta no pertenece a tu sucursal.');
+        }
+        if (item.store && item.store !== requestedStore) throw new HttpsError('failed-precondition', 'La bicicleta pertenece a otra sucursal.');
+        if (item.hasWheelSizes) {
+            if (!wheelSize || !item.wheelSizes?.some((wheel) => wheel.size === wheelSize)) {
+                throw new HttpsError('invalid-argument', 'Selecciona un aro válido para la bicicleta.');
+            }
+        } else if (wheelSize) {
+            throw new HttpsError('invalid-argument', 'Esta bicicleta no utiliza aro por variante.');
+        }
+        const lockRef = db.doc(`_availabilityLocks/${resourceKey({ itemId: itemSnap.id, wheelSize: wheelSize || undefined, quantity })}`);
+        const lockSnap = await tx.get(lockRef);
+        const availableShelf = stockFor(item, wheelSize || undefined);
+        if (quantity > availableShelf) throw new HttpsError('failed-precondition', `Solo hay ${availableShelf} unidad(es) disponible(s) para retirar del inventario.`);
+
+        // The capacity formula is shelf stock + units currently held by confirmed rentals.
+        // Maintenance removes stock from that capacity once. Refuse it if it would
+        // invalidate any still-active reservation window; never cancel reservations here.
+        const relevantIntervals: Array<{ start: number; end: number; units: number }> = [];
+        let currentlyOut = 0;
+        const inventory = inventorySnap.docs.map((snapshot) => ({ id: snapshot.id, ...snapshot.data() } as CatalogItem));
+        const combos = comboSnap.docs.map((snapshot) => ({ id: snapshot.id, ...snapshot.data() } as Combo));
+        for (const rentalSnap of activeSnap.docs) {
+            const row = rentalSnap.data() as RentalLike;
+            let matchingUnits = 0;
+            for (const demand of rentalDemands(row, inventory, combos)) {
+                if (demand.itemId === itemSnap.id && (demand.wheelSize || '') === (wheelSize || '')) matchingUnits += demand.quantity;
+            }
+            if (!matchingUnits) continue;
+            let window: { startMs: number; endMs: number };
+            try { window = getRentalWindow(row); } catch { throw new HttpsError('failed-precondition', 'No se puede validar una reserva activa de esta bicicleta.'); }
+            if (isHolding(String(row.status))) currentlyOut += matchingUnits;
+            if (window.endMs > Date.now()) relevantIntervals.push({ start: window.startMs, end: window.endMs, units: matchingUnits });
+        }
+        const capacityAfterMaintenance = availableShelf + currentlyOut - quantity;
+        const events = relevantIntervals.flatMap(({ start, end, units }) => [{ time: start, delta: units }, { time: end, delta: -units }])
+            .sort((left, right) => left.time - right.time || left.delta - right.delta);
+        let overlap = 0;
+        let peak = 0;
+        for (const event of events) { overlap += event.delta; peak = Math.max(peak, overlap); }
+        if (peak > capacityAfterMaintenance) {
+            throw new HttpsError('failed-precondition', 'El retiro afectaría reservas existentes. No se modificó inventario; revisa las fechas antes de continuar.');
+        }
+
+        const updated = alterStock(item, wheelSize || undefined, -quantity);
+        const wheelSizes = item.hasWheelSizes && item.wheelSizes
+            ? item.wheelSizes.map((wheel) => wheel.size === wheelSize ? { ...wheel, maintenanceStock: (Number(wheel.maintenanceStock) || 0) + quantity } : wheel)
+            : undefined;
+        const nextMaintenance = (Number(item.maintenanceStock) || 0) + quantity;
+        const orderRef = db.doc(`serviceOrders/${id}`);
+        tx.update(itemRef, {
+            ...(wheelSizes ? { wheelSizes: wheelSizes.map((wheel) => ({ ...wheel, ...(wheel.size === wheelSize ? { stock: updated.wheelSizes?.find((entry) => entry.size === wheelSize)?.stock } : {}) })) } : { stock: updated.stock }),
+            maintenanceStock: nextMaintenance,
+            availabilityVersion: FieldValue.increment(1),
+        });
+        tx.set(lockRef, { revision: (Number(lockSnap.data()?.revision) || 0) + 1, updatedAt: Timestamp.now() });
+        tx.create(orderRef, {
+            id, customer, phone, bikeType: bikeType || item.name, issue,
+            notes: cleanString(input.notes, 1000), estimatedDelivery,
+            costEstimate: Math.max(0, Number(input.costEstimate) || 0), status: 'Recibido',
+            date: `${entryDate}T${now.slice(11)}`, maintenanceEntryDate: entryDate, createdAt: now,
+            store: requestedStore, ownership: 'briz', inventoryItemId: itemSnap.id,
+            ...(wheelSize ? { wheelSize } : {}), maintenanceQuantity: quantity,
+            inventoryReleased: false, maintenanceState: 'in_repair',
+            maintenanceAudit: [{ action: 'maintenance_started', actorUid: uid, at: now, quantity, wheelSize: wheelSize || null }],
+        });
+    });
+    return { id };
+});
+
+export const updateBrizMaintenanceOrder = onCall(callable(), async (request) => {
+    const { uid } = requireAuth(request);
+    if (!exactObject(request.data) || !exactObject(request.data.updates)) throw new HttpsError('invalid-argument', 'Actualización inválida.');
+    const id = cleanString(request.data.id, 150);
+    const updates = request.data.updates;
+    const allowedKeys = new Set(['customer', 'phone', 'bikeType', 'issue', 'notes', 'estimatedDelivery', 'costEstimate', 'status']);
+    if (!id || Object.keys(updates).some((key) => !allowedKeys.has(key))) throw new HttpsError('invalid-argument', 'No se pueden editar los datos de inventario desde este formulario.');
+    const roleRef = db.doc(`adminUsers/${uid}`);
+    const orderRef = db.doc(`serviceOrders/${id}`);
+    await db.runTransaction(async (tx) => {
+        const [roleSnap, orderSnap] = await Promise.all([tx.get(roleRef), tx.get(orderRef)]);
+        const role = roleSnap.data(); const order = orderSnap.data();
+        if (!roleSnap.exists || role?.active !== true || !['admin', 'manager'].includes(String(role.role))) throw new HttpsError('permission-denied', 'No tienes permiso.');
+        if (!orderSnap.exists || order?.ownership !== 'briz') throw new HttpsError('not-found', 'Orden BRIZ no encontrada.');
+        if (role.role === 'manager' && role.store !== 'all' && order.store !== role.store) throw new HttpsError('permission-denied', 'La orden pertenece a otra sucursal.');
+        if (order.inventoryReleased === true && 'status' in updates && updates.status !== order.status
+            && !(order.status === 'Listo' && updates.status === 'Entregado')) throw new HttpsError('failed-precondition', 'La orden ya fue reincorporada; solo puede marcarse como entregada.');
+        const patch: Record<string, unknown> = {};
+        for (const key of ['customer', 'phone', 'bikeType', 'issue', 'notes', 'estimatedDelivery'] as const) if (key in updates) patch[key] = cleanString(updates[key], key === 'issue' || key === 'notes' ? 1000 : 150);
+        if ('status' in updates) {
+            const status = cleanString(updates.status, 40);
+            if (!SERVICE_STATUSES.includes(status)) throw new HttpsError('invalid-argument', 'Estado de taller inválido.');
+            if (status === 'Entregado' && order.inventoryReleased !== true) throw new HttpsError('failed-precondition', 'Reintegra primero la bicicleta al inventario disponible.');
+            patch.status = status;
+            if (order.inventoryReleased !== true) patch.maintenanceState = status === 'Listo' ? 'repair_complete_awaiting_release' : 'in_repair';
+        }
+        if ('costEstimate' in updates) {
+            const amount = Number(updates.costEstimate);
+            if (!Number.isFinite(amount) || amount < 0) throw new HttpsError('invalid-argument', 'Importe inválido.');
+            patch.costEstimate = amount;
+        }
+        const updatedAt = new Date().toISOString();
+        patch.updatedAt = updatedAt; patch.updatedBy = uid;
+        const audit = Array.isArray(order.maintenanceAudit) ? order.maintenanceAudit.slice(-49) : [];
+        patch.maintenanceAudit = [...audit, { action: 'order_updated', actorUid: uid, at: updatedAt,
+            ...(typeof updates.status === 'string' ? { status: { before: order.status, after: patch.status } } : {}),
+            ...(typeof updates.costEstimate !== 'undefined' ? { costEstimate: { before: order.costEstimate ?? null, after: patch.costEstimate } } : {}),
+            fields: Object.keys(updates).filter((key) => key !== 'status' && key !== 'costEstimate') }];
+        tx.update(orderRef, patch);
+    });
+    return { ok: true };
+});
+
+export const releaseBrizMaintenanceOrder = onCall(callable(), async (request) => {
+    const { uid } = requireAuth(request);
+    if (!exactObject(request.data)) throw new HttpsError('invalid-argument', 'Orden inválida.');
+    const id = cleanString(request.data.id, 150);
+    if (!id) throw new HttpsError('invalid-argument', 'Orden inválida.');
+    const roleRef = db.doc(`adminUsers/${uid}`); const orderRef = db.doc(`serviceOrders/${id}`);
+    await db.runTransaction(async (tx) => {
+        const [roleSnap, orderSnap] = await Promise.all([tx.get(roleRef), tx.get(orderRef)]);
+        const role = roleSnap.data(); const order = orderSnap.data();
+        if (!roleSnap.exists || role?.active !== true || !['admin', 'manager'].includes(String(role.role))) throw new HttpsError('permission-denied', 'No tienes permiso.');
+        if (!orderSnap.exists || order?.ownership !== 'briz') throw new HttpsError('not-found', 'Orden BRIZ no encontrada.');
+        if (role.role === 'manager' && role.store !== 'all' && order.store !== role.store) throw new HttpsError('permission-denied', 'La orden pertenece a otra sucursal.');
+        if (order.status !== 'Listo') throw new HttpsError('failed-precondition', 'Marca la reparación como Lista antes de reincorporar la bicicleta.');
+        if (order.inventoryReleased === true || order.maintenanceState === 'released') throw new HttpsError('already-exists', 'Esta unidad ya fue reincorporada.');
+        const itemRef = db.doc(`inventory/${order.inventoryItemId}`); const itemSnap = await tx.get(itemRef);
+        const item = itemSnap.data() as CatalogItem | undefined; const quantity = Number(order.maintenanceQuantity);
+        if (!itemSnap.exists || !item || item.itemType !== 'bike' || !Number.isInteger(quantity) || quantity < 1) throw new HttpsError('failed-precondition', 'No se puede reconciliar el inventario de esta orden.');
+        const wheelSize = cleanString(order.wheelSize, 20) || undefined;
+        if (item.hasWheelSizes && (!wheelSize || !item.wheelSizes?.some((wheel) => wheel.size === wheelSize))) throw new HttpsError('failed-precondition', 'El aro de esta orden ya no existe en el inventario.');
+        if ((Number(item.maintenanceStock) || 0) < quantity) throw new HttpsError('failed-precondition', 'El inventario en mantenimiento no coincide con esta orden.');
+        const released = alterStock(item, wheelSize, quantity);
+        const wheelSizes = item.hasWheelSizes && item.wheelSizes ? item.wheelSizes.map((wheel) => wheel.size === wheelSize
+            ? { ...wheel, stock: released.wheelSizes?.find((entry) => entry.size === wheelSize)?.stock, maintenanceStock: Math.max(0, (Number(wheel.maintenanceStock) || 0) - quantity) }
+            : wheel) : undefined;
+        const at = new Date().toISOString();
+        tx.update(itemRef, { ...(wheelSizes ? { wheelSizes } : { stock: released.stock }), maintenanceStock: Math.max(0, (Number(item.maintenanceStock) || 0) - quantity) });
+        tx.update(orderRef, { inventoryReleased: true, maintenanceState: 'released', inventoryReleasedAt: at, inventoryReleasedBy: uid,
+            maintenanceAudit: [...(Array.isArray(order.maintenanceAudit) ? order.maintenanceAudit : []), { action: 'inventory_released', actorUid: uid, at, quantity, wheelSize: wheelSize || null }] });
+    });
+    return { ok: true };
+});
+
+// Legacy damaged returns can already be counted in maintenanceStock without a
+// linked service order. Allow staff to release one such repaired unit, while
+// reserving units owned by active BRIZ maintenance orders and making retries
+// idempotent.
+export const releaseUnlinkedMaintenanceStock = onCall(callable(), async (request) => {
+    const { uid } = requireAuth(request);
+    if (!exactObject(request.data)) throw new HttpsError('invalid-argument', 'Reincorporación inválida.');
+    const itemId = cleanString(request.data.itemId, 150);
+    const wheelSize = cleanString(request.data.wheelSize, 20);
+    const operationId = cleanString(request.data.operationId, 100);
+    if (!itemId || !operationId || !/^[A-Za-z0-9_-]+$/.test(operationId)) throw new HttpsError('invalid-argument', 'Reincorporación inválida.');
+    const roleRef = db.doc(`adminUsers/${uid}`);
+    const itemRef = db.doc(`inventory/${itemId}`);
+    const operationRef = db.doc(`adminUsers/${uid}/maintenanceReleaseOperations/${operationId}`);
+    const auditRef = db.collection('inventoryStockAudits').doc();
+    await db.runTransaction(async (tx) => {
+        const [roleSnap, itemSnap, operationSnap, ordersSnap] = await Promise.all([
+            tx.get(roleRef), tx.get(itemRef), tx.get(operationRef),
+            tx.get(db.collection('serviceOrders').where('inventoryItemId', '==', itemId)),
+        ]);
+        if (operationSnap.exists) return;
+        const role = roleSnap.data();
+        const item = itemSnap.data() as CatalogItem | undefined;
+        if (!roleSnap.exists || role?.active !== true || !['admin', 'manager'].includes(String(role.role))) throw new HttpsError('permission-denied', 'No tienes permiso para reincorporar inventario.');
+        if (!itemSnap.exists || !item || item.itemType !== 'bike') throw new HttpsError('not-found', 'No se encontró la bicicleta.');
+        if (role.role === 'manager' && role.store !== 'all' && item.store !== role.store) throw new HttpsError('permission-denied', 'La bicicleta pertenece a otra sucursal.');
+        if (item.hasWheelSizes && (!wheelSize || !item.wheelSizes?.some((wheel) => wheel.size === wheelSize))) throw new HttpsError('invalid-argument', 'Selecciona un aro válido.');
+        if (!item.hasWheelSizes && wheelSize) throw new HttpsError('invalid-argument', 'Esta bicicleta no tiene stock por aro.');
+        let allocated = 0;
+        for (const orderSnap of ordersSnap.docs) {
+            const order = orderSnap.data();
+            if (order.ownership !== 'briz' || order.inventoryReleased === true) continue;
+            if (item.hasWheelSizes) {
+                if (!order.wheelSize) throw new HttpsError('failed-precondition', 'Hay una orden de mantenimiento sin aro verificable; no se puede liberar stock sin revisar su asignación.');
+                if (order.wheelSize === wheelSize) allocated += Math.max(0, Number(order.maintenanceQuantity) || 0);
+            } else allocated += Math.max(0, Number(order.maintenanceQuantity) || 0);
+        }
+        const wheel = item.wheelSizes?.find((entry) => entry.size === wheelSize);
+        const maintenanceCount = item.hasWheelSizes ? Number(wheel?.maintenanceStock) || 0 : Number(item.maintenanceStock) || 0;
+        if (maintenanceCount - allocated < 1) throw new HttpsError('failed-precondition', 'No hay una unidad reparada sin orden de mantenimiento pendiente para reincorporar.');
+        const released = alterStock(item, wheelSize || undefined, 1);
+        const wheelSizes = item.hasWheelSizes && item.wheelSizes
+            ? item.wheelSizes.map((entry) => entry.size === wheelSize ? { ...entry, stock: released.wheelSizes?.find((next) => next.size === wheelSize)?.stock, maintenanceStock: Math.max(0, (Number(entry.maintenanceStock) || 0) - 1) } : entry)
+            : undefined;
+        const nextMaintenance = Math.max(0, (Number(item.maintenanceStock) || 0) - 1);
+        const before = item.hasWheelSizes ? (item.wheelSizes || []).map(({ size, stock, maintenanceStock: count }) => ({ size, stock, maintenanceStock: Number(count) || 0 })) : { stock: Number(item.stock) || 0, maintenanceStock: Number(item.maintenanceStock) || 0 };
+        const after = wheelSizes ? wheelSizes.map(({ size, stock, maintenanceStock: count }) => ({ size, stock, maintenanceStock: Number(count) || 0 })) : { stock: released.stock, maintenanceStock: nextMaintenance };
+        tx.update(itemRef, { ...(wheelSizes ? { wheelSizes } : { stock: released.stock }), maintenanceStock: nextMaintenance });
+        tx.create(operationRef, { itemId, store: item.store || role.store || 'principal', wheelSize: wheelSize || null, actorUid: uid, createdAt: Timestamp.now() });
+        tx.create(auditRef, { itemId, store: item.store || role.store || 'principal', actorUid: uid, action: 'maintenance_release', before, after, createdAt: Timestamp.now() });
+    });
+    return { ok: true };
+});
+
 export const sendReservationNotification = onDocumentCreated({
     document: 'telegramOutbox/{outboxId}',
     serviceAccount: 'briz-telegram-runtime@briz-4ef3a.iam.gserviceaccount.com',
@@ -1425,7 +1748,10 @@ export const sendReservationNotification = onDocumentCreated({
     if (process.env.FUNCTIONS_EMULATOR !== 'true') {
         try { token = TELEGRAM_BOT_TOKEN.value(); chatId = TELEGRAM_CHAT_ID.value(); } catch { /* Secret configuration is handled as an outbox state, not a booking failure. */ }
     }
-    if (!token || !chatId) {
+    // `.secret.local` uses this explicit sentinel. Keep Emulator Suite tests
+    // completely offline even if the Functions Emulator does not propagate
+    // its runtime marker to an Eventarc callback.
+    if (!token || !chatId || token === 'emulator-disabled' || chatId === 'emulator-disabled') {
         await ref.update({ status: 'skipped_unconfigured', updatedAt: FieldValue.serverTimestamp() });
         return;
     }

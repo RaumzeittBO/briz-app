@@ -20,6 +20,8 @@ import {
 import { filterCompletedServiceOrders, serviceOrderRevenue } from '../src/lib/adminReportScope';
 import { savePublicBusinessConfig } from '../src/lib/publicBusinessSettings';
 import { DEFAULT_PUBLIC_BUSINESS_CONFIG } from '../src/lib/businessConfig';
+import { addInventoryCategory } from '../src/lib/inventoryCategories';
+import { SUPPORTED_WHEEL_SIZES, validateUniqueWheelSizes } from '../src/lib/inventoryWheelSizes';
 
 const projectId = 'demo-briz-security';
 let env: RulesTestEnvironment;
@@ -50,6 +52,7 @@ async function seed(): Promise<void> {
         await setDoc(doc(db, 'customers', 'legacy-customer'), { id: 'legacy-customer', password: 'test-hash' });
         await setDoc(doc(db, 'serviceOrders', 'workshop-order'), { id: 'workshop-order', store: 'cochabamba', status: 'Recibido' });
         await setDoc(doc(db, 'serviceOrders', 'workshop-order-lpz'), { id: 'workshop-order-lpz', store: 'lapaz', status: 'Recibido' });
+        await setDoc(doc(db, 'serviceOrders', 'briz-maintenance-order'), { id: 'briz-maintenance-order', store: 'cochabamba', status: 'Recibido', ownership: 'briz', inventoryItemId: 'bike-cbba', maintenanceQuantity: 1 });
         await setDoc(doc(db, 'sales', 'sale'), { id: 'sale', store: 'cochabamba', total: 10 });
         await setDoc(doc(db, 'publicArtworkConfig', 'home_welcome_badge'), {
             slotId: 'home_welcome_badge',
@@ -86,6 +89,33 @@ try {
     const viewer = env.authenticatedContext('viewer');
     const disabled = env.authenticatedContext('disabled');
 
+    await test('rental accessory categories are persisted, case-insensitive and available to public catalog readers', async () => {
+        const adminDb = admin.firestore();
+        assert.equal(await addInventoryCategory(adminDb, 'accessory_categories', '  Accesorios  Premium  '), 'Accesorios Premium');
+        assert.equal(await addInventoryCategory(adminDb, 'accessory_categories', 'accesorios premium'), 'Accesorios Premium');
+        const saved = await getDoc(doc(anonymous.firestore(), 'settings', 'accessory_categories'));
+        assert.deepEqual(saved.data()?.categories, ['Accesorios Premium']);
+        await addInventoryCategory(adminDb, 'shop_categories', '  Herramientas  de taller ');
+        await addInventoryCategory(adminDb, 'shop_categories', 'herramientas de taller');
+        assert.deepEqual((await getDoc(doc(admin.firestore(), 'settings', 'shop_categories'))).data()?.categories, ['Herramientas de taller']);
+        await assertFails(setDoc(doc(manager.firestore(), 'settings', 'accessory_categories'), { categories: ['falsificada'] }));
+        assert.ok(SUPPORTED_WHEEL_SIZES.includes('13'));
+        assert.ok(SUPPORTED_WHEEL_SIZES.includes('18'));
+        assert.doesNotThrow(() => validateUniqueWheelSizes([{ size: '13' }, { size: '18' }, { size: 'otro' }]));
+        assert.throws(() => validateUniqueWheelSizes([{ size: '13' }, { size: '13' }]), /repetir/);
+    });
+    await test('inventory stock audit is private, append-only and tied to an active staff identity', async () => {
+        const audit = doc(admin.firestore(), 'inventoryStockAudits', 'stock-audit-test');
+        await assertSucceeds(setDoc(audit, {
+            itemId: 'bike-cbba', store: 'all', actorUid: 'root', action: 'stock_adjustment',
+            before: { stock: 4 }, after: { stock: 5 }, createdAt: Timestamp.now(),
+        }));
+        await assertSucceeds(getDoc(audit));
+        await assertFails(getDoc(doc(anonymous.firestore(), 'inventoryStockAudits', 'stock-audit-test')));
+        await assertFails(updateDoc(audit, { after: { stock: 999 } }));
+        await assertFails(deleteDoc(audit));
+    });
+
     await test('catalog inventory remains publicly readable', () =>
         assertSucceeds(getDoc(doc(anonymous.firestore(), 'inventory', 'bike-cbba'))));
     await test('public busy-slot projection is readable', () =>
@@ -97,6 +127,13 @@ try {
     await test('admin can read private rentals while legacy customer data stays behind a sanitizer', async () => {
         await assertSucceeds(getDoc(doc(admin.firestore(), 'rentals', 'private-rental')));
         await assertFails(getDoc(doc(admin.firestore(), 'customers', 'legacy-customer')));
+    });
+    await test('BRIZ fleet maintenance records can only be created or changed through server transactions', async () => {
+        await assertFails(setDoc(doc(admin.firestore(), 'serviceOrders', 'forged-briz-maintenance'), {
+            id: 'forged-briz-maintenance', store: 'all', status: 'Recibido', ownership: 'briz', inventoryItemId: 'bike-cbba', maintenanceQuantity: 1,
+        }));
+        await assertFails(updateDoc(doc(admin.firestore(), 'serviceOrders', 'briz-maintenance-order'), { status: 'Entregado' }));
+        await assertFails(deleteDoc(doc(admin.firestore(), 'serviceOrders', 'briz-maintenance-order')));
     });
     await test('active admin and manager can read their own admin profile for AuthContext role resolution', async () => {
         await assertSucceeds(getDoc(doc(admin.firestore(), 'adminUsers', 'root')));

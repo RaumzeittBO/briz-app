@@ -4,6 +4,7 @@ export interface CatalogItem {
     name: string;
     active: boolean;
     availableForRental: boolean;
+    availableAsRentalAddon?: boolean;
     hasWheelSizes?: boolean;
     wheelSizes?: Array<{ size: string; stock: number; maintenanceStock?: number }>;
     stock?: number;

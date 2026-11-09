@@ -246,9 +246,10 @@ export default function RentalCheckoutWizard({
         return inventory
             .filter(item => {
                 if (!item.active || item.itemType !== 'accessory') return false;
-                if (item.availableForRental === false) return false;
-                // Exclude structural combo baskets/seats unless admin explicitly set a rental price > 0 on them
-                if (STRUCTURAL_COMBO_ACCESSORY_IDS.has(item.id)) {
+                const addonEnabled = item.availableAsRentalAddon ?? item.availableForRental;
+                if (!addonEnabled) return false;
+                // Legacy structural components remain hidden unless an explicit rental price exists.
+                if (item.availableAsRentalAddon !== true && STRUCTURAL_COMBO_ACCESSORY_IDS.has(item.id)) {
                     const hasAdminPrice =
                         (item.price1Hour ?? 0) > 0 ||
                         (item.price24Hours ?? 0) > 0 ||

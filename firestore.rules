@@ -153,7 +153,7 @@ service cloud.firestore {
     }
 
     match /settings/{settingId} {
-      allow read: if settingId in ['rental_settings', 'public_business', 'bike_categories', 'shop_categories', 'admin_navigation'] || isAdmin();
+      allow read: if settingId in ['rental_settings', 'public_business', 'bike_categories', 'accessory_categories', 'shop_categories', 'admin_navigation'] || isAdmin();
       allow write: if isAdmin() && settingId != 'public_business';
 
       match /audit/{entryId} {
@@ -242,6 +242,19 @@ service cloud.firestore {
       allow delete: if isScopedDelete();
     }
 
+    match /inventoryStockAudits/{auditId} {
+      allow read: if isScopedRead();
+      allow create: if isScopedRoleWrite(['admin', 'manager'])
+        && request.resource.data.keys().hasOnly(['itemId', 'store', 'actorUid', 'action', 'before', 'after', 'createdAt'])
+        && request.resource.data.itemId is string
+        && request.resource.data.actorUid == request.auth.uid
+        && request.resource.data.action == 'stock_adjustment'
+        && request.resource.data.before is map
+        && request.resource.data.after is map
+        && request.resource.data.createdAt is timestamp;
+      allow update, delete: if false;
+    }
+
     match /combos/{comboId} {
       allow read: if true;
       allow create, update: if isScopedWrite();
@@ -308,9 +321,15 @@ service cloud.firestore {
 
     match /serviceOrders/{serviceOrderId} {
       allow read: if isScopedRead();
-      allow create: if isScopedRoleWrite(['admin', 'manager', 'mechanic']);
-      allow update: if isScopedRoleWrite(['admin', 'manager', 'mechanic']);
-      allow delete: if isScopedRoleDelete(['admin', 'manager', 'mechanic']);
+      allow create: if isScopedRoleWrite(['admin', 'manager', 'mechanic'])
+        && (!('ownership' in request.resource.data) || request.resource.data.ownership != 'briz');
+      // Flota BRIZ maintenance is mutated only by callable transactions that
+      // reconcile inventory and preserve a release audit trail.
+      allow update: if isScopedRoleWrite(['admin', 'manager', 'mechanic'])
+        && (!('ownership' in resource.data) || resource.data.ownership != 'briz')
+        && (!('ownership' in request.resource.data) || request.resource.data.ownership != 'briz');
+      allow delete: if isScopedRoleDelete(['admin', 'manager', 'mechanic'])
+        && (!('ownership' in resource.data) || resource.data.ownership != 'briz');
     }
 
     match /communityItems/{itemId} {
