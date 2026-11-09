@@ -9,6 +9,7 @@ import { Search, Plus, Edit, Trash2, Image as ImageIcon, Bike, Wrench, Layers, X
 import { useStore } from '@/context/StoreContext';
 import type { InventoryItem, ComboProduct, WheelSizeEntry, ComboComponent } from '@/context/StoreContext';
 import { getRentalInventoryDemands } from '@/lib/rentalAvailability';
+import { nextWheelSize, SUPPORTED_WHEEL_SIZES, validateUniqueWheelSizes } from '@/lib/inventoryWheelSizes';
 
 import { FileUploader } from '@/components/ui/file-uploader';
 
@@ -16,7 +17,6 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
 
-const WHEEL_OPTIONS = ['12','16','20','24','26','27','28','29'];
 const NON_BIKE_CATEGORIES = new Set(['Accesorios', 'Combinados']);
 
 
@@ -142,15 +142,16 @@ function normalizeInventoryDraft(draft: any) {
 
 export default function InventoryPage() {
   const { 
-    inventory, combos, rentals, addInventoryItem, updateInventoryItem, deleteInventoryItem, 
+    inventory, combos, rentals, serviceOrders, addInventoryItem, updateInventoryItem, deleteInventoryItem, releaseUnlinkedMaintenanceUnit,
     addCombo, updateCombo, deleteCombo, getComboAvailability, 
-    bikeCategories, addBikeCategory, deleteBikeCategory, updateBikeCategory, reorderBikeCategories
+    bikeCategories, accessoryCategories, addBikeCategory, addAccessoryCategory, deleteBikeCategory, updateBikeCategory, reorderBikeCategories
   } = useStore();
 
   const [tab, setTab] = useState('bikes');
   const [search, setSearch] = useState('');
   const [modal, setModal] = useState<{open:boolean; mode:'add'|'edit'; type:'bike'|'accessory'|'combo'}>({open:false,mode:'add',type:'bike'});
   const [editItem, setEditItem] = useState<any>(null);
+  const [releasingMaintenanceKey, setReleasingMaintenanceKey] = useState('');
   const [deleteConfirm, setDeleteConfirm] = useState<{id:string; type:string; name:string} | null>(null);
 
   const [categoryManagerOpen, setCategoryManagerOpen] = useState(false);
@@ -191,6 +192,28 @@ export default function InventoryPage() {
     return map;
   }, [rentals, inventory, combos]);
 
+  const maintenanceAllocatedByResource = useMemo(() => {
+    const allocated = new Map<string, number>();
+    serviceOrders.filter(order => order.ownership === 'briz' && !order.inventoryReleased && order.inventoryItemId).forEach(order => {
+      const key = `${order.inventoryItemId}::${order.wheelSize || ''}`;
+      allocated.set(key, (allocated.get(key) || 0) + Math.max(0, Number(order.quantity || order.maintenanceQuantity) || 0));
+    });
+    return allocated;
+  }, [serviceOrders]);
+
+  const handleReleaseUnlinkedMaintenance = async (item: InventoryItem, wheelSize?: string) => {
+    const key = `${item.id}::${wheelSize || ''}`;
+    if (!window.confirm(`¿Confirmas que una unidad de ${item.name}${wheelSize ? ` aro ${wheelSize}` : ''} ya está reparada y vuelve al inventario disponible?`)) return;
+    setReleasingMaintenanceKey(key);
+    try {
+      await releaseUnlinkedMaintenanceUnit(item.id, wheelSize, crypto.randomUUID());
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'No se pudo reincorporar la unidad.');
+    } finally {
+      setReleasingMaintenanceKey('');
+    }
+  };
+
   const availableBikeCategories = useMemo(() => {
     const list = [...bikeCategories];
     inventory.forEach(item => {
@@ -207,6 +230,13 @@ export default function InventoryPage() {
     });
     return list.filter(cat => cat.trim() && !NON_BIKE_CATEGORIES.has(cat));
   }, [bikeCategories, inventory, combos]);
+  const availableAccessoryCategories = useMemo(() => {
+    const categories = [...accessoryCategories];
+    inventory.filter(item => item.itemType === 'accessory' && item.category).forEach(item => {
+      if (!categories.some(category => category.toLocaleLowerCase() === item.category!.toLocaleLowerCase())) categories.push(item.category!);
+    });
+    return categories;
+  }, [accessoryCategories, inventory]);
 
   const openAdd = (type: 'bike'|'accessory'|'combo') => {
     setEditItem(type==='bike'?defaultBike():type==='accessory'?defaultAccessory():defaultCombo());
@@ -219,6 +249,27 @@ export default function InventoryPage() {
 
   const handleSave = () => {
     if (!editItem) return;
+    if (modal.type === 'bike' && editItem.hasWheelSizes) {
+      try {
+        validateUniqueWheelSizes(editItem.wheelSizes || []);
+      } catch (error) {
+        alert(error instanceof Error ? error.message : 'Verifica los tamaños de aro.');
+        return;
+      }
+    }
+    if (modal.type === 'combo') {
+      const components = (editItem.components || []) as ComboComponent[];
+      const ids = components.map(component => component.inventoryItemId).filter(Boolean);
+      if (ids.length !== components.length || new Set(ids).size !== ids.length) {
+        alert('Cada componente debe seleccionarse una sola vez.');
+        return;
+      }
+      if (components.some(component => !Number.isInteger(Number(component.quantity)) || Number(component.quantity) < 1
+        || !inventory.some(item => item.id === component.inventoryItemId && item.active))) {
+        alert('Verifica que cada componente exista y tenga una cantidad entera mayor que cero.');
+        return;
+      }
+    }
     const draft = normalizeInventoryDraft(editItem);
     if (modal.type === 'combo') {
       modal.mode === 'add' ? addCombo(draft) : updateCombo(draft.id, draft);
@@ -226,26 +277,6 @@ export default function InventoryPage() {
       modal.mode === 'add' ? addInventoryItem(draft) : updateInventoryItem(draft.id, draft);
     }
     setModal({...modal, open:false});
-  };
-
-  const handleReleaseMaintenanceUnit = async (item: InventoryItem, wheelSize?: string) => {
-    const currentMaint = Number(item.maintenanceStock || 0);
-    if (currentMaint <= 0) return;
-
-    const updated: Partial<InventoryItem> = {
-      maintenanceStock: Math.max(0, currentMaint - 1),
-    };
-
-    if (item.hasWheelSizes && item.wheelSizes) {
-      const targetSize = wheelSize || item.wheelSizes[0]?.size;
-      updated.wheelSizes = item.wheelSizes.map(ws =>
-        ws.size === targetSize ? { ...ws, stock: Number(ws.stock || 0) + 1 } : ws
-      );
-    } else {
-      updated.stock = Number(item.stock || 0) + 1;
-    }
-
-    await updateInventoryItem(item.id, updated);
   };
 
   const handleDelete = () => {
@@ -263,8 +294,7 @@ export default function InventoryPage() {
   // Wheel size helpers
   const addWheelSize = () => {
     const ws = editItem.wheelSizes || [];
-    const used = ws.map((w:WheelSizeEntry)=>w.size);
-    const next = WHEEL_OPTIONS.find(o => !used.includes(o)) || String(Number(ws[ws.length-1]?.size||26)+1);
+    const next = nextWheelSize(ws);
     setEditItem({...editItem, wheelSizes:[...ws, {size:next, stock:0}]});
   };
   const removeWheelSize = (idx:number) => {
@@ -294,6 +324,9 @@ export default function InventoryPage() {
   const ItemRow = ({item, type, openEdit, setDeleteConfirm}:{item:InventoryItem; type:'bike'|'accessory'; openEdit:any; setDeleteConfirm:any}) => {
     const activeDemand = activeDemandsByItem.get(item.id);
     const maintCount = Number(item.maintenanceStock || 0);
+    const unlinkedMaintenance = item.hasWheelSizes
+      ? (item.wheelSizes || []).filter(wheel => Number(wheel.maintenanceStock || 0) > (maintenanceAllocatedByResource.get(`${item.id}::${wheel.size}`) || 0))
+      : maintCount > (maintenanceAllocatedByResource.get(`${item.id}::`) || 0);
     return (
       <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 bg-white/75 backdrop-blur rounded-2xl border border-brand-yellow/20 hover:border-brand-yellow/60 transition-all shadow-sm">
         <div className="flex items-center gap-4 flex-1 min-w-0">
@@ -320,21 +353,19 @@ export default function InventoryPage() {
                   En taller/dañado: {maintCount}
                 </Badge>
               )}
+              {type === 'bike' && item.hasWheelSizes && Array.isArray(unlinkedMaintenance) && unlinkedMaintenance.map(wheel => {
+                const key = `${item.id}::${wheel.size}`;
+                return <Button key={key} size="sm" disabled={releasingMaintenanceKey === key} onClick={() => handleReleaseUnlinkedMaintenance(item, wheel.size)} className="h-7 rounded-lg bg-emerald-100 px-2 text-[10px] font-bold text-emerald-800 hover:bg-emerald-200">
+                  {releasingMaintenanceKey === key ? 'Guardando…' : `Reintegrar aro ${wheel.size}`}
+                </Button>;
+              })}
+              {type === 'bike' && !item.hasWheelSizes && unlinkedMaintenance === true && <Button size="sm" disabled={releasingMaintenanceKey === `${item.id}::`} onClick={() => handleReleaseUnlinkedMaintenance(item)} className="h-7 rounded-lg bg-emerald-100 px-2 text-[10px] font-bold text-emerald-800 hover:bg-emerald-200">
+                {releasingMaintenanceKey === `${item.id}::` ? 'Guardando…' : 'Reintegrar unidad reparada'}
+              </Button>}
             </div>
           </div>
         </div>
         <div className="flex items-center justify-between sm:justify-end gap-2 shrink-0">
-          {maintCount > 0 && (
-            <Button
-              type="button"
-              size="sm"
-              onClick={() => handleReleaseMaintenanceUnit(item)}
-              className="h-8 px-2.5 rounded-lg bg-amber-500 text-brand-black hover:bg-amber-400 text-[10px] font-black uppercase"
-              title="Reintegrar 1 unidad reparada al stock disponible"
-            >
-              +1 Reparada
-            </Button>
-          )}
           <Badge className={`shrink-0 rounded-full px-3 py-1 text-[9px] font-black uppercase ${item.active?'bg-green-500/10 text-green-600 border-green-500/20':'bg-red-500/10 text-red-500 border-red-500/20'}`}>
             {item.active?'Activo':'Inactivo'}
           </Badge>
@@ -414,9 +445,17 @@ export default function InventoryPage() {
                   <div className="flex flex-wrap gap-1 mt-1">
                     {c.components.map((comp,i)=>{
                       const item = inventory.find(inv=>inv.id===comp.inventoryItemId);
-                      return <Badge key={i} className="bg-brand-charcoal/10 text-brand-charcoal text-[9px] font-bold border-0 rounded-md">{comp.quantity}x {item?.name||'?'}</Badge>;
+                          const rented = activeDemandsByItem.get(comp.inventoryItemId)?.total || 0;
+                          const maintenance = Number(item?.maintenanceStock || 0);
+                          const shelf = item?.hasWheelSizes && item.wheelSizes
+                            ? item.wheelSizes.reduce((sum, wheel) => sum + Number(wheel.stock || 0), 0)
+                            : Number(item?.stock || 0);
+                          return <Badge key={i} className="bg-brand-charcoal/10 text-brand-charcoal text-[9px] font-bold border-0 rounded-md">
+                            {comp.quantity}x {item?.name||'?'} · {shelf} disp. / {rented} alquil. / {maintenance} taller
+                          </Badge>;
                     })}
                   </div>
+                      <p className="mt-1 text-[10px] text-brand-charcoal/55">Capacidad calculada con los componentes físicos. Ajusta stock en la bicicleta o accesorio compartido; este combinado no tiene stock independiente.</p>
                 </div>
                 <div className="text-center shrink-0">
                   <p className="text-brand-charcoal font-black text-lg">{avail}</p>
@@ -639,15 +678,16 @@ export default function InventoryPage() {
                   {editItem && (
                     <div>
                       <div className="flex justify-between items-center mb-1">
-                        <Label className="text-[10px] text-white/40 font-bold uppercase tracking-wider">Categoría de Alquiler</Label>
+                        <Label className="text-[10px] text-white/40 font-bold uppercase tracking-wider">{modal.type === 'accessory' ? 'Categoría de Accesorio' : 'Categoría de Alquiler'}</Label>
                         <button 
                           type="button" 
                           onClick={() => {
-                            const newCat = prompt('Ingrese el nombre de la nueva categoría de alquiler (ej. Urbana, Montañera):');
+                            const newCat = prompt(modal.type === 'accessory' ? 'Ingrese el nombre de la nueva categoría de accesorio:' : 'Ingrese el nombre de la nueva categoría de alquiler (ej. Urbana, Montañera):');
                             if (newCat && newCat.trim()) {
                               const trimmed = newCat.trim();
-                              addBikeCategory(trimmed).catch((err) => console.warn('No se pudo guardar la categoría:', err));
-                              setEditItem({ ...editItem, category: trimmed });
+                              const saveCategory = modal.type === 'accessory' ? addAccessoryCategory(trimmed) : addBikeCategory(trimmed);
+                              saveCategory.then(() => setEditItem({ ...editItem, category: trimmed }))
+                                .catch((err) => alert(`No se pudo guardar la categoría: ${err.message || err}`));
                             }
                           }}
                           className="text-[9px] font-black uppercase text-brand-yellow hover:underline cursor-pointer"
@@ -663,7 +703,7 @@ export default function InventoryPage() {
                           <SelectValue placeholder="Seleccione una categoría" />
                         </SelectTrigger>
                         <SelectContent className="bg-brand-charcoal border-white/10 text-white">
-                          {availableBikeCategories.map((cat) => (
+                          {(modal.type === 'accessory' ? availableAccessoryCategories : availableBikeCategories).map((cat) => (
                             <SelectItem key={cat} value={cat} className="focus:bg-white/5 focus:text-white cursor-pointer">
                               {cat}
                             </SelectItem>
@@ -685,13 +725,17 @@ export default function InventoryPage() {
                       <Checkbox checked={editItem.active} onCheckedChange={v=>setEditItem({...editItem,active:Boolean(v)})} className="data-[state=checked]:bg-green-500 data-[state=checked]:border-green-500"/>
                       <span className="text-xs font-bold text-white/60">Activo</span>
                     </label>
+                    {modal.type === 'accessory' && <label className="flex items-center gap-2 cursor-pointer">
+                      <Checkbox checked={editItem.availableAsRentalAddon ?? Boolean(editItem.availableForRental)} onCheckedChange={v=>setEditItem({...editItem,availableAsRentalAddon:Boolean(v)})} className="data-[state=checked]:bg-brand-yellow data-[state=checked]:border-brand-yellow"/>
+                      <span className="text-xs font-bold text-white/60">Ofrecer como complemento de reserva</span>
+                    </label>}
                     <label className="flex items-center gap-2 cursor-pointer">
                       <Checkbox checked={Boolean(editItem.availableForRental)} onCheckedChange={v=>setEditItem({...editItem,availableForRental:Boolean(v)})} className="data-[state=checked]:bg-brand-yellow data-[state=checked]:border-brand-yellow"/>
                       <span className="text-xs font-bold text-white/60">Disponible para alquiler individual</span>
                     </label>
                   </div>
                   <p className="text-[11px] text-white/45">
-                    Los componentes de combos comparten el mismo stock físico. Activa el alquiler individual y define su tarifa para ofrecer un accesorio por separado.
+                    Los componentes de combos comparten el mismo stock físico. La opción de complemento es independiente del alquiler individual.
                   </p>
                 </div>
 
@@ -714,7 +758,7 @@ export default function InventoryPage() {
                             <div className="flex-1">
                               <Label className="text-[9px] text-white/30 font-bold uppercase">Aro</Label>
                               <select value={ws.size} onChange={e=>updateWS(idx,'size',e.target.value)} className="w-full bg-transparent border-0 border-b border-white/10 text-white font-black text-sm py-1 focus:outline-none">
-                                {WHEEL_OPTIONS.map(o=><option key={o} value={o} className="bg-brand-charcoal">Aro {o}</option>)}
+                                {SUPPORTED_WHEEL_SIZES.map(o=><option key={o} value={o} className="bg-brand-charcoal">Aro {o}</option>)}
                                 <option value="otro" className="bg-brand-charcoal">Otro</option>
                               </select>
                             </div>
@@ -728,16 +772,7 @@ export default function InventoryPage() {
                           </div>
                         ))}
                       </div>
-                      <div className="pt-2 border-t border-white/10">
-                        <Label className="text-[10px] text-amber-400 font-bold uppercase tracking-wider">Unidades en Mantenimiento / Taller</Label>
-                        <Input
-                          type="number"
-                          min={0}
-                          value={toEditableNumber(editItem.maintenanceStock)}
-                          onChange={e=>setEditItem({...editItem,maintenanceStock:e.target.value === '' ? '' : Number(e.target.value)})}
-                          className="bg-black/40 border-white/10 h-10 font-black text-amber-400 rounded-xl mt-1"
-                        />
-                      </div>
+                      <div className="pt-2 border-t border-white/10 text-xs font-bold text-amber-300">En taller: {Number(editItem.maintenanceStock || 0)}. Se registra y se reincorpora desde Taller para conservar trazabilidad.</div>
                     </div>
                   )}
 
@@ -748,16 +783,7 @@ export default function InventoryPage() {
                         <Label className="text-[10px] text-white/40 font-bold uppercase tracking-wider">Stock Disponible</Label>
                         <Input type="number" min={0} value={toEditableNumber(editItem.stock)} onChange={e=>setEditItem({...editItem,stock:e.target.value === '' ? '' : Number(e.target.value)})} className="bg-black/40 border-white/10 h-16 font-black text-4xl text-brand-yellow text-center rounded-xl mt-2"/>
                       </div>
-                      <div>
-                        <Label className="text-[10px] text-amber-400 font-bold uppercase tracking-wider">Unidades en Mantenimiento / Dañadas</Label>
-                        <Input
-                          type="number"
-                          min={0}
-                          value={toEditableNumber(editItem.maintenanceStock)}
-                          onChange={e=>setEditItem({...editItem,maintenanceStock:e.target.value === '' ? '' : Number(e.target.value)})}
-                          className="bg-black/40 border-white/10 h-10 font-black text-amber-400 rounded-xl mt-1"
-                        />
-                      </div>
+                      <p className="text-xs font-bold text-amber-300">En taller/dañado: {Number(editItem.maintenanceStock || 0)}. La gestión se realiza desde Taller.</p>
                     </div>
                   )}
 

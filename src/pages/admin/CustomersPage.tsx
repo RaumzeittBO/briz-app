@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -6,6 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { useStore } from '@/context/StoreContext';
 import type { Customer } from '@/context/StoreContext';
+import { getAdminCustomerFiles, type AdminCustomerFiles } from '@/lib/backend';
 import { ExternalLink, Search, Edit, User, UserPlus, Eye, FileText } from 'lucide-react';
 
 export default function CustomersPage() {
@@ -17,11 +18,31 @@ export default function CustomersPage() {
     const [modalMode, setModalMode] = useState<'add' | 'edit'>('add');
     const [current, setCurrent] = useState<Partial<Customer>>({});
     const [detailsCustomer, setDetailsCustomer] = useState<Customer | null>(null);
+    const [customerFilesResult, setCustomerFilesResult] = useState<{
+        customerId: string;
+        files?: AdminCustomerFiles['files'];
+        error?: string;
+    } | null>(null);
     const isPdfDocument = (url?: string) => Boolean(url && (url.toLowerCase().includes('.pdf') || url.startsWith('data:application/pdf')));
     const openDocument = (url?: string) => {
         if (!url) return;
         window.open(url, '_blank', 'noopener,noreferrer');
     };
+    const currentCustomerFiles = customerFilesResult && detailsCustomer && customerFilesResult.customerId === detailsCustomer.id ? customerFilesResult.files || null : null;
+    const customerFilesLoading = Boolean(detailsCustomer && customerFilesResult?.customerId !== detailsCustomer.id);
+    const customerFilesError = customerFilesResult && detailsCustomer && customerFilesResult.customerId === detailsCustomer.id ? customerFilesResult.error || '' : '';
+    const selfieUrl = currentCustomerFiles?.autofoto.url || undefined;
+    const documentFrontUrl = currentCustomerFiles?.documento.url || undefined;
+    const documentBackUrl = currentCustomerFiles?.documentoReverso.url || undefined;
+
+    useEffect(() => {
+        if (!detailsCustomer) return;
+        let cancelled = false;
+        getAdminCustomerFiles(detailsCustomer.id)
+            .then((result) => { if (!cancelled) setCustomerFilesResult({ customerId: detailsCustomer.id, files: result.files }); })
+            .catch(() => { if (!cancelled) setCustomerFilesResult({ customerId: detailsCustomer.id, error: 'No se pudieron cargar de forma segura los archivos de este cliente.' }); });
+        return () => { cancelled = true; };
+    }, [detailsCustomer]);
 
     const filtered = customers.filter(c =>
         c.name.toLowerCase().includes(search.toLowerCase()) ||
@@ -99,11 +120,7 @@ export default function CustomersPage() {
                             <CardContent className="p-0 flex-1 flex flex-col">
                                 <div className="p-6 flex flex-col items-center text-center relative border-b border-white/5 bg-white/[0.01] flex-1">
                                     <div className="w-24 h-24 rounded-full overflow-hidden mb-4 border-2 border-brand-yellow/30 group-hover:scale-105 transition-transform flex items-center justify-center bg-brand-yellow/10">
-                                        {c.autofotoUrl ? (
-                                            <img src={c.autofotoUrl} className="w-full h-full object-cover" alt={c.name} />
-                                        ) : (
-                                            <span className="text-brand-yellow text-2xl font-black">{c.name.substring(0, 2).toUpperCase()}</span>
-                                        )}
+                                        <span className="text-brand-yellow text-2xl font-black">{c.name.substring(0, 2).toUpperCase()}</span>
                                     </div>
                                     <h3 className="text-white font-black text-xl mb-1 truncate w-full">{c.name}</h3>
                                     
@@ -126,16 +143,6 @@ export default function CustomersPage() {
                                             <p className="text-[10px] text-brand-yellow/60 font-semibold uppercase">
                                                 📢 {c.comoNosConociste}
                                             </p>
-                                        )}
-                                        {c.documentoUrl && (
-                                            <a 
-                                                href={c.documentoUrl} 
-                                                target="_blank" 
-                                                rel="noreferrer" 
-                                                className="inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-wider text-brand-yellow bg-brand-yellow/10 hover:bg-brand-yellow/20 px-3 py-1 rounded-full mt-2 transition-all cursor-pointer"
-                                            >
-                                                📄 Ver Documento
-                                            </a>
                                         )}
                                     </div>
 
@@ -204,6 +211,8 @@ export default function CustomersPage() {
                                 </DialogTitle>
                             </DialogHeader>
                             <div className="max-h-[80vh] space-y-6 overflow-y-auto p-4 sm:p-7">
+                                {customerFilesLoading && <p className="rounded-xl bg-white p-3 text-sm font-bold text-brand-charcoal/70">Cargando archivos privados de forma segura…</p>}
+                                {customerFilesError && <p role="alert" className="rounded-xl border border-red-300 bg-red-50 p-3 text-sm font-bold text-red-700">{customerFilesError}</p>}
                                 <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(520px,0.9fr)_minmax(560px,1.1fr)]">
                                     <div className="space-y-5">
                                         <div>
@@ -240,52 +249,56 @@ export default function CustomersPage() {
                                         <div className="rounded-3xl border border-brand-yellow/15 bg-white p-4 shadow-sm">
                                             <p className="mb-3 text-[10px] font-bold uppercase tracking-widest text-brand-charcoal/45">Foto del cliente</p>
                                             <div className="aspect-square rounded-2xl overflow-hidden bg-brand-yellow/5 border border-brand-yellow/15 flex items-center justify-center">
-                                                {detailsCustomer.autofotoUrl ? (
-                                                    <a href={detailsCustomer.autofotoUrl} target="_blank" rel="noreferrer" className="w-full h-full">
-                                                        <img src={detailsCustomer.autofotoUrl} className="w-full h-full object-cover" alt={`Foto de ${detailsCustomer.name}`} />
+                                                {selfieUrl ? (
+                                                    <a href={selfieUrl} target="_blank" rel="noreferrer" className="w-full h-full">
+                                                        <img src={selfieUrl} className="w-full h-full object-cover" alt={`Foto de ${detailsCustomer.name}`} />
                                                     </a>
                                                 ) : (
                                                     <User className="w-16 h-16 text-brand-charcoal/20" />
                                                 )}
                                             </div>
+                                            {!customerFilesLoading && !customerFilesError && !selfieUrl && <p className="mt-2 text-xs font-medium text-brand-charcoal/55">No hay una fotografía disponible o el archivo ya no existe.</p>}
                                         </div>
 
                                         <div className="rounded-3xl border border-brand-yellow/15 bg-white p-4 shadow-sm">
                                             <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                                                 <p className="text-[10px] font-bold uppercase tracking-widest text-brand-charcoal/45">Documento subido</p>
-                                                {detailsCustomer.documentoUrl && (
+                                                {documentFrontUrl && (
                                                     <div className="flex flex-wrap gap-2">
-                                                        <Button type="button" onClick={() => openDocument(detailsCustomer.documentoUrl)} className="h-9 rounded-full bg-brand-yellow px-4 text-xs font-black text-brand-black hover:bg-white cursor-pointer">
+                                                        <Button type="button" onClick={() => openDocument(documentFrontUrl)} className="h-9 rounded-full bg-brand-yellow px-4 text-xs font-black text-brand-black hover:bg-white cursor-pointer">
                                                             <ExternalLink className="mr-1.5 h-3.5 w-3.5" /> Anverso
                                                         </Button>
-                                                        {detailsCustomer.documentoReversoUrl && (
-                                                            <Button type="button" onClick={() => openDocument(detailsCustomer.documentoReversoUrl)} className="h-9 rounded-full bg-brand-yellow px-4 text-xs font-black text-brand-black hover:bg-white cursor-pointer">
+                                                        {documentBackUrl && (
+                                                            <Button type="button" onClick={() => openDocument(documentBackUrl)} className="h-9 rounded-full bg-brand-yellow px-4 text-xs font-black text-brand-black hover:bg-white cursor-pointer">
                                                                 <ExternalLink className="mr-1.5 h-3.5 w-3.5" /> Reverso
                                                             </Button>
                                                         )}
                                                     </div>
                                                 )}
                                             </div>
+                                            {!customerFilesLoading && !customerFilesError && currentCustomerFiles && !documentFrontUrl && <p className="text-xs text-brand-charcoal/55">No se encontró el anverso del documento.</p>}
+                                            {!customerFilesLoading && !customerFilesError && currentCustomerFiles && !documentBackUrl && <p className="text-xs text-brand-charcoal/55">No se encontró el reverso del documento.</p>}
                                             
                                             <div className="space-y-4 max-h-[680px] overflow-y-auto pr-1">
+                                                {!customerFilesLoading && !customerFilesError && !documentFrontUrl && !documentBackUrl && <p className="rounded-xl bg-brand-yellow/10 p-3 text-sm font-medium text-brand-charcoal/65">No hay documentos disponibles o los archivos no se encontraron.</p>}
                                                 {/* Anverso / Front Side */}
                                                 <div>
-                                                    {detailsCustomer.documentoUrl && (detailsCustomer.documentoReversoUrl || isPdfDocument(detailsCustomer.documentoUrl)) && (
+                                                    {documentFrontUrl && (documentBackUrl || isPdfDocument(documentFrontUrl)) && (
                                                         <p className="text-[9px] font-black uppercase tracking-wider text-brand-charcoal/40 mb-1.5">Parte Frontal (Anverso) / Archivo Principal</p>
                                                     )}
                                                     <div className="min-h-[300px] rounded-2xl overflow-hidden bg-brand-yellow/5 border border-brand-yellow/15 flex items-center justify-center">
-                                                        {detailsCustomer.documentoUrl ? (
-                                                            isPdfDocument(detailsCustomer.documentoUrl) ? (
-                                                                <object data={detailsCustomer.documentoUrl} type="application/pdf" className="h-[550px] w-full bg-white">
+                                                        {documentFrontUrl ? (
+                                                            isPdfDocument(documentFrontUrl) ? (
+                                                                <object data={documentFrontUrl} type="application/pdf" className="h-[550px] w-full bg-white">
                                                                     <iframe
-                                                                        src={detailsCustomer.documentoUrl}
+                                                                        src={documentFrontUrl}
                                                                         title={`Documento de ${detailsCustomer.name}`}
                                                                         className="h-[550px] w-full bg-white"
                                                                     />
                                                                 </object>
                                                             ) : (
-                                                                <button type="button" onClick={() => openDocument(detailsCustomer.documentoUrl)} className="h-full w-full cursor-zoom-in flex items-center justify-center p-2 bg-white">
-                                                                    <img src={detailsCustomer.documentoUrl} className="max-h-[500px] max-w-full object-contain" alt={`Anverso de ${detailsCustomer.name}`} />
+                                                                <button type="button" onClick={() => openDocument(documentFrontUrl)} className="h-full w-full cursor-zoom-in flex items-center justify-center p-2 bg-white">
+                                                                    <img src={documentFrontUrl} className="max-h-[500px] max-w-full object-contain" alt={`Anverso de ${detailsCustomer.name}`} />
                                                                 </button>
                                                             )
                                                         ) : (
@@ -295,21 +308,21 @@ export default function CustomersPage() {
                                                 </div>
 
                                                 {/* Reverso / Back Side */}
-                                                {detailsCustomer.documentoReversoUrl && (
+                                                {documentBackUrl && (
                                                     <div>
                                                         <p className="text-[9px] font-black uppercase tracking-wider text-brand-charcoal/40 mt-3 mb-1.5">Parte Posterior (Reverso)</p>
                                                         <div className="min-h-[300px] rounded-2xl overflow-hidden bg-brand-yellow/5 border border-brand-yellow/15 flex items-center justify-center">
-                                                            {isPdfDocument(detailsCustomer.documentoReversoUrl) ? (
-                                                                <object data={detailsCustomer.documentoReversoUrl} type="application/pdf" className="h-[550px] w-full bg-white">
+                                                            {isPdfDocument(documentBackUrl) ? (
+                                                                <object data={documentBackUrl} type="application/pdf" className="h-[550px] w-full bg-white">
                                                                     <iframe
-                                                                        src={detailsCustomer.documentoReversoUrl}
+                                                                        src={documentBackUrl}
                                                                         title={`Reverso de ${detailsCustomer.name}`}
                                                                         className="h-[550px] w-full bg-white"
                                                                     />
                                                                 </object>
                                                             ) : (
-                                                                <button type="button" onClick={() => openDocument(detailsCustomer.documentoReversoUrl)} className="h-full w-full cursor-zoom-in flex items-center justify-center p-2 bg-white">
-                                                                    <img src={detailsCustomer.documentoReversoUrl} className="max-h-[500px] max-w-full object-contain" alt={`Reverso de ${detailsCustomer.name}`} />
+                                                                <button type="button" onClick={() => openDocument(documentBackUrl)} className="h-full w-full cursor-zoom-in flex items-center justify-center p-2 bg-white">
+                                                                    <img src={documentBackUrl} className="max-h-[500px] max-w-full object-contain" alt={`Reverso de ${detailsCustomer.name}`} />
                                                                 </button>
                                                             )}
                                                         </div>

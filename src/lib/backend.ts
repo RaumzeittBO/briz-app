@@ -62,6 +62,16 @@ export async function getAdminCustomers(): Promise<Record<string, unknown>[]> {
     return customers;
 }
 
+export interface AdminCustomerFiles {
+    files: Record<'autofoto' | 'documento' | 'documentoReverso', { url: string | null; state: 'available' | 'missing' }>;
+    expiresInSeconds: number;
+}
+
+export async function getAdminCustomerFiles(customerId: string): Promise<AdminCustomerFiles> {
+    const result = await httpsCallable<{ customerId: string }, AdminCustomerFiles>(functions, 'getAdminCustomerFiles')({ customerId });
+    return result.data;
+}
+
 export async function createRentalGroup(input: ReservationGroupInput): Promise<{ reservationCode: string; rentalIds: string[]; total: number; duplicate: boolean }> {
     const result = await httpsCallable<ReservationGroupInput, { reservationCode: string; rentalIds: string[]; total: number; duplicate: boolean }>(functions, 'createRentalGroup')(input);
     return result.data;
@@ -108,6 +118,23 @@ export async function recordRentalPaymentMovement(input: RecordRentalPaymentMove
 
 export async function createServiceOrder(data: Record<string, unknown>): Promise<void> {
     await httpsCallable(functions, 'createServiceOrder')(data);
+}
+
+export async function createBrizMaintenanceOrder(data: Record<string, unknown>): Promise<{ id: string }> {
+    const result = await httpsCallable<Record<string, unknown>, { id: string }>(functions, 'createBrizMaintenanceOrder')(data);
+    return result.data;
+}
+
+export async function updateBrizMaintenanceOrder(id: string, updates: Record<string, unknown>): Promise<void> {
+    await httpsCallable<{ id: string; updates: Record<string, unknown> }, { ok: boolean }>(functions, 'updateBrizMaintenanceOrder')({ id, updates });
+}
+
+export async function releaseBrizMaintenanceOrder(id: string): Promise<void> {
+    await httpsCallable<{ id: string }, { ok: boolean }>(functions, 'releaseBrizMaintenanceOrder')({ id });
+}
+
+export async function releaseUnlinkedMaintenanceStock(data: { itemId: string; wheelSize?: string; operationId: string }): Promise<void> {
+    await httpsCallable<typeof data, { ok: boolean }>(functions, 'releaseUnlinkedMaintenanceStock')(data);
 }
 
 export async function provisionAdminUser(data: { uid: string; role: string; store?: string; name?: string; active?: boolean }): Promise<void> {

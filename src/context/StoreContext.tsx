@@ -11,6 +11,8 @@ import {
     orderBy,
     where,
     writeBatch,
+    runTransaction,
+    serverTimestamp,
 } from 'firebase/firestore';
 import {
     browserLocalPersistence,
@@ -36,7 +38,8 @@ import {
 import { SHOP_SEED_CATEGORIES } from '../data/shopSeedData';
 import { DEFAULT_PUBLIC_BUSINESS_CONFIG, mergePublicBusinessConfig, type PublicBusinessConfig, type PublicBusinessConfigUpdate } from '../lib/businessConfig';
 import { savePublicBusinessConfig } from '../lib/publicBusinessSettings';
-import { beginCustomerRegistration, createCustomerProfile as createCustomerProfileBackend, getMyRentals as getMyRentalsBackend, getAdminCustomers as getAdminCustomersBackend, createRentalGroup as createRentalGroupBackend, createServiceOrder as createServiceOrderBackend, type ReservationGroupInput } from '../lib/backend';
+import { addInventoryCategory } from '../lib/inventoryCategories';
+import { beginCustomerRegistration, createCustomerProfile as createCustomerProfileBackend, getMyRentals as getMyRentalsBackend, getAdminCustomers as getAdminCustomersBackend, createRentalGroup as createRentalGroupBackend, createServiceOrder as createServiceOrderBackend, createBrizMaintenanceOrder, updateBrizMaintenanceOrder, releaseBrizMaintenanceOrder, releaseUnlinkedMaintenanceStock as releaseUnlinkedMaintenanceStockBackend, type ReservationGroupInput } from '../lib/backend';
 import { calculateProductRentalPrice } from '../lib/rentalPricing';
 import {
     getAvailableStockForInterval as calcItemStockForInterval,
@@ -70,6 +73,8 @@ export interface InventoryItem {
     active: boolean;
 
     availableForRental: boolean;
+    /** Explicitly offerable in the rental checkout add-on step. Legacy items fall back to availableForRental. */
+    availableAsRentalAddon?: boolean;
     availableForSale: boolean;
 
     // Bikes with wheel sizes
@@ -283,6 +288,14 @@ export interface ServiceOrder {
     bikeImageUrl?: string;
     date: string;
     store?: string;
+    ownership?: 'briz' | 'customer';
+    inventoryItemId?: string;
+    maintenanceEntryDate?: string;
+    wheelSize?: string;
+    maintenanceQuantity?: number;
+    quantity?: number;
+    inventoryReleased?: boolean;
+    maintenanceState?: string;
 }
 
 export interface EventSubcategory {
@@ -336,6 +349,7 @@ interface StoreContextType {
     routes: CyclingRoute[];
     events: EventItem[];
     bikeCategories: string[];
+    accessoryCategories: string[];
     shopCategories: string[];
     isLoaded: boolean;
     rentalSettings: RentalSettings;
@@ -357,6 +371,7 @@ interface StoreContextType {
 
     // Bike Categories CRUD
     addBikeCategory: (category: string) => Promise<void>;
+    addAccessoryCategory: (category: string) => Promise<void>;
     deleteBikeCategory: (category: string) => Promise<void>;
     updateBikeCategory: (oldCategory: string, newCategory: string) => Promise<void>;
     reorderBikeCategories: (categories: string[]) => Promise<void>;
@@ -407,6 +422,8 @@ interface StoreContextType {
     // Service Order CRUD
     addServiceOrder: (so: Omit<ServiceOrder, 'id' | 'date'>) => Promise<void>;
     updateServiceOrder: (id: string, so: Partial<ServiceOrder>) => Promise<void>;
+    releaseMaintenanceOrder: (id: string) => Promise<void>;
+    releaseUnlinkedMaintenanceUnit: (itemId: string, wheelSize: string | undefined, operationId: string) => Promise<void>;
     deleteServiceOrder: (id: string) => Promise<void>;
 
     // Helpers
@@ -517,6 +534,7 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
     const [events, setEvents] = useState<EventItem[]>([]);
     const [localRoutes, setLocalRoutes] = useState<CyclingRoute[]>(() => safeJSON<CyclingRoute[]>(LOCAL_ROUTES_KEY, []));
     const [bikeCategories, setBikeCategories] = useState<string[]>([]);
+    const [accessoryCategories, setAccessoryCategories] = useState<string[]>([]);
     const [shopCategories, setShopCategories] = useState<string[]>([]);
     const [adminNavigationLinks, setAdminNavigationLinks] = useState<AdminNavigationLink[]>([]);
     const [isLoaded, setIsLoaded] = useState(false);
@@ -693,6 +711,10 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
             console.error('Error fetching shop categories:', error);
         });
 
+        const unsubAccessoryCats = onSnapshot(doc(db, 'settings', 'accessory_categories'), (snap) => {
+            setAccessoryCategories(snap.exists() && Array.isArray(snap.data().categories) ? snap.data().categories : []);
+        }, (error) => console.error('Error fetching accessory categories:', error));
+
         const unsubAdminNav = onSnapshot(doc(db, 'settings', 'admin_navigation'), (snap) => {
             if (snap.exists()) {
                 setAdminNavigationLinks(snap.data().links || DEFAULT_ADMIN_LINKS);
@@ -719,6 +741,7 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
             unsubRoutes();
             unsubBikeCats();
             unsubShopCats();
+            unsubAccessoryCats();
             unsubAdminNav();
             unsubEvents();
         };
@@ -1028,7 +1051,39 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
         await setDoc(doc(db, 'inventory', item.id), item);
     };
     const updateInventoryItem = async (id: string, updates: Partial<InventoryItem>) => {
-        await updateDoc(doc(db, 'inventory', id), updates);
+        const itemRef = doc(db, 'inventory', id);
+        const auditRef = doc(collection(db, 'inventoryStockAudits'));
+        await runTransaction(db, async (transaction) => {
+            const snapshot = await transaction.get(itemRef);
+            if (!snapshot.exists()) throw new Error('El producto ya no existe en el inventario.');
+            const current = snapshot.data() as InventoryItem;
+            const patch: Partial<InventoryItem> = { ...updates };
+            // Maintenance counts can only move through the workshop callables.
+            delete patch.maintenanceStock;
+            if (updates.wheelSizes && current.wheelSizes) {
+                const removedWithMaintenance = current.wheelSizes.some(entry => Number(entry.maintenanceStock || 0) > 0
+                    && !updates.wheelSizes?.some(next => next.size === entry.size));
+                if (removedWithMaintenance) throw new Error('No puedes quitar un aro que todavía tiene unidades en mantenimiento.');
+                patch.wheelSizes = updates.wheelSizes.map((wheel) => {
+                    const existing = current.wheelSizes?.find((entry) => entry.size === wheel.size);
+                    return { ...wheel, ...(existing?.maintenanceStock !== undefined ? { maintenanceStock: existing.maintenanceStock } : {}) };
+                });
+            }
+            const nextWheels = (patch.wheelSizes || []).map(({ size, stock }) => ({ size, stock })).sort((a, b) => a.size.localeCompare(b.size));
+            const currentWheels = (current.wheelSizes || []).map(({ size, stock }) => ({ size, stock })).sort((a, b) => a.size.localeCompare(b.size));
+            const stockChanged = (updates.stock !== undefined && Number(updates.stock) !== Number(current.stock))
+                || Boolean(updates.wheelSizes && JSON.stringify(nextWheels) !== JSON.stringify(currentWheels));
+            transaction.update(itemRef, patch);
+            if (stockChanged) transaction.set(auditRef, {
+                itemId: id,
+                store: updates.store || current.store || (adminStoreScope === 'all' ? 'principal' : adminStoreScope),
+                actorUid: auth.currentUser?.uid || '',
+                action: 'stock_adjustment',
+                before: current.hasWheelSizes ? (current.wheelSizes || []).map(({ size, stock, maintenanceStock }) => ({ size, stock, maintenanceStock: Number(maintenanceStock) || 0 })) : { stock: Number(current.stock) || 0, maintenanceStock: Number(current.maintenanceStock) || 0 },
+                after: updates.hasWheelSizes ? (patch.wheelSizes || []).map(({ size, stock, maintenanceStock }) => ({ size, stock, maintenanceStock: Number(maintenanceStock) || 0 })) : { stock: Number(updates.stock ?? current.stock) || 0, maintenanceStock: Number(current.maintenanceStock) || 0 },
+                createdAt: serverTimestamp(),
+            });
+        });
     };
     const deleteInventoryItem = async (id: string) => {
         await deleteDoc(doc(db, 'inventory', id));
@@ -1087,11 +1142,12 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
     };
 
     const addBikeCategory = async (cat: string) => {
-        const trimmed = cat.trim();
-        if (trimmed && !bikeCategories.includes(trimmed)) {
-            const updated = [...bikeCategories, trimmed];
-            await setDoc(doc(db, 'settings', 'bike_categories'), { categories: updated });
-        }
+        const trimmed = await addInventoryCategory(db, 'bike_categories', cat);
+        setBikeCategories(current => current.some(value => value.trim().toLocaleLowerCase() === trimmed.toLocaleLowerCase()) ? current : [...current, trimmed]);
+    };
+    const addAccessoryCategory = async (cat: string) => {
+        const trimmed = await addInventoryCategory(db, 'accessory_categories', cat);
+        setAccessoryCategories(current => current.some(value => value.trim().toLocaleLowerCase() === trimmed.toLocaleLowerCase()) ? current : [...current, trimmed]);
     };
     const deleteBikeCategory = async (cat: string) => {
         const updated = bikeCategories.filter(c => c !== cat);
@@ -1121,12 +1177,8 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
     };
 
     const addShopCategory = async (cat: string) => {
-        const trimmed = cat.trim();
-        if (trimmed && !shopCategories.includes(trimmed)) {
-            const updated = [...shopCategories, trimmed];
-            await setDoc(doc(db, 'settings', 'shop_categories'), { categories: updated });
-            setShopCategories(updated);
-        }
+        const trimmed = await addInventoryCategory(db, 'shop_categories', cat);
+        setShopCategories(current => current.some(value => value.trim().toLocaleLowerCase() === trimmed.toLocaleLowerCase()) ? current : [...current, trimmed]);
     };
     const deleteShopCategory = async (cat: string) => {
         const updated = shopCategories.filter(c => c !== cat);
@@ -1304,6 +1356,10 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
 
     const addServiceOrder = async (so: Omit<ServiceOrder, 'id' | 'date'>) => {
         if (isAdminSession) {
+            if (so.ownership === 'briz') {
+                await createBrizMaintenanceOrder({ ...so, quantity: so.quantity || 1, store: so.store || adminStoreScope });
+                return;
+            }
             const id = generateId('so');
             await setDoc(doc(db, 'serviceOrders', id), {
                 ...so,
@@ -1316,11 +1372,18 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
         await createServiceOrderBackend(so);
     };
     const updateServiceOrder = async (id: string, so: Partial<ServiceOrder>) => {
+        if (serviceOrders.find(order => order.id === id)?.ownership === 'briz') {
+            await updateBrizMaintenanceOrder(id, so as unknown as Record<string, unknown>);
+            return;
+        }
         await updateDoc(doc(db, 'serviceOrders', id), so);
     };
     const deleteServiceOrder = async (id: string) => {
+        if (serviceOrders.find(order => order.id === id)?.ownership === 'briz') throw new Error('Las órdenes de mantenimiento de flota no se pueden eliminar para conservar su auditoría.');
         await deleteDoc(doc(db, 'serviceOrders', id));
     };
+    const releaseMaintenanceOrder = (id: string) => releaseBrizMaintenanceOrder(id);
+    const releaseUnlinkedMaintenanceUnit = (itemId: string, wheelSize: string | undefined, operationId: string) => releaseUnlinkedMaintenanceStockBackend({ itemId, wheelSize, operationId });
 
     const updateAdminNavigationLinks = async (links: AdminNavigationLink[]) => {
         await setDoc(doc(db, 'settings', 'admin_navigation'), { links });
@@ -1389,14 +1452,14 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
         updateRental, recordRentalPaymentMovement, markRentalExpired,
         addSale, updateSaleStatus, deleteSale,
         addOrUpdateCustomer, updateCustomer, deleteCustomer, verifyCustomerRecovery,
-        addServiceOrder, updateServiceOrder, deleteServiceOrder,
+        addServiceOrder, updateServiceOrder, deleteServiceOrder, releaseMaintenanceOrder, releaseUnlinkedMaintenanceUnit,
         getItemStock, getComboAvailability,
         getAvailableStockForInterval, getComboAvailabilityForInterval,
         calculatePrice, resetAllData,
         currentCustomer, loginCustomer, resendCustomerVerification, registerCustomer, logoutCustomer, getMyRentalHistory, createRentalGroup,
         routes: mergedRoutes, addRoute, updateRoute, deleteRoute,
         events, addEvent, updateEvent, deleteEvent,
-        bikeCategories, addBikeCategory, deleteBikeCategory, updateBikeCategory, reorderBikeCategories,
+        bikeCategories, addBikeCategory, accessoryCategories, addAccessoryCategory, deleteBikeCategory, updateBikeCategory, reorderBikeCategories,
         shopCategories, addShopCategory, deleteShopCategory, updateShopCategory, reorderShopCategories,
         adminNavigationLinks, updateAdminNavigationLinks
     };

@@ -4,14 +4,17 @@ import { createRequire } from 'node:module';
 import { initializeApp } from 'firebase/app';
 import { getAuth, createUserWithEmailAndPassword, connectAuthEmulator, reload } from 'firebase/auth';
 import { getFunctions, connectFunctionsEmulator, httpsCallable } from 'firebase/functions';
-import { connectFirestoreEmulator, getFirestore } from 'firebase/firestore';
+import { connectFirestoreEmulator, getFirestore, doc, setDoc } from 'firebase/firestore';
+import { connectStorageEmulator, getStorage, ref as storageRef, uploadBytes } from 'firebase/storage';
+import { getComboAvailabilityForInterval } from '../src/lib/rentalAvailability';
+import type { ComboProduct, InventoryItem } from '../src/context/StoreContext';
 
 const require = createRequire(new URL('../functions/package.json', import.meta.url));
 const adminAppSdk = require('firebase-admin/app');
 const adminAuthSdk = require('firebase-admin/auth');
 const adminFirestoreSdk = require('firebase-admin/firestore');
 const projectId = 'demo-briz-security';
-const firebaseConfig = { apiKey: 'demo-key', authDomain: 'demo-briz-security.local', projectId, appId: 'demo-app' };
+const firebaseConfig = { apiKey: 'demo-key', authDomain: 'demo-briz-security.local', projectId, appId: 'demo-app', storageBucket: `${projectId}.appspot.com` };
 const adminApp = adminAppSdk.initializeApp({ projectId }, `test-admin-${Date.now()}`);
 const adminDb = adminFirestoreSdk.getFirestore(adminApp);
 const adminAuth = adminAuthSdk.getAuth(adminApp);
@@ -23,12 +26,15 @@ async function client(email: string, password: string) {
     const app = initializeApp(firebaseConfig, `client-${clients.length}-${Date.now()}`);
     const auth = getAuth(app);
     const functions = getFunctions(app);
+    const storage = getStorage(app);
+    const firestore = getFirestore(app);
     connectAuthEmulator(auth, 'http://127.0.0.1:9099', { disableWarnings: true });
-    connectFirestoreEmulator(getFirestore(app), '127.0.0.1', 8080);
+    connectFirestoreEmulator(firestore, '127.0.0.1', 8080);
     connectFunctionsEmulator(functions, '127.0.0.1', 5001);
+    connectStorageEmulator(storage, '127.0.0.1', 9199);
     const credential = await createUserWithEmailAndPassword(auth, email, password);
     clients.push({ app, auth, functions });
-    return { app, auth, functions, uid: credential.user.uid };
+    return { app, auth, functions, storage, firestore, uid: credential.user.uid };
 }
 
 async function verifyEmail(auth: ReturnType<typeof getAuth>, uid: string): Promise<void> {
@@ -79,6 +85,31 @@ try {
     assert.equal('password' in sanitizedLegacy, false);
     assert.equal('autofotoUrl' in sanitizedLegacy, false);
     assert.equal('documentoUrl' in sanitizedLegacy, false);
+    await adminDb.collection('customers').doc(userA.uid).update({ store: 'cochabamba' });
+    await adminDb.collection('customerPrivate').doc(userA.uid).set({
+        autofotoPath: `customerUploads/${userA.uid}/selfie.png`,
+        documentoPath: `customerUploads/${userA.uid}/document-front.png`,
+        documentoReversoPath: `customerUploads/${userA.uid}/document-back.png`,
+    });
+    const fictitiousImage = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]);
+    for (const name of ['selfie.png', 'document-front.png', 'document-back.png']) {
+        await uploadBytes(storageRef(userA.storage, `customerUploads/${userA.uid}/${name}`), fictitiousImage, { contentType: 'image/png' });
+    }
+    const privateFiles = await call<{ files: Record<string, { url: string | null; state: string }>; expiresInSeconds: number }>(userA.functions, 'getAdminCustomerFiles', { customerId: userA.uid });
+    assert.equal(privateFiles.expiresInSeconds, 300);
+    assert.deepEqual(Object.values(privateFiles.files).map((file) => file.state), ['available', 'available', 'available']);
+    assert.ok(Object.values(privateFiles.files).every((file) => file.url?.startsWith('data:image/png;base64,')), 'Emulator returns authorized local bytes without publishing a permanent link.');
+    assert.deepEqual(Buffer.from(privateFiles.files.autofoto.url!.split(',')[1], 'base64'), Buffer.from(fictitiousImage));
+    const unauthorizedReader = await client('unauthorized-files@example.test', 'TestPass#123');
+    await assert.rejects(() => call(unauthorizedReader.functions, 'getAdminCustomerFiles', { customerId: userA.uid }), (error: unknown) => (error as { code?: string }).code === 'functions/permission-denied');
+    const branchManager = await client('manager-files@example.test', 'TestPass#123');
+    await adminDb.doc(`adminUsers/${branchManager.uid}`).set({ uid: branchManager.uid, role: 'manager', active: true, store: 'lapaz' });
+    await assert.rejects(() => call(branchManager.functions, 'getAdminCustomerFiles', { customerId: userA.uid }), (error: unknown) => (error as { code?: string }).code === 'functions/permission-denied');
+    await adminDb.doc(`adminUsers/${branchManager.uid}`).update({ store: 'cochabamba' });
+    const scopedFiles = await call<{ files: Record<string, { state: string }> }>(branchManager.functions, 'getAdminCustomerFiles', { customerId: userA.uid });
+    assert.equal(scopedFiles.files.documento.state, 'available', 'Manager can view private documents only for their own branch.');
+    const missingLegacyFiles = await call<{ files: Record<string, { url: string | null; state: string }> }>(userA.functions, 'getAdminCustomerFiles', { customerId: 'legacy-with-secret' });
+    assert.ok(Object.values(missingLegacyFiles.files).every((file) => file.state === 'missing' && file.url === null));
     pass('Verified profile creation writes a credential-free directory record; admin customer reads are sanitized');
 
     await adminDb.collection('inventory').doc('bike-emulator').set({
@@ -91,6 +122,10 @@ try {
         id: 'acc-emulator', itemType: 'accessory', name: 'Emulator Lock', active: true,
         availableForRental: true, hasWheelSizes: false, stock: 3,
         addonFlatPrice: 7,
+    });
+    await adminDb.collection('inventory').doc('acc-addon-only-emulator').set({
+        id: 'acc-addon-only-emulator', itemType: 'accessory', name: 'Addon only', active: true,
+        availableForRental: false, availableAsRentalAddon: true, hasWheelSizes: false, stock: 2, addonFlatPrice: 5,
     });
     await adminDb.collection('inventory').doc('bike-race-emulator').set({
         id: 'bike-race-emulator', itemType: 'bike', name: 'Last Bike', active: true,
@@ -126,7 +161,7 @@ try {
     const outbox = await adminDb.collection('telegramOutbox').where('reservationCode', '==', first.reservationCode).get();
     assert.equal(outbox.size, 1);
     let notificationStatus = outbox.docs[0].get('status');
-    for (let attempt = 0; attempt < 120 && notificationStatus === 'pending'; attempt += 1) {
+    for (let attempt = 0; attempt < 120 && ['pending', 'sending'].includes(notificationStatus); attempt += 1) {
         await new Promise((resolve) => setTimeout(resolve, 500));
         notificationStatus = (await outbox.docs[0].ref.get()).get('status');
     }
@@ -198,6 +233,130 @@ try {
         date: standaloneDate, pickupTime: '14:00', duration: '1 hora', paymentMethod: 'QR',
     }), /disponible|stock|inventario|quedan/i, 'Combo demand must see accessories reserved separately with another rental.');
     pass('Combo-only components can be booked; combo and standalone add-on reservations share one physical accessory stock');
+
+    await adminDb.doc(`_requestLimits/reservations_${createHash('sha256').update(userA.uid).digest('hex')}`).delete();
+    const addOnOnlyBooking = await call<{ reservationCode: string; total: number }>(userA.functions, 'createRentalGroup', {
+        idempotencyKey: `addon_only_${crypto.randomUUID()}`,
+        lines: [{ productId: 'bike-race-emulator', productType: 'single', quantity: 1 }],
+        accessories: [{ itemId: 'acc-addon-only-emulator', quantity: 1 }],
+        date: new Intl.DateTimeFormat('en-CA', { timeZone: 'America/La_Paz' }).format(new Date(Date.now() + 35 * 24 * 60 * 60 * 1000)),
+        pickupTime: '14:00', duration: '1 hora', paymentMethod: 'QR',
+    });
+    assert.equal(addOnOnlyBooking.total, 20, 'An accessory can be a booking add-on while individual rental is disabled.');
+    await adminDb.collection('inventory').doc('acc-addon-only-emulator').update({ availableAsRentalAddon: false });
+    await adminDb.doc(`_requestLimits/reservations_${createHash('sha256').update(userA.uid).digest('hex')}`).delete();
+    await assert.rejects(() => call(userA.functions, 'createRentalGroup', {
+        idempotencyKey: `addon_disabled_${crypto.randomUUID()}`,
+        lines: [{ productId: 'bike-race-emulator', productType: 'single', quantity: 1 }],
+        accessories: [{ itemId: 'acc-addon-only-emulator', quantity: 1 }],
+        date: new Intl.DateTimeFormat('en-CA', { timeZone: 'America/La_Paz' }).format(new Date(Date.now() + 36 * 24 * 60 * 60 * 1000)),
+        pickupTime: '14:00', duration: '1 hora', paymentMethod: 'QR',
+    }), /complemento|disponible/i, 'Server rejects accessories disabled as add-ons.');
+    pass('Add-on-only accessory can be selected without individual rental permission; server rejects add-ons disabled by admin');
+
+    await adminDb.collection('inventory').doc('maintenance-bike-emulator').set({
+        id: 'maintenance-bike-emulator', itemType: 'bike', name: 'Maintenance Fleet Bike', active: true,
+        availableForRental: true, hasWheelSizes: true, store: 'cochabamba', maintenanceStock: 0,
+        wheelSizes: [{ size: '13', stock: 1, maintenanceStock: 0 }, { size: '18', stock: 1, maintenanceStock: 0 }],
+        pricePerHour: 10, price1Hour: 10, price24Hours: 40, pricePerDay: 40,
+    });
+    await adminDb.collection('combos').doc('maintenance-combo-emulator').set({
+        id: 'maintenance-combo-emulator', name: 'Maintenance test combo', active: true, availableForRental: true,
+        components: [{ inventoryItemId: 'maintenance-bike-emulator', quantity: 1, requiresWheelSize: true }], pricePerHour: 10, price1Hour: 10,
+    });
+    const personalBikeOrder = doc(userA.firestore, 'serviceOrders', `personal-bike-${crypto.randomUUID()}`);
+    const maintenanceBeforePersonal = await adminDb.doc('inventory/maintenance-bike-emulator').get();
+    await setDoc(personalBikeOrder, { id: personalBikeOrder.id, ownership: 'customer', store: 'cochabamba', status: 'Recibido' });
+    assert.deepEqual((await adminDb.doc('inventory/maintenance-bike-emulator').get()).get('wheelSizes'), maintenanceBeforePersonal.get('wheelSizes'), 'Customer-owned repair does not alter BRIZ fleet stock.');
+
+    const maintenanceOrder = await call<{ id: string }>(userA.functions, 'createBrizMaintenanceOrder', {
+        customer: 'Fictional customer', phone: '+59170000088', bikeType: 'Maintenance Fleet Bike', issue: 'Fictional brake issue',
+        estimatedDelivery: tomorrowBolivia(), costEstimate: 0, notes: '', store: 'cochabamba', inventoryItemId: 'maintenance-bike-emulator', wheelSize: '13', quantity: 1,
+    });
+    let maintenanceInventory = await adminDb.doc('inventory/maintenance-bike-emulator').get();
+    assert.deepEqual(maintenanceInventory.get('wheelSizes'), [
+        { size: '13', stock: 0, maintenanceStock: 1 }, { size: '18', stock: 1, maintenanceStock: 0 },
+    ]);
+    assert.equal(maintenanceInventory.get('maintenanceStock'), 1);
+    const maintenanceCatalog = [{ id: maintenanceInventory.id, ...maintenanceInventory.data()! } as InventoryItem];
+    const maintenanceCombos = [{ id: 'maintenance-combo-emulator', ...((await adminDb.doc('combos/maintenance-combo-emulator').get()).data()!) } as ComboProduct];
+    assert.equal(getComboAvailabilityForInterval({ inventory: maintenanceCatalog, combos: maintenanceCombos, rentals: [], comboId: 'maintenance-combo-emulator', wheelSize: '13' }), 0);
+    assert.equal(getComboAvailabilityForInterval({ inventory: maintenanceCatalog, combos: maintenanceCombos, rentals: [], comboId: 'maintenance-combo-emulator', wheelSize: '18' }), 1);
+    await call(userA.functions, 'updateBrizMaintenanceOrder', { id: maintenanceOrder.id, updates: { status: 'Listo' } });
+    assert.equal((await adminDb.doc('inventory/maintenance-bike-emulator').get()).get('wheelSizes')[0].stock, 0, 'Ready status alone does not reintroduce the bike.');
+    await call(userA.functions, 'releaseBrizMaintenanceOrder', { id: maintenanceOrder.id });
+    await assert.rejects(() => call(userA.functions, 'releaseBrizMaintenanceOrder', { id: maintenanceOrder.id }), /already-exists|reincorporada/i);
+    await call(userA.functions, 'updateBrizMaintenanceOrder', { id: maintenanceOrder.id, updates: { status: 'Entregado' } });
+    await assert.rejects(() => call(userA.functions, 'updateBrizMaintenanceOrder', { id: maintenanceOrder.id, updates: { status: 'Listo' } }), /reincorporada/i);
+    const completedMaintenanceOrder = await adminDb.doc(`serviceOrders/${maintenanceOrder.id}`).get();
+    assert.equal(completedMaintenanceOrder.get('status'), 'Entregado');
+    assert.ok(completedMaintenanceOrder.get('maintenanceAudit').length >= 3, 'Intake, release, and final delivery are retained in the maintenance audit trail.');
+    maintenanceInventory = await adminDb.doc('inventory/maintenance-bike-emulator').get();
+    assert.deepEqual(maintenanceInventory.get('wheelSizes'), [
+        { size: '13', stock: 1, maintenanceStock: 0 }, { size: '18', stock: 1, maintenanceStock: 0 },
+    ]);
+    pass('Fleet maintenance removes the selected rim exactly once, lowers combo capacity, leaves customer bikes untouched, and requires an audited one-time release');
+
+    await adminDb.doc('inventory/maintenance-legacy-emulator').set({
+        id: 'maintenance-legacy-emulator', itemType: 'bike', name: 'Legacy damaged return', active: true,
+        availableForRental: true, hasWheelSizes: false, store: 'cochabamba', stock: 1, maintenanceStock: 1,
+    });
+    const legacyReleaseOperationId = `legacy_release_${crypto.randomUUID()}`;
+    await call(userA.functions, 'releaseUnlinkedMaintenanceStock', { itemId: 'maintenance-legacy-emulator', operationId: legacyReleaseOperationId });
+    await call(userA.functions, 'releaseUnlinkedMaintenanceStock', { itemId: 'maintenance-legacy-emulator', operationId: legacyReleaseOperationId });
+    const releasedLegacyMaintenance = await adminDb.doc('inventory/maintenance-legacy-emulator').get();
+    assert.equal(releasedLegacyMaintenance.get('stock'), 2);
+    assert.equal(releasedLegacyMaintenance.get('maintenanceStock'), 0, 'Retry with the same operation id does not release stock twice.');
+    await adminDb.doc('inventory/maintenance-assigned-emulator').set({
+        id: 'maintenance-assigned-emulator', itemType: 'bike', name: 'Assigned repair', active: true,
+        availableForRental: true, hasWheelSizes: false, store: 'cochabamba', stock: 1, maintenanceStock: 1,
+    });
+    await adminDb.doc('serviceOrders/maintenance-assigned-fixture').set({
+        id: 'maintenance-assigned-fixture', ownership: 'briz', inventoryItemId: 'maintenance-assigned-emulator',
+        maintenanceQuantity: 1, inventoryReleased: false, store: 'cochabamba', status: 'En reparación',
+    });
+    await assert.rejects(() => call(userA.functions, 'releaseUnlinkedMaintenanceStock', {
+        itemId: 'maintenance-assigned-emulator', operationId: `allocated_${crypto.randomUUID()}`,
+    }), /sin orden|pendiente/i);
+    assert.equal((await adminDb.doc('inventory/maintenance-assigned-emulator').get()).get('stock'), 1, 'Units assigned to a linked workshop order cannot be released through the legacy path.');
+    pass('Legacy damaged-return stock has an audited idempotent release path; stock allocated to an active workshop order is protected');
+
+    await adminDb.collection('inventory').doc('maintenance-conflict-emulator').set({
+        id: 'maintenance-conflict-emulator', itemType: 'bike', name: 'Reserved Fleet Bike', active: true,
+        availableForRental: true, hasWheelSizes: false, store: 'cochabamba', stock: 1, maintenanceStock: 0,
+    });
+    const conflictDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/La_Paz' }).format(new Date(Date.now() + 40 * 24 * 60 * 60 * 1000));
+    const conflictRentalRef = adminDb.doc('rentals/maintenance-conflict-fixture');
+    await conflictRentalRef.set({ id: conflictRentalRef.id, productId: 'maintenance-conflict-emulator', productType: 'single', quantity: 1, status: 'pending', date: conflictDate, pickupTime: '10:00', duration: '1 hora' });
+    await assert.rejects(() => call(userA.functions, 'createBrizMaintenanceOrder', {
+        customer: 'Fictional', phone: '+59170000089', bikeType: 'Reserved Fleet Bike', issue: 'Fictional repair', estimatedDelivery: tomorrowBolivia(),
+        store: 'cochabamba', inventoryItemId: 'maintenance-conflict-emulator', quantity: 1,
+    }), /reservas existentes/i);
+    assert.equal((await adminDb.doc('inventory/maintenance-conflict-emulator').get()).get('stock'), 1, 'Conflict rejection leaves stock intact.');
+    await conflictRentalRef.delete();
+    pass('Maintenance rejects a withdrawal that would conflict with an active reservation and does not cancel or alter that booking');
+
+    await adminDb.collection('inventory').doc('maintenance-race-emulator').set({
+        id: 'maintenance-race-emulator', itemType: 'bike', name: 'Concurrent Fleet Bike', active: true,
+        availableForRental: true, hasWheelSizes: false, store: 'cochabamba', stock: 1, maintenanceStock: 0, pricePerHour: 10, price1Hour: 10,
+    });
+    await adminDb.doc(`_requestLimits/reservations_${createHash('sha256').update(userA.uid).digest('hex')}`).delete();
+    const maintenanceRaceDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/La_Paz' }).format(new Date(Date.now() + 45 * 24 * 60 * 60 * 1000));
+    const [raceBookingResult, raceMaintenanceResult] = await Promise.allSettled([
+        call(userA.functions, 'createRentalGroup', {
+            idempotencyKey: `maintenance_race_${crypto.randomUUID()}`,
+            lines: [{ productId: 'maintenance-race-emulator', productType: 'single', quantity: 1 }],
+            date: maintenanceRaceDate, pickupTime: '10:00', duration: '1 hora', paymentMethod: 'QR',
+        }),
+        call(userA.functions, 'createBrizMaintenanceOrder', {
+            customer: 'Fictional race', phone: '+59170000090', bikeType: 'Concurrent Fleet Bike', issue: 'Race fixture',
+            estimatedDelivery: tomorrowBolivia(), store: 'cochabamba', inventoryItemId: 'maintenance-race-emulator', quantity: 1,
+        }),
+    ]);
+    assert.equal([raceBookingResult, raceMaintenanceResult].filter(result => result.status === 'fulfilled').length, 1, 'Concurrent booking and maintenance must serialize around the same resource.');
+    const raceInventory = await adminDb.doc('inventory/maintenance-race-emulator').get();
+    assert.equal(Number(raceInventory.get('stock')) + Number(raceInventory.get('maintenanceStock')), 1);
+    pass('A booking and a maintenance intake racing for the last physical unit serialize; exactly one succeeds');
 
     const manualBooking = {
         adminManual: true,

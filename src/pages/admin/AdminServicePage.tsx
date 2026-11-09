@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -9,6 +9,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { useStore } from '@/context/StoreContext';
 import type { ServiceOrder } from '@/context/StoreContext';
+import { toBoliviaDateString } from '@/lib/dateUtils';
 import { Plus, Trash2, Wrench, Calendar, DollarSign, Pen, Image, Receipt, MessageSquare, Printer } from 'lucide-react';
 
 const statusColors: Record<string, string> = {
@@ -20,7 +21,7 @@ const statusColors: Record<string, string> = {
 };
 
 export default function AdminServicePage() {
-    const { serviceOrders, addServiceOrder, updateServiceOrder, deleteServiceOrder } = useStore();
+    const { serviceOrders, inventory, adminStoreScope, addServiceOrder, updateServiceOrder, deleteServiceOrder, releaseMaintenanceOrder } = useStore();
 
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isEditing, setIsEditing] = useState(false);
@@ -32,15 +33,26 @@ export default function AdminServicePage() {
         bikeType: '',
         issue: '',
         status: 'Recibido',
-        estimatedDelivery: new Date().toISOString().split('T')[0],
+        estimatedDelivery: toBoliviaDateString(new Date()),
+        maintenanceEntryDate: toBoliviaDateString(new Date()),
         costEstimate: 0,
-        notes: ''
+        notes: '',
+        ownership: 'customer',
+        quantity: 1,
     };
 
     const [currentOrder, setCurrentOrder] = useState<Partial<ServiceOrder>>(initialState);
     const [receiptOrder, setReceiptOrder] = useState<ServiceOrder | null>(null);
+    const [saving, setSaving] = useState(false);
+    const [actionError, setActionError] = useState('');
+    const rentalBikes = useMemo(() => inventory.filter(item => item.itemType === 'bike' && item.active), [inventory]);
+    const branches = useMemo(() => {
+        const values = [...new Set(rentalBikes.map(item => item.store).filter((store): store is string => Boolean(store)))];
+        return values.length ? values : ['principal'];
+    }, [rentalBikes]);
 
     const handleOpenModal = (order?: ServiceOrder) => {
+        setActionError('');
         if (order) {
             setCurrentOrder(order);
             setIsEditing(true);
@@ -51,14 +63,39 @@ export default function AdminServicePage() {
         setIsModalOpen(true);
     };
 
-    const handleSave = (e: React.FormEvent) => {
+    const handleSave = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (isEditing && currentOrder.id) {
-            updateServiceOrder(currentOrder.id, currentOrder);
-        } else {
-            addServiceOrder(currentOrder as Omit<ServiceOrder, 'id' | 'date'>);
+        setSaving(true);
+        setActionError('');
+        try {
+            if (isEditing && currentOrder.id) {
+                const updates = {
+                    customer: currentOrder.customer,
+                    phone: currentOrder.phone,
+                    bikeType: currentOrder.bikeType,
+                    issue: currentOrder.issue,
+                    notes: currentOrder.notes,
+                    estimatedDelivery: currentOrder.estimatedDelivery,
+                    costEstimate: currentOrder.costEstimate,
+                    status: currentOrder.status,
+                };
+                await updateServiceOrder(currentOrder.id, updates);
+            } else {
+                await addServiceOrder(currentOrder as Omit<ServiceOrder, 'id' | 'date'>);
+            }
+            setIsModalOpen(false);
+        } catch (error) {
+            setActionError(error instanceof Error ? error.message : 'No se pudo guardar la orden.');
+        } finally {
+            setSaving(false);
         }
-        setIsModalOpen(false);
+    };
+
+    const handleRelease = async (order: ServiceOrder) => {
+        if (!window.confirm('¿Confirmas que esta unidad vuelve físicamente al inventario disponible?')) return;
+        setActionError('');
+        try { await releaseMaintenanceOrder(order.id); }
+        catch (error) { setActionError(error instanceof Error ? error.message : 'No se pudo reincorporar la bicicleta.'); }
     };
 
     const handleDelete = (id: string) => {
@@ -89,6 +126,7 @@ export default function AdminServicePage() {
                 </Button>
             </div>
 
+            {actionError && <p role="alert" className="rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm font-bold text-red-300">{actionError}</p>}
             <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
                 {statusPipeline.map(status => {
                     const count = serviceOrders.filter(so => so.status === status).length;
@@ -183,14 +221,19 @@ export default function AdminServicePage() {
                                                     >
                                                         Editar
                                                     </Button>
-                                                    <Button
+                                                    {so.ownership === 'briz' && so.status === 'Listo' && !so.inventoryReleased && (
+                                                        <Button variant="ghost" size="sm" onClick={() => handleRelease(so)} className="h-9 rounded-full px-3 text-emerald-300 hover:bg-emerald-400 hover:text-black">
+                                                            Reintegrar a inventario
+                                                        </Button>
+                                                    )}
+                                                    {so.ownership !== 'briz' && <Button
                                                         variant="ghost"
                                                         size="icon"
                                                         onClick={() => handleDelete(so.id)}
                                                         className="h-9 w-9 rounded-full text-red-400/80 hover:text-white hover:bg-red-500 transition-all shadow-sm cursor-pointer"
                                                     >
                                                         <Trash2 className="w-4 h-4" />
-                                                    </Button>
+                                                    </Button>}
                                                 </div>
                                             </TableCell>
                                         </TableRow>
@@ -218,6 +261,41 @@ export default function AdminServicePage() {
                     </DialogHeader>
 
                     <form onSubmit={handleSave} className="p-6 space-y-6 max-h-[70vh] overflow-y-auto">
+                        {!isEditing && <div className="rounded-2xl border border-brand-yellow/20 bg-brand-yellow/5 p-4 space-y-3">
+                            <Label className="text-brand-yellow font-black uppercase tracking-widest text-xs">Tipo de bicicleta recibida</Label>
+                            <select value={currentOrder.ownership || 'customer'} onChange={e => setCurrentOrder({ ...currentOrder, ownership: e.target.value as ServiceOrder['ownership'], inventoryItemId: undefined, wheelSize: undefined, quantity: 1 })} className="w-full bg-black/40 border border-white/10 rounded-xl h-11 px-3 text-white">
+                                <option value="customer" className="bg-brand-charcoal">Bicicleta particular de cliente (no modifica flota)</option>
+                                <option value="briz" className="bg-brand-charcoal">Bicicleta perteneciente a BRIZ (retira stock disponible)</option>
+                            </select>
+                            {currentOrder.ownership === 'briz' && <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                <div className="space-y-1">
+                                    <Label className="text-white/60">Sucursal</Label>
+                                    <select value={currentOrder.store || (adminStoreScope !== 'all' ? adminStoreScope : '')} onChange={e => setCurrentOrder({ ...currentOrder, store: e.target.value, inventoryItemId: undefined, wheelSize: undefined })} required className="w-full bg-black/40 border border-white/10 rounded-xl h-10 px-3 text-white">
+                                        <option value="" className="bg-brand-charcoal">Selecciona sucursal</option>
+                                        {(adminStoreScope !== 'all' ? [adminStoreScope] : branches).map(branch => <option key={branch} value={branch} className="bg-brand-charcoal">{branch}</option>)}
+                                    </select>
+                                </div>
+                                <div className="space-y-1">
+                                    <Label className="text-white/60">Bicicleta de inventario BRIZ</Label>
+                                    <select value={currentOrder.inventoryItemId || ''} onChange={e => {
+                                        const bike = rentalBikes.find(item => item.id === e.target.value);
+                                        setCurrentOrder({ ...currentOrder, inventoryItemId: e.target.value, bikeType: bike?.name || '', wheelSize: bike?.hasWheelSizes ? bike.wheelSizes?.[0]?.size : undefined });
+                                    }} required className="w-full bg-black/40 border border-white/10 rounded-xl h-10 px-3 text-white">
+                                        <option value="" className="bg-brand-charcoal">Selecciona bicicleta</option>
+                                        {rentalBikes.filter(item => !currentOrder.store || !item.store || item.store === currentOrder.store).map(bike => <option key={bike.id} value={bike.id} className="bg-brand-charcoal">{bike.name}</option>)}
+                                    </select>
+                                </div>
+                                {currentOrder.inventoryItemId && (() => {
+                                    const bike = rentalBikes.find(item => item.id === currentOrder.inventoryItemId);
+                                    return <>
+                                        <div className="space-y-1"><Label className="text-white/60">Fecha de ingreso a Taller</Label><Input type="date" max={toBoliviaDateString(new Date())} value={currentOrder.maintenanceEntryDate || toBoliviaDateString(new Date())} onChange={e => setCurrentOrder({ ...currentOrder, maintenanceEntryDate: e.target.value })} className="bg-black/40 border-white/10 text-white [color-scheme:dark]" /></div>
+                                        {bike?.hasWheelSizes && <div className="space-y-1"><Label className="text-white/60">Aro</Label><select value={currentOrder.wheelSize || ''} onChange={e => setCurrentOrder({ ...currentOrder, wheelSize: e.target.value })} className="w-full bg-black/40 border border-white/10 rounded-xl h-10 px-3 text-white">{bike.wheelSizes?.map(wheel => <option key={wheel.size} value={wheel.size} className="bg-brand-charcoal">Aro {wheel.size} — {wheel.stock} disponible(s)</option>)}</select></div>}
+                                        <div className="space-y-1"><Label className="text-white/60">Unidades afectadas</Label><Input type="number" min={1} max={Math.max(1, bike?.hasWheelSizes ? bike.wheelSizes?.find(wheel => wheel.size === currentOrder.wheelSize)?.stock || 0 : bike?.stock || 0)} value={currentOrder.quantity || 1} onChange={e => setCurrentOrder({ ...currentOrder, quantity: Number(e.target.value) })} className="bg-black/40 border-white/10 text-white" /></div>
+                                        <p className="md:col-span-2 text-xs text-white/50">El ingreso descuenta unidades disponibles en una transacción y verifica las reservas futuras. Una orden “Lista” permanece apartada hasta usar “Reintegrar a inventario”.</p>
+                                    </>;
+                                })()}
+                            </div>}
+                        </div>}
 
                         {/* Status override section */}
                         {isEditing && (
@@ -338,9 +416,10 @@ export default function AdminServicePage() {
                             </div>
                         )}
 
+                        {actionError && <p role="alert" className="rounded-xl bg-red-500/10 p-3 text-sm font-bold text-red-300">{actionError}</p>}
                         <DialogFooter className="pt-6 mt-4 border-t border-white/5 flex gap-3">
                             <Button type="button" variant="ghost" onClick={() => setIsModalOpen(false)} className="hover:bg-white/5 h-12 px-6">Cancelar</Button>
-                            <Button type="submit" className="bg-brand-yellow text-brand-black hover:bg-brand-yellow-light font-bold h-12 px-8 flex-1 sm:flex-none">Guardar Cambios</Button>
+                            <Button type="submit" disabled={saving} className="bg-brand-yellow text-brand-black hover:bg-brand-yellow-light font-bold h-12 px-8 flex-1 sm:flex-none">{saving ? 'Guardando…' : 'Guardar Cambios'}</Button>
                         </DialogFooter>
                     </form>
                 </DialogContent>
