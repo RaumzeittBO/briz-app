@@ -438,7 +438,18 @@ export const getAdminCustomerFiles = onCall(callable(), async (request) => {
     if (role.role === 'manager' && role.store !== 'all' && (!customer.store || customer.store !== role.store)) {
         throw new HttpsError('permission-denied', 'El cliente pertenece a otra sucursal.');
     }
-    const ownerUid = cleanString(customer.authUid, 150) || customerId;
+    const claimedOwnerUid = cleanString(customer.authUid, 150);
+    const ownerProfileSnap = claimedOwnerUid && !claimedOwnerUid.includes('/')
+        ? await db.doc(`customerProfiles/${claimedOwnerUid}`).get()
+        : null;
+    const ownerProfile = ownerProfileSnap?.data();
+    const verifiedOwnerUid = ownerProfileSnap?.exists
+        && ownerProfile?.authUid === claimedOwnerUid
+        && (ownerProfile?.legacyCustomerId === customerId
+            || (claimedOwnerUid === customerId && !ownerProfile?.legacyCustomerId))
+        ? claimedOwnerUid
+        : '';
+    const ownerUid = verifiedOwnerUid || customerId;
     const [privateSnap, legacySnap] = await Promise.all([
         db.doc(`customerPrivate/${ownerUid}`).get(),
         db.doc(`customers/${customerId}`).get(),
@@ -478,8 +489,8 @@ export const getAdminCustomerFiles = onCall(callable(), async (request) => {
         const segments = objectPath.split('/');
         if (segments.length < 3 || segments.some((segment) => !segment || segment === '.' || segment === '..')) return '';
 
-        const ownedLegacyRoots = new Set([customerId, ownerUid].map((id) => `customers/${id}/`));
-        if (objectPath.startsWith(`customerUploads/${ownerUid}/`)) return objectPath;
+        const ownedLegacyRoots = new Set([customerId, ...(verifiedOwnerUid ? [verifiedOwnerUid] : [])].map((id) => `customers/${id}/`));
+        if (verifiedOwnerUid && objectPath.startsWith(`customerUploads/${verifiedOwnerUid}/`)) return objectPath;
         if ([...ownedLegacyRoots].some((root) => objectPath.startsWith(root))) return objectPath;
         return '';
     };

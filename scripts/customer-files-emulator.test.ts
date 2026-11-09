@@ -45,6 +45,13 @@ async function callFiles(functions: ReturnType<typeof getFunctions>, customerId:
 
 async function seedCustomer(id: string, store: string, fields: Record<string, unknown> = {}) {
     await adminDb.doc(`customers/${id}`).set({ id, store, ...fields });
+    if (typeof fields.authUid === 'string') {
+        await adminDb.doc(`customerProfiles/${fields.authUid}`).set({
+            id: fields.authUid,
+            authUid: fields.authUid,
+            legacyCustomerId: id,
+        });
+    }
 }
 
 async function upload(storage: ReturnType<typeof getStorage>, path: string): Promise<void> {
@@ -54,9 +61,11 @@ async function upload(storage: ReturnType<typeof getStorage>, path: string): Pro
 try {
     const admin = await makeClient('customer-files-admin@example.test');
     await adminDb.doc(`adminUsers/${admin.uid}`).set({ uid: admin.uid, role: 'admin', active: true, store: 'all' });
+    const ownerA = await makeClient('customer-files-owner-a@example.test');
+    const ownerB = await makeClient('customer-files-owner-b@example.test');
 
     const customerAId = 'legacy-customer-a';
-    const customerAUid = 'verified-customer-a-uid';
+    const customerAUid = ownerA.uid;
     const customerAPath = `customers/${customerAId}/identity/front.png`;
     const customerAUidPath = `customers/${customerAUid}/identity/back.png`;
     await seedCustomer(customerAId, 'cochabamba', {
@@ -66,10 +75,14 @@ try {
     });
     await upload(admin.storage, customerAPath);
     await upload(admin.storage, customerAUidPath);
+    const customerUploadPath = `customerUploads/${customerAUid}/old-id.png`;
+    await upload(ownerA.storage, customerUploadPath);
+    await adminDb.doc(`customerPrivate/${customerAUid}`).set({ documentoPath: customerUploadPath });
 
     const customerBId = 'legacy-customer-b';
+    const customerBUid = ownerB.uid;
     const customerBPath = `customers/${customerBId}/identity/front.png`;
-    await seedCustomer(customerBId, 'lapaz', { authUid: 'verified-customer-b-uid' });
+    await seedCustomer(customerBId, 'lapaz', { authUid: customerBUid });
     await upload(admin.storage, customerBPath);
 
     const managerTargetPath = `customers/${customerAId}/identity/manager-visible.png`;
@@ -84,6 +97,7 @@ try {
     assert.equal(adminFiles.files.documento.state, 'available');
     assert.equal(adminFiles.files.documentoReverso.state, 'available');
     assert.equal(adminFiles.files.documento.url?.startsWith('data:image/png;base64,'), true);
+    assert.equal(adminFiles.files.autofoto.state, 'available');
     pass('Admin can retrieve legacy files owned by the customer ID and its verified authUid');
 
     const managerFiles = await callFiles(manager.functions, customerAId);
@@ -95,8 +109,9 @@ try {
     pass('Manager can read same-branch files and is denied files from another branch');
 
     const crossCustomerId = 'legacy-customer-cross-reference';
+    const ownerCross = await makeClient('customer-files-owner-cross@example.test');
     await seedCustomer(crossCustomerId, 'cochabamba', {
-        authUid: 'verified-cross-reference-uid', documentoPath: customerBPath,
+        authUid: ownerCross.uid, documentoPath: customerBPath,
     });
     const crossFiles = await callFiles(admin.functions, crossCustomerId);
     assert.equal(crossFiles.files.documento.state, 'missing');
