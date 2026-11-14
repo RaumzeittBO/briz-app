@@ -15,6 +15,14 @@ export interface PublicCustomerProfile {
     purchasesCount?: number;
     legacyCustomerId?: string;
     autofotoPath?: string;
+    missingPrivateFiles?: Array<'autofoto' | 'documento' | 'documentoReverso'>;
+    privateFilesNeedReview?: Array<'autofoto' | 'documento' | 'documentoReverso'>;
+}
+
+export interface CustomerRecoveryFiles {
+    autofoto?: File | null;
+    documento?: File | null;
+    documentoReverso?: File | null;
 }
 
 export interface ReservationGroupInput {
@@ -46,6 +54,11 @@ export async function createCustomerProfile(): Promise<PublicCustomerProfile> {
     return result.data.profile;
 }
 
+export async function completeCustomerProfile(input: { name?: string; phone?: string; ci?: string; privateFiles?: Partial<Record<'autofoto' | 'documento' | 'documentoReverso', string>> }): Promise<PublicCustomerProfile> {
+    const result = await httpsCallable<typeof input, { profile: PublicCustomerProfile }>(functions, 'completeCustomerProfile')(input);
+    return result.data.profile;
+}
+
 export async function getMyRentals(): Promise<Record<string, unknown>[]> {
     const result = await httpsCallable<void, { rentals: Record<string, unknown>[] }>(functions, 'getMyRentals')();
     return result.data.rentals;
@@ -63,7 +76,7 @@ export async function getAdminCustomers(): Promise<Record<string, unknown>[]> {
 }
 
 export interface AdminCustomerFiles {
-    files: Record<'autofoto' | 'documento' | 'documentoReverso', { url: string | null; state: 'available' | 'missing' }>;
+    files: Record<'autofoto' | 'documento' | 'documentoReverso', { url: string | null; state: 'available' | 'missing' | 'needs_review' }>;
     expiresInSeconds: number;
 }
 
@@ -131,6 +144,12 @@ export async function updateBrizMaintenanceOrder(id: string, updates: Record<str
 
 export async function releaseBrizMaintenanceOrder(id: string): Promise<void> {
     await httpsCallable<{ id: string }, { ok: boolean }>(functions, 'releaseBrizMaintenanceOrder')({ id });
+}
+
+export async function adjustInventoryStock(itemId: string, delta: number, wheelSize?: string): Promise<void> {
+    await httpsCallable<{ itemId: string; delta: number; wheelSize?: string }, { ok: boolean }>(functions, 'adjustInventoryStock')({
+        itemId, delta, ...(wheelSize ? { wheelSize } : {}),
+    });
 }
 
 export async function releaseUnlinkedMaintenanceStock(data: { itemId: string; wheelSize?: string; operationId: string }): Promise<void> {

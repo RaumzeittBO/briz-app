@@ -9,9 +9,11 @@ import { Search, Plus, Edit, Trash2, Image as ImageIcon, Bike, Wrench, Layers, X
 import { useStore } from '@/context/StoreContext';
 import type { InventoryItem, ComboProduct, WheelSizeEntry, ComboComponent } from '@/context/StoreContext';
 import { getRentalInventoryDemands } from '@/lib/rentalAvailability';
+import { hasConfiguredRentalAddonPrice, isEligibleRentalAddon } from '@/lib/rentalAddonEligibility';
 import { nextWheelSize, SUPPORTED_WHEEL_SIZES, validateUniqueWheelSizes } from '@/lib/inventoryWheelSizes';
 
 import { FileUploader } from '@/components/ui/file-uploader';
+import { useNavigate } from 'react-router-dom';
 
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
@@ -24,7 +26,7 @@ function defaultBike(): InventoryItem {
   return { id: `inv_${Date.now()}_${Math.random().toString(36).slice(2,7)}`, itemType:'bike', name:'', description:'', imageUrl:'', additionalImageUrls:[], active:true, availableForRental:true, availableForSale:false, hasWheelSizes:true, wheelSizes:[{size:'26',stock:0}], maintenanceStock:0, pricePerHour:0, priceFrom5thHour:0, pricePerDay:0, pricePerWeek:0, pricePerMonth:0, price1Hour:0, price2Hours:0, price3Hours:0, price4Hours:0, price8Hours:0, price24Hours:0, price1Week:0, price1Month:0 };
 }
 function defaultAccessory(): InventoryItem {
-  return { id: `inv_${Date.now()}_${Math.random().toString(36).slice(2,7)}`, itemType:'accessory', name:'', description:'', imageUrl:'', additionalImageUrls:[], active:true, availableForRental:true, availableForSale:false, hasWheelSizes:false, stock:0, maintenanceStock:0, addonFlatPrice:0, pricePerHour:0, priceFrom5thHour:0, pricePerDay:0, pricePerWeek:0, pricePerMonth:0, price1Hour:0, price2Hours:0, price3Hours:0, price4Hours:0, price8Hours:0, price24Hours:0, price1Week:0, price1Month:0 };
+  return { id: `inv_${Date.now()}_${Math.random().toString(36).slice(2,7)}`, itemType:'accessory', name:'', description:'', imageUrl:'', additionalImageUrls:[], active:true, availableForRental:false, rentalCatalog:true, availableForSale:false, hasWheelSizes:false, stock:0, maintenanceStock:0, addonFlatPrice:0, pricePerHour:0, priceFrom5thHour:0, pricePerDay:0, pricePerWeek:0, pricePerMonth:0, price1Hour:0, price2Hours:0, price3Hours:0, price4Hours:0, price8Hours:0, price24Hours:0, price1Week:0, price1Month:0 };
 }
 function defaultCombo(): ComboProduct {
   return { id: `combo_${Date.now()}_${Math.random().toString(36).slice(2,7)}`, name:'', description:'', imageUrl:'', additionalImageUrls:[], active:true, availableForRental:true, availableForSale:false, components:[], pricePerHour:0, priceFrom5thHour:0, pricePerDay:0, pricePerWeek:0, pricePerMonth:0, price1Hour:0, price2Hours:0, price3Hours:0, price4Hours:0, price8Hours:0, price24Hours:0, price1Week:0, price1Month:0 };
@@ -58,7 +60,7 @@ function PriceFields({ editItem, setEditItem }: any) {
 
   return (
     <div className="space-y-4">
-      {editItem.availableForRental && (
+      {(editItem.availableForRental || editItem.itemType === 'accessory') && (
         <div className="space-y-3">
           <h4 className="text-xs font-black text-brand-yellow uppercase tracking-widest">Precios de Alquiler (Bs.)</h4>
           {editItem.itemType === 'accessory' && (
@@ -75,7 +77,7 @@ function PriceFields({ editItem, setEditItem }: any) {
                 className="bg-black/40 border-white/10 h-10 font-bold text-brand-yellow rounded-xl"
               />
               <p className="text-[9px] text-white/40 font-medium">
-                Si es mayor a 0, este accesorio cobrará este precio fijo en el paso 3 de reserva. Si es 0, usará las tarifas por duración o la tabla estándar.
+                Si es mayor a 0, se cobrará como tarifa fija. Si queda vacío o en 0, se usarán las tarifas por duración. Marca «Gratis» explícitamente para ofrecerlo sin costo.
               </p>
             </div>
           )}
@@ -141,9 +143,10 @@ function normalizeInventoryDraft(draft: any) {
 }
 
 export default function InventoryPage() {
+  const navigate = useNavigate();
   const { 
-    inventory, combos, rentals, serviceOrders, addInventoryItem, updateInventoryItem, deleteInventoryItem, releaseUnlinkedMaintenanceUnit,
-    addCombo, updateCombo, deleteCombo, getComboAvailability, 
+    adminStoreScope, inventory, combos, rentals, serviceOrders, addInventoryItem, updateInventoryItem, deleteInventoryItem, releaseUnlinkedMaintenanceUnit,
+    addCombo, updateCombo, deleteCombo, getComboAvailability, adjustInventoryStock,
     bikeCategories, accessoryCategories, addBikeCategory, addAccessoryCategory, deleteBikeCategory, updateBikeCategory, reorderBikeCategories
   } = useStore();
 
@@ -153,6 +156,11 @@ export default function InventoryPage() {
   const [editItem, setEditItem] = useState<any>(null);
   const [releasingMaintenanceKey, setReleasingMaintenanceKey] = useState('');
   const [deleteConfirm, setDeleteConfirm] = useState<{id:string; type:string; name:string} | null>(null);
+  const [stockManagerCombo, setStockManagerCombo] = useState<ComboProduct | null>(null);
+  const [stockDeltas, setStockDeltas] = useState<Record<string, string>>({});
+  const [stockManagerError, setStockManagerError] = useState('');
+  const [stockManagerNotice, setStockManagerNotice] = useState('');
+  const [stockSavingKey, setStockSavingKey] = useState('');
 
   const [categoryManagerOpen, setCategoryManagerOpen] = useState(false);
   const [editingCat, setEditingCat] = useState<string | null>(null);
@@ -161,7 +169,9 @@ export default function InventoryPage() {
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
 
   const bikes = inventory.filter(i => i.itemType === 'bike' && (!i.availableForSale || i.availableForRental));
-  const accessories = inventory.filter(i => i.itemType === 'accessory' && (!i.availableForSale || i.availableForRental));
+  const accessories = inventory.filter(i => i.itemType === 'accessory' && isEligibleRentalAddon(i, combos));
+  const accessoriesMissingRentalPrice = useMemo(() => inventory.filter(item => item.active
+    && isEligibleRentalAddon(item, combos) && !hasConfiguredRentalAddonPrice(item)), [inventory, combos]);
   const q = search.toLowerCase();
   const filteredBikes = bikes.filter(b => b.name.toLowerCase().includes(q));
   const filteredAccessories = accessories.filter(a => a.name.toLowerCase().includes(q));
@@ -290,6 +300,31 @@ export default function InventoryPage() {
     setDeleteConfirm(null);
   };
 
+  const handleStockAdjustment = async (item: InventoryItem, deltaText: string, wheelSize?: string) => {
+    const delta = Number(deltaText);
+    const key = `${item.id}::${wheelSize || ''}`;
+    const sharedCombos = combos.filter(combo => combo.id !== stockManagerCombo?.id
+      && combo.active && combo.availableForRental
+      && combo.components.some(component => component.inventoryItemId === item.id));
+    if (!Number.isInteger(delta) || delta === 0) {
+      setStockManagerError('Indica cuántas unidades incorporar o retirar.');
+      return;
+    }
+    if (sharedCombos.length > 0 && !window.confirm(`Este componente también se usa en ${sharedCombos.map(combo => combo.name).join(', ')}. El ajuste afectará la capacidad de esos combinados. ¿Continuar?`)) return;
+    setStockSavingKey(key);
+    setStockManagerError('');
+    setStockManagerNotice('');
+    try {
+      await adjustInventoryStock(item.id, delta, wheelSize);
+      setStockDeltas(current => ({ ...current, [key]: '' }));
+      setStockManagerNotice('Stock actualizado y auditado. La capacidad de los combinados se recalculará con el inventario físico.');
+    } catch (error) {
+      setStockManagerError(error instanceof Error ? error.message : 'No se pudo ajustar el stock. Revisa las reservas antes de intentarlo nuevamente.');
+    } finally {
+      setStockSavingKey('');
+    }
+  };
+
 
   // Wheel size helpers
   const addWheelSize = () => {
@@ -327,6 +362,10 @@ export default function InventoryPage() {
     const unlinkedMaintenance = item.hasWheelSizes
       ? (item.wheelSizes || []).filter(wheel => Number(wheel.maintenanceStock || 0) > (maintenanceAllocatedByResource.get(`${item.id}::${wheel.size}`) || 0))
       : maintCount > (maintenanceAllocatedByResource.get(`${item.id}::`) || 0);
+    const availableNow = item.hasWheelSizes
+      ? (item.wheelSizes || []).reduce((sum, wheel) => sum + Number(wheel.stock || 0), 0)
+      : Number(item.stock || 0);
+    const physicalTotal = availableNow + (activeDemand?.total || 0) + maintCount;
     return (
       <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 bg-white/75 backdrop-blur rounded-2xl border border-brand-yellow/20 hover:border-brand-yellow/60 transition-all shadow-sm">
         <div className="flex items-center gap-4 flex-1 min-w-0">
@@ -353,6 +392,7 @@ export default function InventoryPage() {
                   En taller/dañado: {maintCount}
                 </Badge>
               )}
+              {type === 'bike' && <Badge className="bg-brand-charcoal/5 text-brand-charcoal border-brand-charcoal/10 text-[10px] font-black rounded-md">Flota física: {physicalTotal}</Badge>}
               {type === 'bike' && item.hasWheelSizes && Array.isArray(unlinkedMaintenance) && unlinkedMaintenance.map(wheel => {
                 const key = `${item.id}::${wheel.size}`;
                 return <Button key={key} size="sm" disabled={releasingMaintenanceKey === key} onClick={() => handleReleaseUnlinkedMaintenance(item, wheel.size)} className="h-7 rounded-lg bg-emerald-100 px-2 text-[10px] font-bold text-emerald-800 hover:bg-emerald-200">
@@ -370,6 +410,11 @@ export default function InventoryPage() {
             {item.active?'Activo':'Inactivo'}
           </Badge>
           <div className="flex gap-1 shrink-0">
+            {type === 'bike' && <Button type="button" size="sm" onClick={() => {
+              const params = new URLSearchParams({ new: 'briz', inventoryItemId: item.id, store: item.store || (adminStoreScope === 'all' ? '' : adminStoreScope) });
+              if (item.hasWheelSizes && item.wheelSizes?.[0]?.size) params.set('wheelSize', item.wheelSizes[0].size);
+              navigate(`/admin/service?${params.toString()}`);
+            }} className="h-9 rounded-xl bg-amber-100 px-3 text-xs font-black text-amber-900 hover:bg-amber-200"><Wrench className="mr-1.5 h-3.5 w-3.5"/>Enviar a taller</Button>}
             <Button variant="ghost" size="icon" className="w-9 h-9 rounded-xl bg-brand-yellow/15 text-brand-charcoal hover:bg-brand-yellow" onClick={()=>openEdit(item,type)}><Edit className="w-4 h-4"/></Button>
             <Button variant="ghost" size="icon" className="w-9 h-9 rounded-xl bg-white/5 text-red-400/60 hover:bg-red-500 hover:text-white" onClick={()=>setDeleteConfirm({id:item.id, type, name:item.name})}><Trash2 className="w-4 h-4"/></Button>
           </div>
@@ -416,6 +461,9 @@ export default function InventoryPage() {
             <Button onClick={()=>setCategoryManagerOpen(true)} variant="outline" className="border-brand-yellow text-brand-yellow hover:bg-brand-yellow/10 font-black rounded-xl h-10 px-5 cursor-pointer">
               <Settings className="w-4 h-4 mr-2"/> Administrar Categorías
             </Button>
+            <Button type="button" onClick={()=>navigate('/admin/service?scope=briz')} variant="outline" className="border-amber-500/40 text-amber-900 hover:bg-amber-100 font-black rounded-xl h-10 px-5">
+              <Wrench className="w-4 h-4 mr-2"/> Bicicletas en taller ({serviceOrders.filter(order => order.ownership === 'briz' && !order.inventoryReleased).length})
+            </Button>
           </div>
           {filteredBikes.length===0 ? <p className="text-center py-16 text-white/20 font-bold text-sm">No hay bicicletas registradas</p> : filteredBikes.map(b=><ItemRow key={b.id} item={b} type="bike" openEdit={openEdit} setDeleteConfirm={setDeleteConfirm}/>)}
         </TabsContent>
@@ -425,6 +473,13 @@ export default function InventoryPage() {
           <Button onClick={()=>openAdd('accessory')} className="bg-brand-yellow text-brand-black font-black rounded-xl h-10 px-5 hover:bg-brand-yellow/90">
             <Plus className="w-4 h-4 mr-2"/> Nuevo Accesorio
           </Button>
+          {accessoriesMissingRentalPrice.length > 0 && <section role="alert" className="rounded-2xl border border-amber-500/30 bg-amber-50 p-4 text-amber-950">
+            <div className="flex items-start gap-3"><AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-700"/><div className="min-w-0 flex-1">
+              <h3 className="font-black">{accessoriesMissingRentalPrice.length} accesorio(s) de alquiler necesitan tarifa</h3>
+              <p className="mt-1 text-sm">Aparecerán en el paso 3, pero no se pueden reservar hasta configurar un precio válido o marcarlos explícitamente como gratuitos.</p>
+              <div className="mt-3 flex flex-wrap gap-2">{accessoriesMissingRentalPrice.map(item => <Button key={item.id} type="button" size="sm" variant="outline" onClick={()=>openEdit(item,'accessory')} className="border-amber-700/30 bg-white text-amber-950 hover:bg-amber-100">Configurar: {item.name}</Button>)}</div>
+            </div></div>
+          </section>}
           {filteredAccessories.length===0 ? <p className="text-center py-16 text-white/20 font-bold text-sm">No hay accesorios registrados</p> : filteredAccessories.map(a=><ItemRow key={a.id} item={a} type="accessory" openEdit={openEdit} setDeleteConfirm={setDeleteConfirm}/>)}
         </TabsContent>
 
@@ -465,6 +520,7 @@ export default function InventoryPage() {
                   {c.active?'Activo':'Inactivo'}
                 </Badge>
                 <div className="flex gap-1 shrink-0">
+                  <Button type="button" size="sm" onClick={()=>{setStockManagerCombo(c);setStockDeltas({});setStockManagerError('');setStockManagerNotice('');}} className="h-9 rounded-xl bg-brand-yellow px-3 text-xs font-black text-brand-black hover:bg-brand-yellow/90">Gestionar stock</Button>
                   <Button variant="ghost" size="icon" className="w-9 h-9 rounded-xl bg-brand-yellow/15 text-brand-charcoal hover:bg-brand-yellow" onClick={()=>openEdit(c,'combo')}><Edit className="w-4 h-4"/></Button>
                   <Button variant="ghost" size="icon" className="w-9 h-9 rounded-xl bg-white/5 text-red-400/60 hover:bg-red-500 hover:text-white" onClick={()=>setDeleteConfirm({id:c.id, type:'combo', name:c.name})}><Trash2 className="w-4 h-4"/></Button>
                 </div>
@@ -725,17 +781,27 @@ export default function InventoryPage() {
                       <Checkbox checked={editItem.active} onCheckedChange={v=>setEditItem({...editItem,active:Boolean(v)})} className="data-[state=checked]:bg-green-500 data-[state=checked]:border-green-500"/>
                       <span className="text-xs font-bold text-white/60">Activo</span>
                     </label>
-                    {modal.type === 'accessory' && <label className="flex items-center gap-2 cursor-pointer">
-                      <Checkbox checked={editItem.availableAsRentalAddon ?? Boolean(editItem.availableForRental)} onCheckedChange={v=>setEditItem({...editItem,availableAsRentalAddon:Boolean(v)})} className="data-[state=checked]:bg-brand-yellow data-[state=checked]:border-brand-yellow"/>
-                      <span className="text-xs font-bold text-white/60">Ofrecer como complemento de reserva</span>
-                    </label>}
+                    {modal.type === 'accessory' && <>
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <Checkbox checked={editItem.rentalCatalog !== false} onCheckedChange={v=>setEditItem({...editItem,rentalCatalog:Boolean(v)})} className="data-[state=checked]:bg-brand-yellow data-[state=checked]:border-brand-yellow"/>
+                        <span className="text-xs font-bold text-white/60">Pertenece al catálogo de alquiler</span>
+                      </label>
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <Checkbox checked={Boolean(editItem.excludeFromRentalAddons)} onCheckedChange={v=>setEditItem({...editItem,excludeFromRentalAddons:Boolean(v)})} className="data-[state=checked]:bg-red-500 data-[state=checked]:border-red-500"/>
+                        <span className="text-xs font-bold text-white/60">Excluir de complementos de alquiler</span>
+                      </label>
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <Checkbox checked={Boolean(editItem.rentalAddonFree)} onCheckedChange={v=>setEditItem({...editItem,rentalAddonFree:Boolean(v)})} className="data-[state=checked]:bg-emerald-500 data-[state=checked]:border-emerald-500"/>
+                        <span className="text-xs font-bold text-white/60">Ofrecer gratis (sin tarifa)</span>
+                      </label>
+                    </>}
                     <label className="flex items-center gap-2 cursor-pointer">
                       <Checkbox checked={Boolean(editItem.availableForRental)} onCheckedChange={v=>setEditItem({...editItem,availableForRental:Boolean(v)})} className="data-[state=checked]:bg-brand-yellow data-[state=checked]:border-brand-yellow"/>
-                      <span className="text-xs font-bold text-white/60">Disponible para alquiler individual</span>
+                    <span className="text-xs font-bold text-white/60">{modal.type === 'accessory' ? 'Alquilable individualmente (legacy)' : 'Disponible en catálogo de alquiler'}</span>
                     </label>
                   </div>
                   <p className="text-[11px] text-white/45">
-                    Los componentes de combos comparten el mismo stock físico. La opción de complemento es independiente del alquiler individual.
+                    La pertenencia al catálogo controla si aparece como complemento; «alquilable individualmente» se conserva para compatibilidad histórica. Los productos exclusivos de venta quedan fuera. El stock físico siempre es compartido.
                   </p>
                 </div>
 
@@ -838,6 +904,60 @@ export default function InventoryPage() {
           </div>
         </div>
       )}
+
+      {stockManagerCombo && <div className="fixed inset-0 z-[150] flex items-center justify-center bg-black/70 p-3 backdrop-blur-sm">
+        <div role="dialog" aria-modal="true" aria-labelledby="combo-stock-title" className="max-h-[92vh] w-full max-w-3xl overflow-y-auto rounded-3xl border border-brand-yellow/25 bg-brand-charcoal p-5 shadow-2xl sm:p-7">
+          <div className="flex items-start justify-between gap-4 border-b border-white/10 pb-4">
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-widest text-brand-yellow">Inventario físico compartido</p>
+              <h2 id="combo-stock-title" className="mt-1 text-2xl font-black text-white">Gestionar stock · {stockManagerCombo.name}</h2>
+              <p className="mt-1 text-sm text-white/60">Disponibilidad actual: <strong className="text-brand-yellow">{getComboAvailability(stockManagerCombo.id)}</strong> combinado(s).</p>
+            </div>
+            <Button type="button" variant="ghost" size="icon" onClick={()=>setStockManagerCombo(null)} aria-label="Cerrar"><X className="h-5 w-5"/></Button>
+          </div>
+          <div className="mt-5 space-y-4">
+            {stockManagerCombo.components.map((component, index) => {
+              const item = inventory.find(candidate => candidate.id === component.inventoryItemId);
+              if (!item) return <div key={component.inventoryItemId} role="alert" className="rounded-xl bg-red-500/10 p-3 text-sm text-red-200">Falta inventario para el componente {component.inventoryItemId}.</div>;
+              const rented = activeDemandsByItem.get(item.id);
+              const sizes = item.hasWheelSizes ? item.wheelSizes || [] : [{ size: '', stock: Number(item.stock || 0), maintenanceStock: Number(item.maintenanceStock || 0) }];
+              const available = item.hasWheelSizes ? sizes.reduce((sum, wheel) => sum + Number(wheel.stock || 0), 0) : Number(item.stock || 0);
+              const capacity = Math.floor(available / Math.max(1, component.quantity));
+              const limits = capacity <= getComboAvailability(stockManagerCombo.id);
+              return <section key={`${component.inventoryItemId}-${index}`} className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div><h3 className="font-black text-white">{item.name}</h3><p className="text-xs text-white/55">Requerido por combinado: {component.quantity} unidad(es)</p></div>
+                  {limits && <Badge className="border-amber-300/30 bg-amber-300/10 text-amber-100">Limita la capacidad</Badge>}
+                </div>
+                <div className="mt-3 space-y-2">
+                  {sizes.map(wheel => {
+                    const size = wheel.size || undefined;
+                    const key = `${item.id}::${size || ''}`;
+                    const stock = Number(wheel.stock || 0);
+                    const rentedCount = size ? Number(rented?.byWheelSize[size] || 0) : Number(rented?.total || 0);
+                    const maintenance = Number(wheel.maintenanceStock || 0);
+                    const total = stock + rentedCount + maintenance;
+                    const sharedNames = combos.filter(other => other.id !== stockManagerCombo.id && other.active && other.availableForRental && other.components.some(part => part.inventoryItemId === item.id)).map(other => other.name);
+                    return <div key={key} className="grid grid-cols-1 gap-3 rounded-xl bg-black/20 p-3 sm:grid-cols-[1fr_1fr_1fr_190px] sm:items-center">
+                      <div className="text-sm font-bold text-white">{size ? `Aro ${size}` : 'Stock general'}<span className="block text-xs font-medium text-white/55">Disponible: {stock} · Alquilado: {rentedCount}</span></div>
+                      <div className="text-xs text-white/65">En taller: {maintenance}</div>
+                      <div className="text-xs font-bold text-brand-yellow">Total físico: {total}</div>
+                      <div className="flex gap-2">
+                        <Input aria-label={`Ajuste de stock ${item.name} ${size || ''}`} type="number" step="1" value={stockDeltas[key] || ''} onChange={event=>setStockDeltas(current=>({...current,[key]:event.target.value}))} placeholder="+ / − unidades" className="h-9 min-w-0 bg-black/30 text-white" />
+                        <Button type="button" size="sm" disabled={stockSavingKey === key || !stockDeltas[key]} onClick={()=>handleStockAdjustment(item, stockDeltas[key], size)} className="h-9 bg-brand-yellow px-3 font-black text-brand-black">{stockSavingKey === key ? '…' : 'Aplicar'}</Button>
+                      </div>
+                      {sharedNames.length > 0 && <p className="sm:col-span-4 text-[11px] text-amber-200/80">También comparte stock con: {sharedNames.join(', ')}. Se pedirá confirmar cada ajuste.</p>}
+                    </div>;
+                  })}
+                </div>
+              </section>;
+            })}
+          </div>
+          {stockManagerError && <p role="alert" className="mt-4 rounded-xl border border-red-400/30 bg-red-500/10 p-3 text-sm font-bold text-red-200">{stockManagerError}</p>}
+          {stockManagerNotice && <p role="status" className="mt-4 rounded-xl border border-emerald-400/30 bg-emerald-500/10 p-3 text-sm font-bold text-emerald-100">{stockManagerNotice}</p>}
+          <div className="mt-5 flex justify-end border-t border-white/10 pt-4"><Button type="button" variant="outline" onClick={()=>setStockManagerCombo(null)} className="border-white/20 text-white hover:bg-white/10">Cerrar</Button></div>
+        </div>
+      </div>}
 
       {/* DELETE CONFIRMATION MODAL */}
       {deleteConfirm && (

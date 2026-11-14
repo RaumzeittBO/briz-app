@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { createRequire } from 'node:module';
 import { initializeApp } from 'firebase/app';
-import { getAuth, createUserWithEmailAndPassword, connectAuthEmulator, reload } from 'firebase/auth';
+import { getAuth, createUserWithEmailAndPassword, connectAuthEmulator, reload, confirmPasswordReset, verifyPasswordResetCode, signInWithEmailAndPassword, applyActionCode } from 'firebase/auth';
 import { getFunctions, connectFunctionsEmulator, httpsCallable } from 'firebase/functions';
 import { connectFirestoreEmulator, getFirestore, doc, setDoc } from 'firebase/firestore';
 import { connectStorageEmulator, getStorage, ref as storageRef, uploadBytes } from 'firebase/storage';
@@ -13,11 +13,13 @@ const require = createRequire(new URL('../functions/package.json', import.meta.u
 const adminAppSdk = require('firebase-admin/app');
 const adminAuthSdk = require('firebase-admin/auth');
 const adminFirestoreSdk = require('firebase-admin/firestore');
+const adminStorageSdk = require('firebase-admin/storage');
 const projectId = 'demo-briz-security';
 const firebaseConfig = { apiKey: 'demo-key', authDomain: 'demo-briz-security.local', projectId, appId: 'demo-app', storageBucket: `${projectId}.appspot.com` };
-const adminApp = adminAppSdk.initializeApp({ projectId }, `test-admin-${Date.now()}`);
+const adminApp = adminAppSdk.initializeApp({ projectId, storageBucket: `${projectId}.appspot.com` }, `test-admin-${Date.now()}`);
 const adminDb = adminFirestoreSdk.getFirestore(adminApp);
 const adminAuth = adminAuthSdk.getAuth(adminApp);
+const adminBucket = adminStorageSdk.getStorage(adminApp).bucket();
 const clients: Array<{ app: ReturnType<typeof initializeApp>; auth: ReturnType<typeof getAuth>; functions: ReturnType<typeof getFunctions> }> = [];
 
 function pass(label: string): void { console.log(`PASS ${label}`); }
@@ -62,6 +64,7 @@ try {
         name: 'Rider A', phone: '+59170000001', ci: 'TEST-1001',
     });
     assert.equal(beginProfile.verificationRequired, true);
+    await adminDb.doc(`pendingCustomerRegistrations/${userA.uid}`).update({ expiresAt: Date.now() - 1 });
     await assert.rejects(() => call(userA.functions, 'createCustomerProfile'), /verify|verifica/i);
     await verifyEmail(userA.auth, userA.uid);
     const createdProfile = await call<{ profile: { authUid: string; email: string } }>(userA.functions, 'createCustomerProfile');
@@ -95,11 +98,51 @@ try {
     for (const name of ['selfie.png', 'document-front.png', 'document-back.png']) {
         await uploadBytes(storageRef(userA.storage, `customerUploads/${userA.uid}/${name}`), fictitiousImage, { contentType: 'image/png' });
     }
+    const accountWithExistingFiles = await call<{ profile: { missingPrivateFiles: string[]; privateFilesNeedReview: string[] } }>(userA.functions, 'createCustomerProfile');
+    assert.deepEqual(accountWithExistingFiles.profile.missingPrivateFiles, []);
+    assert.deepEqual(accountWithExistingFiles.profile.privateFilesNeedReview, []);
+    pass('Existing UID-owned photo and document references are retained and individually verified after upload');
     const privateFiles = await call<{ files: Record<string, { url: string | null; state: string }>; expiresInSeconds: number }>(userA.functions, 'getAdminCustomerFiles', { customerId: userA.uid });
     assert.equal(privateFiles.expiresInSeconds, 300);
     assert.deepEqual(Object.values(privateFiles.files).map((file) => file.state), ['available', 'available', 'available']);
     assert.ok(Object.values(privateFiles.files).every((file) => file.url?.startsWith('data:image/png;base64,')), 'Emulator returns authorized local bytes without publishing a permanent link.');
     assert.deepEqual(Buffer.from(privateFiles.files.autofoto.url!.split(',')[1], 'base64'), Buffer.from(fictitiousImage));
+
+    const legacyFilesEmail = 'legacy-files@example.test';
+    const legacyFilesUser = await client(legacyFilesEmail, 'TestPass#123');
+    await verifyEmail(legacyFilesUser.auth, legacyFilesUser.uid);
+    const legacyFilesId = 'legacy-profile-with-private-files';
+    const legacyOwnedPaths = {
+        autofotoPath: `customers/${legacyFilesId}/selfie.jpg`,
+        documentoPath: `customers/${legacyFilesId}/document-front.png`,
+        documentoReversoPath: `customers/${legacyFilesId}/document-back.png`,
+    };
+    await adminDb.doc(`customers/${legacyFilesId}`).set({
+        id: legacyFilesId, email: legacyFilesEmail, name: 'Legacy Files Customer', phone: '+59170000004', ci: 'LEGACY-1004', rentalsCount: 4,
+    });
+    await adminDb.doc(`customerPrivate/${legacyFilesId}`).set(legacyOwnedPaths);
+    for (const path of Object.values(legacyOwnedPaths)) await adminBucket.file(path).save(Buffer.from(fictitiousImage), { metadata: { contentType: 'image/png' } });
+    const linkedLegacyFiles = await call<{ profile: { legacyCustomerId: string; missingPrivateFiles: string[]; privateFilesNeedReview: string[] }; linkedLegacyAccount: boolean }>(legacyFilesUser.functions, 'createCustomerProfile');
+    assert.equal(linkedLegacyFiles.linkedLegacyAccount, true);
+    assert.equal(linkedLegacyFiles.profile.legacyCustomerId, legacyFilesId);
+    assert.deepEqual(linkedLegacyFiles.profile.missingPrivateFiles, []);
+    assert.deepEqual(linkedLegacyFiles.profile.privateFilesNeedReview, []);
+    const linkedLegacyPrivate = (await adminDb.doc(`customerPrivate/${legacyFilesUser.uid}`).get()).data() || {};
+    for (const [field, path] of Object.entries(legacyOwnedPaths)) assert.equal(linkedLegacyPrivate[field], path, 'Verified legacy paths are copied only to the matching verified UID.');
+    pass('Exact-email legacy account retains files under its linked customer root after individual existence checks');
+
+    const mismatchedLegacyOwner = await client('mismatched-legacy-owner@example.test', 'TestPass#123');
+    await verifyEmail(mismatchedLegacyOwner.auth, mismatchedLegacyOwner.uid);
+    const foreignLegacyId = 'legacy-linked-to-someone-else';
+    await adminDb.doc(`customers/${foreignLegacyId}`).set({ id: foreignLegacyId, authUid: 'different-owner-uid', email: 'different@example.test' });
+    await adminDb.doc(`customerProfiles/${mismatchedLegacyOwner.uid}`).set({
+        id: mismatchedLegacyOwner.uid, authUid: mismatchedLegacyOwner.uid, email: 'mismatched-legacy-owner@example.test',
+        name: 'Fictional Account', phone: '+59170000005', ci: 'SAFE-1005', legacyCustomerId: foreignLegacyId,
+    });
+    await adminDb.doc(`customerPrivate/${foreignLegacyId}`).set({ autofotoPath: `customers/${foreignLegacyId}/selfie.jpg` });
+    await assert.rejects(() => call(mismatchedLegacyOwner.functions, 'createCustomerProfile'), (error: unknown) => (error as { code?: string }).code === 'functions/failed-precondition');
+    pass('A legacy storage root is not trusted unless its customer record is linked to the authenticated UID');
+
     const unauthorizedReader = await client('unauthorized-files@example.test', 'TestPass#123');
     await assert.rejects(() => call(unauthorizedReader.functions, 'getAdminCustomerFiles', { customerId: userA.uid }), (error: unknown) => (error as { code?: string }).code === 'functions/permission-denied');
     const branchManager = await client('manager-files@example.test', 'TestPass#123');
@@ -108,8 +151,12 @@ try {
     await adminDb.doc(`adminUsers/${branchManager.uid}`).update({ store: 'cochabamba' });
     const scopedFiles = await call<{ files: Record<string, { state: string }> }>(branchManager.functions, 'getAdminCustomerFiles', { customerId: userA.uid });
     assert.equal(scopedFiles.files.documento.state, 'available', 'Manager can view private documents only for their own branch.');
-    const missingLegacyFiles = await call<{ files: Record<string, { url: string | null; state: string }> }>(userA.functions, 'getAdminCustomerFiles', { customerId: 'legacy-with-secret' });
-    assert.ok(Object.values(missingLegacyFiles.files).every((file) => file.state === 'missing' && file.url === null));
+    const unreferencedLegacyFiles = await call<{ files: Record<string, { url: string | null; state: string }> }>(userA.functions, 'getAdminCustomerFiles', { customerId: 'legacy-with-secret' });
+    assert.ok(Object.values(unreferencedLegacyFiles.files).every((file) => file.state === 'needs_review' && file.url === null), 'Unsupported legacy URLs are not reported as deleted files.');
+    await adminDb.doc('customers/legacy-file-absent').set({ id: 'legacy-file-absent', name: 'Fictional Missing File', store: 'cochabamba', autofotoPath: 'customers/legacy-file-absent/selfie.jpg' });
+    const absentReferencedFile = await call<{ files: Record<string, { url: string | null; state: string }> }>(userA.functions, 'getAdminCustomerFiles', { customerId: 'legacy-file-absent' });
+    assert.equal(absentReferencedFile.files.autofoto.state, 'missing', 'A safe owned reference that returns exists=false is a confirmed missing object.');
+    assert.equal(absentReferencedFile.files.documento.state, 'needs_review', 'A file with no stored reference needs review rather than a missing claim.');
     pass('Verified profile creation writes a credential-free directory record; admin customer reads are sanitized');
 
     await adminDb.collection('inventory').doc('bike-emulator').set({
@@ -120,8 +167,13 @@ try {
     });
     await adminDb.collection('inventory').doc('acc-emulator').set({
         id: 'acc-emulator', itemType: 'accessory', name: 'Emulator Lock', active: true,
-        availableForRental: true, hasWheelSizes: false, stock: 3,
+        availableForRental: false, availableAsRentalAddon: false, rentalCatalog: true, availableForSale: false, hasWheelSizes: false, stock: 3,
         addonFlatPrice: 7,
+    });
+    await adminDb.collection('inventory').doc('acc-catalog-only-emulator').set({
+        id: 'acc-catalog-only-emulator', itemType: 'accessory', name: 'Rental catalog only', active: true,
+        availableForRental: false, availableAsRentalAddon: false, rentalCatalog: true, availableForSale: false,
+        hasWheelSizes: false, stock: 1, addonFlatPrice: 3,
     });
     await adminDb.collection('inventory').doc('acc-addon-only-emulator').set({
         id: 'acc-addon-only-emulator', itemType: 'accessory', name: 'Addon only', active: true,
@@ -132,6 +184,11 @@ try {
         availableForRental: true, hasWheelSizes: false, stock: 1,
         pricePerHour: 15, price1Hour: 15, price24Hours: 50, pricePerDay: 50,
     });
+    const everyDay = { closed: false, open: '08:00', close: '12:00', secondShift: { open: '13:00', close: '19:30' } };
+    await adminDb.doc('settings/public_business').set({ hours: {
+        monday: everyDay, tuesday: everyDay, wednesday: everyDay, thursday: everyDay,
+        friday: everyDay, saturday: everyDay, sunday: everyDay,
+    } }, { merge: true });
     await adminDb.collection('combos').doc('combo-emulator').set({
         id: 'combo-emulator', name: 'Emulator Combo', active: true, availableForRental: true,
         components: [
@@ -140,6 +197,19 @@ try {
         ],
         pricePerHour: 30, price1Hour: 30, price24Hours: 90, pricePerDay: 90,
     });
+    const stockWindowDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/La_Paz' }).format(new Date(Date.now() + 100 * 24 * 60 * 60 * 1000));
+    const inventoryBeforeStockAdjustment = (await adminDb.collection('inventory').get()).docs.map((snapshot) => ({ id: snapshot.id, ...snapshot.data() })) as unknown as InventoryItem[];
+    const combosBeforeStockAdjustment = (await adminDb.collection('combos').get()).docs.map((snapshot) => ({ id: snapshot.id, ...snapshot.data() })) as unknown as ComboProduct[];
+    const capacityBeforeStockAdjustment = getComboAvailabilityForInterval({ inventory: inventoryBeforeStockAdjustment, combos: combosBeforeStockAdjustment, rentals: [], comboId: 'combo-emulator', wheelSize: '26', date: stockWindowDate, pickupTime: '10:00', duration: '1 hora' });
+    await call(userA.functions, 'adjustInventoryStock', { itemId: 'bike-emulator', wheelSize: '26', delta: 2 });
+    const inventoryAfterStockAdjustment = (await adminDb.collection('inventory').get()).docs.map((snapshot) => ({ id: snapshot.id, ...snapshot.data() })) as unknown as InventoryItem[];
+    const capacityAfterStockAdjustment = getComboAvailabilityForInterval({ inventory: inventoryAfterStockAdjustment, combos: combosBeforeStockAdjustment, rentals: [], comboId: 'combo-emulator', wheelSize: '26', date: stockWindowDate, pickupTime: '10:00', duration: '1 hora' });
+    assert.equal(capacityBeforeStockAdjustment, 2);
+    assert.equal(capacityAfterStockAdjustment, 3, 'Combo capacity recalculates from the adjusted physical bicycle stock');
+    await call(userA.functions, 'adjustInventoryStock', { itemId: 'bike-emulator', wheelSize: '26', delta: -2 });
+    const stockAdjustmentAudits = await adminDb.collection('inventoryStockAudits').where('itemId', '==', 'bike-emulator').where('source', '==', 'combo_stock_manager').get();
+    assert.equal(stockAdjustmentAudits.size, 2, 'Both physical stock adjustments have audit rows');
+    pass('Combo stock manager adjusts physical component stock atomically, audits both changes, and recalculates capacity');
     pass('Emulator catalog seeded with fictional inventory only');
 
     const key = `request_${crypto.randomUUID()}`;
@@ -153,6 +223,21 @@ try {
     const first = await call<{ reservationCode: string; total: number; duplicate: boolean }>(userA.functions, 'createRentalGroup', booking);
     assert.equal(first.total, 27, 'Server uses current catalog rates and ignores submitted total.');
     assert.equal(first.duplicate, false);
+    await assert.rejects(() => call(userA.functions, 'adjustInventoryStock', { itemId: 'bike-emulator', wheelSize: '26', delta: -2 }), /reserva|inventario|stock/i, 'Stock manager must protect an existing reservation');
+    assert.equal((await adminDb.collection('inventory').doc('bike-emulator').get()).get('wheelSizes')[0].stock, 2, 'Rejected stock reduction leaves physical stock unchanged');
+    pass('Combo stock manager rejects a reduction that would violate a committed reservation');
+    const scheduleDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/La_Paz' }).format(new Date(Date.now() + 60 * 24 * 60 * 60 * 1000));
+    await call(userA.functions, 'createRentalGroup', {
+        idempotencyKey: `close_exact_${crypto.randomUUID()}`,
+        lines: [{ productId: 'bike-emulator', productType: 'single', quantity: 1, wheelSize: '27' }],
+        date: scheduleDate, pickupTime: '17:30', endTime: '19:30', duration: '2 horas', paymentMethod: 'QR',
+    });
+    await assert.rejects(() => call(userA.functions, 'createRentalGroup', {
+        idempotencyKey: `after_close_${crypto.randomUUID()}`,
+        lines: [{ productId: 'bike-emulator', productType: 'single', quantity: 1, wheelSize: '27' }],
+        date: scheduleDate, pickupTime: '18:00', endTime: '21:00', duration: '3 horas', paymentMethod: 'QR',
+    }), /horario|19:30/i, 'Callable must reject a manipulated booking that returns after closing.');
+    pass('Rental callable validates public business hours and allows return exactly at configured close');
     const retry = await call<{ reservationCode: string; total: number; duplicate: boolean }>(userA.functions, 'createRentalGroup', booking);
     assert.equal(retry.reservationCode, first.reservationCode);
     assert.equal(retry.duplicate, true);
@@ -182,6 +267,7 @@ try {
         date: comboDate,
         pickupTime: '14:00', duration: '1 hora', paymentMethod: 'QR',
     };
+    await adminDb.collection('inventory').doc('acc-emulator').update({ availableAsRentalAddon: false });
     const comboResult = await call<{ reservationCode: string; total: number }>(userA.functions, 'createRentalGroup', comboBooking);
     assert.equal(comboResult.total, 30);
     const comboDoc = await adminDb.collection('rentals').where('reservationCode', '==', comboResult.reservationCode).get();
@@ -196,6 +282,14 @@ try {
         accessories: [{ itemId: 'acc-emulator', quantity: 1 }],
     });
     assert.equal(comboWithAccessory.total, 37);
+    await adminDb.collection('inventory').doc('acc-emulator').update({ excludeFromRentalAddons: true });
+    await adminDb.doc(`_requestLimits/reservations_${createHash('sha256').update(userA.uid).digest('hex')}`).delete();
+    await assert.rejects(() => call(userA.functions, 'createRentalGroup', {
+        ...comboBooking, idempotencyKey: `excluded_addon_${crypto.randomUUID()}`,
+        lines: [{ productId: 'bike-race-emulator', productType: 'single', quantity: 1 }],
+        accessories: [{ itemId: 'acc-emulator', quantity: 1 }],
+    }), /complemento|disponible/i, 'Explicit admin exclusion is honored by the server.');
+    await adminDb.collection('inventory').doc('acc-emulator').update({ excludeFromRentalAddons: false });
     await assert.rejects(() => call(userA.functions, 'createRentalGroup', {
         idempotencyKey: `shared_${crypto.randomUUID()}`,
         lines: [{ productId: 'combo-emulator', productType: 'combo', quantity: 1, wheelSize: '26' }],
@@ -243,7 +337,17 @@ try {
         pickupTime: '14:00', duration: '1 hora', paymentMethod: 'QR',
     });
     assert.equal(addOnOnlyBooking.total, 20, 'An accessory can be a booking add-on while individual rental is disabled.');
-    await adminDb.collection('inventory').doc('acc-addon-only-emulator').update({ availableAsRentalAddon: false });
+    await adminDb.doc(`_requestLimits/reservations_${createHash('sha256').update(userA.uid).digest('hex')}`).delete();
+    const automaticCatalogBooking = await call<{ reservationCode: string; total: number }>(userA.functions, 'createRentalGroup', {
+        idempotencyKey: `catalog_only_${crypto.randomUUID()}`,
+        lines: [{ productId: 'bike-race-emulator', productType: 'single', quantity: 1 }],
+        accessories: [{ itemId: 'acc-catalog-only-emulator', quantity: 1 }],
+        date: new Intl.DateTimeFormat('en-CA', { timeZone: 'America/La_Paz' }).format(new Date(Date.now() + 37 * 24 * 60 * 60 * 1000)),
+        pickupTime: '14:00', duration: '1 hora', paymentMethod: 'QR',
+    });
+    assert.equal(automaticCatalogBooking.total, 18, 'Rental-catalog membership offers an accessory without individual-rental/add-on flags or combo membership.');
+    pass('Explicit rental catalog membership exposes active accessories while sale-only and excluded items remain unavailable');
+    await adminDb.collection('inventory').doc('acc-addon-only-emulator').update({ excludeFromRentalAddons: true });
     await adminDb.doc(`_requestLimits/reservations_${createHash('sha256').update(userA.uid).digest('hex')}`).delete();
     await assert.rejects(() => call(userA.functions, 'createRentalGroup', {
         idempotencyKey: `addon_disabled_${crypto.randomUUID()}`,
@@ -252,7 +356,7 @@ try {
         date: new Intl.DateTimeFormat('en-CA', { timeZone: 'America/La_Paz' }).format(new Date(Date.now() + 36 * 24 * 60 * 60 * 1000)),
         pickupTime: '14:00', duration: '1 hora', paymentMethod: 'QR',
     }), /complemento|disponible/i, 'Server rejects accessories disabled as add-ons.');
-    pass('Add-on-only accessory can be selected without individual rental permission; server rejects add-ons disabled by admin');
+    pass('Add-on-only legacy accessory remains supported; server honors explicit add-on exclusion');
 
     await adminDb.collection('inventory').doc('maintenance-bike-emulator').set({
         id: 'maintenance-bike-emulator', itemType: 'bike', name: 'Maintenance Fleet Bike', active: true,
@@ -512,8 +616,82 @@ try {
 
     const userB = await client('rider-b@example.test', 'TestPass#123');
     await call(userB.functions, 'beginCustomerRegistration', { name: 'Rider B', phone: '+59170000002', ci: 'TEST-1002' });
+    await assert.rejects(() => call(userB.functions, 'completeCustomerProfile', { phone: '+59170000002' }), /verify|verifica/i);
     await verifyEmail(userB.auth, userB.uid);
     await call(userB.functions, 'createCustomerProfile');
+    await adminDb.collection('customerProfiles').doc(userB.uid).update({ phone: '' });
+    await adminDb.collection('customers').doc(userB.uid).update({ phone: '' });
+    const recoveryFixtureImage = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]);
+    const userBFilePaths = {
+        autofotoPath: `customerUploads/${userB.uid}/selfie.jpg`,
+        documentoPath: `customerUploads/${userB.uid}/document-front.png`,
+        documentoReversoPath: `customerUploads/${userB.uid}/document-back.png`,
+    };
+    for (const path of Object.values(userBFilePaths)) await uploadBytes(storageRef(userB.storage, path), recoveryFixtureImage, { contentType: 'image/png' });
+    await adminDb.collection('customerPrivate').doc(userB.uid).set(userBFilePaths, { merge: true });
+    const completion = await call<{ profile: { name: string; phone: string; ci: string } }>(userB.functions, 'completeCustomerProfile', { name: 'Malicious overwrite', phone: '+59170000002' });
+    assert.deepEqual({ name: completion.profile.name, phone: completion.profile.phone, ci: completion.profile.ci }, { name: 'Rider B', phone: '+59170000002', ci: 'TEST-1002' }, 'Profile completion fills only missing values and preserves existing values.');
+    assert.deepEqual((await adminDb.collection('customerPrivate').doc(userB.uid).get()).data(), userBFilePaths, 'Profile completion leaves all private file associations intact.');
+    pass('Verified customer profile completion fills only missing fields and preserves private files');
+
+    const recoveryEmail = 'verified-recovery@example.test';
+    const recoveryOriginalPassword = 'TestPass#123';
+    const recoveryNewPassword = 'RecoveredPass#456';
+    const recoveryUser = await client(recoveryEmail, recoveryOriginalPassword);
+    assert.equal((await adminDb.doc(`pendingCustomerRegistrations/${recoveryUser.uid}`).get()).exists, false, 'Recovery account has no temporary registration record.');
+    await adminDb.collection('rentals').doc('recovered-email-history').set({
+        id: 'recovered-email-history', reservationCode: 'BRIZ-RECOVERY-TEST', customerEmail: recoveryEmail,
+        customerName: 'Historic Recovery Customer', customerPhone: '', customerCI: '',
+        productType: 'single', productId: 'bike-emulator', productName: 'Emulator Bike', quantity: 1,
+        date: '2026-11-10', pickupTime: '10:00', duration: '1 hora', status: 'returned', total: 20,
+    });
+    const otherBrowserApp = initializeApp(firebaseConfig, `recovery-other-browser-${Date.now()}`);
+    const otherBrowserAuth = getAuth(otherBrowserApp);
+    const otherBrowserFunctions = getFunctions(otherBrowserApp);
+    const otherBrowserStorage = getStorage(otherBrowserApp);
+    connectAuthEmulator(otherBrowserAuth, 'http://127.0.0.1:9099', { disableWarnings: true });
+    connectFunctionsEmulator(otherBrowserFunctions, '127.0.0.1', 5001);
+    connectStorageEmulator(otherBrowserStorage, '127.0.0.1', 9199);
+    const verificationLink = await adminAuth.generateEmailVerificationLink(recoveryEmail);
+    const verificationCode = new URL(verificationLink).searchParams.get('oobCode');
+    assert.ok(verificationCode, 'Firebase Auth Emulator supplied a verification action code.');
+    await applyActionCode(otherBrowserAuth, verificationCode!);
+    await reload(recoveryUser.auth.currentUser!);
+    assert.equal(recoveryUser.auth.currentUser?.emailVerified, true, 'Verification action completed in another browser session.');
+    const resetLink = await adminAuth.generatePasswordResetLink(recoveryEmail);
+    const resetCode = new URL(resetLink).searchParams.get('oobCode');
+    assert.ok(resetCode, 'Firebase Auth Emulator supplied a reset action code.');
+    assert.equal(await verifyPasswordResetCode(recoveryUser.auth, resetCode!), recoveryEmail);
+    await confirmPasswordReset(recoveryUser.auth, resetCode!, recoveryNewPassword);
+    const recoveredCredential = await signInWithEmailAndPassword(otherBrowserAuth, recoveryEmail, recoveryNewPassword);
+    await recoveredCredential.user.getIdToken(true);
+    const recoveredProfile = await call<{ profile: { id: string; authUid: string; email: string; name: string; missingPrivateFiles: string[] }; recoveredWithoutPendingRegistration: boolean }>(otherBrowserFunctions, 'createCustomerProfile');
+    assert.equal(recoveredProfile.profile.authUid, recoveryUser.uid);
+    assert.equal(recoveredProfile.profile.email, recoveryEmail);
+    assert.equal(recoveredProfile.profile.name, '');
+    assert.deepEqual(recoveredProfile.profile.missingPrivateFiles, ['autofoto', 'documento', 'documentoReverso']);
+    assert.equal(recoveredProfile.recoveredWithoutPendingRegistration, true);
+    const recoveryHistory = await call<{ rentals: Array<{ id: string }> }>(otherBrowserFunctions, 'getMyRentals');
+    assert.ok(recoveryHistory.rentals.some(rental => rental.id === 'recovered-email-history'), 'Verified email keeps access to historical rentals without relinking by personal data.');
+    const recoveryFilePaths = {
+        autofoto: `customerUploads/${recoveryUser.uid}/recovery-autofoto-test.png`,
+        documento: `customerUploads/${recoveryUser.uid}/recovery-documento-test.png`,
+        documentoReverso: `customerUploads/${recoveryUser.uid}/recovery-documentoReverso-test.png`,
+    };
+    for (const path of Object.values(recoveryFilePaths)) await uploadBytes(storageRef(otherBrowserStorage, path), recoveryFixtureImage, { contentType: 'image/png' });
+    await assert.rejects(() => call(otherBrowserFunctions, 'completeCustomerProfile', {
+        name: 'Verified Recovery Customer', phone: '+59170000003', ci: 'RECOVERY-1003',
+        privateFiles: { ...recoveryFilePaths, documento: `customerUploads/${userB.uid}/document-front.png` },
+    }), (error: unknown) => (error as { code?: string }).code === 'functions/invalid-argument', 'A file path owned by another UID must be rejected.');
+    const recoveredCompletion = await call<{ profile: { name: string; phone: string; ci: string; missingPrivateFiles: string[] } }>(otherBrowserFunctions, 'completeCustomerProfile', {
+        name: 'Verified Recovery Customer', phone: '+59170000003', ci: 'RECOVERY-1003', privateFiles: recoveryFilePaths,
+    });
+    assert.deepEqual({ name: recoveredCompletion.profile.name, phone: recoveredCompletion.profile.phone, ci: recoveredCompletion.profile.ci }, {
+        name: 'Verified Recovery Customer', phone: '+59170000003', ci: 'RECOVERY-1003',
+    });
+    assert.deepEqual(recoveredCompletion.profile.missingPrivateFiles, []);
+    assert.equal((await adminDb.doc(`customerPrivate/${recoveryUser.uid}`).get()).get('documentoReversoPath'), recoveryFilePaths.documentoReverso);
+    pass('Verified account recovers without pending data after password reset on a second browser, retains email history, and requests only absent private files');
     await adminDb.collection('customers').doc(userB.uid).update({ store: 'shop-b' });
     await adminDb.collection('adminUsers').doc(userB.uid).set({ uid: userB.uid, role: 'manager', active: true, store: 'shop-b' });
     const raceDate = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000);

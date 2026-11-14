@@ -17,25 +17,8 @@ export interface PricingSource {
     price1Week?: number;
     price1Month?: number;
     addonFlatPrice?: number;
+    rentalAddonFree?: boolean;
 }
-
-/**
- * Default commercial rental addon rates (Bs.) for accessories when their database tier fields are 0.
- * Admins can override any accessory price from InventoryPage by setting pricePerDay / price1Hour / addonFlatPrice > 0.
- */
-export const DEFAULT_ACCESSORY_RENTAL_PRICES: Record<string, number> = {
-    acc_casco_adulto: 0,      // Included free with rental
-    acc_casco_nino: 0,        // Included free with rental
-    acc_portacelular: 0,      // Included free with rental
-    acc_linterna_bocina: 10,  // 10 Bs
-    acc_candado_seguridad: 10,// 10 Bs
-    acc_chaleco_seguridad: 10,// 10 Bs
-    acc_remolque_mascotas: 40,// 40 Bs
-    acc_canasta_plastica: 15,
-    acc_canasta_metalica: 15,
-    acc_silla_bebe: 25,
-    acc_parrilla: 15,
-};
 
 /**
  * Parses a human-readable duration string (in Spanish or English) into hours.
@@ -86,25 +69,14 @@ export function parseDurationToHours(duration: string | number): number {
  * Returns the effective unit price for an accessory added as an extra in a rental.
  * Respects admin-configured prices first, falling back to DEFAULT_ACCESSORY_RENTAL_PRICES.
  */
-export function getAccessoryAddonUnitPrice(item: InventoryItem, duration: string = '1 Hora'): number {
+export function getAccessoryAddonUnitPrice(item: InventoryItem, duration: string = '1 Hora'): number | null {
+    if (item.rentalAddonFree === true) return 0;
     const customFlat = (item as PricingSource).addonFlatPrice;
     if (typeof customFlat === 'number' && customFlat > 0) {
         return customFlat;
     }
-    const hasConfiguredTier =
-        (item.price1Hour ?? 0) > 0 ||
-        (item.price24Hours ?? 0) > 0 ||
-        (item.pricePerHour ?? 0) > 0 ||
-        (item.pricePerDay ?? 0) > 0;
-
-    if (hasConfiguredTier) {
-        const calc = calculateProductRentalPrice(item, duration, 1);
-        if (calc > 0) return calc;
-    }
-    if (item.id in DEFAULT_ACCESSORY_RENTAL_PRICES) {
-        return DEFAULT_ACCESSORY_RENTAL_PRICES[item.id];
-    }
-    return Math.max(0, item.pricePerDay || item.pricePerHour || 0);
+    const calc = calculateProductRentalPrice(item, duration, 1);
+    return calc > 0 ? calc : null;
 }
 
 /**
@@ -126,15 +98,9 @@ export function calculateProductRentalPrice(
     if (safeQty === 0) return 0;
 
     if ('itemType' in pricing && pricing.itemType === 'accessory') {
+        if (pricing.rentalAddonFree === true) return 0;
         const customFlat = Number(pricing.addonFlatPrice || 0);
         if (customFlat > 0) return customFlat * safeQty;
-        const p1hCheck = Number(pricing.price1Hour || 0);
-        const p24hCheck = Number(pricing.price24Hours || 0);
-        const pHrCheck = Number(pricing.pricePerHour || 0);
-        const pDayCheck = Number(pricing.pricePerDay || 0);
-        if (p1hCheck === 0 && p24hCheck === 0 && pHrCheck === 0 && pDayCheck === 0 && pricing.id && pricing.id in DEFAULT_ACCESSORY_RENTAL_PRICES) {
-            return DEFAULT_ACCESSORY_RENTAL_PRICES[pricing.id] * safeQty;
-        }
     }
 
     const pHr = Math.max(0, Number(pricing.pricePerHour || 0));

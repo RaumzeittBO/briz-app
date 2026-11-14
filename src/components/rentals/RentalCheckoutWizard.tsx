@@ -17,7 +17,9 @@ import DeliveryMapPicker from './DeliveryMapPicker';
 import { addDaysToDateString, toBoliviaDateString } from '@/lib/dateUtils';
 import { getAccessoryAddonUnitPrice, parseDurationToHours } from '@/lib/rentalPricing';
 import { getRentalInventoryDemands } from '@/lib/rentalAvailability';
+import { isEligibleRentalAddon } from '@/lib/rentalAddonEligibility';
 import { businessMapUrl, businessWhatsAppUrl } from '@/lib/businessConfig';
+import { getRentalPickupOptions, validateRentalSchedule } from '@/lib/rentalSchedule';
 
 // Types for wizard cart
 export interface RentalCartItem {
@@ -49,19 +51,6 @@ const PRICE_TIER_DEFS = [
     { label: '1 Mes', value: '1 mes', accent: true },
 ];
 
-// Structural combo accessories (already offered inside combo bikes, excluded from standalone extra addon selector unless admin enables them)
-const STRUCTURAL_COMBO_ACCESSORY_IDS = new Set([
-    'acc_canasta_metalica',
-    'acc_canasta_mimbre',
-    'acc_ruedas_auxiliares_adulto',
-    'acc_silla_delantera_urbana',
-    'acc_silla_delantera_mamachari',
-    'acc_silla_mediana_trasera',
-    'acc_silla_trasera_grande',
-    'acc_set_silla_delantera_canasta_mamachari',
-    'acc_ruedas_apoyo_nino_16',
-    'acc_canasta_trasera_carga',
-]);
 
 // Preferred display order & visual icons for real rental accessories
 const ACCESSORY_META: Record<string, { icon: string; badge?: string; order: number; subtitle?: string }> = {
@@ -244,21 +233,7 @@ export default function RentalCheckoutWizard({
     // Build real rental accessories list from inventory
     const availableAddonAccessories = useMemo(() => {
         return inventory
-            .filter(item => {
-                if (!item.active || item.itemType !== 'accessory') return false;
-                const addonEnabled = item.availableAsRentalAddon ?? item.availableForRental;
-                if (!addonEnabled) return false;
-                // Legacy structural components remain hidden unless an explicit rental price exists.
-                if (item.availableAsRentalAddon !== true && STRUCTURAL_COMBO_ACCESSORY_IDS.has(item.id)) {
-                    const hasAdminPrice =
-                        (item.price1Hour ?? 0) > 0 ||
-                        (item.price24Hours ?? 0) > 0 ||
-                        (item.pricePerHour ?? 0) > 0 ||
-                        (item.pricePerDay ?? 0) > 0;
-                    return hasAdminPrice;
-                }
-                return true;
-            })
+            .filter(item => isEligibleRentalAddon(item, combos))
             .map(item => {
                 const intervalStock = getAvailableStockForInterval(item.id, undefined, date, pickupTime, duration);
                 const usedInCartCombos = cartComponentDemands.get(item.id) || 0;
@@ -276,7 +251,7 @@ export default function RentalCheckoutWizard({
                 };
             })
             .sort((a, b) => a.order - b.order || a.item.name.localeCompare(b.item.name));
-    }, [inventory, date, pickupTime, duration, getAvailableStockForInterval, cartComponentDemands]);
+    }, [inventory, combos, date, pickupTime, duration, getAvailableStockForInterval, cartComponentDemands]);
 
     // Automatically clamp selected accessory quantities if remainingStock drops (e.g. when changing date/time)
     useEffect(() => {
@@ -286,7 +261,7 @@ export default function RentalCheckoutWizard({
             for (const [accId, qty] of Object.entries(next)) {
                 if (qty <= 0) continue;
                 const entry = availableAddonAccessories.find(a => a.item.id === accId);
-                const maxAllowed = entry ? entry.remainingStock : 0;
+                const maxAllowed = entry && entry.unitPrice !== null ? entry.remainingStock : 0;
                 if (qty > maxAllowed) {
                     next[accId] = maxAllowed;
                     changed = true;
@@ -336,10 +311,9 @@ export default function RentalCheckoutWizard({
     }, [cart, calculatePrice]);
 
     const selectedAccessoryEntries = useMemo(() => {
-        return availableAddonAccessories
-            .filter(a => (selectedAccessories[a.item.id] || 0) > 0)
-            .map(a => {
+        return availableAddonAccessories.flatMap(a => {
                 const qty = selectedAccessories[a.item.id] || 0;
+                if (qty <= 0 || a.unitPrice === null) return [];
                 return {
                     ...a,
                     quantity: qty,
@@ -384,6 +358,13 @@ export default function RentalCheckoutWizard({
     useEffect(() => {
         setReturnTime(addHoursToTime(pickupTime, parseDurationToHours(duration)));
     }, [pickupTime, duration]);
+
+    const pickupOptions = useMemo(() => getRentalPickupOptions(publicBusinessConfig.hours, date, duration), [publicBusinessConfig.hours, date, duration]);
+    const scheduleResult = useMemo(() => validateRentalSchedule(publicBusinessConfig.hours, date, pickupTime, duration), [publicBusinessConfig.hours, date, pickupTime, duration]);
+    const scheduleError = scheduleResult.valid ? null : scheduleResult.reason;
+    useEffect(() => {
+        if (pickupOptions.length && !pickupOptions.includes(pickupTime)) setPickupTime(pickupOptions[0]);
+    }, [pickupOptions, pickupTime]);
 
     // Validate shared component conflicts across all cart items + selected accessories for the chosen date/time
     const cartAvailabilityConflict = useMemo((): string | null => {
@@ -607,8 +588,8 @@ export default function RentalCheckoutWizard({
             return;
         }
 
-        if (cartAvailabilityConflict) {
-            alert(cartAvailabilityConflict);
+        if (cartAvailabilityConflict || scheduleError) {
+            alert(cartAvailabilityConflict || scheduleError);
             return;
         }
 
@@ -629,10 +610,10 @@ export default function RentalCheckoutWizard({
 
     // Auto-advance if authenticated during step 3
     useEffect(() => {
-        if (step === 3 && currentCustomer && !cartAvailabilityConflict) {
+        if (step === 3 && currentCustomer && !cartAvailabilityConflict && scheduleResult.valid) {
             setStep(4);
         }
-    }, [currentCustomer]);
+    }, [currentCustomer, cartAvailabilityConflict, scheduleResult.valid]);
 
     const handleFinalizeOrder = async () => {
         if (loading) return; // Prevent double submission
@@ -644,8 +625,8 @@ export default function RentalCheckoutWizard({
             alert('No hay productos en tu carrito.');
             return;
         }
-        if (cartAvailabilityConflict) {
-            alert(cartAvailabilityConflict);
+        if (cartAvailabilityConflict || scheduleError) {
+            alert(cartAvailabilityConflict || scheduleError);
             return;
         }
 
@@ -1065,7 +1046,7 @@ export default function RentalCheckoutWizard({
                                         onChange={e => setPickupTime(e.target.value)}
                                         className="w-full px-4 bg-gray-50 border border-gray-200 h-12 text-sm text-brand-black font-bold rounded-xl focus:border-brand-yellow focus:outline-none font-sans"
                                     >
-                                        {['08:00', '09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00', '18:00', '19:00'].map(timeOpt => (
+                                        {pickupOptions.map(timeOpt => (
                                             <option key={timeOpt} value={timeOpt}>{timeOpt}</option>
                                         ))}
                                     </select>
@@ -1082,6 +1063,15 @@ export default function RentalCheckoutWizard({
                                     />
                                 </div>
                             </div>
+                            {!scheduleResult.valid && (
+                                <div role="alert" className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-xs font-semibold text-amber-900">
+                                    <p>{scheduleResult.reason}</p>
+                                    <a className="mt-2 inline-block font-black underline" href={businessWhatsAppUrl(publicBusinessConfig.whatsapp, language === 'es' ? `Hola BRIZ, quisiera consultar un horario especial para el ${date} a las ${pickupTime} (${duration}).` : `Hello BRIZ, I would like to ask about a special rental time on ${date} at ${pickupTime} (${duration}).`)} target="_blank" rel="noreferrer">
+                                        {language === 'es' ? 'Consultar horario especial por WhatsApp' : 'Ask about a special time on WhatsApp'}
+                                    </a>
+                                </div>
+                            )}
+                            {!pickupOptions.length && <p role="status" className="text-xs font-semibold text-brand-charcoal/65">{language === 'es' ? 'No hay horarios ordinarios disponibles para esta fecha y duración.' : 'No regular pickup times are available for this date and duration.'}</p>}
                             {returnDateNote && (
                                 <p className="text-[10px] text-brand-black/45 font-bold uppercase font-maiandra leading-relaxed">
                                     {returnDateNote}
@@ -1158,6 +1148,7 @@ export default function RentalCheckoutWizard({
                                     {availableAddonAccessories.map(({ item, remainingStock, unitPrice, icon, badge, subtitle }) => {
                                         const qty = selectedAccessories[item.id] || 0;
                                         const isSelected = qty > 0;
+                                        const priceMissing = unitPrice === null;
                                         const isOutOfStock = remainingStock <= 0;
 
                                         return (
@@ -1197,7 +1188,9 @@ export default function RentalCheckoutWizard({
                                                         </p>
                                                         <div className="flex items-center gap-2 mt-1.5">
                                                             <span className="text-xs font-black text-brand-yellow-vibrant font-sans">
-                                                                {unitPrice === 0 ? (language === 'es' ? 'Incluido (Bs. 0)' : 'Included (Bs. 0)') : `+Bs. ${unitPrice}`}
+                                                                {priceMissing
+                                                                    ? (language === 'es' ? 'Tarifa por definir' : 'Price required')
+                                                                    : unitPrice === 0 ? (language === 'es' ? 'Gratis' : 'Free') : `+Bs. ${unitPrice}`}
                                                             </span>
                                                             <span className={`text-[9px] font-black uppercase px-1.5 py-0.5 rounded-full ${
                                                                 isOutOfStock
@@ -1213,7 +1206,7 @@ export default function RentalCheckoutWizard({
                                                 {/* Quantity Controls */}
                                                 <div className="flex items-center justify-between pt-2 border-t border-gray-100">
                                                     <span className="text-[10px] font-bold uppercase text-brand-charcoal/45 font-maiandra">
-                                                        {qty > 0 ? `Subtotal: Bs. ${unitPrice * qty}` : (language === 'es' ? 'Cantidad' : 'Quantity')}
+                                    {qty > 0 && unitPrice !== null ? `Subtotal: Bs. ${unitPrice * qty}` : (language === 'es' ? 'Cantidad' : 'Quantity')}
                                                     </span>
                                                     <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-xl p-1">
                                                         <button
@@ -1229,7 +1222,7 @@ export default function RentalCheckoutWizard({
                                                         </span>
                                                         <button
                                                             type="button"
-                                                            disabled={isOutOfStock || qty >= remainingStock}
+                                                            disabled={priceMissing || isOutOfStock || qty >= remainingStock}
                                                             onClick={() => handleAccessoryDelta(item, 1, remainingStock)}
                                                             className="w-7 h-7 rounded-lg bg-brand-yellow flex items-center justify-center text-brand-black hover:bg-brand-yellow-light disabled:opacity-30 cursor-pointer shadow-xs"
                                                         >
@@ -1334,7 +1327,7 @@ export default function RentalCheckoutWizard({
                         {/* Step 3 Alquilar CTA */}
                         <Button
                             onClick={handleAlquilarAhora}
-                            disabled={Boolean(cartAvailabilityConflict)}
+                            disabled={Boolean(cartAvailabilityConflict) || !scheduleResult.valid}
                             className="w-full bg-brand-yellow hover:bg-brand-yellow-light text-brand-black font-black rounded-2xl h-14 uppercase text-xs tracking-widest font-sans cursor-pointer shadow-md shadow-brand-yellow/10 disabled:opacity-50"
                         >
                             {language === 'es' ? 'Alquilar ahora' : 'Rent now'}
@@ -1539,7 +1532,7 @@ export default function RentalCheckoutWizard({
                         {/* Finalize order Button */}
                         <Button
                             onClick={handleFinalizeOrder}
-                            disabled={loading || Boolean(cartAvailabilityConflict)}
+                            disabled={loading || Boolean(cartAvailabilityConflict) || !scheduleResult.valid}
                             className="w-full bg-brand-yellow hover:bg-brand-yellow-light text-brand-black font-black rounded-2xl h-14 uppercase text-xs tracking-widest font-sans cursor-pointer shadow-md shadow-brand-yellow/10"
                         >
                             {loading ? (language === 'es' ? 'Procesando Reserva...' : 'Processing Booking...') : (language === 'es' ? 'FINALIZAR EL PEDIDO' : 'COMPLETE BOOKING')}

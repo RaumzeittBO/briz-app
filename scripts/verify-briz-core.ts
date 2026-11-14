@@ -99,15 +99,16 @@ async function runTests() {
         assert.equal(parseDurationToHours('1 mes'), 720);
     });
 
-    await test('Tarifas de accesorios reales de inventario (addonFlatPrice y defaults)', () => {
+    await test('Tarifas explícitas de accesorios, sin regalos implícitos', () => {
         const casco = RENTAL_SEED_ACCESSORIES.find(a => a.id === 'acc_casco_adulto')!;
         const linterna = RENTAL_SEED_ACCESSORIES.find(a => a.id === 'acc_linterna_bocina')!;
-        assert.equal(getAccessoryAddonUnitPrice(casco, '2 horas'), 0);
-        assert.equal(getAccessoryAddonUnitPrice(linterna, '2 horas'), 10);
+        assert.equal(getAccessoryAddonUnitPrice(casco, '2 horas'), null);
+        assert.equal(getAccessoryAddonUnitPrice(linterna, '2 horas'), null);
+        assert.equal(getAccessoryAddonUnitPrice({ ...casco, rentalAddonFree: true }, '2 horas'), 0);
         const customAcc = { ...casco, addonFlatPrice: 12 };
         assert.equal(getAccessoryAddonUnitPrice(customAcc, '2 horas'), 12);
         assert.equal(calculateProductRentalPrice(customAcc, '2 horas'), 12, 'El precio fijo debe coincidir en la ficha y en el extra');
-        assert.equal(getAccessoryAddonUnitPrice({ ...linterna, addonFlatPrice: 0 }, '2 horas'), 10, 'Cero debe usar la tarifa configurada, según la ayuda de Admin');
+        assert.equal(getAccessoryAddonUnitPrice({ ...linterna, addonFlatPrice: 0, price2Hours: 8 }, '2 horas'), 8, 'Cero fijo usa la tarifa explícita por duración');
     });
 
     // 2. AVAILABILITY BY TIME INTERVALS & COMBOS
@@ -285,8 +286,10 @@ async function runTests() {
         assert.equal(availTomorrow, 1, 'Fuera de la ventana del alquiler confirmado se recupera la capacidad total sin doble descuento');
     });
 
-    await test('Demanda de bicicleta multi-aro sin aro explícito resuelve aro por defecto sin inflar los demás aros', () => {
-        // Si un alquiler confirmado de 2 unidades de bike_urbana descontó 2 unidades del aro por defecto (26 -> pasa de 113 a 111)
+    await test('Alquiler confirmado sin aro explícito repone dos unidades solo en el aro por defecto después de su ventana futura', () => {
+        const rentalDate = addDaysToDateString(toBoliviaDateString(), 2);
+        const afterRentalDate = addDaysToDateString(rentalDate, 2);
+        // 111 unidades en estante + 2 comprometidas = 113 de capacidad para una ventana posterior no solapada.
         const modifiedInventory = allInventory.map(i =>
             i.id === 'bike_urbana'
                 ? {
@@ -302,33 +305,64 @@ async function runTests() {
             productName: 'Urbana',
             quantity: 2,
             selectedWheelSize: '',
-            date: '2026-10-25',
+            date: rentalDate,
             pickupTime: '09:00',
             duration: '2 horas',
             status: 'confirmed',
         });
-        const avail26 = getAvailableStockForInterval({
+        const duringRental26 = getAvailableStockForInterval({
             inventory: modifiedInventory,
             combos: RENTAL_SEED_COMBOS,
             rentals: [legacyRentalWithoutWheelSize],
             itemId: 'bike_urbana',
             wheelSize: '26',
-            date: '2026-10-29',
+            date: rentalDate,
             pickupTime: '09:00',
             duration: '2 horas',
         });
-        const avail27 = getAvailableStockForInterval({
+        const afterRental26 = getAvailableStockForInterval({
+            inventory: modifiedInventory,
+            combos: RENTAL_SEED_COMBOS,
+            rentals: [legacyRentalWithoutWheelSize],
+            itemId: 'bike_urbana',
+            wheelSize: '26',
+            date: afterRentalDate,
+            pickupTime: '09:00',
+            duration: '2 horas',
+        });
+        const afterRental27 = getAvailableStockForInterval({
             inventory: modifiedInventory,
             combos: RENTAL_SEED_COMBOS,
             rentals: [legacyRentalWithoutWheelSize],
             itemId: 'bike_urbana',
             wheelSize: '27',
-            date: '2026-10-29',
+            date: afterRentalDate,
             pickupTime: '09:00',
             duration: '2 horas',
         });
-        assert.equal(avail26, 113, 'El aro 26 recupera su capacidad total real (111 + 2 = 113)');
-        assert.equal(avail27, 26, 'El aro 27 NO se infla a 28 cuando un alquiler sin aro está confirmado');
+        assert.equal(duringRental26, 111, 'Durante el alquiler confirmado la capacidad es 111; las 2 unidades no se liberan antes de su devolución.');
+        assert.equal(afterRental26, 113, 'Fuera de la ventana futura se reconstruye la capacidad: 111 de estante + 2 comprometidas = 113.');
+        assert.equal(afterRental27, 26, 'La demanda sin aro se asigna al 26 por defecto y no aumenta el aro 27.');
+    });
+
+    await test('Un combinado confirmado restaura solo su demanda física del aro seleccionado después de su ventana', () => {
+        const rentalDate = addDaysToDateString(toBoliviaDateString(), 4);
+        const afterRentalDate = addDaysToDateString(rentalDate, 2);
+        const modifiedInventory = allInventory.map(i => i.id === 'bike_urbana'
+            ? { ...i, wheelSizes: i.wheelSizes?.map(ws => ws.size === '26' ? { ...ws, stock: 112 } : ws) }
+            : i);
+        const confirmedCombo = makeRental({
+            id: 'r_combo_legacy_26', productId: 'combo_urbana_canasta_metalica', productType: 'combo',
+            productName: 'Urbana + canasta metálica', quantity: 1, selectedWheelSize: '26',
+            date: rentalDate, pickupTime: '10:00', duration: '1 hora', status: 'confirmed',
+        });
+        const availability = (wheelSize: string, date: string) => getAvailableStockForInterval({
+            inventory: modifiedInventory, combos: RENTAL_SEED_COMBOS, rentals: [confirmedCombo],
+            itemId: 'bike_urbana', wheelSize, date, pickupTime: '10:00', duration: '1 hora',
+        });
+        assert.equal(availability('26', rentalDate), 112, 'El combinado ocupa una bicicleta aro 26 durante su ventana.');
+        assert.equal(availability('26', afterRentalDate), 113, 'Al pasar la ventana, 112 en estante + 1 retenida recupera 113.');
+        assert.equal(availability('27', afterRentalDate), 26, 'El aro 27 permanece intacto porque el combinado seleccionó aro 26.');
     });
 
     // 3. SECURITY & DATA PROTECTION

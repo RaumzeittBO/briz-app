@@ -16,6 +16,7 @@ import AboutPage from '@/pages/public/AboutPage';
 import ContactPage from '@/pages/public/ContactPage';
 import CommunityPage from '@/pages/public/CommunityPage';
 import ProfilePage from '@/pages/public/ProfilePage';
+import EmailVerificationPage from '@/pages/public/EmailVerificationPage';
 
 // Admin pages
 import LoginPage from '@/pages/admin/LoginPage';
@@ -56,6 +57,7 @@ function AdminRoleRoute({ children }: { children: React.ReactNode }) {
 function AppRoutes() {
   return (
     <Routes>
+      <Route path="/verify-email" element={<EmailVerificationPage />} />
       {/* Public routes */}
       <Route element={<PublicLayout />}>
         <Route path="/" element={<HomePage />} />

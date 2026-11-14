@@ -15,6 +15,8 @@ import {
     isBlocking,
     isHolding,
     isInsideDeliveryZone,
+    isEligibleRentalAddon,
+    hasConfiguredRentalAddonPrice,
     parseDateTime,
     parseDurationHours,
     rentalDemands,
@@ -24,6 +26,8 @@ import {
     type Demand,
     type RentalLike,
 } from './domain';
+import { DEFAULT_RENTAL_HOURS, validateRentalBusinessHours } from './businessHours';
+import { CUSTOMER_PRIVATE_FILE_SPECS, ownedCustomerStoragePath, resolveCustomerPrivateFiles } from './customerPrivateFiles';
 
 if (getApps().length === 0) initializeApp();
 const db = getFirestore();
@@ -56,21 +60,6 @@ type BookingRequest = {
 
 const ACTIVE_STATUSES = ['pending', 'Pendiente', 'confirmed', 'Confirmado', 'delivered', 'Entregado'];
 const MAX_REQUEST_BYTES = 24_000;
-const LEGACY_STRUCTURAL_ADDONS = new Set([
-    'acc_canasta_metalica', 'acc_canasta_mimbre', 'acc_ruedas_auxiliares_adulto',
-    'acc_silla_delantera_urbana', 'acc_silla_delantera_mamachari', 'acc_silla_mediana_trasera',
-    'acc_silla_trasera_grande', 'acc_set_silla_delantera_canasta_mamachari',
-    'acc_ruedas_apoyo_nino_16', 'acc_canasta_trasera_carga',
-]);
-
-function canOfferRentalAddon(item: CatalogItem): boolean {
-    if (item.availableAsRentalAddon !== undefined) return item.availableAsRentalAddon === true;
-    if (!item.availableForRental) return false;
-    if (!LEGACY_STRUCTURAL_ADDONS.has(item.id)) return true;
-    return Number(item.price1Hour || 0) > 0 || Number(item.price24Hours || 0) > 0
-        || Number(item.pricePerHour || 0) > 0 || Number(item.pricePerDay || 0) > 0;
-}
-
 function callable(options: { enforceAppCheck?: boolean } = {}) {
     return { region: 'us-central1', maxInstances: 10, enforceAppCheck: options.enforceAppCheck ?? false } as const;
 }
@@ -281,18 +270,47 @@ export const createCustomerProfile = onCall(callable(), async (request) => {
     if (!email) throw new HttpsError('failed-precondition', 'La cuenta necesita un correo electrónico.');
     const profileRef = db.doc(`customerProfiles/${uid}`);
     const existing = await profileRef.get();
-    if (existing.exists) return { profile: existing.data(), alreadyExists: true };
-    const pendingRef = db.doc(`pendingCustomerRegistrations/${uid}`);
-    const pendingSnap = await pendingRef.get();
-    if (!pendingSnap.exists || Number(pendingSnap.data()?.expiresAt) < Date.now()) {
-        throw new HttpsError('failed-precondition', 'El registro expiró. Inicia nuevamente el registro.');
+    if (existing.exists) {
+        let profile = existing.data()!;
+        if (profile.authUid !== uid) {
+            throw new HttpsError('permission-denied', 'El perfil existente no está vinculado de forma segura a esta cuenta. Contacta a BRIZ.');
+        }
+        if (String(profile.email || '').trim().toLowerCase() !== email.trim().toLowerCase()) {
+            const customerId = cleanString(profile.legacyCustomerId, 120) || uid;
+            const customerRef = db.doc(`customers/${customerId}`);
+            await db.runTransaction(async tx => {
+                const [latestProfile, customer] = await Promise.all([tx.get(profileRef), tx.get(customerRef)]);
+                if (!latestProfile.exists || latestProfile.data()?.authUid !== uid) throw new HttpsError('permission-denied', 'El perfil cambió durante la actualización del correo.');
+                tx.update(profileRef, { email, updatedAt: FieldValue.serverTimestamp() });
+                if (customer.exists && customer.data()?.authUid === uid) tx.update(customerRef, { email, updatedAt: FieldValue.serverTimestamp() });
+            });
+            profile = { ...profile, email };
+        }
+        const legacyCustomerId = cleanString(profile.legacyCustomerId, 120);
+        const [privateSnap, legacySnap] = await Promise.all([
+            db.doc(`customerPrivate/${uid}`).get(),
+            legacyCustomerId ? db.doc(`customers/${legacyCustomerId}`).get() : Promise.resolve(null),
+        ]);
+        if (legacyCustomerId && (!legacySnap?.exists || legacySnap.data()?.authUid !== uid)) {
+            throw new HttpsError('failed-precondition', 'El vínculo con el registro antiguo no pudo verificarse. Contacta a BRIZ para revisar los archivos.');
+        }
+        const legacyPrivateSnap = legacyCustomerId ? await db.doc(`customerPrivate/${legacyCustomerId}`).get() : null;
+        const state = await resolveCustomerPrivateFiles(uid, legacyCustomerId,
+            [privateSnap.data(), legacyPrivateSnap?.data(), legacySnap?.data()], getStorage().bucket(), 'review');
+        if (JSON.stringify(profile.missingPrivateFiles || []) !== JSON.stringify(state.missing)
+            || JSON.stringify(profile.privateFilesNeedReview || []) !== JSON.stringify(state.needsReview)) {
+            await profileRef.update({ missingPrivateFiles: state.missing, privateFilesNeedReview: state.needsReview, updatedAt: FieldValue.serverTimestamp() });
+            profile = { ...profile, missingPrivateFiles: state.missing, privateFilesNeedReview: state.needsReview };
+        }
+        return { profile: { ...profile, missingPrivateFiles: state.missing, privateFilesNeedReview: state.needsReview }, alreadyExists: true };
     }
-    const profileInput = validateProfile(pendingSnap.data());
-    const privatePaths = ['autofotoPath', 'documentoPath', 'documentoReversoPath'].reduce<Record<string, string>>((result, field) => {
-        const path = cleanString(pendingSnap.data()?.[field], 300);
-        if (path && path.startsWith(`customerUploads/${uid}/`) && !path.includes('..')) result[field] = path;
-        return result;
-    }, {});
+    const pendingRef = db.doc(`pendingCustomerRegistrations/${uid}`);
+    const privateRef = db.doc(`customerPrivate/${uid}`);
+    const pendingSnap = await pendingRef.get();
+    const pendingData = pendingSnap.data() || {};
+    const profileInput = pendingSnap.exists
+        ? validateProfile(pendingData)
+        : { name: '', phone: '', ci: '' };
 
     // A legacy record is linked only after the account owner verified control of the same email.
     let legacy: QueryDocumentSnapshot<DocumentData> | undefined;
@@ -301,8 +319,19 @@ export const createCustomerProfile = onCall(callable(), async (request) => {
         if (matches.size > 1) throw new HttpsError('failed-precondition', 'Hay varias cuentas antiguas con este correo. Contacta a BRIZ para verificarlas.');
         legacy = matches.docs[0];
     }
+    const legacyData = legacy?.data();
+    if (legacyData?.authUid && legacyData.authUid !== uid) {
+        throw new HttpsError('failed-precondition', 'El registro antiguo ya está vinculado a otra cuenta. Contacta a BRIZ para revisar el acceso.');
+    }
+    const legacyCustomerId = legacy?.id || '';
+    const [privateSnap, legacyPrivateSnap] = await Promise.all([
+        privateRef.get(),
+        legacyCustomerId ? db.doc(`customerPrivate/${legacyCustomerId}`).get() : Promise.resolve(null),
+    ]);
+    const privateState = await resolveCustomerPrivateFiles(uid, legacyCustomerId,
+        [privateSnap.data(), pendingData, legacyPrivateSnap?.data(), legacyData], getStorage().bucket(), legacy || pendingSnap.exists ? 'review' : 'missing');
     if (legacy) {
-        const old = legacy.data();
+        const old = legacyData || {};
         const linkedProfile = {
             id: uid,
             authUid: uid,
@@ -316,23 +345,33 @@ export const createCustomerProfile = onCall(callable(), async (request) => {
             legacyCustomerId: legacy.id,
             rentalsCount: Number(old.rentalsCount) || 0,
             purchasesCount: Number(old.purchasesCount) || 0,
+            missingPrivateFiles: privateState.missing,
+            privateFilesNeedReview: privateState.needsReview,
             createdAt: FieldValue.serverTimestamp(),
             updatedAt: FieldValue.serverTimestamp(),
         };
         await db.runTransaction(async (tx) => {
-            const latest = await tx.get(profileRef);
+            const [latest, latestLegacy, latestPrivate, latestPending] = await Promise.all([
+                tx.get(profileRef), tx.get(legacy!.ref), tx.get(privateRef), tx.get(pendingRef),
+            ]);
             if (latest.exists) return;
+            if (latestLegacy.data()?.authUid && latestLegacy.data()?.authUid !== uid) throw new HttpsError('failed-precondition', 'El registro antiguo ya está vinculado a otra cuenta.');
             tx.create(profileRef, linkedProfile);
-            if (Object.keys(privatePaths).length) tx.set(db.doc(`customerPrivate/${uid}`), { ...privatePaths, updatedAt: FieldValue.serverTimestamp() });
+            const currentPrivate = latestPrivate.data() || {};
+            const preservedPaths = Object.fromEntries(CUSTOMER_PRIVATE_FILE_SPECS.flatMap(spec => {
+                const resolved = privateState.paths[spec.key];
+                return resolved ? [[spec.key, resolved]] : [];
+            }));
+            if (Object.keys(preservedPaths).length) tx.set(privateRef, { ...currentPrivate, ...preservedPaths, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
             tx.update(legacy!.ref, {
                 authUid: uid,
                 password: FieldValue.delete(),
                 linkedAt: FieldValue.serverTimestamp(),
             });
-            tx.delete(pendingRef);
+            if (latestPending.exists) tx.delete(pendingRef);
         });
         const saved = await profileRef.get();
-        return { profile: saved.data(), linkedLegacyAccount: true };
+        return { profile: { ...saved.data(), missingPrivateFiles: privateState.missing, privateFilesNeedReview: privateState.needsReview }, linkedLegacyAccount: true };
     }
 
     const newProfile = {
@@ -342,14 +381,16 @@ export const createCustomerProfile = onCall(callable(), async (request) => {
         ...profileInput,
         rentalsCount: 0,
         purchasesCount: 0,
+        missingPrivateFiles: privateState.missing,
+        privateFilesNeedReview: privateState.needsReview,
         createdAt: FieldValue.serverTimestamp(),
         updatedAt: FieldValue.serverTimestamp(),
     };
     await db.runTransaction(async (tx) => {
         const latestProfile = await tx.get(profileRef);
         const latestPending = await tx.get(pendingRef);
+        const latestPrivate = await tx.get(privateRef);
         if (latestProfile.exists) return;
-        if (!latestPending.exists) throw new HttpsError('failed-precondition', 'El registro expiró.');
         tx.create(profileRef, newProfile);
         tx.set(db.doc(`customers/${uid}`), {
             id: uid, authUid: uid, email, ...profileInput,
@@ -357,10 +398,97 @@ export const createCustomerProfile = onCall(callable(), async (request) => {
             firstVisit: new Date().toISOString(), lastVisit: new Date().toISOString(), notes: '',
             createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp(),
         });
-        if (Object.keys(privatePaths).length) tx.set(db.doc(`customerPrivate/${uid}`), { ...privatePaths, updatedAt: FieldValue.serverTimestamp() });
-        tx.delete(pendingRef);
+        const currentPrivate = latestPrivate.data() || {};
+        const preservedPaths = Object.fromEntries(CUSTOMER_PRIVATE_FILE_SPECS.flatMap(spec => {
+            const resolved = privateState.paths[spec.key];
+            return resolved ? [[spec.key, resolved]] : [];
+        }));
+        if (Object.keys(preservedPaths).length) tx.set(privateRef, { ...currentPrivate, ...preservedPaths, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+        if (latestPending.exists) tx.delete(pendingRef);
     });
-    return { profile: newProfile, linkedLegacyAccount: false };
+    return { profile: { ...newProfile, missingPrivateFiles: privateState.missing, privateFilesNeedReview: privateState.needsReview }, linkedLegacyAccount: false, recoveredWithoutPendingRegistration: !pendingSnap.exists };
+});
+
+export const completeCustomerProfile = onCall(callable(), async (request) => {
+    const { uid } = requireAuth(request, true);
+    if (!exactObject(request.data) || Object.keys(request.data).some((key) => !['name', 'phone', 'ci', 'privateFiles'].includes(key))) {
+        throw new HttpsError('invalid-argument', 'Completa únicamente los datos solicitados del perfil.');
+    }
+    const profileRef = db.doc(`customerProfiles/${uid}`);
+    const first = await profileRef.get();
+    if (!first.exists || first.data()?.authUid !== uid) throw new HttpsError('failed-precondition', 'No encontramos un perfil vinculado a esta cuenta.');
+    const profile = first.data()!;
+    const customerId = cleanString(profile.legacyCustomerId, 120) || uid;
+    const customerRef = db.doc(`customers/${customerId}`);
+    const privateRef = db.doc(`customerPrivate/${uid}`);
+    const [firstPrivate, firstCustomer, legacyPrivate] = await Promise.all([
+        privateRef.get(), db.doc(`customers/${customerId}`).get(),
+        customerId === uid ? Promise.resolve(null) : db.doc(`customerPrivate/${customerId}`).get(),
+    ]);
+    if (!firstCustomer.exists || firstCustomer.data()?.authUid !== uid) throw new HttpsError('failed-precondition', 'No encontramos un perfil de cliente vinculado a esta cuenta.');
+    const privateState = await resolveCustomerPrivateFiles(uid, customerId === uid ? '' : customerId,
+        [firstPrivate.data(), legacyPrivate?.data(), firstCustomer.data()], getStorage().bucket(), (label) =>
+            profile.privateFilesNeedReview === undefined || profile.privateFilesNeedReview.includes(label) ? 'review' : 'missing');
+    const missing = (['name', 'phone', 'ci'] as const).filter((field) => !cleanString(profile[field], field === 'name' ? 120 : 40));
+    const patch: Record<string, string> = {};
+    for (const field of missing) {
+        const value = cleanString(request.data[field], field === 'name' ? 120 : 40);
+        if (field === 'name' && value.length < 2 || field === 'phone' && value.replace(/\D/g, '').length < 7 || field === 'ci' && value.length < 3) {
+            throw new HttpsError('invalid-argument', 'Completa nombre, teléfono y documento de identidad que falten.');
+        }
+        patch[field] = value;
+    }
+    if (missing.some((field) => !patch[field])) throw new HttpsError('invalid-argument', 'Envía los datos que todavía faltan en tu perfil.');
+    const rawPrivateFiles = request.data.privateFiles;
+    if (rawPrivateFiles !== undefined && !exactObject(rawPrivateFiles)) throw new HttpsError('invalid-argument', 'Los archivos del perfil no son válidos.');
+    const providedPrivateFiles = (rawPrivateFiles || {}) as Record<string, unknown>;
+    const allowedFileKeys = new Set(['autofoto', 'documento', 'documentoReverso']);
+    if (Object.keys(providedPrivateFiles).some(key => !allowedFileKeys.has(key))) throw new HttpsError('invalid-argument', 'Los archivos del perfil no son válidos.');
+    const pathFields: Record<string, string> = { autofoto: 'autofotoPath', documento: 'documentoPath', documentoReverso: 'documentoReversoPath' };
+    const safePrivateFiles: Record<string, string> = {};
+    for (const [label, rawPath] of Object.entries(providedPrivateFiles)) {
+        if (!privateState.missing.includes(label as 'autofoto' | 'documento' | 'documentoReverso')) {
+            throw new HttpsError('already-exists', 'Ese archivo ya está vinculado al perfil y no se reemplazó.');
+        }
+        const path = ownedCustomerStoragePath(uid, '', rawPath, getStorage().bucket().name);
+        if (!path) throw new HttpsError('invalid-argument', 'La ruta del archivo no corresponde a esta cuenta.');
+        const [exists] = await getStorage().bucket().file(path).exists();
+        if (!exists) throw new HttpsError('not-found', 'No encontramos uno de los archivos que subiste. Vuelve a intentarlo.');
+        safePrivateFiles[pathFields[label]] = path;
+    }
+    if (privateState.missing.some(label => !safePrivateFiles[pathFields[label]])) {
+        throw new HttpsError('failed-precondition', 'Sube únicamente la fotografía o los lados del documento que todavía faltan.');
+    }
+    if (missing.length === 0 && Object.keys(safePrivateFiles).length === 0) {
+        return { profile: { ...profile, missingPrivateFiles: privateState.missing, privateFilesNeedReview: privateState.needsReview }, alreadyComplete: true };
+    }
+    const remainingFiles = privateState.missing.filter(label => !safePrivateFiles[pathFields[label]]);
+    await db.runTransaction(async (tx) => {
+        const [latestProfile, latestCustomer, latestPrivate] = await Promise.all([tx.get(profileRef), tx.get(customerRef), tx.get(privateRef)]);
+        if (!latestProfile.exists || latestProfile.data()?.authUid !== uid || !latestCustomer.exists || latestCustomer.data()?.authUid !== uid) {
+            throw new HttpsError('failed-precondition', 'El perfil cambió. Vuelve a iniciar sesión e inténtalo de nuevo.');
+        }
+        const latest = latestProfile.data()!;
+        const stillMissing = missing.filter((field) => !cleanString(latest[field], field === 'name' ? 120 : 40));
+        const safePatch = stillMissing.reduce<Record<string, string>>((result, field) => {
+            result[field] = patch[field];
+            return result;
+        }, {});
+        const latestFiles = latestPrivate.data() || {};
+        const privatePatch = Object.fromEntries(Object.entries(safePrivateFiles).map(([field, path]) => {
+            const original = firstPrivate.data()?.[field];
+            const current = latestFiles[field];
+            if (current && current !== original && current !== path) throw new HttpsError('aborted', 'El vínculo de un archivo cambió durante la recuperación. Vuelve a intentarlo.');
+            if (current && current === path) return [field, path];
+            return [field, path];
+        }));
+        tx.update(profileRef, { ...safePatch, missingPrivateFiles: remainingFiles, privateFilesNeedReview: privateState.needsReview, updatedAt: FieldValue.serverTimestamp() });
+        tx.update(customerRef, { ...safePatch, updatedAt: FieldValue.serverTimestamp() });
+        if (Object.keys(privatePatch).length) tx.set(privateRef, { ...privatePatch, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+    });
+    // Keep only non-sensitive completion flags on the owner's profile document;
+    // the actual Storage paths remain in customerPrivate.
+    return { profile: { ...profile, ...patch, missingPrivateFiles: remainingFiles, privateFilesNeedReview: privateState.needsReview }, alreadyComplete: false };
 });
 
 export const beginCustomerRegistration = onCall(callable(), async (request) => {
@@ -494,12 +622,18 @@ export const getAdminCustomerFiles = onCall(callable(), async (request) => {
         if ([...ownedLegacyRoots].some((root) => objectPath.startsWith(root))) return objectPath;
         return '';
     };
-    const signFile = async (...candidates: unknown[]): Promise<{ url: string | null; state: 'available' | 'missing' }> => {
-        const path = candidates.map(resolveObjectPath).find(Boolean);
-        if (!path) return { url: null, state: 'missing' };
-        const file = bucket.file(path);
-        const [exists] = await file.exists();
-        if (!exists) return { url: null, state: 'missing' };
+    const signFile = async (...candidates: unknown[]): Promise<{ url: string | null; state: 'available' | 'missing' | 'needs_review' }> => {
+        const references = candidates.map(value => cleanString(value, 1500)).filter(Boolean);
+        const validPaths = [...new Set(references.map(resolveObjectPath).filter(Boolean))];
+        const hasUnresolvableReference = references.some(value => !resolveObjectPath(value));
+        if (!validPaths.length) return { url: null, state: 'needs_review' };
+        let file: ReturnType<typeof bucket.file> | undefined;
+        for (const path of validPaths) {
+            const candidate = bucket.file(path);
+            const [exists] = await candidate.exists();
+            if (exists) { file = candidate; break; }
+        }
+        if (!file) return { url: null, state: hasUnresolvableReference ? 'needs_review' : 'missing' };
         // The Storage Emulator has no signing identity. In local tests only,
         // return the already-authorized bytes through this callable response;
         // production always uses a five-minute signed URL.
@@ -515,7 +649,7 @@ export const getAdminCustomerFiles = onCall(callable(), async (request) => {
         ['documento', ['documentoPath', 'documentoUrl', 'documentFrontPath', 'documentFrontUrl']],
         ['documentoReverso', ['documentoReversoPath', 'documentoReversoUrl', 'documentBackPath', 'documentBackUrl']],
     ] as const;
-    const files: Record<string, { url: string | null; state: 'available' | 'missing' }> = {};
+    const files: Record<string, { url: string | null; state: 'available' | 'missing' | 'needs_review' }> = {};
     for (const [name, pathFields] of fields) {
         files[name] = await signFile(...pathFields.flatMap((field) => [privateData[field], legacyData[field]]));
     }
@@ -585,11 +719,12 @@ export const createRentalGroup = onCall(callable(), async (request) => {
 
     const result = await db.runTransaction(async (tx) => {
         let transactionRole: DocumentData | undefined;
-        const [profileSnap, idemSnap, rateSnap, counterSnap, inventorySnap, comboSnap, allRentalSnap, codeSnap] = await Promise.all([
+        const [profileSnap, idemSnap, rateSnap, counterSnap, inventorySnap, comboSnap, allRentalSnap, codeSnap, businessSnap] = await Promise.all([
             tx.get(profileRef), tx.get(idempotencyRef), tx.get(rateRef), tx.get(counterRef),
             tx.get(db.collection('inventory')), tx.get(db.collection('combos')),
             tx.get(db.collection('rentals').where('status', 'in', ACTIVE_STATUSES)),
             tx.get(db.collection('rentals').where('reservationCode', '>=', `BRIZ-${currentYear}-`).where('reservationCode', '<', `BRIZ-${currentYear}-\uf8ff`)),
+            tx.get(db.doc('settings/public_business')),
         ]);
         let adminCustomerSnap: DocumentSnapshot<DocumentData> | null = null;
         if (adminManual) {
@@ -622,6 +757,8 @@ export const createRentalGroup = onCall(callable(), async (request) => {
 
         const inventory = inventorySnap.docs.map((item) => ({ id: item.id, ...item.data() } as CatalogItem));
         const combos = comboSnap.docs.map((item) => ({ id: item.id, ...item.data() } as Combo));
+        const scheduleError = validateRentalBusinessHours(businessSnap.data()?.hours || DEFAULT_RENTAL_HOURS, input.date, input.pickupTime, input.duration, input.endTime);
+        if (scheduleError) throw new HttpsError('failed-precondition', scheduleError);
         const inventoryById = new Map(inventory.map((item) => [item.id, item]));
         const comboById = new Map(combos.map((item) => [item.id, item]));
         if (adminManual && transactionRole?.role === 'manager' && transactionRole.store !== 'all') {
@@ -674,7 +811,10 @@ export const createRentalGroup = onCall(callable(), async (request) => {
         }
         for (const accessory of input.accessories || []) {
             const item = inventoryById.get(accessory.itemId);
-            if (!item || !item.active || !canOfferRentalAddon(item) || item.itemType !== 'accessory') throw new HttpsError('failed-precondition', 'Uno de los accesorios ya no está disponible como complemento.');
+            if (!item || !isEligibleRentalAddon(item, combos)) throw new HttpsError('failed-precondition', 'Uno de los accesorios ya no está disponible como complemento.');
+            if (!hasConfiguredRentalAddonPrice(item)) throw new HttpsError('failed-precondition', `${item.name} necesita una tarifa de alquiler o estar marcado expresamente como gratuito.`);
+            try { accessoryUnitPrice(item, input.duration); }
+            catch { throw new HttpsError('failed-precondition', `${item.name} no tiene una tarifa configurada para la duración seleccionada.`); }
         }
 
         const rentalLines: Array<Record<string, unknown>> = [];
@@ -991,6 +1131,92 @@ function alterStock(item: CatalogItem, wheelSize: string | undefined, delta: num
     }
     return next;
 }
+
+export const adjustInventoryStock = onCall(callable(), async (request) => {
+    const { uid } = requireAuth(request);
+    if (!exactObject(request.data)) throw new HttpsError('invalid-argument', 'Ajuste de inventario inválido.');
+    const itemId = cleanString(request.data.itemId, 150);
+    const wheelSize = cleanString(request.data.wheelSize, 20) || undefined;
+    const delta = Number(request.data.delta);
+    if (!itemId || !Number.isInteger(delta) || delta === 0 || Math.abs(delta) > 500) {
+        throw new HttpsError('invalid-argument', 'Indica un cambio de stock entero distinto de cero.');
+    }
+    const roleRef = db.doc(`adminUsers/${uid}`);
+    const itemRef = db.doc(`inventory/${itemId}`);
+    const auditRef = db.collection('inventoryStockAudits').doc();
+    await db.runTransaction(async (tx) => {
+        const [roleSnap, itemSnap, rentalsSnap, inventorySnap, combosSnap] = await Promise.all([
+            tx.get(roleRef), tx.get(itemRef), tx.get(db.collection('rentals').where('status', 'in', ACTIVE_STATUSES)),
+            tx.get(db.collection('inventory')), tx.get(db.collection('combos')),
+        ]);
+        const role = roleSnap.data();
+        const item = itemSnap.data() as CatalogItem | undefined;
+        if (!roleSnap.exists || role?.active !== true || !['admin', 'manager'].includes(String(role.role))) {
+            throw new HttpsError('permission-denied', 'No tienes permiso para ajustar inventario.');
+        }
+        if (!itemSnap.exists || !item || item.active !== true) throw new HttpsError('not-found', 'No se encontró un artículo activo.');
+        if (role.role === 'manager' && role.store !== 'all' && item.store !== role.store) {
+            throw new HttpsError('permission-denied', 'El artículo pertenece a otra sucursal.');
+        }
+        if (item.hasWheelSizes && (!wheelSize || !item.wheelSizes?.some((wheel) => wheel.size === wheelSize))) {
+            throw new HttpsError('invalid-argument', 'Selecciona un aro válido para este artículo.');
+        }
+        if (!item.hasWheelSizes && wheelSize) throw new HttpsError('invalid-argument', 'Este artículo no tiene stock separado por aro.');
+        const currentStock = stockFor(item, wheelSize);
+        const nextStock = currentStock + delta;
+        if (nextStock < 0) throw new HttpsError('failed-precondition', 'El ajuste no puede dejar stock negativo.');
+
+        const inventory = inventorySnap.docs.map((snapshot) => ({ id: snapshot.id, ...snapshot.data() } as CatalogItem));
+        const combos = combosSnap.docs.map((snapshot) => ({ id: snapshot.id, ...snapshot.data() } as Combo));
+        const events: Array<{ time: number; delta: number }> = [];
+        const now = Date.now();
+        for (const snapshot of rentalsSnap.docs) {
+            const rental = normalizeLegacyRental(snapshot);
+            if (!rental) continue;
+            const matching = rentalDemands(rental, inventory, combos)
+                .filter((demand) => demand.itemId === itemId && (demand.wheelSize || '') === (wheelSize || ''))
+                .reduce((sum, demand) => sum + demand.quantity, 0);
+            if (!matching) continue;
+            const holding = isHolding(rental.status);
+            if (!isBlocking(rental.status)) continue;
+            const window = getRentalWindow(rental);
+            const effectiveEnd = holding && window.endMs < now && window.startMs <= now ? now + 1 : window.endMs;
+            if (effectiveEnd <= window.startMs) continue;
+            events.push({ time: window.startMs, delta: matching }, { time: effectiveEnd, delta: -matching });
+        }
+        events.sort((left, right) => left.time - right.time || left.delta - right.delta);
+        let active = 0;
+        let peakReserved = 0;
+        for (const event of events) {
+            active += event.delta;
+            peakReserved = Math.max(peakReserved, active);
+        }
+        if (peakReserved > nextStock) {
+            throw new HttpsError('failed-precondition', 'Ese retiro reduciría una reserva existente. No se modificó el inventario.');
+        }
+
+        const lockRef = db.doc(`_availabilityLocks/${resourceKey({ itemId, wheelSize, quantity: 1 })}`);
+        const lockSnap = await tx.get(lockRef);
+        const updated = alterStock(item, wheelSize, delta);
+        const wheelSizes = item.hasWheelSizes && item.wheelSizes
+            ? item.wheelSizes.map((wheel) => wheel.size === wheelSize
+                ? { ...wheel, stock: updated.wheelSizes?.find((entry) => entry.size === wheelSize)?.stock }
+                : wheel)
+            : undefined;
+        tx.update(itemRef, {
+            ...(wheelSizes ? { wheelSizes } : { stock: updated.stock }),
+            availabilityVersion: FieldValue.increment(1),
+        });
+        tx.set(lockRef, { revision: (Number(lockSnap.data()?.revision) || 0) + 1, updatedAt: Timestamp.now() });
+        tx.create(auditRef, {
+            itemId, store: item.store || (role.store === 'all' ? 'principal' : role.store), actorUid: uid,
+            action: 'stock_adjustment', source: 'combo_stock_manager',
+            resource: wheelSize ? { wheelSize } : null, before: currentStock, after: nextStock, delta,
+            createdAt: FieldValue.serverTimestamp(),
+        });
+    });
+    return { ok: true };
+});
 
 function appendRentalAudit(row: DocumentData, uid: string, action: string, before: unknown, after: unknown, now: string): Record<string, unknown> {
     const history = Array.isArray(row.auditLog) ? row.auditLog.slice(-49) : [];
@@ -1535,12 +1761,12 @@ export const createBrizMaintenanceOrder = onCall(callable(), async (request) => 
     const wheelSize = input.wheelSize === undefined ? '' : cleanString(input.wheelSize, 20);
     const entryDate = cleanString(input.maintenanceEntryDate, 10) || new Intl.DateTimeFormat('en-CA', { timeZone: 'America/La_Paz' }).format(new Date());
     const quantity = Number(input.quantity);
-    const customer = cleanString(input.customer, 120);
+    const customer = cleanString(input.customer, 120) || 'BRIZ';
     const phone = cleanString(input.phone, 40);
     const bikeType = cleanString(input.bikeType, 120);
     const issue = cleanString(input.issue, 1000);
     const estimatedDelivery = cleanString(input.estimatedDelivery, 20);
-    if (!itemId || !requestedStore || !customer || !issue || phone.replace(/\D/g, '').length < 7
+    if (!itemId || !requestedStore || !customer || !issue
         || !Number.isInteger(quantity) || quantity < 1 || !/^\d{4}-\d{2}-\d{2}$/.test(estimatedDelivery)
         || !/^\d{4}-\d{2}-\d{2}$/.test(entryDate)) {
         throw new HttpsError('invalid-argument', 'Completa bicicleta BRIZ, sucursal, cantidad, cliente, problema y fecha estimada.');
