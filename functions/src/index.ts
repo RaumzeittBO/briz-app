@@ -519,7 +519,11 @@ export const beginCustomerRegistration = onCall(callable(), async (request) => {
     return { ok: true, verificationRequired: true };
 });
 
-export const sendCustomerVerificationEmail = onCall({ ...callable(), secrets: [RESEND_API_KEY] }, async (request) => {
+export const sendCustomerVerificationEmail = onCall({
+    ...callable(),
+    serviceAccount: 'briz-resend-runtime@briz-4ef3a.iam.gserviceaccount.com',
+    secrets: [RESEND_API_KEY],
+}, async (request) => {
     const { uid, email: tokenEmail } = requireAuth(request);
     if (!exactObject(request.data) || Object.keys(request.data).some(key => key !== 'language')) {
         throw new HttpsError('invalid-argument', 'La solicitud de verificación no es válida.');
