@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { createRequire } from 'node:module';
 import { initializeApp } from 'firebase/app';
-import { getAuth, createUserWithEmailAndPassword, connectAuthEmulator, reload, confirmPasswordReset, verifyPasswordResetCode, signInWithEmailAndPassword, applyActionCode } from 'firebase/auth';
+import { getAuth, createUserWithEmailAndPassword, connectAuthEmulator, reload, confirmPasswordReset, verifyPasswordResetCode, signInWithEmailAndPassword, applyActionCode, signOut } from 'firebase/auth';
 import { getFunctions, connectFunctionsEmulator, httpsCallable } from 'firebase/functions';
 import { connectFirestoreEmulator, getFirestore, doc, setDoc } from 'firebase/firestore';
 import { connectStorageEmulator, getStorage, ref as storageRef, uploadBytes } from 'firebase/storage';
@@ -64,9 +64,47 @@ try {
         name: 'Rider A', phone: '+59170000001', ci: 'TEST-1001',
     });
     assert.equal(beginProfile.verificationRequired, true);
+    const initialVerification = await call<{ status: 'sent' | 'verified' }>(userA.functions, 'sendCustomerVerificationEmail', { language: 'es' });
+    assert.equal(initialVerification.status, 'sent');
+    const initialEmails = await adminDb.collection('_emulatorVerificationOutbox').where('to', '==', 'rider-a@example.test').get();
+    assert.equal(initialEmails.size, 1, 'Registration sends exactly one verification email through the emulator adapter.');
+    const initialEmail = initialEmails.docs[0].data();
+    assert.equal(initialEmail.from, 'BRIZ <notificaciones@briz.com.bo>');
+    assert.match(String(initialEmail.html), /CONFIRMAR MI CORREO/);
+    assert.match(String(initialEmail.text), /¡Bienvenido a BRIZ!/);
+    const initialLinkMatch = String(initialEmail.text).match(/CONFIRMAR MI CORREO: (https:\/\/\S+)/);
+    assert.ok(initialLinkMatch, 'The plain-text message includes the custom verification handler URL.');
+    const initialActionUrl = new URL(initialLinkMatch![1]);
+    assert.equal(initialActionUrl.origin, 'https://www.briz.com.bo');
+    assert.equal(initialActionUrl.pathname, '/verify-email');
+    assert.equal(initialActionUrl.searchParams.get('mode'), 'verifyEmail');
+    assert.equal(initialActionUrl.searchParams.get('lang'), 'es');
+    assert.equal(initialEmail.idempotencyKey.length > 0, true);
+    await assert.rejects(
+        () => call(userA.functions, 'sendCustomerVerificationEmail', { language: 'es', email: 'victim@example.test' }),
+        /solicitud.*no.*válida/i,
+        'A caller cannot choose a verification recipient.',
+    );
+    await assert.rejects(
+        () => call(userA.functions, 'sendCustomerVerificationEmail', { language: 'en' }),
+        /Espera un minuto/i,
+        'The server rate-limits repeated sends independently of the UI cooldown.',
+    );
     await adminDb.doc(`pendingCustomerRegistrations/${userA.uid}`).update({ expiresAt: Date.now() - 1 });
     await assert.rejects(() => call(userA.functions, 'createCustomerProfile'), /verify|verifica/i);
-    await verifyEmail(userA.auth, userA.uid);
+    const initialCode = initialActionUrl.searchParams.get('oobCode');
+    assert.ok(initialCode);
+    await applyActionCode(userA.auth, initialCode!);
+    await reload(userA.auth.currentUser!);
+    assert.equal(userA.auth.currentUser?.emailVerified, true, 'A code in the Resend message activates Firebase Auth.');
+    await userA.auth.currentUser!.getIdToken(true);
+    const alreadyVerified = await call<{ status: 'verified' | 'sent' }>(userA.functions, 'sendCustomerVerificationEmail', { language: 'es' });
+    assert.equal(alreadyVerified.status, 'verified', 'A verified user is told their account is already confirmed.');
+    assert.equal((await adminDb.collection('_emulatorVerificationOutbox').where('to', '==', 'rider-a@example.test').get()).size, 1);
+    await signOut(userA.auth);
+    const verifiedLogin = await signInWithEmailAndPassword(userA.auth, 'rider-a@example.test', 'TestPass#123');
+    assert.equal(verifiedLogin.user.emailVerified, true, 'The confirmed account can sign in normally.');
+    await verifiedLogin.user.getIdToken(true);
     const createdProfile = await call<{ profile: { authUid: string; email: string } }>(userA.functions, 'createCustomerProfile');
     assert.equal(createdProfile.profile.authUid, userA.uid);
     assert.equal(createdProfile.profile.email, 'rider-a@example.test');
@@ -617,7 +655,18 @@ try {
     const userB = await client('rider-b@example.test', 'TestPass#123');
     await call(userB.functions, 'beginCustomerRegistration', { name: 'Rider B', phone: '+59170000002', ci: 'TEST-1002' });
     await assert.rejects(() => call(userB.functions, 'completeCustomerProfile', { phone: '+59170000002' }), /verify|verifica/i);
-    await verifyEmail(userB.auth, userB.uid);
+    const pendingRegistrationMail = await call<{ status: 'sent' | 'verified' }>(userB.functions, 'sendCustomerVerificationEmail', { language: 'en' });
+    assert.equal(pendingRegistrationMail.status, 'sent');
+    const pendingMailDoc = (await adminDb.collection('_emulatorVerificationOutbox').where('to', '==', 'rider-b@example.test').get()).docs[0];
+    assert.ok(pendingMailDoc);
+    assert.match(String(pendingMailDoc.data().html), /Welcome to BRIZ!/);
+    const pendingActionUrlText = String(pendingMailDoc.data().text).match(/CONFIRM MY EMAIL: (https:\/\/\S+)/);
+    assert.ok(pendingActionUrlText);
+    const pendingActionUrl = new URL(pendingActionUrlText![1]);
+    await applyActionCode(userB.auth, pendingActionUrl.searchParams.get('oobCode')!);
+    await reload(userB.auth.currentUser!);
+    assert.equal(userB.auth.currentUser?.emailVerified, true, 'A pending registration is activated from its English Resend email.');
+    await userB.auth.currentUser!.getIdToken(true);
     await call(userB.functions, 'createCustomerProfile');
     await adminDb.collection('customerProfiles').doc(userB.uid).update({ phone: '' });
     await adminDb.collection('customers').doc(userB.uid).update({ phone: '' });
@@ -652,9 +701,18 @@ try {
     connectAuthEmulator(otherBrowserAuth, 'http://127.0.0.1:9099', { disableWarnings: true });
     connectFunctionsEmulator(otherBrowserFunctions, '127.0.0.1', 5001);
     connectStorageEmulator(otherBrowserStorage, '127.0.0.1', 9199);
-    const verificationLink = await adminAuth.generateEmailVerificationLink(recoveryEmail);
-    const verificationCode = new URL(verificationLink).searchParams.get('oobCode');
+    const recoveryVerificationResult = await call<{ status: 'sent' | 'verified' }>(recoveryUser.functions, 'sendCustomerVerificationEmail', { language: 'en' });
+    assert.equal(recoveryVerificationResult.status, 'sent');
+    const recoveryEmailDocs = await adminDb.collection('_emulatorVerificationOutbox').where('to', '==', recoveryEmail).get();
+    assert.equal(recoveryEmailDocs.size, 1);
+    const recoveryActionLinkText = String(recoveryEmailDocs.docs[0].data().text).match(/CONFIRM MY EMAIL: (https:\/\/\S+)/);
+    assert.ok(recoveryActionLinkText, 'A recovered account receives the English verification email.');
+    const customVerificationUrl = new URL(recoveryActionLinkText![1]);
+    const verificationCode = customVerificationUrl.searchParams.get('oobCode');
     assert.ok(verificationCode, 'Firebase Auth Emulator supplied a verification action code.');
+    assert.equal(customVerificationUrl.pathname, '/verify-email');
+    assert.equal(customVerificationUrl.searchParams.get('mode'), 'verifyEmail');
+    assert.equal(customVerificationUrl.searchParams.get('lang'), 'en');
     await applyActionCode(otherBrowserAuth, verificationCode!);
     await reload(recoveryUser.auth.currentUser!);
     assert.equal(recoveryUser.auth.currentUser?.emailVerified, true, 'Verification action completed in another browser session.');

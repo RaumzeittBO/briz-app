@@ -22,7 +22,6 @@ import {
     onAuthStateChanged,
     reauthenticateWithCredential,
     reload,
-    sendEmailVerification,
     sendPasswordResetEmail,
     setPersistence,
     signInWithEmailAndPassword,
@@ -43,7 +42,7 @@ import { SHOP_SEED_CATEGORIES } from '../data/shopSeedData';
 import { DEFAULT_PUBLIC_BUSINESS_CONFIG, mergePublicBusinessConfig, type PublicBusinessConfig, type PublicBusinessConfigUpdate } from '../lib/businessConfig';
 import { savePublicBusinessConfig } from '../lib/publicBusinessSettings';
 import { addInventoryCategory } from '../lib/inventoryCategories';
-import { beginCustomerRegistration, createCustomerProfile as createCustomerProfileBackend, completeCustomerProfile as completeCustomerProfileBackend, getMyRentals as getMyRentalsBackend, getAdminCustomers as getAdminCustomersBackend, createRentalGroup as createRentalGroupBackend, createServiceOrder as createServiceOrderBackend, createBrizMaintenanceOrder, updateBrizMaintenanceOrder, releaseBrizMaintenanceOrder, releaseUnlinkedMaintenanceStock as releaseUnlinkedMaintenanceStockBackend, adjustInventoryStock as adjustInventoryStockBackend, type CustomerRecoveryFiles, type PublicCustomerProfile, type ReservationGroupInput } from '../lib/backend';
+import { beginCustomerRegistration, sendCustomerVerificationEmail as sendCustomerVerificationEmailBackend, createCustomerProfile as createCustomerProfileBackend, completeCustomerProfile as completeCustomerProfileBackend, getMyRentals as getMyRentalsBackend, getAdminCustomers as getAdminCustomersBackend, createRentalGroup as createRentalGroupBackend, createServiceOrder as createServiceOrderBackend, createBrizMaintenanceOrder, updateBrizMaintenanceOrder, releaseBrizMaintenanceOrder, releaseUnlinkedMaintenanceStock as releaseUnlinkedMaintenanceStockBackend, adjustInventoryStock as adjustInventoryStockBackend, type CustomerRecoveryFiles, type PublicCustomerProfile, type ReservationGroupInput } from '../lib/backend';
 import { calculateProductRentalPrice } from '../lib/rentalPricing';
 
 const CUSTOMER_VERIFICATION_EMAIL_KEY = 'briz_customer_verification_email';
@@ -475,7 +474,7 @@ interface StoreContextType {
     // Customer Authentication state & methods
     currentCustomer: Customer | null;
     loginCustomer: (email: string, password: string, remember: boolean) => Promise<Customer | null>;
-    resendCustomerVerification: (email: string, password?: string) => Promise<'sent' | 'verified'>;
+    resendCustomerVerification: (email: string, password?: string, language?: 'es' | 'en') => Promise<'sent' | 'verified'>;
     refreshCustomerVerification: () => Promise<Customer | null>;
     changeCustomerVerificationEmail: (newEmail: string, password: string) => Promise<void>;
     completeCustomerProfile: (fields: { name?: string; phone?: string; ci?: string; privateFiles?: CustomerRecoveryFiles }) => Promise<Customer>;
@@ -484,7 +483,8 @@ interface StoreContextType {
         selfieBlob: Blob | null,
         docFileAnverso: File | null,
         docFileReverso: File | null,
-        remember: boolean
+        remember: boolean,
+        language?: 'es' | 'en'
     ) => Promise<{ customer: Customer; verificationSent: boolean }>;
     logoutCustomer: () => void;
     adminNavigationLinks: AdminNavigationLink[];
@@ -991,7 +991,7 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
         return customer;
     };
 
-    const resendCustomerVerification = async (email: string, password?: string): Promise<'sent' | 'verified'> => {
+    const resendCustomerVerification = async (email: string, password?: string, language: 'es' | 'en' = 'es'): Promise<'sent' | 'verified'> => {
         const cleanEmail = email.trim().toLowerCase();
         const existingUser = auth.currentUser;
         const ownsCurrentSession = Boolean(existingUser && existingUser.email?.toLowerCase() === cleanEmail);
@@ -1005,8 +1005,7 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
             await reload(user);
             await user.getIdToken(true);
             if (user.emailVerified) return 'verified';
-            await sendEmailVerification(user, customerVerificationActionSettings());
-            return 'sent';
+            return await sendCustomerVerificationEmailBackend(language);
         } finally {
             if (!ownsCurrentSession) await signOut(auth);
         }
@@ -1078,7 +1077,8 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
         selfieBlob: Blob | null,
         docFileAnverso: File | null,
         docFileReverso: File | null,
-        remember: boolean
+        remember: boolean,
+        language: 'es' | 'en' = 'es'
     ): Promise<{ customer: Customer; verificationSent: boolean }> => {
         const cleanEmail = customerData.email?.trim().toLowerCase() || '';
         if (!cleanEmail || !customerData.password) throw new Error('El correo y la contraseña son obligatorios.');
@@ -1116,7 +1116,7 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
             registrationDataSaved = true;
             let verificationSent = true;
             try {
-                await sendEmailVerification(credential.user, customerVerificationActionSettings());
+                await sendCustomerVerificationEmailBackend(language);
             } catch {
                 verificationSent = false;
             }

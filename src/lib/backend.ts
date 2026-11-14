@@ -49,6 +49,11 @@ export async function beginCustomerRegistration(data: Record<string, unknown>): 
     await httpsCallable(functions, 'beginCustomerRegistration')(data);
 }
 
+export async function sendCustomerVerificationEmail(language: 'es' | 'en'): Promise<'sent' | 'verified'> {
+    const result = await httpsCallable<{ language: 'es' | 'en' }, { status: 'sent' | 'verified' }>(functions, 'sendCustomerVerificationEmail')({ language });
+    return result.data.status;
+}
+
 export async function createCustomerProfile(): Promise<PublicCustomerProfile> {
     const result = await httpsCallable<void, { profile: PublicCustomerProfile }>(functions, 'createCustomerProfile')();
     return result.data.profile;
