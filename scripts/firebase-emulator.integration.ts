@@ -13,11 +13,13 @@ const require = createRequire(new URL('../functions/package.json', import.meta.u
 const adminAppSdk = require('firebase-admin/app');
 const adminAuthSdk = require('firebase-admin/auth');
 const adminFirestoreSdk = require('firebase-admin/firestore');
+const adminStorageSdk = require('firebase-admin/storage');
 const projectId = 'demo-briz-security';
 const firebaseConfig = { apiKey: 'demo-key', authDomain: 'demo-briz-security.local', projectId, appId: 'demo-app', storageBucket: `${projectId}.appspot.com` };
-const adminApp = adminAppSdk.initializeApp({ projectId }, `test-admin-${Date.now()}`);
+const adminApp = adminAppSdk.initializeApp({ projectId, storageBucket: `${projectId}.appspot.com` }, `test-admin-${Date.now()}`);
 const adminDb = adminFirestoreSdk.getFirestore(adminApp);
 const adminAuth = adminAuthSdk.getAuth(adminApp);
+const adminBucket = adminStorageSdk.getStorage(adminApp).bucket();
 const clients: Array<{ app: ReturnType<typeof initializeApp>; auth: ReturnType<typeof getAuth>; functions: ReturnType<typeof getFunctions> }> = [];
 
 function pass(label: string): void { console.log(`PASS ${label}`); }
@@ -96,11 +98,51 @@ try {
     for (const name of ['selfie.png', 'document-front.png', 'document-back.png']) {
         await uploadBytes(storageRef(userA.storage, `customerUploads/${userA.uid}/${name}`), fictitiousImage, { contentType: 'image/png' });
     }
+    const accountWithExistingFiles = await call<{ profile: { missingPrivateFiles: string[]; privateFilesNeedReview: string[] } }>(userA.functions, 'createCustomerProfile');
+    assert.deepEqual(accountWithExistingFiles.profile.missingPrivateFiles, []);
+    assert.deepEqual(accountWithExistingFiles.profile.privateFilesNeedReview, []);
+    pass('Existing UID-owned photo and document references are retained and individually verified after upload');
     const privateFiles = await call<{ files: Record<string, { url: string | null; state: string }>; expiresInSeconds: number }>(userA.functions, 'getAdminCustomerFiles', { customerId: userA.uid });
     assert.equal(privateFiles.expiresInSeconds, 300);
     assert.deepEqual(Object.values(privateFiles.files).map((file) => file.state), ['available', 'available', 'available']);
     assert.ok(Object.values(privateFiles.files).every((file) => file.url?.startsWith('data:image/png;base64,')), 'Emulator returns authorized local bytes without publishing a permanent link.');
     assert.deepEqual(Buffer.from(privateFiles.files.autofoto.url!.split(',')[1], 'base64'), Buffer.from(fictitiousImage));
+
+    const legacyFilesEmail = 'legacy-files@example.test';
+    const legacyFilesUser = await client(legacyFilesEmail, 'TestPass#123');
+    await verifyEmail(legacyFilesUser.auth, legacyFilesUser.uid);
+    const legacyFilesId = 'legacy-profile-with-private-files';
+    const legacyOwnedPaths = {
+        autofotoPath: `customers/${legacyFilesId}/selfie.jpg`,
+        documentoPath: `customers/${legacyFilesId}/document-front.png`,
+        documentoReversoPath: `customers/${legacyFilesId}/document-back.png`,
+    };
+    await adminDb.doc(`customers/${legacyFilesId}`).set({
+        id: legacyFilesId, email: legacyFilesEmail, name: 'Legacy Files Customer', phone: '+59170000004', ci: 'LEGACY-1004', rentalsCount: 4,
+    });
+    await adminDb.doc(`customerPrivate/${legacyFilesId}`).set(legacyOwnedPaths);
+    for (const path of Object.values(legacyOwnedPaths)) await adminBucket.file(path).save(Buffer.from(fictitiousImage), { metadata: { contentType: 'image/png' } });
+    const linkedLegacyFiles = await call<{ profile: { legacyCustomerId: string; missingPrivateFiles: string[]; privateFilesNeedReview: string[] }; linkedLegacyAccount: boolean }>(legacyFilesUser.functions, 'createCustomerProfile');
+    assert.equal(linkedLegacyFiles.linkedLegacyAccount, true);
+    assert.equal(linkedLegacyFiles.profile.legacyCustomerId, legacyFilesId);
+    assert.deepEqual(linkedLegacyFiles.profile.missingPrivateFiles, []);
+    assert.deepEqual(linkedLegacyFiles.profile.privateFilesNeedReview, []);
+    const linkedLegacyPrivate = (await adminDb.doc(`customerPrivate/${legacyFilesUser.uid}`).get()).data() || {};
+    for (const [field, path] of Object.entries(legacyOwnedPaths)) assert.equal(linkedLegacyPrivate[field], path, 'Verified legacy paths are copied only to the matching verified UID.');
+    pass('Exact-email legacy account retains files under its linked customer root after individual existence checks');
+
+    const mismatchedLegacyOwner = await client('mismatched-legacy-owner@example.test', 'TestPass#123');
+    await verifyEmail(mismatchedLegacyOwner.auth, mismatchedLegacyOwner.uid);
+    const foreignLegacyId = 'legacy-linked-to-someone-else';
+    await adminDb.doc(`customers/${foreignLegacyId}`).set({ id: foreignLegacyId, authUid: 'different-owner-uid', email: 'different@example.test' });
+    await adminDb.doc(`customerProfiles/${mismatchedLegacyOwner.uid}`).set({
+        id: mismatchedLegacyOwner.uid, authUid: mismatchedLegacyOwner.uid, email: 'mismatched-legacy-owner@example.test',
+        name: 'Fictional Account', phone: '+59170000005', ci: 'SAFE-1005', legacyCustomerId: foreignLegacyId,
+    });
+    await adminDb.doc(`customerPrivate/${foreignLegacyId}`).set({ autofotoPath: `customers/${foreignLegacyId}/selfie.jpg` });
+    await assert.rejects(() => call(mismatchedLegacyOwner.functions, 'createCustomerProfile'), (error: unknown) => (error as { code?: string }).code === 'functions/failed-precondition');
+    pass('A legacy storage root is not trusted unless its customer record is linked to the authenticated UID');
+
     const unauthorizedReader = await client('unauthorized-files@example.test', 'TestPass#123');
     await assert.rejects(() => call(unauthorizedReader.functions, 'getAdminCustomerFiles', { customerId: userA.uid }), (error: unknown) => (error as { code?: string }).code === 'functions/permission-denied');
     const branchManager = await client('manager-files@example.test', 'TestPass#123');
@@ -109,8 +151,12 @@ try {
     await adminDb.doc(`adminUsers/${branchManager.uid}`).update({ store: 'cochabamba' });
     const scopedFiles = await call<{ files: Record<string, { state: string }> }>(branchManager.functions, 'getAdminCustomerFiles', { customerId: userA.uid });
     assert.equal(scopedFiles.files.documento.state, 'available', 'Manager can view private documents only for their own branch.');
-    const missingLegacyFiles = await call<{ files: Record<string, { url: string | null; state: string }> }>(userA.functions, 'getAdminCustomerFiles', { customerId: 'legacy-with-secret' });
-    assert.ok(Object.values(missingLegacyFiles.files).every((file) => file.state === 'missing' && file.url === null));
+    const unreferencedLegacyFiles = await call<{ files: Record<string, { url: string | null; state: string }> }>(userA.functions, 'getAdminCustomerFiles', { customerId: 'legacy-with-secret' });
+    assert.ok(Object.values(unreferencedLegacyFiles.files).every((file) => file.state === 'needs_review' && file.url === null), 'Unsupported legacy URLs are not reported as deleted files.');
+    await adminDb.doc('customers/legacy-file-absent').set({ id: 'legacy-file-absent', name: 'Fictional Missing File', store: 'cochabamba', autofotoPath: 'customers/legacy-file-absent/selfie.jpg' });
+    const absentReferencedFile = await call<{ files: Record<string, { url: string | null; state: string }> }>(userA.functions, 'getAdminCustomerFiles', { customerId: 'legacy-file-absent' });
+    assert.equal(absentReferencedFile.files.autofoto.state, 'missing', 'A safe owned reference that returns exists=false is a confirmed missing object.');
+    assert.equal(absentReferencedFile.files.documento.state, 'needs_review', 'A file with no stored reference needs review rather than a missing claim.');
     pass('Verified profile creation writes a credential-free directory record; admin customer reads are sanitized');
 
     await adminDb.collection('inventory').doc('bike-emulator').set({
@@ -633,6 +679,10 @@ try {
         documentoReverso: `customerUploads/${recoveryUser.uid}/recovery-documentoReverso-test.png`,
     };
     for (const path of Object.values(recoveryFilePaths)) await uploadBytes(storageRef(otherBrowserStorage, path), recoveryFixtureImage, { contentType: 'image/png' });
+    await assert.rejects(() => call(otherBrowserFunctions, 'completeCustomerProfile', {
+        name: 'Verified Recovery Customer', phone: '+59170000003', ci: 'RECOVERY-1003',
+        privateFiles: { ...recoveryFilePaths, documento: `customerUploads/${userB.uid}/document-front.png` },
+    }), (error: unknown) => (error as { code?: string }).code === 'functions/invalid-argument', 'A file path owned by another UID must be rejected.');
     const recoveredCompletion = await call<{ profile: { name: string; phone: string; ci: string; missingPrivateFiles: string[] } }>(otherBrowserFunctions, 'completeCustomerProfile', {
         name: 'Verified Recovery Customer', phone: '+59170000003', ci: 'RECOVERY-1003', privateFiles: recoveryFilePaths,
     });

@@ -16,6 +16,7 @@ export interface PublicCustomerProfile {
     legacyCustomerId?: string;
     autofotoPath?: string;
     missingPrivateFiles?: Array<'autofoto' | 'documento' | 'documentoReverso'>;
+    privateFilesNeedReview?: Array<'autofoto' | 'documento' | 'documentoReverso'>;
 }
 
 export interface CustomerRecoveryFiles {
@@ -75,7 +76,7 @@ export async function getAdminCustomers(): Promise<Record<string, unknown>[]> {
 }
 
 export interface AdminCustomerFiles {
-    files: Record<'autofoto' | 'documento' | 'documentoReverso', { url: string | null; state: 'available' | 'missing' }>;
+    files: Record<'autofoto' | 'documento' | 'documentoReverso', { url: string | null; state: 'available' | 'missing' | 'needs_review' }>;
     expiresInSeconds: number;
 }
 

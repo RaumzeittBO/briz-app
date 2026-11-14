@@ -266,7 +266,7 @@ export default function CustomersPage() {
                                                     <User className="w-16 h-16 text-brand-charcoal/20" />
                                                 )}
                                             </div>
-                                            {!customerFilesLoading && !customerFilesError && !selfieUrl && <p className="mt-2 text-xs font-medium text-brand-charcoal/55">No hay una fotografía disponible o el archivo ya no existe.</p>}
+                                            {!customerFilesLoading && !customerFilesError && !selfieUrl && <p className="mt-2 text-xs font-medium text-brand-charcoal/55">{currentCustomerFiles?.autofoto.state === 'needs_review' ? 'No hay una referencia segura para localizar la fotografía; requiere revisión manual.' : 'La referencia de la fotografía apunta a un archivo que no existe.'}</p>}
                                         </div>
 
                                         <div className="rounded-3xl border border-brand-yellow/15 bg-white p-4 shadow-sm">
@@ -285,11 +285,11 @@ export default function CustomersPage() {
                                                     </div>
                                                 )}
                                             </div>
-                                            {!customerFilesLoading && !customerFilesError && currentCustomerFiles && !documentFrontUrl && <p className="text-xs text-brand-charcoal/55">No se encontró el anverso del documento.</p>}
-                                            {!customerFilesLoading && !customerFilesError && currentCustomerFiles && !documentBackUrl && <p className="text-xs text-brand-charcoal/55">No se encontró el reverso del documento.</p>}
+                                            {!customerFilesLoading && !customerFilesError && currentCustomerFiles && !documentFrontUrl && <p className="text-xs text-brand-charcoal/55">{currentCustomerFiles.documento.state === 'needs_review' ? 'No hay una referencia segura para localizar el anverso; requiere revisión manual.' : 'La referencia del anverso apunta a un archivo que no existe.'}</p>}
+                                            {!customerFilesLoading && !customerFilesError && currentCustomerFiles && !documentBackUrl && <p className="text-xs text-brand-charcoal/55">{currentCustomerFiles.documentoReverso.state === 'needs_review' ? 'No hay una referencia segura para localizar el reverso; requiere revisión manual.' : 'La referencia del reverso apunta a un archivo que no existe.'}</p>}
                                             
                                             <div className="space-y-4 max-h-[680px] overflow-y-auto pr-1">
-                                                {!customerFilesLoading && !customerFilesError && !documentFrontUrl && !documentBackUrl && <p className="rounded-xl bg-brand-yellow/10 p-3 text-sm font-medium text-brand-charcoal/65">No hay documentos disponibles o los archivos no se encontraron.</p>}
+                                                {!customerFilesLoading && !customerFilesError && !documentFrontUrl && !documentBackUrl && <p className="rounded-xl bg-brand-yellow/10 p-3 text-sm font-medium text-brand-charcoal/65">{currentCustomerFiles?.documento.state === 'needs_review' || currentCustomerFiles?.documentoReverso.state === 'needs_review' ? 'La referencia de uno o más documentos antiguos requiere revisión; no se confirmó que hayan sido eliminados.' : 'Las referencias de los documentos apuntan a archivos que no existen.'}</p>}
                                                 {/* Anverso / Front Side */}
                                                 <div>
                                                     {documentFrontUrl && (documentBackUrl || isPdfDocument(documentFrontUrl)) && (

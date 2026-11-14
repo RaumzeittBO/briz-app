@@ -27,6 +27,7 @@ import {
     type RentalLike,
 } from './domain';
 import { DEFAULT_RENTAL_HOURS, validateRentalBusinessHours } from './businessHours';
+import { CUSTOMER_PRIVATE_FILE_SPECS, ownedCustomerStoragePath, resolveCustomerPrivateFiles } from './customerPrivateFiles';
 
 if (getApps().length === 0) initializeApp();
 const db = getFirestore();
@@ -264,74 +265,6 @@ function validateProfile(data: unknown): { name: string; phone: string; ci: stri
     };
 }
 
-const CUSTOMER_PRIVATE_FILE_SPECS = [
-    { key: 'autofotoPath', label: 'autofoto', fields: ['autofotoPath', 'selfiePath', 'photoPath', 'autofotoUrl', 'selfieUrl', 'photoUrl'] },
-    { key: 'documentoPath', label: 'documento', fields: ['documentoPath', 'documentFrontPath', 'documentoUrl', 'documentFrontUrl'] },
-    { key: 'documentoReversoPath', label: 'documentoReverso', fields: ['documentoReversoPath', 'documentBackPath', 'documentoReversoUrl', 'documentBackUrl'] },
-] as const;
-
-function ownedCustomerStoragePath(uid: string, legacyCustomerId: string, value: unknown): string {
-    const reference = cleanString(value, 1500);
-    if (!reference) return '';
-    let objectPath = reference;
-    if (reference.startsWith('gs://')) {
-        const match = /^gs:\/\/([^/]+)\/(.+)$/.exec(reference);
-        if (!match || match[1] !== getStorage().bucket().name) return '';
-        objectPath = match[2];
-    } else if (/^https?:\/\//i.test(reference)) {
-        try {
-            const url = new URL(reference);
-            if (url.protocol !== 'https:' || url.hostname !== 'firebasestorage.googleapis.com') return '';
-            const match = /^\/v0\/b\/([^/]+)\/o\/(.+)$/.exec(url.pathname);
-            if (!match || match[1] !== getStorage().bucket().name) return '';
-            objectPath = decodeURIComponent(match[2]);
-        } catch { return ''; }
-    }
-    if (objectPath.includes('%') || objectPath.includes('\\') || [...objectPath].some(character => character.charCodeAt(0) <= 0x1f || character.charCodeAt(0) === 0x7f)) return '';
-    const segments = objectPath.split('/');
-    if (segments.length < 3 || segments.some(segment => !segment || segment === '.' || segment === '..')) return '';
-    return objectPath.startsWith(`customerUploads/${uid}/`) || Boolean(legacyCustomerId && objectPath.startsWith(`customers/${legacyCustomerId}/`))
-        ? objectPath
-        : '';
-}
-
-async function resolveCustomerPrivateFiles(uid: string, legacyCustomerId: string, ...sources: Array<DocumentData | undefined>): Promise<{ paths: Record<string, string>; missing: Array<'autofoto' | 'documento' | 'documentoReverso'> }> {
-    const bucket = getStorage().bucket();
-    const ownedObjects = new Set<string>();
-    const prefixes = [`customerUploads/${uid}/`, ...(legacyCustomerId ? [`customers/${legacyCustomerId}/`] : [])];
-    for (const prefix of prefixes) {
-        try {
-            const [files] = await bucket.getFiles({ prefix });
-            files.forEach(file => ownedObjects.add(file.name));
-        } catch {
-            // An unavailable listing is treated as missing metadata; the user can re-upload privately.
-        }
-    }
-    const paths: Record<string, string> = {};
-    const missing: Array<'autofoto' | 'documento' | 'documentoReverso'> = [];
-    for (const spec of CUSTOMER_PRIVATE_FILE_SPECS) {
-        const candidates = sources.flatMap(source => spec.fields.map(field => source?.[field]));
-        let objectPath = '';
-        for (const value of candidates) {
-            const candidate = ownedCustomerStoragePath(uid, legacyCustomerId, value);
-            if (!candidate) continue;
-            const [exists] = await bucket.file(candidate).exists();
-            if (exists) { objectPath = candidate; break; }
-        }
-        if (!objectPath) {
-            const matches = [...ownedObjects].filter(path => {
-                if (spec.label === 'autofoto') return /\/selfie(?:-[^/]*)?\.[A-Za-z0-9]{1,8}$/i.test(path);
-                if (spec.label === 'documento') return /\/document-front(?:-[^/]*)?\.[A-Za-z0-9]{1,8}$/i.test(path);
-                return /\/document-back(?:-[^/]*)?\.[A-Za-z0-9]{1,8}$/i.test(path);
-            });
-            if (matches.length === 1) objectPath = matches[0];
-        }
-        if (objectPath) paths[spec.key] = objectPath;
-        else missing.push(spec.label);
-    }
-    return { paths, missing };
-}
-
 export const createCustomerProfile = onCall(callable(), async (request) => {
     const { uid, email } = requireAuth(request, true);
     if (!email) throw new HttpsError('failed-precondition', 'La cuenta necesita un correo electrónico.');
@@ -354,18 +287,22 @@ export const createCustomerProfile = onCall(callable(), async (request) => {
             profile = { ...profile, email };
         }
         const legacyCustomerId = cleanString(profile.legacyCustomerId, 120);
-        const [privateSnap, legacySnap, legacyPrivateSnap] = await Promise.all([
+        const [privateSnap, legacySnap] = await Promise.all([
             db.doc(`customerPrivate/${uid}`).get(),
             legacyCustomerId ? db.doc(`customers/${legacyCustomerId}`).get() : Promise.resolve(null),
-            legacyCustomerId ? db.doc(`customerPrivate/${legacyCustomerId}`).get() : Promise.resolve(null),
         ]);
-        const state = await resolveCustomerPrivateFiles(uid, legacyCustomerId,
-            privateSnap.data(), legacyPrivateSnap?.data(), legacySnap?.data());
-        if (JSON.stringify(profile.missingPrivateFiles || []) !== JSON.stringify(state.missing)) {
-            await profileRef.update({ missingPrivateFiles: state.missing, updatedAt: FieldValue.serverTimestamp() });
-            profile = { ...profile, missingPrivateFiles: state.missing };
+        if (legacyCustomerId && (!legacySnap?.exists || legacySnap.data()?.authUid !== uid)) {
+            throw new HttpsError('failed-precondition', 'El vínculo con el registro antiguo no pudo verificarse. Contacta a BRIZ para revisar los archivos.');
         }
-        return { profile: { ...profile, missingPrivateFiles: state.missing }, alreadyExists: true };
+        const legacyPrivateSnap = legacyCustomerId ? await db.doc(`customerPrivate/${legacyCustomerId}`).get() : null;
+        const state = await resolveCustomerPrivateFiles(uid, legacyCustomerId,
+            [privateSnap.data(), legacyPrivateSnap?.data(), legacySnap?.data()], getStorage().bucket(), 'review');
+        if (JSON.stringify(profile.missingPrivateFiles || []) !== JSON.stringify(state.missing)
+            || JSON.stringify(profile.privateFilesNeedReview || []) !== JSON.stringify(state.needsReview)) {
+            await profileRef.update({ missingPrivateFiles: state.missing, privateFilesNeedReview: state.needsReview, updatedAt: FieldValue.serverTimestamp() });
+            profile = { ...profile, missingPrivateFiles: state.missing, privateFilesNeedReview: state.needsReview };
+        }
+        return { profile: { ...profile, missingPrivateFiles: state.missing, privateFilesNeedReview: state.needsReview }, alreadyExists: true };
     }
     const pendingRef = db.doc(`pendingCustomerRegistrations/${uid}`);
     const privateRef = db.doc(`customerPrivate/${uid}`);
@@ -392,7 +329,7 @@ export const createCustomerProfile = onCall(callable(), async (request) => {
         legacyCustomerId ? db.doc(`customerPrivate/${legacyCustomerId}`).get() : Promise.resolve(null),
     ]);
     const privateState = await resolveCustomerPrivateFiles(uid, legacyCustomerId,
-        privateSnap.data(), pendingData, legacyPrivateSnap?.data(), legacyData);
+        [privateSnap.data(), pendingData, legacyPrivateSnap?.data(), legacyData], getStorage().bucket(), legacy || pendingSnap.exists ? 'review' : 'missing');
     if (legacy) {
         const old = legacyData || {};
         const linkedProfile = {
@@ -409,25 +346,21 @@ export const createCustomerProfile = onCall(callable(), async (request) => {
             rentalsCount: Number(old.rentalsCount) || 0,
             purchasesCount: Number(old.purchasesCount) || 0,
             missingPrivateFiles: privateState.missing,
+            privateFilesNeedReview: privateState.needsReview,
             createdAt: FieldValue.serverTimestamp(),
             updatedAt: FieldValue.serverTimestamp(),
         };
         await db.runTransaction(async (tx) => {
-            const [latest, latestLegacy, latestPrivate, latestLegacyPrivate, latestPending] = await Promise.all([
-                tx.get(profileRef), tx.get(legacy!.ref), tx.get(privateRef),
-                tx.get(db.doc(`customerPrivate/${legacy!.id}`)), tx.get(pendingRef),
+            const [latest, latestLegacy, latestPrivate, latestPending] = await Promise.all([
+                tx.get(profileRef), tx.get(legacy!.ref), tx.get(privateRef), tx.get(pendingRef),
             ]);
             if (latest.exists) return;
             if (latestLegacy.data()?.authUid && latestLegacy.data()?.authUid !== uid) throw new HttpsError('failed-precondition', 'El registro antiguo ya está vinculado a otra cuenta.');
             tx.create(profileRef, linkedProfile);
             const currentPrivate = latestPrivate.data() || {};
-            const legacyPrivate = latestLegacyPrivate.data() || {};
             const preservedPaths = Object.fromEntries(CUSTOMER_PRIVATE_FILE_SPECS.flatMap(spec => {
-                const current = cleanString(currentPrivate[spec.key], 1500);
                 const resolved = privateState.paths[spec.key];
-                const oldPrivateValue = spec.fields.map(field => legacyPrivate[field]).find(Boolean);
-                const value = current || resolved || cleanString(oldPrivateValue, 1500);
-                return value ? [[spec.key, value]] : [];
+                return resolved ? [[spec.key, resolved]] : [];
             }));
             if (Object.keys(preservedPaths).length) tx.set(privateRef, { ...currentPrivate, ...preservedPaths, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
             tx.update(legacy!.ref, {
@@ -438,7 +371,7 @@ export const createCustomerProfile = onCall(callable(), async (request) => {
             if (latestPending.exists) tx.delete(pendingRef);
         });
         const saved = await profileRef.get();
-        return { profile: { ...saved.data(), missingPrivateFiles: privateState.missing }, linkedLegacyAccount: true };
+        return { profile: { ...saved.data(), missingPrivateFiles: privateState.missing, privateFilesNeedReview: privateState.needsReview }, linkedLegacyAccount: true };
     }
 
     const newProfile = {
@@ -449,6 +382,7 @@ export const createCustomerProfile = onCall(callable(), async (request) => {
         rentalsCount: 0,
         purchasesCount: 0,
         missingPrivateFiles: privateState.missing,
+        privateFilesNeedReview: privateState.needsReview,
         createdAt: FieldValue.serverTimestamp(),
         updatedAt: FieldValue.serverTimestamp(),
     };
@@ -466,15 +400,13 @@ export const createCustomerProfile = onCall(callable(), async (request) => {
         });
         const currentPrivate = latestPrivate.data() || {};
         const preservedPaths = Object.fromEntries(CUSTOMER_PRIVATE_FILE_SPECS.flatMap(spec => {
-            const current = cleanString(currentPrivate[spec.key], 1500);
             const resolved = privateState.paths[spec.key];
-            const value = current || resolved;
-            return value ? [[spec.key, value]] : [];
+            return resolved ? [[spec.key, resolved]] : [];
         }));
         if (Object.keys(preservedPaths).length) tx.set(privateRef, { ...currentPrivate, ...preservedPaths, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
         if (latestPending.exists) tx.delete(pendingRef);
     });
-    return { profile: { ...newProfile, missingPrivateFiles: privateState.missing }, linkedLegacyAccount: false, recoveredWithoutPendingRegistration: !pendingSnap.exists };
+    return { profile: { ...newProfile, missingPrivateFiles: privateState.missing, privateFilesNeedReview: privateState.needsReview }, linkedLegacyAccount: false, recoveredWithoutPendingRegistration: !pendingSnap.exists };
 });
 
 export const completeCustomerProfile = onCall(callable(), async (request) => {
@@ -495,7 +427,8 @@ export const completeCustomerProfile = onCall(callable(), async (request) => {
     ]);
     if (!firstCustomer.exists || firstCustomer.data()?.authUid !== uid) throw new HttpsError('failed-precondition', 'No encontramos un perfil de cliente vinculado a esta cuenta.');
     const privateState = await resolveCustomerPrivateFiles(uid, customerId === uid ? '' : customerId,
-        firstPrivate.data(), legacyPrivate?.data(), firstCustomer.data());
+        [firstPrivate.data(), legacyPrivate?.data(), firstCustomer.data()], getStorage().bucket(), (label) =>
+            profile.privateFilesNeedReview === undefined || profile.privateFilesNeedReview.includes(label) ? 'review' : 'missing');
     const missing = (['name', 'phone', 'ci'] as const).filter((field) => !cleanString(profile[field], field === 'name' ? 120 : 40));
     const patch: Record<string, string> = {};
     for (const field of missing) {
@@ -517,7 +450,7 @@ export const completeCustomerProfile = onCall(callable(), async (request) => {
         if (!privateState.missing.includes(label as 'autofoto' | 'documento' | 'documentoReverso')) {
             throw new HttpsError('already-exists', 'Ese archivo ya está vinculado al perfil y no se reemplazó.');
         }
-        const path = ownedCustomerStoragePath(uid, '', rawPath);
+        const path = ownedCustomerStoragePath(uid, '', rawPath, getStorage().bucket().name);
         if (!path) throw new HttpsError('invalid-argument', 'La ruta del archivo no corresponde a esta cuenta.');
         const [exists] = await getStorage().bucket().file(path).exists();
         if (!exists) throw new HttpsError('not-found', 'No encontramos uno de los archivos que subiste. Vuelve a intentarlo.');
@@ -527,7 +460,7 @@ export const completeCustomerProfile = onCall(callable(), async (request) => {
         throw new HttpsError('failed-precondition', 'Sube únicamente la fotografía o los lados del documento que todavía faltan.');
     }
     if (missing.length === 0 && Object.keys(safePrivateFiles).length === 0) {
-        return { profile: { ...profile, missingPrivateFiles: privateState.missing }, alreadyComplete: true };
+        return { profile: { ...profile, missingPrivateFiles: privateState.missing, privateFilesNeedReview: privateState.needsReview }, alreadyComplete: true };
     }
     const remainingFiles = privateState.missing.filter(label => !safePrivateFiles[pathFields[label]]);
     await db.runTransaction(async (tx) => {
@@ -549,13 +482,13 @@ export const completeCustomerProfile = onCall(callable(), async (request) => {
             if (current && current === path) return [field, path];
             return [field, path];
         }));
-        tx.update(profileRef, { ...safePatch, missingPrivateFiles: remainingFiles, updatedAt: FieldValue.serverTimestamp() });
+        tx.update(profileRef, { ...safePatch, missingPrivateFiles: remainingFiles, privateFilesNeedReview: privateState.needsReview, updatedAt: FieldValue.serverTimestamp() });
         tx.update(customerRef, { ...safePatch, updatedAt: FieldValue.serverTimestamp() });
         if (Object.keys(privatePatch).length) tx.set(privateRef, { ...privatePatch, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
     });
     // Keep only non-sensitive completion flags on the owner's profile document;
     // the actual Storage paths remain in customerPrivate.
-    return { profile: { ...profile, ...patch, missingPrivateFiles: remainingFiles }, alreadyComplete: false };
+    return { profile: { ...profile, ...patch, missingPrivateFiles: remainingFiles, privateFilesNeedReview: privateState.needsReview }, alreadyComplete: false };
 });
 
 export const beginCustomerRegistration = onCall(callable(), async (request) => {
@@ -689,12 +622,18 @@ export const getAdminCustomerFiles = onCall(callable(), async (request) => {
         if ([...ownedLegacyRoots].some((root) => objectPath.startsWith(root))) return objectPath;
         return '';
     };
-    const signFile = async (...candidates: unknown[]): Promise<{ url: string | null; state: 'available' | 'missing' }> => {
-        const path = candidates.map(resolveObjectPath).find(Boolean);
-        if (!path) return { url: null, state: 'missing' };
-        const file = bucket.file(path);
-        const [exists] = await file.exists();
-        if (!exists) return { url: null, state: 'missing' };
+    const signFile = async (...candidates: unknown[]): Promise<{ url: string | null; state: 'available' | 'missing' | 'needs_review' }> => {
+        const references = candidates.map(value => cleanString(value, 1500)).filter(Boolean);
+        const validPaths = [...new Set(references.map(resolveObjectPath).filter(Boolean))];
+        const hasUnresolvableReference = references.some(value => !resolveObjectPath(value));
+        if (!validPaths.length) return { url: null, state: 'needs_review' };
+        let file: ReturnType<typeof bucket.file> | undefined;
+        for (const path of validPaths) {
+            const candidate = bucket.file(path);
+            const [exists] = await candidate.exists();
+            if (exists) { file = candidate; break; }
+        }
+        if (!file) return { url: null, state: hasUnresolvableReference ? 'needs_review' : 'missing' };
         // The Storage Emulator has no signing identity. In local tests only,
         // return the already-authorized bytes through this callable response;
         // production always uses a five-minute signed URL.
@@ -710,7 +649,7 @@ export const getAdminCustomerFiles = onCall(callable(), async (request) => {
         ['documento', ['documentoPath', 'documentoUrl', 'documentFrontPath', 'documentFrontUrl']],
         ['documentoReverso', ['documentoReversoPath', 'documentoReversoUrl', 'documentBackPath', 'documentBackUrl']],
     ] as const;
-    const files: Record<string, { url: string | null; state: 'available' | 'missing' }> = {};
+    const files: Record<string, { url: string | null; state: 'available' | 'missing' | 'needs_review' }> = {};
     for (const [name, pathFields] of fields) {
         files[name] = await signFile(...pathFields.flatMap((field) => [privateData[field], legacyData[field]]));
     }

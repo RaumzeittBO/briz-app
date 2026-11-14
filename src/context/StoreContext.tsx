@@ -291,6 +291,7 @@ export interface Customer {
     documentoUrl?: string;
     documentoReversoUrl?: string;
     missingPrivateFiles?: Array<'autofoto' | 'documento' | 'documentoReverso'>;
+    privateFilesNeedReview?: Array<'autofoto' | 'documento' | 'documentoReverso'>;
     store?: string;
 }
 
@@ -499,12 +500,14 @@ function customerFromPublicProfile(profile: {
     nacionalidad?: string; departamento?: string; comoNosConociste?: string;
     rentalsCount?: number; purchasesCount?: number;
     missingPrivateFiles?: PublicCustomerProfile['missingPrivateFiles'];
+    privateFilesNeedReview?: PublicCustomerProfile['privateFilesNeedReview'];
 }): Customer {
     return {
         id: profile.id, email: profile.email, name: profile.name, phone: profile.phone, ci: profile.ci,
         nacionalidad: profile.nacionalidad, departamento: profile.departamento,
         comoNosConociste: profile.comoNosConociste,
         missingPrivateFiles: profile.missingPrivateFiles || [],
+        privateFilesNeedReview: profile.privateFilesNeedReview || [],
         rentalsCount: Number(profile.rentalsCount) || 0,
         purchasesCount: Number(profile.purchasesCount) || 0,
         firstVisit: '', lastVisit: '', notes: '',
@@ -612,6 +615,9 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
                             email: String(profile.email || fbUser.email || ''),
                             missingPrivateFiles: Array.isArray(profile.missingPrivateFiles)
                                 ? profile.missingPrivateFiles.filter((kind: unknown): kind is 'autofoto' | 'documento' | 'documentoReverso' => ['autofoto', 'documento', 'documentoReverso'].includes(String(kind)))
+                                : [],
+                            privateFilesNeedReview: Array.isArray(profile.privateFilesNeedReview)
+                                ? profile.privateFilesNeedReview.filter((kind: unknown): kind is 'autofoto' | 'documento' | 'documentoReverso' => ['autofoto', 'documento', 'documentoReverso'].includes(String(kind)))
                                 : [],
                             nacionalidad: String(profile.nacionalidad || ''),
                             departamento: String(profile.departamento || ''),
