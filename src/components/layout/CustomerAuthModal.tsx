@@ -13,6 +13,7 @@ import { useStore } from '@/context/StoreContext';
 import { useLanguage } from '@/context/LanguageContext';
 import ArtworkPicture from '@/components/ArtworkPicture';
 import { auth } from '@/lib/firebase';
+import { getCustomerProfileCompletionSnapshot, isCustomerProfileFieldEditable, validateCustomerProfileField, type CustomerProfileField } from '@/lib/customerProfileCompletion';
 
 interface CustomerAuthModalProps {
     isOpen: boolean;
@@ -120,6 +121,8 @@ export default function CustomerAuthModal({ isOpen, onClose, onSuccess }: Custom
     const [resendAvailableAt, setResendAvailableAt] = useState(0);
     const [clockNow, setClockNow] = useState(Date.now());
     const [completionFields, setCompletionFields] = useState<{ name: string; phone: string; ci: string }>({ name: '', phone: '', ci: '' });
+    const [completionEditableFields, setCompletionEditableFields] = useState<CustomerProfileField[]>([]);
+    const [completionFieldErrors, setCompletionFieldErrors] = useState<Partial<Record<CustomerProfileField, string>>>({});
     const [completionMissingFiles, setCompletionMissingFiles] = useState<Array<'autofoto' | 'documento' | 'documentoReverso'>>([]);
     const [completionNeedsReview, setCompletionNeedsReview] = useState<Array<'autofoto' | 'documento' | 'documentoReverso'>>([]);
     const [completionFiles, setCompletionFiles] = useState<{ autofoto: File | null; documento: File | null; documentoReverso: File | null }>({ autofoto: null, documento: null, documentoReverso: null });
@@ -155,13 +158,13 @@ export default function CustomerAuthModal({ isOpen, onClose, onSuccess }: Custom
     const docReversoInputRef = useRef<HTMLInputElement | null>(null);
 
     const startProfileCompletion = (customer: { name: string; phone: string; ci: string; missingPrivateFiles?: Array<'autofoto' | 'documento' | 'documentoReverso'>; privateFilesNeedReview?: Array<'autofoto' | 'documento' | 'documentoReverso'> }) => {
-        const missingName = customer.name.trim().length < 2;
-        const missingPhone = customer.phone.replace(/\D/g, '').length < 7;
-        const missingCi = customer.ci.trim().length < 3;
+        const snapshot = getCustomerProfileCompletionSnapshot(customer);
         const missingFiles = customer.missingPrivateFiles || [];
         const needsReview = customer.privateFilesNeedReview || [];
-        if (!missingName && !missingPhone && !missingCi && missingFiles.length === 0 && needsReview.length === 0) return false;
-        setCompletionFields({ name: missingName ? '' : customer.name, phone: missingPhone ? '' : customer.phone, ci: missingCi ? '' : customer.ci });
+        if (snapshot.editableFields.length === 0 && snapshot.fieldsNeedingReview.length === 0 && missingFiles.length === 0 && needsReview.length === 0) return false;
+        setCompletionEditableFields(snapshot.editableFields);
+        setCompletionFieldErrors({});
+        setCompletionFields({ name: '', phone: '', ci: '' });
         setCompletionMissingFiles(missingFiles);
         setCompletionNeedsReview(needsReview);
         setCompletionFiles({ autofoto: null, documento: null, documentoReverso: null });
@@ -366,8 +369,17 @@ export default function CustomerAuthModal({ isOpen, onClose, onSuccess }: Custom
         }
     };
 
-    const handleCompleteProfile = async (event: React.FormEvent) => {
-        event.preventDefault(); setLoading(true); setError(null);
+    const handleCompleteProfile = async () => {
+        setError(null);
+        const fieldErrors: Partial<Record<CustomerProfileField, string>> = {};
+        for (const field of completionEditableFields) {
+            const validationError = validateCustomerProfileField(field, completionFields[field]);
+            if (validationError) fieldErrors[field] = validationError;
+        }
+        setCompletionFieldErrors(fieldErrors);
+        if (Object.keys(fieldErrors).length > 0) return;
+        if (completionEditableFields.length === 0 && completionMissingFiles.length === 0) return;
+        setLoading(true);
         try {
             if (completionMissingFiles.some(kind => !completionFiles[kind])) {
                 setError(language === 'es' ? 'Sube únicamente los archivos indicados para continuar.' : 'Upload only the files listed to continue.');
@@ -390,9 +402,15 @@ export default function CustomerAuthModal({ isOpen, onClose, onSuccess }: Custom
             onSuccess?.(); window.setTimeout(onClose, 900);
         } catch (err) {
             const code = err && typeof err === 'object' && 'code' in err ? String(err.code) : '';
-            setError(code.includes('invalid-argument')
-                ? (language === 'es' ? 'Completa los datos pendientes con información válida.' : 'Enter valid information for the missing fields.')
-                : (language === 'es' ? 'No se pudo guardar el perfil. Comprueba tu conexión e inténtalo de nuevo.' : 'Could not save the profile. Check your connection and try again.'));
+            if (code.includes('invalid-argument')) {
+                const validationErrors: Partial<Record<CustomerProfileField, string>> = {};
+                for (const field of completionEditableFields) {
+                    const validationError = validateCustomerProfileField(field, completionFields[field]);
+                    if (validationError) validationErrors[field] = validationError;
+                }
+                if (Object.keys(validationErrors).length > 0) setCompletionFieldErrors(validationErrors);
+                else setError(language === 'es' ? 'No pudimos validar los datos pendientes. Comprueba la información e inténtalo de nuevo.' : 'We could not validate the pending details. Check the information and try again.');
+            } else setError(language === 'es' ? 'No se pudo guardar el perfil. Comprueba tu conexión e inténtalo de nuevo.' : 'Could not save the profile. Check your connection and try again.');
         } finally { setLoading(false); }
     };
 
@@ -642,16 +660,17 @@ export default function CustomerAuthModal({ isOpen, onClose, onSuccess }: Custom
 
                     {/* Form Layouts */}
                     {mode === 'complete' ? (
-                        <form onSubmit={handleCompleteProfile} className="space-y-4">
+                        <form onSubmit={event => event.preventDefault()} className="space-y-4">
                             <p className="text-sm leading-relaxed text-brand-charcoal/65">{language === 'es' ? 'Tu correo ya está verificado. Para proteger tus datos, conserva lo que ya existe y completa únicamente los campos vacíos.' : 'Your email is verified. To protect your information, existing details will stay as they are; fill only the empty fields.'}</p>
                             {completionNeedsReview.length > 0 && <p role="status" className="rounded-xl border border-amber-500/30 bg-amber-50 p-3 text-sm leading-relaxed text-amber-950">{language === 'es' ? 'Algunos archivos antiguos no tienen una referencia verificable. No asumimos que fueron borrados ni te pediremos volver a subirlos. Contacta a BRIZ para revisar su recuperación segura.' : 'Some older files have no verifiable reference. We do not assume they were deleted or ask you to upload them again. Contact BRIZ to review safe recovery.'}</p>}
-                            {!completionFields.name.trim() && <div className="space-y-1"><Label>{language === 'es' ? 'Nombre completo' : 'Full name'}</Label><Input required minLength={2} value={completionFields.name} onChange={event => setCompletionFields(value => ({ ...value, name: event.target.value }))} /></div>}
-                            {completionFields.phone.replace(/\D/g, '').length < 7 && <div className="space-y-1"><Label>{language === 'es' ? 'Teléfono' : 'Phone'}</Label><Input required type="tel" value={completionFields.phone} onChange={event => setCompletionFields(value => ({ ...value, phone: event.target.value }))} /></div>}
-                            {completionFields.ci.trim().length < 3 && <div className="space-y-1"><Label>{language === 'es' ? 'Documento de identidad' : 'Identity document'}</Label><Input required value={completionFields.ci} onChange={event => setCompletionFields(value => ({ ...value, ci: event.target.value }))} /></div>}
+                            {isCustomerProfileFieldEditable(completionEditableFields, 'name') && <div className="space-y-1"><Label htmlFor="completion-name">{language === 'es' ? 'Nombre completo' : 'Full name'}</Label><Input id="completion-name" minLength={2} value={completionFields.name} aria-invalid={Boolean(completionFieldErrors.name)} aria-describedby={completionFieldErrors.name ? 'completion-name-error' : undefined} onChange={event => { setCompletionFields(value => ({ ...value, name: event.target.value })); setCompletionFieldErrors(value => ({ ...value, name: undefined })); }} />{completionFieldErrors.name && <p id="completion-name-error" role="alert" className="text-xs font-semibold text-red-700">{language === 'es' ? 'Escribe al menos 2 caracteres.' : 'Enter at least 2 characters.'}</p>}</div>}
+                            {isCustomerProfileFieldEditable(completionEditableFields, 'phone') && <div className="space-y-1"><Label htmlFor="completion-phone">{language === 'es' ? 'Teléfono' : 'Phone'}</Label><Input id="completion-phone" type="tel" inputMode="tel" value={completionFields.phone} aria-invalid={Boolean(completionFieldErrors.phone)} aria-describedby={completionFieldErrors.phone ? 'completion-phone-error' : undefined} onChange={event => { setCompletionFields(value => ({ ...value, phone: event.target.value })); setCompletionFieldErrors(value => ({ ...value, phone: undefined })); }} />{completionFieldErrors.phone && <p id="completion-phone-error" role="alert" className="text-xs font-semibold text-red-700">{language === 'es' ? 'Escribe al menos 7 dígitos.' : 'Enter at least 7 digits.'}</p>}</div>}
+                            {isCustomerProfileFieldEditable(completionEditableFields, 'ci') && <div className="space-y-1"><Label htmlFor="completion-ci">{language === 'es' ? 'Documento de identidad' : 'Identity document'}</Label><Input id="completion-ci" value={completionFields.ci} aria-invalid={Boolean(completionFieldErrors.ci)} aria-describedby={completionFieldErrors.ci ? 'completion-ci-error' : undefined} onChange={event => { setCompletionFields(value => ({ ...value, ci: event.target.value })); setCompletionFieldErrors(value => ({ ...value, ci: undefined })); }} />{completionFieldErrors.ci && <p id="completion-ci-error" role="alert" className="text-xs font-semibold text-red-700">{language === 'es' ? 'Escribe al menos 3 caracteres.' : 'Enter at least 3 characters.'}</p>}</div>}
+                            {completionEditableFields.length === 0 && completionNeedsReview.length === 0 && <p role="status" className="rounded-xl border border-amber-500/30 bg-amber-50 p-3 text-sm leading-relaxed text-amber-950">{language === 'es' ? 'Hay datos existentes que requieren revisión de BRIZ. Este formulario no los modifica.' : 'Some existing details need BRIZ review. This form will not change them.'}</p>}
                             {completionMissingFiles.includes('autofoto') && <div className="space-y-1"><Label>{language === 'es' ? 'Fotografía pendiente' : 'Missing profile photo'}</Label><Input required type="file" accept="image/*" onChange={event => setCompletionFiles(value => ({ ...value, autofoto: event.target.files?.[0] || null }))} /></div>}
                             {completionMissingFiles.includes('documento') && <div className="space-y-1"><Label>{language === 'es' ? 'Documento · anverso pendiente' : 'ID document · front missing'}</Label><Input required type="file" accept="image/*,application/pdf" onChange={event => setCompletionFiles(value => ({ ...value, documento: event.target.files?.[0] || null }))} /></div>}
                             {completionMissingFiles.includes('documentoReverso') && <div className="space-y-1"><Label>{language === 'es' ? 'Documento · reverso pendiente' : 'ID document · back missing'}</Label><Input required type="file" accept="image/*,application/pdf" onChange={event => setCompletionFiles(value => ({ ...value, documentoReverso: event.target.files?.[0] || null }))} /></div>}
-                            {(!completionFields.name.trim() || completionFields.phone.replace(/\D/g, '').length < 7 || completionFields.ci.trim().length < 3 || completionMissingFiles.length > 0) && <Button type="submit" disabled={loading} className="h-12 w-full rounded-xl bg-brand-yellow font-black text-brand-charcoal hover:bg-brand-yellow-light">{loading ? (language === 'es' ? 'Guardando…' : 'Saving…') : (language === 'es' ? 'Guardar y continuar' : 'Save and continue')}</Button>}
+                            {(completionEditableFields.length > 0 || completionMissingFiles.length > 0) && <Button type="button" onClick={handleCompleteProfile} disabled={loading} className="h-12 w-full rounded-xl bg-brand-yellow font-black text-brand-charcoal hover:bg-brand-yellow-light">{loading ? (language === 'es' ? 'Guardando…' : 'Saving…') : (language === 'es' ? 'Guardar y continuar' : 'Save and continue')}</Button>}
                             <button type="button" onClick={() => setMode('login')} className="w-full text-sm font-bold text-brand-charcoal/70 underline underline-offset-4">{language === 'es' ? 'Volver al inicio de sesión' : 'Back to sign in'}</button>
                         </form>
                     ) : mode === 'verify' ? (
