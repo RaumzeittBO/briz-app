@@ -1,9 +1,10 @@
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { initializeApp, getApps } from 'firebase-admin/app';
 import { FieldPath, FieldValue, Timestamp, getFirestore, type DocumentData, type DocumentReference, type DocumentSnapshot, type QueryDocumentSnapshot } from 'firebase-admin/firestore';
 import { getAuth } from 'firebase-admin/auth';
 import { getStorage } from 'firebase-admin/storage';
 import { defineSecret } from 'firebase-functions/params';
+import { logger } from 'firebase-functions';
 import { setGlobalOptions } from 'firebase-functions/v2';
 import { onCall, onRequest, HttpsError, type CallableRequest } from 'firebase-functions/v2/https';
 import { onDocumentCreated, onDocumentWritten } from 'firebase-functions/v2/firestore';
@@ -28,14 +29,17 @@ import {
 } from './domain';
 import { DEFAULT_RENTAL_HOURS, validateRentalBusinessHours } from './businessHours';
 import { CUSTOMER_PRIVATE_FILE_SPECS, ownedCustomerStoragePath, resolveCustomerPrivateFiles } from './customerPrivateFiles';
+import { Resend } from 'resend';
+import { buildBrizVerificationUrl, createVerificationEmail, deliverVerificationEmail, nextVerificationRateState, rollbackDefinitiveVerificationAttempt, VerificationDeliveryError, type EmailLanguage, type VerificationRateState } from './customerVerificationEmail';
 
 if (getApps().length === 0) initializeApp();
 const db = getFirestore();
 const TELEGRAM_BOT_TOKEN = defineSecret('TELEGRAM_BOT_TOKEN');
 const TELEGRAM_CHAT_ID = defineSecret('TELEGRAM_CHAT_ID');
+const RESEND_API_KEY = defineSecret('RESEND_API_KEY');
 
-// Runtime identity is provisioned at release with Firestore data access and Auth user lookup;
-// Secret Manager access is scoped only to the reservation notification trigger.
+// Runtime identity is provisioned with least-privilege Firestore/Auth access.
+// Function secrets are bound only to the function that needs each secret.
 setGlobalOptions({ serviceAccount: 'briz-functions-runtime@briz-4ef3a.iam.gserviceaccount.com' });
 
 type BookingLine = {
@@ -513,6 +517,162 @@ export const beginCustomerRegistration = onCall(callable(), async (request) => {
         updatedAt: FieldValue.serverTimestamp(),
     });
     return { ok: true, verificationRequired: true };
+});
+
+export const sendCustomerVerificationEmail = onCall({
+    ...callable(),
+    serviceAccount: 'briz-resend-runtime@briz-4ef3a.iam.gserviceaccount.com',
+    secrets: [RESEND_API_KEY],
+}, async (request) => {
+    const { uid, email: tokenEmail } = requireAuth(request);
+    if (!exactObject(request.data) || Object.keys(request.data).some(key => key !== 'language')) {
+        throw new HttpsError('invalid-argument', 'La solicitud de verificación no es válida.');
+    }
+    const languageValue = request.data.language;
+    if (languageValue !== undefined && languageValue !== 'es' && languageValue !== 'en') {
+        throw new HttpsError('invalid-argument', 'El idioma solicitado no es válido.');
+    }
+    const language: EmailLanguage = languageValue === 'en' ? 'en' : 'es';
+
+    let user;
+    try {
+        user = await getAuth().getUser(uid);
+    } catch {
+        throw new HttpsError('unauthenticated', 'Vuelve a iniciar sesión para solicitar la verificación.');
+    }
+    const accountEmail = cleanString(user.email, 254).toLowerCase();
+    if (user.disabled || !accountEmail || accountEmail !== tokenEmail) {
+        throw new HttpsError('unauthenticated', 'Vuelve a iniciar sesión para solicitar la verificación.');
+    }
+    if (user.emailVerified) return { status: 'verified' as const };
+
+    const now = Date.now();
+    const attemptId = randomUUID();
+    const rateRef = db.doc(`customerVerificationRateLimits/${digest(uid)}`);
+    try {
+        await db.runTransaction(async tx => {
+            const snapshot = await tx.get(rateRef);
+            const data = snapshot.data();
+            const current: VerificationRateState | undefined = data
+                && typeof data.windowStartedAt === 'number'
+                && typeof data.lastAttemptAt === 'number'
+                && typeof data.count === 'number'
+                ? {
+                    windowStartedAt: data.windowStartedAt,
+                    lastAttemptAt: data.lastAttemptAt,
+                    count: data.count,
+                    deliveryState: data.deliveryState === 'pending' || data.deliveryState === 'sent' || data.deliveryState === 'ambiguous'
+                        ? data.deliveryState
+                        : undefined,
+                }
+                : undefined;
+            const next = nextVerificationRateState(current, now);
+            tx.set(rateRef, {
+                ...next,
+                previousLastAttemptAt: current?.lastAttemptAt ?? 0,
+                attemptId,
+                expiresAt: Timestamp.fromMillis(next.windowStartedAt + 30 * 24 * 60 * 60 * 1000),
+                updatedAt: FieldValue.serverTimestamp(),
+            });
+        });
+    } catch (error) {
+        if (error instanceof Error && error.message === 'verification-cooldown') {
+            throw new HttpsError('resource-exhausted', 'Espera un minuto antes de solicitar otro correo.');
+        }
+        if (error instanceof Error && error.message === 'verification-daily-limit') {
+            throw new HttpsError('resource-exhausted', 'Alcanzaste el límite diario. Inténtalo más tarde.');
+        }
+        if (error instanceof Error && error.message === 'verification-result-ambiguous') {
+            throw new HttpsError('resource-exhausted', 'No pudimos confirmar si el último correo se envió. Revisa tu bandeja antes de volver a intentarlo.');
+        }
+        throw error;
+    }
+
+    const settleAttempt = async (outcome: 'definitive' | 'ambiguous' | 'sent') => {
+        await db.runTransaction(async tx => {
+            const snapshot = await tx.get(rateRef);
+            const data = snapshot.data();
+            if (!data || data.attemptId !== attemptId || data.deliveryState !== 'pending') return;
+            if (outcome === 'definitive') {
+                const current: VerificationRateState = {
+                    windowStartedAt: data.windowStartedAt,
+                    lastAttemptAt: data.lastAttemptAt,
+                    count: data.count,
+                    deliveryState: 'pending',
+                };
+                const rolledBack = rollbackDefinitiveVerificationAttempt(
+                    current,
+                    typeof data.previousLastAttemptAt === 'number' ? data.previousLastAttemptAt : 0,
+                );
+                tx.set(rateRef, {
+                    ...rolledBack,
+                    attemptId: FieldValue.delete(),
+                    previousLastAttemptAt: FieldValue.delete(),
+                    updatedAt: FieldValue.serverTimestamp(),
+                }, { merge: true });
+                return;
+            }
+            tx.update(rateRef, {
+                deliveryState: outcome,
+                previousLastAttemptAt: FieldValue.delete(),
+                updatedAt: FieldValue.serverTimestamp(),
+            });
+        });
+    };
+
+    let customActionUrl: string;
+    try {
+        const firebaseActionLink = await getAuth().generateEmailVerificationLink(accountEmail);
+        const projectId = process.env.GCLOUD_PROJECT || process.env.GCP_PROJECT || 'briz-4ef3a';
+        customActionUrl = buildBrizVerificationUrl(firebaseActionLink, language, projectId, process.env.FIREBASE_AUTH_EMULATOR_HOST);
+    } catch {
+        await settleAttempt('definitive').catch(() => logger.error('Customer verification rate rollback failed.'));
+        logger.error('Customer verification action link generation failed.');
+        throw new HttpsError('unavailable', 'No pudimos preparar el enlace de verificación. Inténtalo más tarde.');
+    }
+
+    let payload;
+    try {
+        payload = createVerificationEmail(accountEmail, customActionUrl, language);
+    } catch {
+        await settleAttempt('definitive').catch(() => logger.error('Customer verification rate rollback failed.'));
+        logger.error('Customer verification email rendering failed.');
+        throw new HttpsError('unavailable', 'No pudimos preparar el correo de verificación. Inténtalo más tarde.');
+    }
+
+    try {
+        const idempotencyKey = `briz-customer-verification/${digest(uid)}/${attemptId}`;
+        const useEmulatorMailer = process.env.FUNCTIONS_EMULATOR === 'true'
+            && (process.env.GCLOUD_PROJECT || '').startsWith('demo-')
+            && process.env.BRIZ_VERIFICATION_MAILER === 'mock';
+        if (useEmulatorMailer) {
+            await db.collection('_emulatorVerificationOutbox').add({
+                ...payload,
+                idempotencyKey,
+                createdAt: FieldValue.serverTimestamp(),
+            });
+        } else {
+            const resend = new Resend(RESEND_API_KEY.value());
+            await deliverVerificationEmail(resend.emails, payload, idempotencyKey);
+        }
+    } catch (error) {
+        const outcome = error instanceof VerificationDeliveryError ? error.outcome : 'definitive';
+        await settleAttempt(outcome).catch(() => logger.error('Customer verification attempt settlement failed.'));
+        logger.error('Resend customer verification delivery failed.');
+        const message = outcome === 'ambiguous'
+            ? 'No pudimos confirmar el resultado del envío. Revisa tu bandeja antes de volver a intentarlo.'
+            : 'No pudimos enviar el correo de verificación. Puedes intentarlo de nuevo en un momento.';
+        throw new HttpsError('unavailable', message);
+    }
+
+    try {
+        await settleAttempt('sent');
+    } catch {
+        await settleAttempt('ambiguous').catch(() => logger.error('Customer verification ambiguous state update failed.'));
+        logger.error('Customer verification delivery result could not be saved.');
+        throw new HttpsError('unavailable', 'No pudimos confirmar el resultado del envío. Revisa tu bandeja antes de volver a intentarlo.');
+    }
+    return { status: 'sent' as const };
 });
 
 export const getMyRentals = onCall(callable(), async (request) => {
