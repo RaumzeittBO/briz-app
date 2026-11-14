@@ -496,6 +496,10 @@ export default function SettingsPage() {
                             })}
                         </div>
                     </div>
+                    <div className="rounded-xl border border-amber-400/20 bg-amber-400/5 p-4">
+                        <h3 className="text-xs font-black uppercase tracking-wider text-amber-200">Excepciones fuera de horario</h3>
+                        <p className="mt-2 text-xs leading-relaxed text-white/60">Deshabilitadas hasta que BRIZ apruebe sus condiciones. No se han definido minutos máximos, cantidad mínima, duraciones, sucursales, aprobadores ni cargos; por eso no se aceptan automáticamente reservas fuera del horario configurado. El cliente puede consultar por WhatsApp, sin crear una reserva. Cuando BRIZ defina esos límites, se podrá habilitar un flujo administrativo con aprobación y auditoría.</p>
+                    </div>
                     <div className="flex flex-col-reverse gap-3 border-t border-white/5 pt-5 sm:flex-row sm:items-center">
                         <p role="status" className="flex-1 text-xs font-bold text-emerald-300">{businessMessage}</p>
                         {businessError && <p role="alert" className="flex-1 text-xs font-bold text-red-300">{businessError}</p>}

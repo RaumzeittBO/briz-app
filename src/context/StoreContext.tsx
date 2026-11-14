@@ -17,13 +17,17 @@ import {
 import {
     browserLocalPersistence,
     browserSessionPersistence,
+    EmailAuthProvider,
     createUserWithEmailAndPassword,
     onAuthStateChanged,
+    reauthenticateWithCredential,
+    reload,
     sendEmailVerification,
     sendPasswordResetEmail,
     setPersistence,
     signInWithEmailAndPassword,
     signOut,
+    verifyBeforeUpdateEmail,
 } from 'firebase/auth';
 import { auth, db, storage } from '../lib/firebase';
 import { runAdminRentalAction, updateRentalGroup, recordRentalPaymentMovement as recordRentalPaymentBackend, type RecordRentalPaymentMovementInput } from '../lib/backend';
@@ -39,8 +43,15 @@ import { SHOP_SEED_CATEGORIES } from '../data/shopSeedData';
 import { DEFAULT_PUBLIC_BUSINESS_CONFIG, mergePublicBusinessConfig, type PublicBusinessConfig, type PublicBusinessConfigUpdate } from '../lib/businessConfig';
 import { savePublicBusinessConfig } from '../lib/publicBusinessSettings';
 import { addInventoryCategory } from '../lib/inventoryCategories';
-import { beginCustomerRegistration, createCustomerProfile as createCustomerProfileBackend, getMyRentals as getMyRentalsBackend, getAdminCustomers as getAdminCustomersBackend, createRentalGroup as createRentalGroupBackend, createServiceOrder as createServiceOrderBackend, createBrizMaintenanceOrder, updateBrizMaintenanceOrder, releaseBrizMaintenanceOrder, releaseUnlinkedMaintenanceStock as releaseUnlinkedMaintenanceStockBackend, type ReservationGroupInput } from '../lib/backend';
+import { beginCustomerRegistration, createCustomerProfile as createCustomerProfileBackend, completeCustomerProfile as completeCustomerProfileBackend, getMyRentals as getMyRentalsBackend, getAdminCustomers as getAdminCustomersBackend, createRentalGroup as createRentalGroupBackend, createServiceOrder as createServiceOrderBackend, createBrizMaintenanceOrder, updateBrizMaintenanceOrder, releaseBrizMaintenanceOrder, releaseUnlinkedMaintenanceStock as releaseUnlinkedMaintenanceStockBackend, adjustInventoryStock as adjustInventoryStockBackend, type ReservationGroupInput } from '../lib/backend';
 import { calculateProductRentalPrice } from '../lib/rentalPricing';
+
+const CUSTOMER_VERIFICATION_EMAIL_KEY = 'briz_customer_verification_email';
+
+function customerVerificationActionSettings() {
+    return { url: new URL('/verify-email', window.location.origin).toString() };
+}
+
 import {
     getAvailableStockForInterval as calcItemStockForInterval,
     getComboAvailabilityForInterval as calcComboAvailForInterval,
@@ -73,8 +84,10 @@ export interface InventoryItem {
     active: boolean;
 
     availableForRental: boolean;
-    /** Explicitly offerable in the rental checkout add-on step. Legacy items fall back to availableForRental. */
+    /** Legacy opt-in retained for older catalog documents. */
     availableAsRentalAddon?: boolean;
+    excludeFromRentalAddons?: boolean;
+    rentalAddonFree?: boolean;
     availableForSale: boolean;
 
     // Bikes with wheel sizes
@@ -385,6 +398,7 @@ interface StoreContextType {
     // Inventory CRUD
     addInventoryItem: (item: InventoryItem) => Promise<void>;
     updateInventoryItem: (id: string, item: Partial<InventoryItem>) => Promise<void>;
+    adjustInventoryStock: (id: string, delta: number, wheelSize?: string) => Promise<void>;
     deleteInventoryItem: (id: string) => Promise<void>;
 
     // Combo CRUD
@@ -454,14 +468,17 @@ interface StoreContextType {
     // Customer Authentication state & methods
     currentCustomer: Customer | null;
     loginCustomer: (email: string, password: string, remember: boolean) => Promise<Customer | null>;
-    resendCustomerVerification: (email: string, password: string) => Promise<'sent' | 'verified'>;
+    resendCustomerVerification: (email: string, password?: string) => Promise<'sent' | 'verified'>;
+    refreshCustomerVerification: () => Promise<Customer | null>;
+    changeCustomerVerificationEmail: (newEmail: string, password: string) => Promise<void>;
+    completeCustomerProfile: (fields: { name?: string; phone?: string; ci?: string }) => Promise<Customer>;
     registerCustomer: (
         customerData: Omit<Customer, 'id' | 'rentalsCount' | 'purchasesCount' | 'firstVisit' | 'lastVisit' | 'notes'>,
         selfieBlob: Blob | null,
         docFileAnverso: File | null,
         docFileReverso: File | null,
         remember: boolean
-    ) => Promise<Customer>;
+    ) => Promise<{ customer: Customer; verificationSent: boolean }>;
     logoutCustomer: () => void;
     adminNavigationLinks: AdminNavigationLink[];
     updateAdminNavigationLinks: (links: AdminNavigationLink[]) => Promise<void>;
@@ -943,6 +960,8 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
     const loginCustomer = async (email: string, password: string, remember: boolean): Promise<Customer | null> => {
         await setPersistence(auth, remember ? browserLocalPersistence : browserSessionPersistence);
         const credential = await signInWithEmailAndPassword(auth, email.trim().toLowerCase(), password);
+        await reload(credential.user);
+        await credential.user.getIdToken(true);
         if (!credential.user.emailVerified) {
             await signOut(auth);
             const error = new Error('Este correo todavía no está verificado. Solicita un nuevo enlace y confírmalo antes de iniciar sesión.') as Error & { code: string };
@@ -955,16 +974,56 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
         return customer;
     };
 
-    const resendCustomerVerification = async (email: string, password: string): Promise<'sent' | 'verified'> => {
-        await setPersistence(auth, browserSessionPersistence);
-        const credential = await signInWithEmailAndPassword(auth, email.trim().toLowerCase(), password);
+    const resendCustomerVerification = async (email: string, password?: string): Promise<'sent' | 'verified'> => {
+        const cleanEmail = email.trim().toLowerCase();
+        const existingUser = auth.currentUser;
+        const ownsCurrentSession = Boolean(existingUser && existingUser.email?.toLowerCase() === cleanEmail);
+        let user = ownsCurrentSession ? existingUser : null;
+        if (!user) {
+            if (!password) throw new Error('Inicia sesión para reenviar el enlace de verificación.');
+            await setPersistence(auth, browserSessionPersistence);
+            user = (await signInWithEmailAndPassword(auth, cleanEmail, password)).user;
+        }
         try {
-            if (credential.user.emailVerified) return 'verified';
-            await sendEmailVerification(credential.user);
+            await reload(user);
+            await user.getIdToken(true);
+            if (user.emailVerified) return 'verified';
+            await sendEmailVerification(user, customerVerificationActionSettings());
             return 'sent';
         } finally {
-            await signOut(auth);
+            if (!ownsCurrentSession) await signOut(auth);
         }
+    };
+
+    const refreshCustomerVerification = async (): Promise<Customer | null> => {
+        const user = auth.currentUser;
+        if (!user) return null;
+        await reload(user);
+        await user.getIdToken(true);
+        if (!user.emailVerified) return null;
+        const profile = await createCustomerProfileBackend();
+        const customer = customerFromPublicProfile(profile);
+        setCurrentCustomer(customer);
+        localStorage.removeItem(CUSTOMER_VERIFICATION_EMAIL_KEY);
+        return customer;
+    };
+
+    const changeCustomerVerificationEmail = async (newEmail: string, password: string): Promise<void> => {
+        const user = auth.currentUser;
+        const cleanEmail = newEmail.trim().toLowerCase();
+        if (!user?.email || !cleanEmail || cleanEmail === user.email.toLowerCase()) {
+            throw new Error('Ingresa una dirección de correo diferente.');
+        }
+        await reauthenticateWithCredential(user, EmailAuthProvider.credential(user.email, password));
+        await verifyBeforeUpdateEmail(user, cleanEmail, customerVerificationActionSettings());
+        localStorage.setItem(CUSTOMER_VERIFICATION_EMAIL_KEY, cleanEmail);
+    };
+
+    const completeCustomerProfile = async (fields: { name?: string; phone?: string; ci?: string }): Promise<Customer> => {
+        const profile = await completeCustomerProfileBackend(fields);
+        const customer = customerFromPublicProfile(profile);
+        setCurrentCustomer(customer);
+        return customer;
     };
 
     const verifyCustomerRecovery = async (email: string): Promise<boolean> => {
@@ -981,12 +1040,13 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
         docFileAnverso: File | null,
         docFileReverso: File | null,
         remember: boolean
-    ): Promise<Customer> => {
+    ): Promise<{ customer: Customer; verificationSent: boolean }> => {
         const cleanEmail = customerData.email?.trim().toLowerCase() || '';
         if (!cleanEmail || !customerData.password) throw new Error('El correo y la contraseña son obligatorios.');
         if (!selfieBlob || !docFileAnverso || !docFileReverso) throw new Error('Adjunta la foto y ambos lados del documento.');
         const id = `cust_pending_${Date.now()}`;
         let authCreated = false;
+        let registrationDataSaved = false;
         try {
             await setPersistence(auth, remember ? browserLocalPersistence : browserSessionPersistence);
             const credential = await createUserWithEmailAndPassword(auth, cleanEmail, customerData.password);
@@ -1014,10 +1074,15 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
                 comoNosConociste: customerData.comoNosConociste || '',
                 ...privatePaths,
             });
-            await sendEmailVerification(credential.user);
-            await signOut(auth);
+            registrationDataSaved = true;
+            let verificationSent = true;
+            try {
+                await sendEmailVerification(credential.user, customerVerificationActionSettings());
+            } catch {
+                verificationSent = false;
+            }
             setCurrentCustomer(null);
-            return {
+            const customer = {
                 id,
                 name: customerData.name,
                 phone: customerData.phone,
@@ -1025,8 +1090,10 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
                 email: cleanEmail,
                 rentalsCount: 0, purchasesCount: 0, firstVisit: '', lastVisit: '', notes: '',
             };
+            localStorage.setItem(CUSTOMER_VERIFICATION_EMAIL_KEY, cleanEmail);
+            return { customer, verificationSent };
         } catch (error) {
-            if (authCreated && auth.currentUser) await signOut(auth).catch(() => undefined);
+            if (authCreated && !registrationDataSaved && auth.currentUser) await signOut(auth).catch(() => undefined);
             throw error;
         }
     };
@@ -1085,6 +1152,7 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
             });
         });
     };
+    const adjustInventoryStock = (id: string, delta: number, wheelSize?: string) => adjustInventoryStockBackend(id, delta, wheelSize);
     const deleteInventoryItem = async (id: string) => {
         await deleteDoc(doc(db, 'inventory', id));
     };
@@ -1444,7 +1512,7 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
         adminStoreScope,
         inventory, combos, rentals, rentalPaymentMovements, sales, customers, serviceOrders, isLoaded,
         rentalSettings, rentalSettingsLoaded, rentalSettingsLoadError, updateRentalSettings, publicBusinessConfig, updatePublicBusinessConfig,
-        addInventoryItem, updateInventoryItem, deleteInventoryItem,
+        addInventoryItem, updateInventoryItem, deleteInventoryItem, adjustInventoryStock,
         addCombo, updateCombo, deleteCombo,
         confirmRental, confirmRentalGroup, deliverRentalGroup,
         cancelRental, cancelRentalGroup, returnRental, returnRentalGroup,
@@ -1456,7 +1524,7 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
         getItemStock, getComboAvailability,
         getAvailableStockForInterval, getComboAvailabilityForInterval,
         calculatePrice, resetAllData,
-        currentCustomer, loginCustomer, resendCustomerVerification, registerCustomer, logoutCustomer, getMyRentalHistory, createRentalGroup,
+        currentCustomer, loginCustomer, resendCustomerVerification, refreshCustomerVerification, changeCustomerVerificationEmail, completeCustomerProfile, registerCustomer, logoutCustomer, getMyRentalHistory, createRentalGroup,
         routes: mergedRoutes, addRoute, updateRoute, deleteRoute,
         events, addEvent, updateEvent, deleteEvent,
         bikeCategories, addBikeCategory, accessoryCategories, addAccessoryCategory, deleteBikeCategory, updateBikeCategory, reorderBikeCategories,

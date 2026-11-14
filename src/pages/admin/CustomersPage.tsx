@@ -7,7 +7,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { useStore } from '@/context/StoreContext';
 import type { Customer } from '@/context/StoreContext';
 import { getAdminCustomerFiles, type AdminCustomerFiles } from '@/lib/backend';
-import { ExternalLink, Search, Edit, User, UserPlus, Eye, FileText } from 'lucide-react';
+import { ExternalLink, Search, Edit, User, UserPlus, Eye, FileText, RefreshCw } from 'lucide-react';
 
 export default function CustomersPage() {
     const { customers, updateCustomer, addOrUpdateCustomer, deleteCustomer, sales, rentals } = useStore();
@@ -23,6 +23,8 @@ export default function CustomersPage() {
         files?: AdminCustomerFiles['files'];
         error?: string;
     } | null>(null);
+    const [filesReload, setFilesReload] = useState(0);
+    const [fileContentError, setFileContentError] = useState(false);
     const isPdfDocument = (url?: string) => Boolean(url && (url.toLowerCase().includes('.pdf') || url.startsWith('data:application/pdf')));
     const openDocument = (url?: string) => {
         if (!url) return;
@@ -42,7 +44,13 @@ export default function CustomersPage() {
             .then((result) => { if (!cancelled) setCustomerFilesResult({ customerId: detailsCustomer.id, files: result.files }); })
             .catch(() => { if (!cancelled) setCustomerFilesResult({ customerId: detailsCustomer.id, error: 'No se pudieron cargar de forma segura los archivos de este cliente.' }); });
         return () => { cancelled = true; };
-    }, [detailsCustomer]);
+    }, [detailsCustomer, filesReload]);
+
+    const retryCustomerFiles = () => {
+        setFileContentError(false);
+        setCustomerFilesResult(null);
+        setFilesReload(value => value + 1);
+    };
 
     const filtered = customers.filter(c =>
         c.name.toLowerCase().includes(search.toLowerCase()) ||
@@ -172,7 +180,7 @@ export default function CustomersPage() {
                                 </div>
 
                                 <button
-                                    onClick={() => setDetailsCustomer(c)}
+                                    onClick={() => { setFileContentError(false); setCustomerFilesResult(null); setDetailsCustomer(c); }}
                                     className="w-full py-4 text-brand-yellow hover:text-brand-black hover:bg-brand-yellow text-[10px] font-black uppercase tracking-[0.2em] transition-all border-t border-white/5 flex items-center justify-center gap-2"
                                 >
                                     <Eye className="w-4 h-4" /> Ver detalles
@@ -212,7 +220,8 @@ export default function CustomersPage() {
                             </DialogHeader>
                             <div className="max-h-[80vh] space-y-6 overflow-y-auto p-4 sm:p-7">
                                 {customerFilesLoading && <p className="rounded-xl bg-white p-3 text-sm font-bold text-brand-charcoal/70">Cargando archivos privados de forma segura…</p>}
-                                {customerFilesError && <p role="alert" className="rounded-xl border border-red-300 bg-red-50 p-3 text-sm font-bold text-red-700">{customerFilesError}</p>}
+                                {customerFilesError && <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-red-300 bg-red-50 p-3 text-sm font-bold text-red-700"><span>{customerFilesError}</span><Button type="button" variant="outline" onClick={retryCustomerFiles} className="h-9 border-red-300 text-red-800"><RefreshCw className="mr-2 h-4 w-4" />Reintentar</Button></div>}
+                                {fileContentError && <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm font-semibold text-amber-900"><span>No se pudo mostrar un archivo. Puede haber vencido el enlace temporal o fallado la carga del formato.</span><Button type="button" variant="outline" onClick={retryCustomerFiles} className="h-9 border-amber-400 text-amber-900"><RefreshCw className="mr-2 h-4 w-4" />Generar enlaces nuevos</Button></div>}
                                 <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(520px,0.9fr)_minmax(560px,1.1fr)]">
                                     <div className="space-y-5">
                                         <div>
@@ -251,7 +260,7 @@ export default function CustomersPage() {
                                             <div className="aspect-square rounded-2xl overflow-hidden bg-brand-yellow/5 border border-brand-yellow/15 flex items-center justify-center">
                                                 {selfieUrl ? (
                                                     <a href={selfieUrl} target="_blank" rel="noreferrer" className="w-full h-full">
-                                                        <img src={selfieUrl} className="w-full h-full object-cover" alt={`Foto de ${detailsCustomer.name}`} />
+                                                        <img src={selfieUrl} onError={() => setFileContentError(true)} className="w-full h-full object-cover" alt={`Foto de ${detailsCustomer.name}`} />
                                                     </a>
                                                 ) : (
                                                     <User className="w-16 h-16 text-brand-charcoal/20" />
@@ -289,7 +298,7 @@ export default function CustomersPage() {
                                                     <div className="min-h-[300px] rounded-2xl overflow-hidden bg-brand-yellow/5 border border-brand-yellow/15 flex items-center justify-center">
                                                         {documentFrontUrl ? (
                                                             isPdfDocument(documentFrontUrl) ? (
-                                                                <object data={documentFrontUrl} type="application/pdf" className="h-[550px] w-full bg-white">
+                                                                <object data={documentFrontUrl} type="application/pdf" onError={() => setFileContentError(true)} className="h-[550px] w-full bg-white">
                                                                     <iframe
                                                                         src={documentFrontUrl}
                                                                         title={`Documento de ${detailsCustomer.name}`}
@@ -298,7 +307,7 @@ export default function CustomersPage() {
                                                                 </object>
                                                             ) : (
                                                                 <button type="button" onClick={() => openDocument(documentFrontUrl)} className="h-full w-full cursor-zoom-in flex items-center justify-center p-2 bg-white">
-                                                                    <img src={documentFrontUrl} className="max-h-[500px] max-w-full object-contain" alt={`Anverso de ${detailsCustomer.name}`} />
+                                                                    <img src={documentFrontUrl} onError={() => setFileContentError(true)} className="max-h-[500px] max-w-full object-contain" alt={`Anverso de ${detailsCustomer.name}`} />
                                                                 </button>
                                                             )
                                                         ) : (
@@ -313,7 +322,7 @@ export default function CustomersPage() {
                                                         <p className="text-[9px] font-black uppercase tracking-wider text-brand-charcoal/40 mt-3 mb-1.5">Parte Posterior (Reverso)</p>
                                                         <div className="min-h-[300px] rounded-2xl overflow-hidden bg-brand-yellow/5 border border-brand-yellow/15 flex items-center justify-center">
                                                             {isPdfDocument(documentBackUrl) ? (
-                                                                <object data={documentBackUrl} type="application/pdf" className="h-[550px] w-full bg-white">
+                                                                <object data={documentBackUrl} type="application/pdf" onError={() => setFileContentError(true)} className="h-[550px] w-full bg-white">
                                                                     <iframe
                                                                         src={documentBackUrl}
                                                                         title={`Reverso de ${detailsCustomer.name}`}
@@ -322,7 +331,7 @@ export default function CustomersPage() {
                                                                 </object>
                                                             ) : (
                                                                 <button type="button" onClick={() => openDocument(documentBackUrl)} className="h-full w-full cursor-zoom-in flex items-center justify-center p-2 bg-white">
-                                                                    <img src={documentBackUrl} className="max-h-[500px] max-w-full object-contain" alt={`Reverso de ${detailsCustomer.name}`} />
+                                                                    <img src={documentBackUrl} onError={() => setFileContentError(true)} className="max-h-[500px] max-w-full object-contain" alt={`Reverso de ${detailsCustomer.name}`} />
                                                                 </button>
                                                             )}
                                                         </div>

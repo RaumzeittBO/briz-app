@@ -46,6 +46,11 @@ export async function createCustomerProfile(): Promise<PublicCustomerProfile> {
     return result.data.profile;
 }
 
+export async function completeCustomerProfile(input: { name?: string; phone?: string; ci?: string }): Promise<PublicCustomerProfile> {
+    const result = await httpsCallable<typeof input, { profile: PublicCustomerProfile }>(functions, 'completeCustomerProfile')(input);
+    return result.data.profile;
+}
+
 export async function getMyRentals(): Promise<Record<string, unknown>[]> {
     const result = await httpsCallable<void, { rentals: Record<string, unknown>[] }>(functions, 'getMyRentals')();
     return result.data.rentals;
@@ -131,6 +136,12 @@ export async function updateBrizMaintenanceOrder(id: string, updates: Record<str
 
 export async function releaseBrizMaintenanceOrder(id: string): Promise<void> {
     await httpsCallable<{ id: string }, { ok: boolean }>(functions, 'releaseBrizMaintenanceOrder')({ id });
+}
+
+export async function adjustInventoryStock(itemId: string, delta: number, wheelSize?: string): Promise<void> {
+    await httpsCallable<{ itemId: string; delta: number; wheelSize?: string }, { ok: boolean }>(functions, 'adjustInventoryStock')({
+        itemId, delta, ...(wheelSize ? { wheelSize } : {}),
+    });
 }
 
 export async function releaseUnlinkedMaintenanceStock(data: { itemId: string; wheelSize?: string; operationId: string }): Promise<void> {

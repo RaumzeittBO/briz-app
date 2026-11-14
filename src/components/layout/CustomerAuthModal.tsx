@@ -104,15 +104,21 @@ const COUNTRIES_LIST = [
 ];
 
 export default function CustomerAuthModal({ isOpen, onClose, onSuccess }: CustomerAuthModalProps) {
-    const { loginCustomer, resendCustomerVerification, registerCustomer, verifyCustomerRecovery } = useStore();
+    const { loginCustomer, resendCustomerVerification, refreshCustomerVerification, changeCustomerVerificationEmail, completeCustomerProfile, registerCustomer, verifyCustomerRecovery } = useStore();
     const { language } = useLanguage();
     
     // Auth Mode: 'login' | 'register' | 'forgot' | 'reset'
-    const [mode, setMode] = useState<'login' | 'register' | 'forgot' | 'reset'>('login');
+    const [mode, setMode] = useState<'login' | 'register' | 'forgot' | 'reset' | 'verify' | 'complete'>('login');
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [successMessage, setSuccessMessage] = useState<string | null>(null);
     const [verificationPending, setVerificationPending] = useState(false);
+    const [verificationEmail, setVerificationEmail] = useState(() => localStorage.getItem('briz_customer_verification_email') || '');
+    const [verificationPassword, setVerificationPassword] = useState('');
+    const [replacementEmail, setReplacementEmail] = useState('');
+    const [resendAvailableAt, setResendAvailableAt] = useState(0);
+    const [clockNow, setClockNow] = useState(Date.now());
+    const [completionFields, setCompletionFields] = useState<{ name: string; phone: string; ci: string }>({ name: '', phone: '', ci: '' });
 
     // Common fields
     const [email, setEmail] = useState('');
@@ -143,6 +149,18 @@ export default function CustomerAuthModal({ isOpen, onClose, onSuccess }: Custom
     const selfieInputRef = useRef<HTMLInputElement | null>(null);
     const docAnversoInputRef = useRef<HTMLInputElement | null>(null);
     const docReversoInputRef = useRef<HTMLInputElement | null>(null);
+
+    const startProfileCompletion = (customer: { name: string; phone: string; ci: string }) => {
+        const missingName = customer.name.trim().length < 2;
+        const missingPhone = customer.phone.replace(/\D/g, '').length < 7;
+        const missingCi = customer.ci.trim().length < 3;
+        if (!missingName && !missingPhone && !missingCi) return false;
+        setCompletionFields({ name: missingName ? '' : customer.name, phone: missingPhone ? '' : customer.phone, ci: missingCi ? '' : customer.ci });
+        setMode('complete');
+        setError(null);
+        setSuccessMessage(null);
+        return true;
+    };
 
     // Callback ref to bind stream and play video when the element mounts
     const videoRef = useCallback((node: HTMLVideoElement | null) => {
@@ -177,8 +195,20 @@ export default function CustomerAuthModal({ isOpen, onClose, onSuccess }: Custom
             setLoading(false);
             setMode('login');
             setRecoveryEmail('');
+            if (localStorage.getItem('briz_customer_verification_email')) setMode('verify');
         }
     }, [isOpen, stream]);
+
+    useEffect(() => {
+        const timer = window.setInterval(() => setClockNow(Date.now()), 1000);
+        return () => window.clearInterval(timer);
+    }, []);
+
+    useEffect(() => {
+        if (!isOpen || !verificationEmail) return;
+        const lastSent = Number(localStorage.getItem(`briz_verify_sent_${verificationEmail.toLowerCase()}`) || 0);
+        setResendAvailableAt(lastSent + 60_000);
+    }, [isOpen, verificationEmail]);
 
     // Cleanup camera stream on unmount
     useEffect(() => {
@@ -287,6 +317,7 @@ export default function CustomerAuthModal({ isOpen, onClose, onSuccess }: Custom
         try {
             const customer = await loginCustomer(email, password, remember);
             if (customer) {
+                if (startProfileCompletion(customer)) return;
                 setSuccessMessage(`¡Bienvenido de vuelta, ${customer.name}!`);
                 setTimeout(() => {
                     if (onSuccess) onSuccess();
@@ -299,11 +330,41 @@ export default function CustomerAuthModal({ isOpen, onClose, onSuccess }: Custom
             console.error(err);
             if (err && typeof err === 'object' && 'code' in err && err.code === 'auth/email-not-verified') {
                 setVerificationPending(true);
+                setVerificationEmail(email.trim().toLowerCase());
+                localStorage.setItem('briz_customer_verification_email', email.trim().toLowerCase());
+                setMode('verify');
+                setVerificationPassword(password);
+                setError(null);
+                setLoading(false);
+                return;
             }
-            setError(err instanceof Error ? err.message : "Ocurrió un error inesperado al intentar iniciar sesión.");
+            const code = err && typeof err === 'object' && 'code' in err ? String(err.code) : '';
+            setError(code.includes('wrong-password') || code.includes('invalid-credential')
+                ? (language === 'es' ? 'El correo o la contraseña no son correctos.' : 'The email or password is incorrect.')
+                : code.includes('network-request-failed')
+                    ? (language === 'es' ? 'No hay conexión. Comprueba tu internet e inténtalo de nuevo.' : 'Connection failed. Check your internet and try again.')
+                    : (language === 'es' ? 'No pudimos cargar tu perfil. Inténtalo de nuevo en unos minutos.' : 'We could not load your profile. Please try again shortly.'));
         } finally {
             setLoading(false);
         }
+    };
+
+    const handleCompleteProfile = async (event: React.FormEvent) => {
+        event.preventDefault(); setLoading(true); setError(null);
+        try {
+            await completeCustomerProfile({
+                ...(completionFields.name.trim() ? { name: completionFields.name } : {}),
+                ...(completionFields.phone.trim() ? { phone: completionFields.phone } : {}),
+                ...(completionFields.ci.trim() ? { ci: completionFields.ci } : {}),
+            });
+            setSuccessMessage(language === 'es' ? 'Perfil completado. Ya puedes continuar.' : 'Profile completed. You can continue.');
+            onSuccess?.(); window.setTimeout(onClose, 900);
+        } catch (err) {
+            const code = err && typeof err === 'object' && 'code' in err ? String(err.code) : '';
+            setError(code.includes('invalid-argument')
+                ? (language === 'es' ? 'Completa los datos pendientes con información válida.' : 'Enter valid information for the missing fields.')
+                : (language === 'es' ? 'No se pudo guardar el perfil. Comprueba tu conexión e inténtalo de nuevo.' : 'Could not save the profile. Check your connection and try again.'));
+        } finally { setLoading(false); }
     };
 
     const handleResendVerification = async () => {
@@ -311,7 +372,7 @@ export default function CustomerAuthModal({ isOpen, onClose, onSuccess }: Custom
         setSuccessMessage(null);
         setLoading(true);
         try {
-            const result = await resendCustomerVerification(email, password);
+            const result = await resendCustomerVerification(email, password || undefined);
             setVerificationPending(false);
             setSuccessMessage(result === 'sent'
                 ? (language === 'es'
@@ -328,6 +389,57 @@ export default function CustomerAuthModal({ isOpen, onClose, onSuccess }: Custom
         } finally {
             setLoading(false);
         }
+    };
+
+    const handleVerificationCheck = async () => {
+        setError(null); setSuccessMessage(null); setLoading(true);
+        try {
+            const customer = await refreshCustomerVerification();
+            if (!customer) { setError(language === 'es' ? 'Tu correo aún está pendiente de confirmación.' : 'Your email is still awaiting verification.'); return; }
+            if (startProfileCompletion(customer)) return;
+            localStorage.removeItem('briz_customer_verification_email');
+            setSuccessMessage(language === 'es' ? 'Correo confirmado. Tu cuenta BRIZ está lista.' : 'Email confirmed. Your BRIZ account is ready.');
+            onSuccess?.();
+            window.setTimeout(onClose, 900);
+        } catch {
+            setError(language === 'es' ? 'El correo está confirmado, pero no pudimos cargar tu perfil. Inténtalo nuevamente.' : 'Your email is verified, but we could not load your profile. Please try again.');
+        } finally { setLoading(false); }
+    };
+
+    const handleVerificationResend = async () => {
+        if (clockNow < resendAvailableAt) return;
+        setError(null); setSuccessMessage(null); setLoading(true);
+        try {
+            const result = await resendCustomerVerification(verificationEmail, verificationPassword || undefined);
+            if (result === 'verified') { await handleVerificationCheck(); return; }
+            const sentAt = Date.now();
+            localStorage.setItem(`briz_verify_sent_${verificationEmail.toLowerCase()}`, String(sentAt));
+            setResendAvailableAt(sentAt + 60_000);
+            setSuccessMessage(language === 'es' ? 'Enviamos un nuevo enlace de verificación.' : 'A new verification link has been sent.');
+        } catch (err) {
+            const code = err && typeof err === 'object' && 'code' in err ? String(err.code) : '';
+            setError(code.includes('too-many-requests')
+                ? (language === 'es' ? 'Firebase limitó temporalmente los envíos. Espera antes de volver a intentarlo.' : 'Firebase temporarily limited verification emails. Please wait before trying again.')
+                : (language === 'es' ? 'Inicia sesión con tu contraseña antes de reenviar el enlace.' : 'Sign in with your password before resending the link.'));
+        } finally { setLoading(false); }
+    };
+
+    const handleVerificationEmailChange = async () => {
+        setLoading(true); setError(null); setSuccessMessage(null);
+        try {
+            await changeCustomerVerificationEmail(replacementEmail, verificationPassword);
+            const cleanEmail = replacementEmail.trim().toLowerCase();
+            setVerificationEmail(cleanEmail);
+            localStorage.setItem('briz_customer_verification_email', cleanEmail);
+            setReplacementEmail('');
+            const sentAt = Date.now(); localStorage.setItem(`briz_verify_sent_${cleanEmail}`, String(sentAt)); setResendAvailableAt(sentAt + 60_000);
+            setSuccessMessage(language === 'es' ? `Enviamos el enlace de confirmación a ${cleanEmail}.` : `A confirmation link was sent to ${cleanEmail}.`);
+        } catch (err) {
+            const code = err && typeof err === 'object' && 'code' in err ? String(err.code) : '';
+            setError(code.includes('email-already-in-use')
+                ? (language === 'es' ? 'Ese correo ya pertenece a otra cuenta.' : 'That email is already linked to another account.')
+                : (language === 'es' ? 'No pudimos cambiar el correo. Comprueba tu contraseña e inténtalo de nuevo.' : 'We could not change the email. Check your password and try again.'));
+        } finally { setLoading(false); }
     };
 
     const handleRegisterSubmit = async (e: React.FormEvent) => {
@@ -373,13 +485,21 @@ export default function CustomerAuthModal({ isOpen, onClose, onSuccess }: Custom
                 comoNosConociste: referral
             };
 
-            await registerCustomer(customerData, selfieBlob, docFileAnverso, docFileReverso, remember);
-            setSuccessMessage(language === 'es'
-                ? 'Cuenta creada. Revisa tu bandeja de entrada y confirma tu correo antes de iniciar sesión. Si no ves el mensaje, revisa Spam o Correo no deseado. Abre el enlace de verificación del correo para activar tu cuenta.'
-                : 'Account created. Check your inbox and verify your email before signing in. If you do not see the message, check Spam or Junk. Open the verification link in the email to activate your account.');
-            setMode('login');
-            setEmail(email.trim().toLowerCase());
+            const result = await registerCustomer(customerData, selfieBlob, docFileAnverso, docFileReverso, remember);
+            const cleanEmail = email.trim().toLowerCase();
+            setVerificationEmail(cleanEmail);
+            localStorage.setItem('briz_customer_verification_email', cleanEmail);
+            setVerificationPassword('');
+            setMode('verify');
             setPassword('');
+            if (result.verificationSent) {
+                const sentAt = Date.now();
+                localStorage.setItem(`briz_verify_sent_${cleanEmail}`, String(sentAt));
+                setResendAvailableAt(sentAt + 60_000);
+                setSuccessMessage(null);
+            } else {
+                setError(language === 'es' ? 'La cuenta se creó, pero no se pudo enviar el correo. Revisa tu conexión y pulsa “Reenviar correo”.' : 'Your account was created, but the email could not be sent. Check your connection and choose “Resend email”.');
+            }
         } catch (err: any) {
             console.error(err);
             setError(err.message || "No se pudo registrar tu usuario. Verifica si el correo ya está registrado.");
@@ -439,6 +559,10 @@ export default function CustomerAuthModal({ isOpen, onClose, onSuccess }: Custom
                             ? (language === 'es' ? 'INICIAR SESIÓN' : 'SIGN IN') 
                             : mode === 'register' 
                             ? (language === 'es' ? 'REGÍSTRATE EN BRIZ' : 'REGISTER AT BRIZ') 
+                            : mode === 'verify'
+                            ? (language === 'es' ? 'CONFIRMA TU CORREO PARA INICIAR SESIÓN' : 'VERIFY YOUR EMAIL TO SIGN IN')
+                            : mode === 'complete'
+                            ? (language === 'es' ? 'COMPLETA TU PERFIL' : 'COMPLETE YOUR PROFILE')
                             : mode === 'forgot'
                             ? (language === 'es' ? 'RECUPERAR CONTRASEÑA' : 'RECOVER PASSWORD')
                             : (language === 'es' ? 'RESTABLECER CONTRASEÑA' : 'RESET PASSWORD')
@@ -449,6 +573,10 @@ export default function CustomerAuthModal({ isOpen, onClose, onSuccess }: Custom
                             ? (language === 'es' ? 'Ingresa para rentar tu bicicleta' : 'Sign in to rent your bicycle') 
                             : mode === 'register'
                             ? (language === 'es' ? 'Sigue los pasos y regístrate en nuestro sistema' : 'Follow the steps to create your account')
+                            : mode === 'verify'
+                            ? (language === 'es' ? 'Activa tu cuenta BRIZ con el enlace que enviamos' : 'Activate your BRIZ account using the link we sent')
+                            : mode === 'complete'
+                            ? (language === 'es' ? 'Solo te pediremos los datos que faltan' : 'We will ask only for missing details')
                             : mode === 'forgot'
                             ? (language === 'es' ? 'Ingresa tus datos para validar tu perfil' : 'Enter your details to verify your profile')
                             : (language === 'es' ? 'Establece tu nueva contraseña de acceso' : 'Set your new account password')
@@ -484,7 +612,35 @@ export default function CustomerAuthModal({ isOpen, onClose, onSuccess }: Custom
                     </AnimatePresence>
 
                     {/* Form Layouts */}
-                    {mode === 'login' ? (
+                    {mode === 'complete' ? (
+                        <form onSubmit={handleCompleteProfile} className="space-y-4">
+                            <p className="text-sm leading-relaxed text-brand-charcoal/65">{language === 'es' ? 'Tu correo ya está verificado. Para proteger tus datos, conserva lo que ya existe y completa únicamente los campos vacíos.' : 'Your email is verified. To protect your information, existing details will stay as they are; fill only the empty fields.'}</p>
+                            {!completionFields.name.trim() && <div className="space-y-1"><Label>{language === 'es' ? 'Nombre completo' : 'Full name'}</Label><Input required minLength={2} value={completionFields.name} onChange={event => setCompletionFields(value => ({ ...value, name: event.target.value }))} /></div>}
+                            {completionFields.phone.replace(/\D/g, '').length < 7 && <div className="space-y-1"><Label>{language === 'es' ? 'Teléfono' : 'Phone'}</Label><Input required type="tel" value={completionFields.phone} onChange={event => setCompletionFields(value => ({ ...value, phone: event.target.value }))} /></div>}
+                            {completionFields.ci.trim().length < 3 && <div className="space-y-1"><Label>{language === 'es' ? 'Documento de identidad' : 'Identity document'}</Label><Input required value={completionFields.ci} onChange={event => setCompletionFields(value => ({ ...value, ci: event.target.value }))} /></div>}
+                            <Button type="submit" disabled={loading} className="h-12 w-full rounded-xl bg-brand-yellow font-black text-brand-charcoal hover:bg-brand-yellow-light">{loading ? (language === 'es' ? 'Guardando…' : 'Saving…') : (language === 'es' ? 'Guardar y continuar' : 'Save and continue')}</Button>
+                            <button type="button" onClick={() => setMode('login')} className="w-full text-sm font-bold text-brand-charcoal/70 underline underline-offset-4">{language === 'es' ? 'Volver al inicio de sesión' : 'Back to sign in'}</button>
+                        </form>
+                    ) : mode === 'verify' ? (
+                        <div className="space-y-5 text-center">
+                            <div className="mx-auto grid h-16 w-16 place-items-center rounded-full bg-brand-yellow/25 text-brand-charcoal"><Mail className="h-7 w-7" /></div>
+                            <div className="space-y-2">
+                                <p className="text-sm text-brand-charcoal/75">{language === 'es' ? 'Enviamos un enlace de verificación a:' : 'We sent a verification link to:'}</p>
+                                <p className="break-all rounded-xl border border-brand-yellow/50 bg-white px-4 py-3 text-base font-black text-brand-charcoal">{verificationEmail}</p>
+                                <p className="text-sm leading-relaxed text-brand-charcoal/65">{language === 'es' ? 'Abre el correo y pulsa el botón de confirmación para activar tu cuenta BRIZ. Si no encuentras el mensaje, revisa Spam o Correo no deseado.' : 'Open the email and select the confirmation button to activate your BRIZ account. If you cannot find it, check Spam or Junk.'}</p>
+                            </div>
+                            {verificationPassword && <div className="space-y-2 text-left"><Label>{language === 'es' ? 'Contraseña para confirmar cambios o reenviar' : 'Password to confirm changes or resend'}</Label><Input type="password" autoComplete="current-password" value={verificationPassword} onChange={event => setVerificationPassword(event.target.value)} /></div>}
+                            <Button type="button" disabled={loading} onClick={handleVerificationCheck} className="h-12 w-full rounded-xl bg-brand-yellow font-black text-brand-charcoal hover:bg-brand-yellow-light">{loading ? (language === 'es' ? 'Verificando…' : 'Checking…') : (language === 'es' ? 'Ya confirmé mi correo' : 'I have verified my email')}</Button>
+                            <Button type="button" variant="outline" disabled={loading || clockNow < resendAvailableAt} onClick={handleVerificationResend} className="h-11 w-full rounded-xl border-brand-charcoal/15">{clockNow < resendAvailableAt ? (language === 'es' ? `Reenviar correo (${Math.ceil((resendAvailableAt-clockNow)/1000)} s)` : `Resend email (${Math.ceil((resendAvailableAt-clockNow)/1000)} s)`) : (language === 'es' ? 'Reenviar correo' : 'Resend email')}</Button>
+                            <div className="space-y-2 border-t border-brand-charcoal/10 pt-4 text-left">
+                                <Label>{language === 'es' ? '¿Correo escrito incorrectamente?' : 'Typo in your email?'}</Label>
+                                <Input type="email" autoComplete="email" value={replacementEmail} onChange={event => setReplacementEmail(event.target.value)} placeholder={language === 'es' ? 'Nuevo correo electrónico' : 'New email address'} />
+                                {!verificationPassword && <Input type="password" autoComplete="current-password" value={verificationPassword} onChange={event => setVerificationPassword(event.target.value)} placeholder={language === 'es' ? 'Contraseña actual' : 'Current password'} />}
+                                <Button type="button" variant="outline" disabled={loading || !replacementEmail || !verificationPassword} onClick={handleVerificationEmailChange} className="w-full">{language === 'es' ? 'Cambiar correo de forma segura' : 'Change email securely'}</Button>
+                            </div>
+                            <button type="button" onClick={() => { setMode('login'); setEmail(verificationEmail); setError(null); setSuccessMessage(null); }} className="text-sm font-bold text-brand-charcoal/70 underline underline-offset-4">{language === 'es' ? 'Volver al inicio de sesión' : 'Back to sign in'}</button>
+                        </div>
+                    ) : mode === 'login' ? (
                         <form onSubmit={handleLoginSubmit} className="space-y-5">
                             <div className="space-y-2">
                                 <Label className="text-[10px] text-brand-charcoal/60 font-bold uppercase tracking-widest font-maiandra">{language === 'es' ? 'Correo Electrónico' : 'Email Address'}</Label>

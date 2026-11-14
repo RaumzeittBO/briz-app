@@ -15,6 +15,8 @@ import {
     isBlocking,
     isHolding,
     isInsideDeliveryZone,
+    isEligibleRentalAddon,
+    hasConfiguredRentalAddonPrice,
     parseDateTime,
     parseDurationHours,
     rentalDemands,
@@ -24,6 +26,7 @@ import {
     type Demand,
     type RentalLike,
 } from './domain';
+import { DEFAULT_RENTAL_HOURS, validateRentalBusinessHours } from './businessHours';
 
 if (getApps().length === 0) initializeApp();
 const db = getFirestore();
@@ -56,21 +59,6 @@ type BookingRequest = {
 
 const ACTIVE_STATUSES = ['pending', 'Pendiente', 'confirmed', 'Confirmado', 'delivered', 'Entregado'];
 const MAX_REQUEST_BYTES = 24_000;
-const LEGACY_STRUCTURAL_ADDONS = new Set([
-    'acc_canasta_metalica', 'acc_canasta_mimbre', 'acc_ruedas_auxiliares_adulto',
-    'acc_silla_delantera_urbana', 'acc_silla_delantera_mamachari', 'acc_silla_mediana_trasera',
-    'acc_silla_trasera_grande', 'acc_set_silla_delantera_canasta_mamachari',
-    'acc_ruedas_apoyo_nino_16', 'acc_canasta_trasera_carga',
-]);
-
-function canOfferRentalAddon(item: CatalogItem): boolean {
-    if (item.availableAsRentalAddon !== undefined) return item.availableAsRentalAddon === true;
-    if (!item.availableForRental) return false;
-    if (!LEGACY_STRUCTURAL_ADDONS.has(item.id)) return true;
-    return Number(item.price1Hour || 0) > 0 || Number(item.price24Hours || 0) > 0
-        || Number(item.pricePerHour || 0) > 0 || Number(item.pricePerDay || 0) > 0;
-}
-
 function callable(options: { enforceAppCheck?: boolean } = {}) {
     return { region: 'us-central1', maxInstances: 10, enforceAppCheck: options.enforceAppCheck ?? false } as const;
 }
@@ -284,10 +272,10 @@ export const createCustomerProfile = onCall(callable(), async (request) => {
     if (existing.exists) return { profile: existing.data(), alreadyExists: true };
     const pendingRef = db.doc(`pendingCustomerRegistrations/${uid}`);
     const pendingSnap = await pendingRef.get();
-    if (!pendingSnap.exists || Number(pendingSnap.data()?.expiresAt) < Date.now()) {
-        throw new HttpsError('failed-precondition', 'El registro expiró. Inicia nuevamente el registro.');
-    }
-    const profileInput = validateProfile(pendingSnap.data());
+    const pendingData = pendingSnap.data() || {};
+    const profileInput = pendingSnap.exists
+        ? validateProfile(pendingData)
+        : { name: '', phone: '', ci: '' };
     const privatePaths = ['autofotoPath', 'documentoPath', 'documentoReversoPath'].reduce<Record<string, string>>((result, field) => {
         const path = cleanString(pendingSnap.data()?.[field], 300);
         if (path && path.startsWith(`customerUploads/${uid}/`) && !path.includes('..')) result[field] = path;
@@ -335,6 +323,8 @@ export const createCustomerProfile = onCall(callable(), async (request) => {
         return { profile: saved.data(), linkedLegacyAccount: true };
     }
 
+    if (!pendingSnap.exists) throw new HttpsError('failed-precondition', 'Tu correo está verificado, pero faltan datos del registro. Contacta a BRIZ para completar tu perfil de forma segura.');
+
     const newProfile = {
         id: uid,
         authUid: uid,
@@ -349,7 +339,7 @@ export const createCustomerProfile = onCall(callable(), async (request) => {
         const latestProfile = await tx.get(profileRef);
         const latestPending = await tx.get(pendingRef);
         if (latestProfile.exists) return;
-        if (!latestPending.exists) throw new HttpsError('failed-precondition', 'El registro expiró.');
+        if (!latestPending.exists) throw new HttpsError('failed-precondition', 'No encontramos los datos pendientes del registro.');
         tx.create(profileRef, newProfile);
         tx.set(db.doc(`customers/${uid}`), {
             id: uid, authUid: uid, email, ...profileInput,
@@ -361,6 +351,45 @@ export const createCustomerProfile = onCall(callable(), async (request) => {
         tx.delete(pendingRef);
     });
     return { profile: newProfile, linkedLegacyAccount: false };
+});
+
+export const completeCustomerProfile = onCall(callable(), async (request) => {
+    const { uid } = requireAuth(request, true);
+    if (!exactObject(request.data) || Object.keys(request.data).some((key) => !['name', 'phone', 'ci'].includes(key))) {
+        throw new HttpsError('invalid-argument', 'Completa únicamente los datos solicitados del perfil.');
+    }
+    const profileRef = db.doc(`customerProfiles/${uid}`);
+    const first = await profileRef.get();
+    if (!first.exists || first.data()?.authUid !== uid) throw new HttpsError('failed-precondition', 'No encontramos un perfil vinculado a esta cuenta.');
+    const profile = first.data()!;
+    const missing = (['name', 'phone', 'ci'] as const).filter((field) => !cleanString(profile[field], field === 'name' ? 120 : 40));
+    const patch: Record<string, string> = {};
+    for (const field of missing) {
+        const value = cleanString(request.data[field], field === 'name' ? 120 : 40);
+        if (field === 'name' && value.length < 2 || field === 'phone' && value.replace(/\D/g, '').length < 7 || field === 'ci' && value.length < 3) {
+            throw new HttpsError('invalid-argument', 'Completa nombre, teléfono y documento de identidad que falten.');
+        }
+        patch[field] = value;
+    }
+    if (missing.length === 0) return { profile, alreadyComplete: true };
+    if (missing.some((field) => !patch[field])) throw new HttpsError('invalid-argument', 'Envía los datos que todavía faltan en tu perfil.');
+    const customerId = cleanString(profile.legacyCustomerId, 120) || uid;
+    const customerRef = db.doc(`customers/${customerId}`);
+    await db.runTransaction(async (tx) => {
+        const [latestProfile, latestCustomer] = await Promise.all([tx.get(profileRef), tx.get(customerRef)]);
+        if (!latestProfile.exists || latestProfile.data()?.authUid !== uid || !latestCustomer.exists) {
+            throw new HttpsError('failed-precondition', 'El perfil cambió. Vuelve a iniciar sesión e inténtalo de nuevo.');
+        }
+        const latest = latestProfile.data()!;
+        const stillMissing = missing.filter((field) => !cleanString(latest[field], field === 'name' ? 120 : 40));
+        const safePatch = stillMissing.reduce<Record<string, string>>((result, field) => {
+            result[field] = patch[field];
+            return result;
+        }, {});
+        tx.update(profileRef, { ...safePatch, updatedAt: FieldValue.serverTimestamp() });
+        tx.update(customerRef, { ...safePatch, updatedAt: FieldValue.serverTimestamp() });
+    });
+    return { profile: { ...profile, ...patch }, alreadyComplete: false };
 });
 
 export const beginCustomerRegistration = onCall(callable(), async (request) => {
@@ -585,11 +614,12 @@ export const createRentalGroup = onCall(callable(), async (request) => {
 
     const result = await db.runTransaction(async (tx) => {
         let transactionRole: DocumentData | undefined;
-        const [profileSnap, idemSnap, rateSnap, counterSnap, inventorySnap, comboSnap, allRentalSnap, codeSnap] = await Promise.all([
+        const [profileSnap, idemSnap, rateSnap, counterSnap, inventorySnap, comboSnap, allRentalSnap, codeSnap, businessSnap] = await Promise.all([
             tx.get(profileRef), tx.get(idempotencyRef), tx.get(rateRef), tx.get(counterRef),
             tx.get(db.collection('inventory')), tx.get(db.collection('combos')),
             tx.get(db.collection('rentals').where('status', 'in', ACTIVE_STATUSES)),
             tx.get(db.collection('rentals').where('reservationCode', '>=', `BRIZ-${currentYear}-`).where('reservationCode', '<', `BRIZ-${currentYear}-\uf8ff`)),
+            tx.get(db.doc('settings/public_business')),
         ]);
         let adminCustomerSnap: DocumentSnapshot<DocumentData> | null = null;
         if (adminManual) {
@@ -622,6 +652,8 @@ export const createRentalGroup = onCall(callable(), async (request) => {
 
         const inventory = inventorySnap.docs.map((item) => ({ id: item.id, ...item.data() } as CatalogItem));
         const combos = comboSnap.docs.map((item) => ({ id: item.id, ...item.data() } as Combo));
+        const scheduleError = validateRentalBusinessHours(businessSnap.data()?.hours || DEFAULT_RENTAL_HOURS, input.date, input.pickupTime, input.duration, input.endTime);
+        if (scheduleError) throw new HttpsError('failed-precondition', scheduleError);
         const inventoryById = new Map(inventory.map((item) => [item.id, item]));
         const comboById = new Map(combos.map((item) => [item.id, item]));
         if (adminManual && transactionRole?.role === 'manager' && transactionRole.store !== 'all') {
@@ -674,7 +706,10 @@ export const createRentalGroup = onCall(callable(), async (request) => {
         }
         for (const accessory of input.accessories || []) {
             const item = inventoryById.get(accessory.itemId);
-            if (!item || !item.active || !canOfferRentalAddon(item) || item.itemType !== 'accessory') throw new HttpsError('failed-precondition', 'Uno de los accesorios ya no está disponible como complemento.');
+            if (!item || !isEligibleRentalAddon(item, combos)) throw new HttpsError('failed-precondition', 'Uno de los accesorios ya no está disponible como complemento.');
+            if (!hasConfiguredRentalAddonPrice(item)) throw new HttpsError('failed-precondition', `${item.name} necesita una tarifa de alquiler o estar marcado expresamente como gratuito.`);
+            try { accessoryUnitPrice(item, input.duration); }
+            catch { throw new HttpsError('failed-precondition', `${item.name} no tiene una tarifa configurada para la duración seleccionada.`); }
         }
 
         const rentalLines: Array<Record<string, unknown>> = [];
@@ -991,6 +1026,92 @@ function alterStock(item: CatalogItem, wheelSize: string | undefined, delta: num
     }
     return next;
 }
+
+export const adjustInventoryStock = onCall(callable(), async (request) => {
+    const { uid } = requireAuth(request);
+    if (!exactObject(request.data)) throw new HttpsError('invalid-argument', 'Ajuste de inventario inválido.');
+    const itemId = cleanString(request.data.itemId, 150);
+    const wheelSize = cleanString(request.data.wheelSize, 20) || undefined;
+    const delta = Number(request.data.delta);
+    if (!itemId || !Number.isInteger(delta) || delta === 0 || Math.abs(delta) > 500) {
+        throw new HttpsError('invalid-argument', 'Indica un cambio de stock entero distinto de cero.');
+    }
+    const roleRef = db.doc(`adminUsers/${uid}`);
+    const itemRef = db.doc(`inventory/${itemId}`);
+    const auditRef = db.collection('inventoryStockAudits').doc();
+    await db.runTransaction(async (tx) => {
+        const [roleSnap, itemSnap, rentalsSnap, inventorySnap, combosSnap] = await Promise.all([
+            tx.get(roleRef), tx.get(itemRef), tx.get(db.collection('rentals').where('status', 'in', ACTIVE_STATUSES)),
+            tx.get(db.collection('inventory')), tx.get(db.collection('combos')),
+        ]);
+        const role = roleSnap.data();
+        const item = itemSnap.data() as CatalogItem | undefined;
+        if (!roleSnap.exists || role?.active !== true || !['admin', 'manager'].includes(String(role.role))) {
+            throw new HttpsError('permission-denied', 'No tienes permiso para ajustar inventario.');
+        }
+        if (!itemSnap.exists || !item || item.active !== true) throw new HttpsError('not-found', 'No se encontró un artículo activo.');
+        if (role.role === 'manager' && role.store !== 'all' && item.store !== role.store) {
+            throw new HttpsError('permission-denied', 'El artículo pertenece a otra sucursal.');
+        }
+        if (item.hasWheelSizes && (!wheelSize || !item.wheelSizes?.some((wheel) => wheel.size === wheelSize))) {
+            throw new HttpsError('invalid-argument', 'Selecciona un aro válido para este artículo.');
+        }
+        if (!item.hasWheelSizes && wheelSize) throw new HttpsError('invalid-argument', 'Este artículo no tiene stock separado por aro.');
+        const currentStock = stockFor(item, wheelSize);
+        const nextStock = currentStock + delta;
+        if (nextStock < 0) throw new HttpsError('failed-precondition', 'El ajuste no puede dejar stock negativo.');
+
+        const inventory = inventorySnap.docs.map((snapshot) => ({ id: snapshot.id, ...snapshot.data() } as CatalogItem));
+        const combos = combosSnap.docs.map((snapshot) => ({ id: snapshot.id, ...snapshot.data() } as Combo));
+        const events: Array<{ time: number; delta: number }> = [];
+        const now = Date.now();
+        for (const snapshot of rentalsSnap.docs) {
+            const rental = normalizeLegacyRental(snapshot);
+            if (!rental) continue;
+            const matching = rentalDemands(rental, inventory, combos)
+                .filter((demand) => demand.itemId === itemId && (demand.wheelSize || '') === (wheelSize || ''))
+                .reduce((sum, demand) => sum + demand.quantity, 0);
+            if (!matching) continue;
+            const holding = isHolding(rental.status);
+            if (!isBlocking(rental.status)) continue;
+            const window = getRentalWindow(rental);
+            const effectiveEnd = holding && window.endMs < now && window.startMs <= now ? now + 1 : window.endMs;
+            if (effectiveEnd <= window.startMs) continue;
+            events.push({ time: window.startMs, delta: matching }, { time: effectiveEnd, delta: -matching });
+        }
+        events.sort((left, right) => left.time - right.time || left.delta - right.delta);
+        let active = 0;
+        let peakReserved = 0;
+        for (const event of events) {
+            active += event.delta;
+            peakReserved = Math.max(peakReserved, active);
+        }
+        if (peakReserved > nextStock) {
+            throw new HttpsError('failed-precondition', 'Ese retiro reduciría una reserva existente. No se modificó el inventario.');
+        }
+
+        const lockRef = db.doc(`_availabilityLocks/${resourceKey({ itemId, wheelSize, quantity: 1 })}`);
+        const lockSnap = await tx.get(lockRef);
+        const updated = alterStock(item, wheelSize, delta);
+        const wheelSizes = item.hasWheelSizes && item.wheelSizes
+            ? item.wheelSizes.map((wheel) => wheel.size === wheelSize
+                ? { ...wheel, stock: updated.wheelSizes?.find((entry) => entry.size === wheelSize)?.stock }
+                : wheel)
+            : undefined;
+        tx.update(itemRef, {
+            ...(wheelSizes ? { wheelSizes } : { stock: updated.stock }),
+            availabilityVersion: FieldValue.increment(1),
+        });
+        tx.set(lockRef, { revision: (Number(lockSnap.data()?.revision) || 0) + 1, updatedAt: Timestamp.now() });
+        tx.create(auditRef, {
+            itemId, store: item.store || (role.store === 'all' ? 'principal' : role.store), actorUid: uid,
+            action: 'stock_adjustment', source: 'combo_stock_manager',
+            resource: wheelSize ? { wheelSize } : null, before: currentStock, after: nextStock, delta,
+            createdAt: FieldValue.serverTimestamp(),
+        });
+    });
+    return { ok: true };
+});
 
 function appendRentalAudit(row: DocumentData, uid: string, action: string, before: unknown, after: unknown, now: string): Record<string, unknown> {
     const history = Array.isArray(row.auditLog) ? row.auditLog.slice(-49) : [];
@@ -1535,12 +1656,12 @@ export const createBrizMaintenanceOrder = onCall(callable(), async (request) => 
     const wheelSize = input.wheelSize === undefined ? '' : cleanString(input.wheelSize, 20);
     const entryDate = cleanString(input.maintenanceEntryDate, 10) || new Intl.DateTimeFormat('en-CA', { timeZone: 'America/La_Paz' }).format(new Date());
     const quantity = Number(input.quantity);
-    const customer = cleanString(input.customer, 120);
+    const customer = cleanString(input.customer, 120) || 'BRIZ';
     const phone = cleanString(input.phone, 40);
     const bikeType = cleanString(input.bikeType, 120);
     const issue = cleanString(input.issue, 1000);
     const estimatedDelivery = cleanString(input.estimatedDelivery, 20);
-    if (!itemId || !requestedStore || !customer || !issue || phone.replace(/\D/g, '').length < 7
+    if (!itemId || !requestedStore || !customer || !issue
         || !Number.isInteger(quantity) || quantity < 1 || !/^\d{4}-\d{2}-\d{2}$/.test(estimatedDelivery)
         || !/^\d{4}-\d{2}-\d{2}$/.test(entryDate)) {
         throw new HttpsError('invalid-argument', 'Completa bicicleta BRIZ, sucursal, cantidad, cliente, problema y fecha estimada.');

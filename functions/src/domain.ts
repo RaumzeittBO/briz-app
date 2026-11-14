@@ -5,6 +5,8 @@ export interface CatalogItem {
     active: boolean;
     availableForRental: boolean;
     availableAsRentalAddon?: boolean;
+    excludeFromRentalAddons?: boolean;
+    rentalAddonFree?: boolean;
     hasWheelSizes?: boolean;
     wheelSizes?: Array<{ size: string; stock: number; maintenanceStock?: number }>;
     stock?: number;
@@ -46,6 +48,22 @@ export interface Combo {
     price1Week?: number;
     price1Month?: number;
     store?: string;
+}
+
+/** One eligibility rule for active rental-catalog accessories and legacy combo parts. */
+export function isEligibleRentalAddon(item: CatalogItem, combos: Combo[] = []): boolean {
+    if (item.active !== true || item.itemType !== 'accessory' || item.excludeFromRentalAddons === true) return false;
+    if (item.availableForRental === true || item.availableAsRentalAddon === true) return true;
+    return combos.some((combo) => combo.active === true && combo.availableForRental === true
+        && combo.components.some((component) => component.inventoryItemId === item.id));
+}
+
+export function hasConfiguredRentalAddonPrice(item: CatalogItem): boolean {
+    if (item.rentalAddonFree === true) return true;
+    return [item.addonFlatPrice, item.price1Hour, item.price2Hours, item.price3Hours, item.price4Hours,
+        item.price8Hours, item.price24Hours, item.price1Week, item.price1Month, item.pricePerHour,
+        item.priceFrom5thHour, item.pricePerDay, item.pricePerWeek, item.pricePerMonth]
+        .some((value) => Number.isFinite(Number(value)) && Number(value) > 0);
 }
 
 export interface Demand {
@@ -118,25 +136,13 @@ export function calculatePrice(pricing: CatalogItem | Combo | undefined, duratio
     return Number.isFinite(unit) && unit >= 0 ? unit * quantity : 0;
 }
 
-export const DEFAULT_ACCESSORY_PRICES: Record<string, number> = {
-    acc_casco_adulto: 0,
-    acc_casco_nino: 0,
-    acc_portacelular: 0,
-    acc_linterna_bocina: 10,
-    acc_candado_seguridad: 10,
-    acc_chaleco_seguridad: 10,
-    acc_remolque_mascotas: 40,
-    acc_canasta_plastica: 15,
-    acc_canasta_metalica: 15,
-    acc_silla_bebe: 25,
-    acc_parrilla: 15,
-};
-
 export function accessoryUnitPrice(item: CatalogItem, duration: string): number {
+    if (item.rentalAddonFree === true) return 0;
     if (typeof item.addonFlatPrice === 'number' && item.addonFlatPrice > 0) return item.addonFlatPrice;
-    const configured = [item.price1Hour, item.price24Hours, item.pricePerHour, item.pricePerDay].some(value => Number(value || 0) > 0);
-    if (configured) return calculatePrice(item, duration, 1);
-    return DEFAULT_ACCESSORY_PRICES[item.id] ?? Math.max(0, item.pricePerDay || item.pricePerHour || 0);
+    if (!hasConfiguredRentalAddonPrice(item)) throw new Error('Este accesorio necesita una tarifa de alquiler o estar marcado expresamente como gratuito.');
+    const price = calculatePrice(item, duration, 1);
+    if (price <= 0) throw new Error('Configura una tarifa para la duración seleccionada o marca el accesorio como gratuito.');
+    return price;
 }
 
 export function parseDateTime(date: string, time: string): number {

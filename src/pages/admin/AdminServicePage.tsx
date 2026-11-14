@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -22,12 +23,14 @@ const statusColors: Record<string, string> = {
 
 export default function AdminServicePage() {
     const { serviceOrders, inventory, adminStoreScope, addServiceOrder, updateServiceOrder, deleteServiceOrder, releaseMaintenanceOrder } = useStore();
+    const navigate = useNavigate();
+    const [searchParams, setSearchParams] = useSearchParams();
 
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isEditing, setIsEditing] = useState(false);
 
     // Initial State for a new Service Order
-    const initialState: Partial<ServiceOrder> = {
+    const initialState = useMemo<Partial<ServiceOrder>>(() => ({
         customer: '',
         phone: '',
         bikeType: '',
@@ -39,7 +42,7 @@ export default function AdminServicePage() {
         notes: '',
         ownership: 'customer',
         quantity: 1,
-    };
+    }), []);
 
     const [currentOrder, setCurrentOrder] = useState<Partial<ServiceOrder>>(initialState);
     const [receiptOrder, setReceiptOrder] = useState<ServiceOrder | null>(null);
@@ -50,6 +53,32 @@ export default function AdminServicePage() {
         const values = [...new Set(rentalBikes.map(item => item.store).filter((store): store is string => Boolean(store)))];
         return values.length ? values : ['principal'];
     }, [rentalBikes]);
+    const brizMaintenanceOrders = useMemo(() => serviceOrders.filter(order => order.ownership === 'briz' && !order.inventoryReleased), [serviceOrders]);
+    const visibleServiceOrders = searchParams.get('scope') === 'briz'
+        ? serviceOrders.filter(order => order.ownership === 'briz')
+        : serviceOrders;
+
+    useEffect(() => {
+        if (searchParams.get('new') !== 'briz') return;
+        const itemId = searchParams.get('inventoryItemId') || '';
+        const bike = rentalBikes.find(item => item.id === itemId);
+        if (!bike) return;
+        const requestedStore = searchParams.get('store') || bike.store || (adminStoreScope !== 'all' ? adminStoreScope : '');
+        setCurrentOrder({
+            ...initialState,
+            ownership: 'briz',
+            customer: 'BRIZ',
+            bikeType: bike.name,
+            inventoryItemId: bike.id,
+            store: requestedStore,
+            wheelSize: searchParams.get('wheelSize') || bike.wheelSizes?.[0]?.size,
+            quantity: 1,
+        });
+        setIsEditing(false);
+        setActionError('');
+        setIsModalOpen(true);
+        setSearchParams(searchParams.get('scope') === 'briz' ? { scope: 'briz' } : {}, { replace: true });
+    }, [searchParams, rentalBikes, adminStoreScope, setSearchParams, initialState]);
 
     const handleOpenModal = (order?: ServiceOrder) => {
         setActionError('');
@@ -126,6 +155,19 @@ export default function AdminServicePage() {
                 </Button>
             </div>
 
+            <div className="flex flex-col gap-3 rounded-2xl border border-amber-400/20 bg-amber-400/5 p-4 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                    <p className="font-black text-white">Bicicletas BRIZ en taller</p>
+                    <p className="text-sm text-white/55">{brizMaintenanceOrders.reduce((sum, order) => sum + Number(order.maintenanceQuantity || order.quantity || 1), 0)} unidad(es) apartadas de la flota. Las órdenes de bicicletas particulares no afectan el inventario.</p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                    <Button type="button" variant="outline" onClick={() => setSearchParams({ scope: searchParams.get('scope') === 'briz' ? 'all' : 'briz' })} className="border-amber-300/30 text-amber-100 hover:bg-amber-300/10">
+                        {searchParams.get('scope') === 'briz' ? 'Ver todas las órdenes' : 'Bicicletas en taller'}
+                    </Button>
+                    <Button type="button" variant="outline" onClick={() => navigate('/admin/inventory')} className="border-white/15 text-white hover:bg-white/10">Ir a Inventario</Button>
+                </div>
+            </div>
+
             {actionError && <p role="alert" className="rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm font-bold text-red-300">{actionError}</p>}
             <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
                 {statusPipeline.map(status => {
@@ -158,14 +200,14 @@ export default function AdminServicePage() {
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
-                                {serviceOrders.length === 0 ? (
+                                {visibleServiceOrders.length === 0 ? (
                                     <TableRow>
                                         <TableCell colSpan={6} className="py-20 text-center text-white/40 font-medium">
                                             No hay órdenes de servicio activas.
                                         </TableCell>
                                     </TableRow>
                                 ) : (
-                                    serviceOrders.map(so => (
+                                    visibleServiceOrders.map(so => (
                                         <TableRow key={so.id} className="border-white/5 hover:bg-white/5 transition-colors group">
                                             <TableCell className="pl-6 py-4">
                                                 <div className="flex flex-col">
@@ -263,7 +305,10 @@ export default function AdminServicePage() {
                     <form onSubmit={handleSave} className="p-6 space-y-6 max-h-[70vh] overflow-y-auto">
                         {!isEditing && <div className="rounded-2xl border border-brand-yellow/20 bg-brand-yellow/5 p-4 space-y-3">
                             <Label className="text-brand-yellow font-black uppercase tracking-widest text-xs">Tipo de bicicleta recibida</Label>
-                            <select value={currentOrder.ownership || 'customer'} onChange={e => setCurrentOrder({ ...currentOrder, ownership: e.target.value as ServiceOrder['ownership'], inventoryItemId: undefined, wheelSize: undefined, quantity: 1 })} className="w-full bg-black/40 border border-white/10 rounded-xl h-11 px-3 text-white">
+                            <select value={currentOrder.ownership || 'customer'} onChange={e => {
+                                const ownership = e.target.value as ServiceOrder['ownership'];
+                                setCurrentOrder({ ...currentOrder, ownership, customer: ownership === 'briz' ? 'BRIZ' : '', inventoryItemId: undefined, wheelSize: undefined, quantity: 1 });
+                            }} className="w-full bg-black/40 border border-white/10 rounded-xl h-11 px-3 text-white">
                                 <option value="customer" className="bg-brand-charcoal">Bicicleta particular de cliente (no modifica flota)</option>
                                 <option value="briz" className="bg-brand-charcoal">Bicicleta perteneciente a BRIZ (retira stock disponible)</option>
                             </select>
@@ -314,7 +359,7 @@ export default function AdminServicePage() {
 
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                             {/* Customer Info */}
-                            <div className="space-y-4">
+                            {currentOrder.ownership !== 'briz' && <div className="space-y-4">
                                 <div className="flex items-center gap-2 border-b border-white/10 pb-2 mb-4">
                                     <h3 className="text-white/80 font-semibold uppercase tracking-wider text-sm">Info del Cliente</h3>
                                 </div>
@@ -338,7 +383,7 @@ export default function AdminServicePage() {
                                         required
                                     />
                                 </div>
-                            </div>
+                            </div>}
 
                             {/* Service Details */}
                             <div className="space-y-4">

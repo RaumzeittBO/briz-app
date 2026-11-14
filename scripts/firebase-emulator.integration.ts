@@ -62,6 +62,7 @@ try {
         name: 'Rider A', phone: '+59170000001', ci: 'TEST-1001',
     });
     assert.equal(beginProfile.verificationRequired, true);
+    await adminDb.doc(`pendingCustomerRegistrations/${userA.uid}`).update({ expiresAt: Date.now() - 1 });
     await assert.rejects(() => call(userA.functions, 'createCustomerProfile'), /verify|verifica/i);
     await verifyEmail(userA.auth, userA.uid);
     const createdProfile = await call<{ profile: { authUid: string; email: string } }>(userA.functions, 'createCustomerProfile');
@@ -132,6 +133,11 @@ try {
         availableForRental: true, hasWheelSizes: false, stock: 1,
         pricePerHour: 15, price1Hour: 15, price24Hours: 50, pricePerDay: 50,
     });
+    const everyDay = { closed: false, open: '08:00', close: '12:00', secondShift: { open: '13:00', close: '19:30' } };
+    await adminDb.doc('settings/public_business').set({ hours: {
+        monday: everyDay, tuesday: everyDay, wednesday: everyDay, thursday: everyDay,
+        friday: everyDay, saturday: everyDay, sunday: everyDay,
+    } }, { merge: true });
     await adminDb.collection('combos').doc('combo-emulator').set({
         id: 'combo-emulator', name: 'Emulator Combo', active: true, availableForRental: true,
         components: [
@@ -140,6 +146,19 @@ try {
         ],
         pricePerHour: 30, price1Hour: 30, price24Hours: 90, pricePerDay: 90,
     });
+    const stockWindowDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/La_Paz' }).format(new Date(Date.now() + 100 * 24 * 60 * 60 * 1000));
+    const inventoryBeforeStockAdjustment = (await adminDb.collection('inventory').get()).docs.map((snapshot) => ({ id: snapshot.id, ...snapshot.data() })) as unknown as InventoryItem[];
+    const combosBeforeStockAdjustment = (await adminDb.collection('combos').get()).docs.map((snapshot) => ({ id: snapshot.id, ...snapshot.data() })) as unknown as ComboProduct[];
+    const capacityBeforeStockAdjustment = getComboAvailabilityForInterval({ inventory: inventoryBeforeStockAdjustment, combos: combosBeforeStockAdjustment, rentals: [], comboId: 'combo-emulator', wheelSize: '26', date: stockWindowDate, pickupTime: '10:00', duration: '1 hora' });
+    await call(userA.functions, 'adjustInventoryStock', { itemId: 'bike-emulator', wheelSize: '26', delta: 2 });
+    const inventoryAfterStockAdjustment = (await adminDb.collection('inventory').get()).docs.map((snapshot) => ({ id: snapshot.id, ...snapshot.data() })) as unknown as InventoryItem[];
+    const capacityAfterStockAdjustment = getComboAvailabilityForInterval({ inventory: inventoryAfterStockAdjustment, combos: combosBeforeStockAdjustment, rentals: [], comboId: 'combo-emulator', wheelSize: '26', date: stockWindowDate, pickupTime: '10:00', duration: '1 hora' });
+    assert.equal(capacityBeforeStockAdjustment, 2);
+    assert.equal(capacityAfterStockAdjustment, 3, 'Combo capacity recalculates from the adjusted physical bicycle stock');
+    await call(userA.functions, 'adjustInventoryStock', { itemId: 'bike-emulator', wheelSize: '26', delta: -2 });
+    const stockAdjustmentAudits = await adminDb.collection('inventoryStockAudits').where('itemId', '==', 'bike-emulator').where('source', '==', 'combo_stock_manager').get();
+    assert.equal(stockAdjustmentAudits.size, 2, 'Both physical stock adjustments have audit rows');
+    pass('Combo stock manager adjusts physical component stock atomically, audits both changes, and recalculates capacity');
     pass('Emulator catalog seeded with fictional inventory only');
 
     const key = `request_${crypto.randomUUID()}`;
@@ -153,6 +172,21 @@ try {
     const first = await call<{ reservationCode: string; total: number; duplicate: boolean }>(userA.functions, 'createRentalGroup', booking);
     assert.equal(first.total, 27, 'Server uses current catalog rates and ignores submitted total.');
     assert.equal(first.duplicate, false);
+    await assert.rejects(() => call(userA.functions, 'adjustInventoryStock', { itemId: 'bike-emulator', wheelSize: '26', delta: -2 }), /reserva|inventario|stock/i, 'Stock manager must protect an existing reservation');
+    assert.equal((await adminDb.collection('inventory').doc('bike-emulator').get()).get('wheelSizes')[0].stock, 2, 'Rejected stock reduction leaves physical stock unchanged');
+    pass('Combo stock manager rejects a reduction that would violate a committed reservation');
+    const scheduleDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/La_Paz' }).format(new Date(Date.now() + 60 * 24 * 60 * 60 * 1000));
+    await call(userA.functions, 'createRentalGroup', {
+        idempotencyKey: `close_exact_${crypto.randomUUID()}`,
+        lines: [{ productId: 'bike-emulator', productType: 'single', quantity: 1, wheelSize: '27' }],
+        date: scheduleDate, pickupTime: '17:30', endTime: '19:30', duration: '2 horas', paymentMethod: 'QR',
+    });
+    await assert.rejects(() => call(userA.functions, 'createRentalGroup', {
+        idempotencyKey: `after_close_${crypto.randomUUID()}`,
+        lines: [{ productId: 'bike-emulator', productType: 'single', quantity: 1, wheelSize: '27' }],
+        date: scheduleDate, pickupTime: '18:00', endTime: '21:00', duration: '3 horas', paymentMethod: 'QR',
+    }), /horario|19:30/i, 'Callable must reject a manipulated booking that returns after closing.');
+    pass('Rental callable validates public business hours and allows return exactly at configured close');
     const retry = await call<{ reservationCode: string; total: number; duplicate: boolean }>(userA.functions, 'createRentalGroup', booking);
     assert.equal(retry.reservationCode, first.reservationCode);
     assert.equal(retry.duplicate, true);
@@ -182,6 +216,7 @@ try {
         date: comboDate,
         pickupTime: '14:00', duration: '1 hora', paymentMethod: 'QR',
     };
+    await adminDb.collection('inventory').doc('acc-emulator').update({ availableAsRentalAddon: false });
     const comboResult = await call<{ reservationCode: string; total: number }>(userA.functions, 'createRentalGroup', comboBooking);
     assert.equal(comboResult.total, 30);
     const comboDoc = await adminDb.collection('rentals').where('reservationCode', '==', comboResult.reservationCode).get();
@@ -196,6 +231,14 @@ try {
         accessories: [{ itemId: 'acc-emulator', quantity: 1 }],
     });
     assert.equal(comboWithAccessory.total, 37);
+    await adminDb.collection('inventory').doc('acc-emulator').update({ excludeFromRentalAddons: true });
+    await adminDb.doc(`_requestLimits/reservations_${createHash('sha256').update(userA.uid).digest('hex')}`).delete();
+    await assert.rejects(() => call(userA.functions, 'createRentalGroup', {
+        ...comboBooking, idempotencyKey: `excluded_addon_${crypto.randomUUID()}`,
+        lines: [{ productId: 'bike-race-emulator', productType: 'single', quantity: 1 }],
+        accessories: [{ itemId: 'acc-emulator', quantity: 1 }],
+    }), /complemento|disponible/i, 'Explicit admin exclusion is honored by the server.');
+    await adminDb.collection('inventory').doc('acc-emulator').update({ excludeFromRentalAddons: false });
     await assert.rejects(() => call(userA.functions, 'createRentalGroup', {
         idempotencyKey: `shared_${crypto.randomUUID()}`,
         lines: [{ productId: 'combo-emulator', productType: 'combo', quantity: 1, wheelSize: '26' }],
@@ -243,7 +286,7 @@ try {
         pickupTime: '14:00', duration: '1 hora', paymentMethod: 'QR',
     });
     assert.equal(addOnOnlyBooking.total, 20, 'An accessory can be a booking add-on while individual rental is disabled.');
-    await adminDb.collection('inventory').doc('acc-addon-only-emulator').update({ availableAsRentalAddon: false });
+    await adminDb.collection('inventory').doc('acc-addon-only-emulator').update({ excludeFromRentalAddons: true });
     await adminDb.doc(`_requestLimits/reservations_${createHash('sha256').update(userA.uid).digest('hex')}`).delete();
     await assert.rejects(() => call(userA.functions, 'createRentalGroup', {
         idempotencyKey: `addon_disabled_${crypto.randomUUID()}`,
@@ -252,7 +295,7 @@ try {
         date: new Intl.DateTimeFormat('en-CA', { timeZone: 'America/La_Paz' }).format(new Date(Date.now() + 36 * 24 * 60 * 60 * 1000)),
         pickupTime: '14:00', duration: '1 hora', paymentMethod: 'QR',
     }), /complemento|disponible/i, 'Server rejects accessories disabled as add-ons.');
-    pass('Add-on-only accessory can be selected without individual rental permission; server rejects add-ons disabled by admin');
+    pass('Add-on-only legacy accessory remains supported; server honors explicit add-on exclusion');
 
     await adminDb.collection('inventory').doc('maintenance-bike-emulator').set({
         id: 'maintenance-bike-emulator', itemType: 'bike', name: 'Maintenance Fleet Bike', active: true,
@@ -512,8 +555,16 @@ try {
 
     const userB = await client('rider-b@example.test', 'TestPass#123');
     await call(userB.functions, 'beginCustomerRegistration', { name: 'Rider B', phone: '+59170000002', ci: 'TEST-1002' });
+    await assert.rejects(() => call(userB.functions, 'completeCustomerProfile', { phone: '+59170000002' }), /verify|verifica/i);
     await verifyEmail(userB.auth, userB.uid);
     await call(userB.functions, 'createCustomerProfile');
+    await adminDb.collection('customerProfiles').doc(userB.uid).update({ phone: '' });
+    await adminDb.collection('customers').doc(userB.uid).update({ phone: '' });
+    await adminDb.collection('customerPrivate').doc(userB.uid).set({ autofotoPath: `customerUploads/${userB.uid}/selfie.jpg` }, { merge: true });
+    const completion = await call<{ profile: { name: string; phone: string; ci: string } }>(userB.functions, 'completeCustomerProfile', { name: 'Malicious overwrite', phone: '+59170000002' });
+    assert.deepEqual({ name: completion.profile.name, phone: completion.profile.phone, ci: completion.profile.ci }, { name: 'Rider B', phone: '+59170000002', ci: 'TEST-1002' }, 'Profile completion fills only missing values and preserves existing values.');
+    assert.equal((await adminDb.collection('customerPrivate').doc(userB.uid).get()).get('autofotoPath'), `customerUploads/${userB.uid}/selfie.jpg`, 'Profile completion leaves private file associations intact.');
+    pass('Verified customer profile completion fills only missing fields and preserves private files');
     await adminDb.collection('customers').doc(userB.uid).update({ store: 'shop-b' });
     await adminDb.collection('adminUsers').doc(userB.uid).set({ uid: userB.uid, role: 'manager', active: true, store: 'shop-b' });
     const raceDate = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000);

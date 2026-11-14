@@ -99,15 +99,16 @@ async function runTests() {
         assert.equal(parseDurationToHours('1 mes'), 720);
     });
 
-    await test('Tarifas de accesorios reales de inventario (addonFlatPrice y defaults)', () => {
+    await test('Tarifas explícitas de accesorios, sin regalos implícitos', () => {
         const casco = RENTAL_SEED_ACCESSORIES.find(a => a.id === 'acc_casco_adulto')!;
         const linterna = RENTAL_SEED_ACCESSORIES.find(a => a.id === 'acc_linterna_bocina')!;
-        assert.equal(getAccessoryAddonUnitPrice(casco, '2 horas'), 0);
-        assert.equal(getAccessoryAddonUnitPrice(linterna, '2 horas'), 10);
+        assert.equal(getAccessoryAddonUnitPrice(casco, '2 horas'), null);
+        assert.equal(getAccessoryAddonUnitPrice(linterna, '2 horas'), null);
+        assert.equal(getAccessoryAddonUnitPrice({ ...casco, rentalAddonFree: true }, '2 horas'), 0);
         const customAcc = { ...casco, addonFlatPrice: 12 };
         assert.equal(getAccessoryAddonUnitPrice(customAcc, '2 horas'), 12);
         assert.equal(calculateProductRentalPrice(customAcc, '2 horas'), 12, 'El precio fijo debe coincidir en la ficha y en el extra');
-        assert.equal(getAccessoryAddonUnitPrice({ ...linterna, addonFlatPrice: 0 }, '2 horas'), 10, 'Cero debe usar la tarifa configurada, según la ayuda de Admin');
+        assert.equal(getAccessoryAddonUnitPrice({ ...linterna, addonFlatPrice: 0, price2Hours: 8 }, '2 horas'), 8, 'Cero fijo usa la tarifa explícita por duración');
     });
 
     // 2. AVAILABILITY BY TIME INTERVALS & COMBOS
