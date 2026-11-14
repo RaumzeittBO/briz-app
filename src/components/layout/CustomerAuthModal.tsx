@@ -401,7 +401,7 @@ export default function CustomerAuthModal({ isOpen, onClose, onSuccess }: Custom
         setSuccessMessage(null);
         setLoading(true);
         try {
-            const result = await resendCustomerVerification(email, password || undefined);
+            const result = await resendCustomerVerification(email, password || undefined, language);
             setVerificationPending(false);
             setSuccessMessage(result === 'sent'
                 ? (language === 'es'
@@ -439,7 +439,7 @@ export default function CustomerAuthModal({ isOpen, onClose, onSuccess }: Custom
         if (clockNow < resendAvailableAt) return;
         setError(null); setSuccessMessage(null); setLoading(true);
         try {
-            const result = await resendCustomerVerification(verificationEmail, verificationPassword || undefined);
+            const result = await resendCustomerVerification(verificationEmail, verificationPassword || undefined, language);
             if (result === 'verified') { await handleVerificationCheck(); return; }
             const sentAt = Date.now();
             localStorage.setItem(`briz_verify_sent_${verificationEmail.toLowerCase()}`, String(sentAt));
@@ -514,7 +514,7 @@ export default function CustomerAuthModal({ isOpen, onClose, onSuccess }: Custom
                 comoNosConociste: referral
             };
 
-            const result = await registerCustomer(customerData, selfieBlob, docFileAnverso, docFileReverso, remember);
+            const result = await registerCustomer(customerData, selfieBlob, docFileAnverso, docFileReverso, remember, language);
             const cleanEmail = email.trim().toLowerCase();
             setVerificationEmail(cleanEmail);
             localStorage.setItem('briz_customer_verification_email', cleanEmail);
@@ -529,9 +529,9 @@ export default function CustomerAuthModal({ isOpen, onClose, onSuccess }: Custom
             } else {
                 setError(language === 'es' ? 'La cuenta se creó, pero no se pudo enviar el correo. Revisa tu conexión y pulsa “Reenviar correo”.' : 'Your account was created, but the email could not be sent. Check your connection and choose “Resend email”.');
             }
-        } catch (err: any) {
+        } catch (err: unknown) {
             console.error(err);
-            setError(err.message || "No se pudo registrar tu usuario. Verifica si el correo ya está registrado.");
+            setError(err instanceof Error ? err.message : "No se pudo registrar tu usuario. Verifica si el correo ya está registrado.");
         } finally {
             setLoading(false);
         }
