@@ -32,7 +32,7 @@ import {
 import { auth, db, storage } from '../lib/firebase';
 import { runAdminRentalAction, updateRentalGroup, recordRentalPaymentMovement as recordRentalPaymentBackend, type RecordRentalPaymentMovementInput } from '../lib/backend';
 import type { RentalPaymentMovement } from '../lib/rentalReportMoney';
-import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { ref as storageRef, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import { cyclingRoutes as DEFAULT_ROUTES, type CyclingRoute } from '../data/mockData';
 import {
     RENTAL_SEED_CATEGORIES,
@@ -43,13 +43,15 @@ import { SHOP_SEED_CATEGORIES } from '../data/shopSeedData';
 import { DEFAULT_PUBLIC_BUSINESS_CONFIG, mergePublicBusinessConfig, type PublicBusinessConfig, type PublicBusinessConfigUpdate } from '../lib/businessConfig';
 import { savePublicBusinessConfig } from '../lib/publicBusinessSettings';
 import { addInventoryCategory } from '../lib/inventoryCategories';
-import { beginCustomerRegistration, createCustomerProfile as createCustomerProfileBackend, completeCustomerProfile as completeCustomerProfileBackend, getMyRentals as getMyRentalsBackend, getAdminCustomers as getAdminCustomersBackend, createRentalGroup as createRentalGroupBackend, createServiceOrder as createServiceOrderBackend, createBrizMaintenanceOrder, updateBrizMaintenanceOrder, releaseBrizMaintenanceOrder, releaseUnlinkedMaintenanceStock as releaseUnlinkedMaintenanceStockBackend, adjustInventoryStock as adjustInventoryStockBackend, type ReservationGroupInput } from '../lib/backend';
+import { beginCustomerRegistration, createCustomerProfile as createCustomerProfileBackend, completeCustomerProfile as completeCustomerProfileBackend, getMyRentals as getMyRentalsBackend, getAdminCustomers as getAdminCustomersBackend, createRentalGroup as createRentalGroupBackend, createServiceOrder as createServiceOrderBackend, createBrizMaintenanceOrder, updateBrizMaintenanceOrder, releaseBrizMaintenanceOrder, releaseUnlinkedMaintenanceStock as releaseUnlinkedMaintenanceStockBackend, adjustInventoryStock as adjustInventoryStockBackend, type CustomerRecoveryFiles, type PublicCustomerProfile, type ReservationGroupInput } from '../lib/backend';
 import { calculateProductRentalPrice } from '../lib/rentalPricing';
 
 const CUSTOMER_VERIFICATION_EMAIL_KEY = 'briz_customer_verification_email';
 
 function customerVerificationActionSettings() {
-    return { url: new URL('/verify-email', window.location.origin).toString() };
+    // ActionCodeSettings.url is the safe continuation destination. Firebase's
+    // email-template action URL separately selects the published custom handler.
+    return { url: new URL('/rentals', window.location.origin).toString() };
 }
 
 import {
@@ -86,6 +88,8 @@ export interface InventoryItem {
     availableForRental: boolean;
     /** Legacy opt-in retained for older catalog documents. */
     availableAsRentalAddon?: boolean;
+    /** Explicit membership in the rental inventory; absent legacy values are inferred safely. */
+    rentalCatalog?: boolean;
     excludeFromRentalAddons?: boolean;
     rentalAddonFree?: boolean;
     availableForSale: boolean;
@@ -186,6 +190,7 @@ export interface Rental {
     autofotoUrl?: string;
     documentoUrl?: string;
     documentoReversoUrl?: string;
+    missingPrivateFiles?: Array<'autofoto' | 'documento' | 'documentoReverso'>;
 
     productType: 'single' | 'combo';
     productId: string;
@@ -285,6 +290,7 @@ export interface Customer {
     autofotoUrl?: string;
     documentoUrl?: string;
     documentoReversoUrl?: string;
+    missingPrivateFiles?: Array<'autofoto' | 'documento' | 'documentoReverso'>;
     store?: string;
 }
 
@@ -471,7 +477,7 @@ interface StoreContextType {
     resendCustomerVerification: (email: string, password?: string) => Promise<'sent' | 'verified'>;
     refreshCustomerVerification: () => Promise<Customer | null>;
     changeCustomerVerificationEmail: (newEmail: string, password: string) => Promise<void>;
-    completeCustomerProfile: (fields: { name?: string; phone?: string; ci?: string }) => Promise<Customer>;
+    completeCustomerProfile: (fields: { name?: string; phone?: string; ci?: string; privateFiles?: CustomerRecoveryFiles }) => Promise<Customer>;
     registerCustomer: (
         customerData: Omit<Customer, 'id' | 'rentalsCount' | 'purchasesCount' | 'firstVisit' | 'lastVisit' | 'notes'>,
         selfieBlob: Blob | null,
@@ -492,11 +498,13 @@ function customerFromPublicProfile(profile: {
     id: string; email: string; name: string; phone: string; ci: string;
     nacionalidad?: string; departamento?: string; comoNosConociste?: string;
     rentalsCount?: number; purchasesCount?: number;
+    missingPrivateFiles?: PublicCustomerProfile['missingPrivateFiles'];
 }): Customer {
     return {
         id: profile.id, email: profile.email, name: profile.name, phone: profile.phone, ci: profile.ci,
         nacionalidad: profile.nacionalidad, departamento: profile.departamento,
         comoNosConociste: profile.comoNosConociste,
+        missingPrivateFiles: profile.missingPrivateFiles || [],
         rentalsCount: Number(profile.rentalsCount) || 0,
         purchasesCount: Number(profile.purchasesCount) || 0,
         firstVisit: '', lastVisit: '', notes: '',
@@ -602,6 +610,9 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
                             phone: String(profile.phone || ''),
                             ci: String(profile.ci || ''),
                             email: String(profile.email || fbUser.email || ''),
+                            missingPrivateFiles: Array.isArray(profile.missingPrivateFiles)
+                                ? profile.missingPrivateFiles.filter((kind: unknown): kind is 'autofoto' | 'documento' | 'documentoReverso' => ['autofoto', 'documento', 'documentoReverso'].includes(String(kind)))
+                                : [],
                             nacionalidad: String(profile.nacionalidad || ''),
                             departamento: String(profile.departamento || ''),
                             comoNosConociste: String(profile.comoNosConociste || ''),
@@ -1019,18 +1030,40 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
         localStorage.setItem(CUSTOMER_VERIFICATION_EMAIL_KEY, cleanEmail);
     };
 
-    const completeCustomerProfile = async (fields: { name?: string; phone?: string; ci?: string }): Promise<Customer> => {
-        const profile = await completeCustomerProfileBackend(fields);
-        const customer = customerFromPublicProfile(profile);
-        setCurrentCustomer(customer);
-        return customer;
+    const completeCustomerProfile = async (fields: { name?: string; phone?: string; ci?: string; privateFiles?: CustomerRecoveryFiles }): Promise<Customer> => {
+        const user = auth.currentUser;
+        if (!user?.emailVerified) throw new Error('Confirma tu correo antes de completar el perfil.');
+        const privateFiles: Partial<Record<'autofoto' | 'documento' | 'documentoReverso', string>> = {};
+        const uploadedPaths: string[] = [];
+        const { privateFiles: requestedFiles, ...profileFields } = fields;
+        try {
+            for (const [kind, file] of Object.entries(requestedFiles || {}) as Array<[keyof CustomerRecoveryFiles, File | undefined]>) {
+                if (!file) continue;
+                const category = kind === 'autofoto' ? 'image' : 'document';
+                if (file.size <= 0 || file.size >= 10 * 1024 * 1024 || !(file.type.startsWith('image/') || category === 'document' && file.type === 'application/pdf')) {
+                    throw new Error('Cada archivo debe ser una imagen o PDF válido de menos de 10 MB.');
+                }
+                const extension = fileExtension(file);
+                const path = `customerUploads/${user.uid}/recovery-${kind}-${crypto.randomUUID()}.${extension}`;
+                await uploadBytes(storageRef(storage, path), file, { contentType: file.type });
+                uploadedPaths.push(path);
+                privateFiles[kind] = path;
+            }
+            const profile = await completeCustomerProfileBackend({ ...profileFields, ...(Object.keys(privateFiles).length ? { privateFiles } : {}) });
+            const customer = customerFromPublicProfile(profile);
+            setCurrentCustomer(customer);
+            return customer;
+        } catch (error) {
+            await Promise.all(uploadedPaths.map(path => deleteObject(storageRef(storage, path)).catch(() => undefined)));
+            throw error;
+        }
     };
 
     const verifyCustomerRecovery = async (email: string): Promise<boolean> => {
         const cleanEmail = email.toLowerCase().trim();
         if (!cleanEmail) return false;
         // Firebase applies abuse controls and does not reveal whether an address has an account.
-        await sendPasswordResetEmail(auth, cleanEmail).catch(() => undefined);
+        await sendPasswordResetEmail(auth, cleanEmail, customerVerificationActionSettings()).catch(() => undefined);
         return true;
     };
 

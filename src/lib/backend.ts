@@ -15,6 +15,13 @@ export interface PublicCustomerProfile {
     purchasesCount?: number;
     legacyCustomerId?: string;
     autofotoPath?: string;
+    missingPrivateFiles?: Array<'autofoto' | 'documento' | 'documentoReverso'>;
+}
+
+export interface CustomerRecoveryFiles {
+    autofoto?: File | null;
+    documento?: File | null;
+    documentoReverso?: File | null;
 }
 
 export interface ReservationGroupInput {
@@ -46,7 +53,7 @@ export async function createCustomerProfile(): Promise<PublicCustomerProfile> {
     return result.data.profile;
 }
 
-export async function completeCustomerProfile(input: { name?: string; phone?: string; ci?: string }): Promise<PublicCustomerProfile> {
+export async function completeCustomerProfile(input: { name?: string; phone?: string; ci?: string; privateFiles?: Partial<Record<'autofoto' | 'documento' | 'documentoReverso', string>> }): Promise<PublicCustomerProfile> {
     const result = await httpsCallable<typeof input, { profile: PublicCustomerProfile }>(functions, 'completeCustomerProfile')(input);
     return result.data.profile;
 }

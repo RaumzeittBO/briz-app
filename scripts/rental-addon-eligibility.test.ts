@@ -4,15 +4,29 @@ import { isEligibleRentalAddon as isEligibleClientAddon } from '../src/lib/renta
 import { getAccessoryAddonUnitPrice } from '../src/lib/rentalPricing';
 
 const rentalCombo = { id: 'combo-family', active: true, availableForRental: true, components: [{ inventoryItemId: 'basket' }] };
-const saleOnly = { id: 'sale-only', itemType: 'accessory' as const, name: 'Sale only', active: true, availableForRental: false };
-const legacyCatalog = { ...saleOnly, id: 'legacy-catalog', availableForRental: true, availableAsRentalAddon: false };
-const comboPart = { ...saleOnly, id: 'basket' };
+const saleOnly = { id: 'sale-only', itemType: 'accessory' as const, name: 'Sale only', active: true, availableForRental: false, availableForSale: true };
+const legacyCatalog = { ...saleOnly, id: 'legacy-catalog', availableForRental: true, availableAsRentalAddon: false, availableForSale: false };
+const rentalCatalogWithoutLegacyFlags = { ...saleOnly, id: 'rental-catalog-no-flags', availableForRental: false, availableAsRentalAddon: false, availableForSale: false, rentalCatalog: true };
+const legacyUnspecifiedCatalog = { ...saleOnly, id: 'legacy-unspecified-catalog', availableForRental: false, availableAsRentalAddon: false, availableForSale: false };
+const unclassifiedSaleStatus = { ...saleOnly, id: 'unknown-sale-status', availableForRental: false, availableAsRentalAddon: false, availableForSale: undefined };
+const comboPart = { ...saleOnly, id: 'basket', availableForSale: false };
 const excluded = { ...legacyCatalog, id: 'excluded', excludeFromRentalAddons: true };
 const inactive = { ...legacyCatalog, id: 'inactive', active: false };
+const explicitSaleOnly = { ...rentalCatalogWithoutLegacyFlags, id: 'explicit-sale-only', rentalCatalog: false };
 
-for (const [item, expected] of [[legacyCatalog, true], [saleOnly, false], [comboPart, true], [excluded, false], [inactive, false]] as const) {
-  assert.equal(isEligibleClientAddon(item, [rentalCombo]), expected, `${item.id}: frontend eligibility`);
-  assert.equal(isEligibleServerAddon(item, [rentalCombo]), expected, `${item.id}: backend eligibility`);
+for (const [item, combos, expected] of [
+  [legacyCatalog, [], true],
+  [rentalCatalogWithoutLegacyFlags, [], true],
+  [legacyUnspecifiedCatalog, [], true],
+  [unclassifiedSaleStatus, [], false],
+  [saleOnly, [], false],
+  [explicitSaleOnly, [rentalCombo], false],
+  [comboPart, [rentalCombo], true],
+  [excluded, [rentalCombo], false],
+  [inactive, [rentalCombo], false],
+] as const) {
+  assert.equal(isEligibleClientAddon(item, combos), expected, `${item.id}: frontend eligibility`);
+  assert.equal(isEligibleServerAddon(item, combos), expected, `${item.id}: backend eligibility`);
 }
 
 const missingRate = { ...legacyCatalog, id: 'basket', price1Hour: 0, price24Hours: 0 };

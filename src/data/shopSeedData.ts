@@ -20,7 +20,7 @@ function bike(name: string, category: string, stock: number, salePrice: number, 
 function accessory(name: string, category: string, stock: number, salePrice: number, description = '', details = ''): InventoryItem {
   return {
     id: `shop_accessory_${slug(name)}`, itemType: 'accessory', name, category, description, details, imageUrl: '', active: true,
-    availableForRental: false, availableForSale: true, hasWheelSizes: false, stock, salePrice, ...rentalPrices,
+    availableForRental: false, rentalCatalog: false, availableForSale: true, hasWheelSizes: false, stock, salePrice, ...rentalPrices,
   };
 }
 

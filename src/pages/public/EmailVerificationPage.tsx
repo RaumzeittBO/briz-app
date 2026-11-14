@@ -10,6 +10,7 @@ export default function EmailVerificationPage() {
   const mode = params.get('mode') || '';
   const code = params.get('oobCode') || '';
   const language = (params.get('lang') || navigator.language || 'es').toLowerCase().startsWith('en') ? 'en' : 'es';
+  const [returnTo, setReturnTo] = useState('/rentals');
   const [status, setStatus] = useState<'working' | 'success' | 'error' | 'reset'>('working');
   const [message, setMessage] = useState('');
   const [password, setPassword] = useState('');
@@ -25,6 +26,15 @@ export default function EmailVerificationPage() {
       return;
     }
     const cleanUrl = new URL(window.location.href);
+    const continueUrl = cleanUrl.searchParams.get('continueUrl');
+    if (continueUrl) {
+      try {
+        const parsedContinueUrl = new URL(continueUrl, window.location.origin);
+        if (parsedContinueUrl.origin === window.location.origin && parsedContinueUrl.pathname !== '/verify-email') {
+          setReturnTo(`${parsedContinueUrl.pathname}${parsedContinueUrl.search}${parsedContinueUrl.hash}`);
+        }
+      } catch { /* Keep the same-origin rentals fallback for malformed continuation URLs. */ }
+    }
     cleanUrl.searchParams.delete('oobCode'); cleanUrl.searchParams.delete('apiKey'); cleanUrl.searchParams.delete('continueUrl');
     window.history.replaceState({}, document.title, `${cleanUrl.pathname}${cleanUrl.search}${cleanUrl.hash}`);
     if (mode === 'resetPassword') {
@@ -68,7 +78,7 @@ export default function EmailVerificationPage() {
         <input type="password" required minLength={6} autoComplete="new-password" value={password} onChange={event => setPassword(event.target.value)} className="h-12 w-full rounded-xl border border-stone-300 px-4" placeholder={language === 'es' ? 'Nueva contraseña' : 'New password'} />
         <button disabled={saving} className="h-12 w-full rounded-xl bg-brand-yellow font-black disabled:opacity-60">{saving ? (language === 'es' ? 'Guardando…' : 'Saving…') : (language === 'es' ? 'Guardar contraseña' : 'Save password')}</button>
       </form> : <p role="status" className="mt-4 text-sm leading-relaxed text-stone-600">{message || (language === 'es' ? 'Estamos validando tu enlace seguro.' : 'We are validating your secure link.')}</p>}
-      {status !== 'reset' && <Link to="/" className="mt-7 inline-flex h-12 items-center justify-center rounded-xl bg-brand-yellow px-7 font-black hover:bg-yellow-300">{language === 'es' ? 'Volver a BRIZ' : 'Return to BRIZ'}</Link>}
+      {status !== 'reset' && <Link to={returnTo} className="mt-7 inline-flex h-12 items-center justify-center rounded-xl bg-brand-yellow px-7 font-black hover:bg-yellow-300">{language === 'es' ? 'Volver a BRIZ' : 'Return to BRIZ'}</Link>}
       {status === 'success' && <p className="mt-4 text-xs text-stone-500">{language === 'es' ? 'El enlace solo puede utilizarse una vez.' : 'This link can only be used once.'}</p>}
     </section>
   </main>;

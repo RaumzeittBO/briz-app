@@ -4,6 +4,8 @@ export interface RentalAddonItem {
     itemType: 'bike' | 'accessory';
     availableForRental: boolean;
     availableAsRentalAddon?: boolean;
+    availableForSale?: boolean;
+    rentalCatalog?: boolean;
     excludeFromRentalAddons?: boolean;
     rentalAddonFree?: boolean;
     addonFlatPrice?: number;
@@ -28,12 +30,14 @@ export interface RentalAddonCombo {
     components: Array<{ inventoryItemId: string }>;
 }
 
-/** Mirrors the server rule and is parity-tested against the Functions helper. */
+/** Mirrors the server's explicit classification and legacy fallback. */
 export function isEligibleRentalAddon(item: RentalAddonItem, combos: RentalAddonCombo[] = []): boolean {
     if (item.active !== true || item.itemType !== 'accessory' || item.excludeFromRentalAddons === true) return false;
+    if (item.rentalCatalog !== undefined) return item.rentalCatalog === true;
     if (item.availableForRental === true || item.availableAsRentalAddon === true) return true;
-    return combos.some(combo => combo.active === true && combo.availableForRental === true
-        && combo.components.some(component => component.inventoryItemId === item.id));
+    if (combos.some(combo => combo.active === true && combo.availableForRental === true
+        && combo.components.some(component => component.inventoryItemId === item.id))) return true;
+    return item.availableForSale === false;
 }
 
 export function hasConfiguredRentalAddonPrice(item: RentalAddonItem): boolean {

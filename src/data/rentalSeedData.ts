@@ -81,6 +81,7 @@ function accessory(
     imageUrl: '',
     active: true,
     availableForRental: false,
+    rentalCatalog: true,
     availableForSale: false,
     hasWheelSizes: false,
     stock,

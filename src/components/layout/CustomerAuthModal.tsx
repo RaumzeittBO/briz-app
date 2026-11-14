@@ -12,6 +12,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { useStore } from '@/context/StoreContext';
 import { useLanguage } from '@/context/LanguageContext';
 import ArtworkPicture from '@/components/ArtworkPicture';
+import { auth } from '@/lib/firebase';
 
 interface CustomerAuthModalProps {
     isOpen: boolean;
@@ -104,7 +105,7 @@ const COUNTRIES_LIST = [
 ];
 
 export default function CustomerAuthModal({ isOpen, onClose, onSuccess }: CustomerAuthModalProps) {
-    const { loginCustomer, resendCustomerVerification, refreshCustomerVerification, changeCustomerVerificationEmail, completeCustomerProfile, registerCustomer, verifyCustomerRecovery } = useStore();
+    const { currentCustomer, loginCustomer, resendCustomerVerification, refreshCustomerVerification, changeCustomerVerificationEmail, completeCustomerProfile, registerCustomer, verifyCustomerRecovery } = useStore();
     const { language } = useLanguage();
     
     // Auth Mode: 'login' | 'register' | 'forgot' | 'reset'
@@ -119,6 +120,8 @@ export default function CustomerAuthModal({ isOpen, onClose, onSuccess }: Custom
     const [resendAvailableAt, setResendAvailableAt] = useState(0);
     const [clockNow, setClockNow] = useState(Date.now());
     const [completionFields, setCompletionFields] = useState<{ name: string; phone: string; ci: string }>({ name: '', phone: '', ci: '' });
+    const [completionMissingFiles, setCompletionMissingFiles] = useState<Array<'autofoto' | 'documento' | 'documentoReverso'>>([]);
+    const [completionFiles, setCompletionFiles] = useState<{ autofoto: File | null; documento: File | null; documentoReverso: File | null }>({ autofoto: null, documento: null, documentoReverso: null });
 
     // Common fields
     const [email, setEmail] = useState('');
@@ -150,12 +153,15 @@ export default function CustomerAuthModal({ isOpen, onClose, onSuccess }: Custom
     const docAnversoInputRef = useRef<HTMLInputElement | null>(null);
     const docReversoInputRef = useRef<HTMLInputElement | null>(null);
 
-    const startProfileCompletion = (customer: { name: string; phone: string; ci: string }) => {
+    const startProfileCompletion = (customer: { name: string; phone: string; ci: string; missingPrivateFiles?: Array<'autofoto' | 'documento' | 'documentoReverso'> }) => {
         const missingName = customer.name.trim().length < 2;
         const missingPhone = customer.phone.replace(/\D/g, '').length < 7;
         const missingCi = customer.ci.trim().length < 3;
-        if (!missingName && !missingPhone && !missingCi) return false;
+        const missingFiles = customer.missingPrivateFiles || [];
+        if (!missingName && !missingPhone && !missingCi && missingFiles.length === 0) return false;
         setCompletionFields({ name: missingName ? '' : customer.name, phone: missingPhone ? '' : customer.phone, ci: missingCi ? '' : customer.ci });
+        setCompletionMissingFiles(missingFiles);
+        setCompletionFiles({ autofoto: null, documento: null, documentoReverso: null });
         setMode('complete');
         setError(null);
         setSuccessMessage(null);
@@ -172,6 +178,14 @@ export default function CustomerAuthModal({ isOpen, onClose, onSuccess }: Custom
             });
         }
     }, [stream]);
+
+    useEffect(() => {
+        if (isOpen) auth.languageCode = language === 'en' ? 'en' : 'es';
+    }, [isOpen, language]);
+
+    useEffect(() => {
+        if (isOpen && mode === 'login' && currentCustomer) startProfileCompletion(currentCustomer);
+    }, [isOpen, mode, currentCustomer]);
 
     // ID Document upload states
     const [docFileAnverso, setDocFileAnverso] = useState<File | null>(null);
@@ -352,10 +366,15 @@ export default function CustomerAuthModal({ isOpen, onClose, onSuccess }: Custom
     const handleCompleteProfile = async (event: React.FormEvent) => {
         event.preventDefault(); setLoading(true); setError(null);
         try {
+            if (completionMissingFiles.some(kind => !completionFiles[kind])) {
+                setError(language === 'es' ? 'Sube únicamente los archivos indicados para continuar.' : 'Upload only the files listed to continue.');
+                return;
+            }
             await completeCustomerProfile({
                 ...(completionFields.name.trim() ? { name: completionFields.name } : {}),
                 ...(completionFields.phone.trim() ? { phone: completionFields.phone } : {}),
                 ...(completionFields.ci.trim() ? { ci: completionFields.ci } : {}),
+                privateFiles: completionFiles,
             });
             setSuccessMessage(language === 'es' ? 'Perfil completado. Ya puedes continuar.' : 'Profile completed. You can continue.');
             onSuccess?.(); window.setTimeout(onClose, 900);
@@ -618,6 +637,9 @@ export default function CustomerAuthModal({ isOpen, onClose, onSuccess }: Custom
                             {!completionFields.name.trim() && <div className="space-y-1"><Label>{language === 'es' ? 'Nombre completo' : 'Full name'}</Label><Input required minLength={2} value={completionFields.name} onChange={event => setCompletionFields(value => ({ ...value, name: event.target.value }))} /></div>}
                             {completionFields.phone.replace(/\D/g, '').length < 7 && <div className="space-y-1"><Label>{language === 'es' ? 'Teléfono' : 'Phone'}</Label><Input required type="tel" value={completionFields.phone} onChange={event => setCompletionFields(value => ({ ...value, phone: event.target.value }))} /></div>}
                             {completionFields.ci.trim().length < 3 && <div className="space-y-1"><Label>{language === 'es' ? 'Documento de identidad' : 'Identity document'}</Label><Input required value={completionFields.ci} onChange={event => setCompletionFields(value => ({ ...value, ci: event.target.value }))} /></div>}
+                            {completionMissingFiles.includes('autofoto') && <div className="space-y-1"><Label>{language === 'es' ? 'Fotografía pendiente' : 'Missing profile photo'}</Label><Input required type="file" accept="image/*" onChange={event => setCompletionFiles(value => ({ ...value, autofoto: event.target.files?.[0] || null }))} /></div>}
+                            {completionMissingFiles.includes('documento') && <div className="space-y-1"><Label>{language === 'es' ? 'Documento · anverso pendiente' : 'ID document · front missing'}</Label><Input required type="file" accept="image/*,application/pdf" onChange={event => setCompletionFiles(value => ({ ...value, documento: event.target.files?.[0] || null }))} /></div>}
+                            {completionMissingFiles.includes('documentoReverso') && <div className="space-y-1"><Label>{language === 'es' ? 'Documento · reverso pendiente' : 'ID document · back missing'}</Label><Input required type="file" accept="image/*,application/pdf" onChange={event => setCompletionFiles(value => ({ ...value, documentoReverso: event.target.files?.[0] || null }))} /></div>}
                             <Button type="submit" disabled={loading} className="h-12 w-full rounded-xl bg-brand-yellow font-black text-brand-charcoal hover:bg-brand-yellow-light">{loading ? (language === 'es' ? 'Guardando…' : 'Saving…') : (language === 'es' ? 'Guardar y continuar' : 'Save and continue')}</Button>
                             <button type="button" onClick={() => setMode('login')} className="w-full text-sm font-bold text-brand-charcoal/70 underline underline-offset-4">{language === 'es' ? 'Volver al inicio de sesión' : 'Back to sign in'}</button>
                         </form>

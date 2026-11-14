@@ -5,6 +5,8 @@ export interface CatalogItem {
     active: boolean;
     availableForRental: boolean;
     availableAsRentalAddon?: boolean;
+    availableForSale?: boolean;
+    rentalCatalog?: boolean;
     excludeFromRentalAddons?: boolean;
     rentalAddonFree?: boolean;
     hasWheelSizes?: boolean;
@@ -50,12 +52,14 @@ export interface Combo {
     store?: string;
 }
 
-/** One eligibility rule for active rental-catalog accessories and legacy combo parts. */
+/** Explicit catalog classification wins; legacy inventory without it is inferred conservatively. */
 export function isEligibleRentalAddon(item: CatalogItem, combos: Combo[] = []): boolean {
     if (item.active !== true || item.itemType !== 'accessory' || item.excludeFromRentalAddons === true) return false;
+    if (item.rentalCatalog !== undefined) return item.rentalCatalog === true;
     if (item.availableForRental === true || item.availableAsRentalAddon === true) return true;
-    return combos.some((combo) => combo.active === true && combo.availableForRental === true
-        && combo.components.some((component) => component.inventoryItemId === item.id));
+    if (combos.some((combo) => combo.active === true && combo.availableForRental === true
+        && combo.components.some((component) => component.inventoryItemId === item.id))) return true;
+    return item.availableForSale === false;
 }
 
 export function hasConfiguredRentalAddonPrice(item: CatalogItem): boolean {

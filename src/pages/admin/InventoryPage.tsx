@@ -9,6 +9,7 @@ import { Search, Plus, Edit, Trash2, Image as ImageIcon, Bike, Wrench, Layers, X
 import { useStore } from '@/context/StoreContext';
 import type { InventoryItem, ComboProduct, WheelSizeEntry, ComboComponent } from '@/context/StoreContext';
 import { getRentalInventoryDemands } from '@/lib/rentalAvailability';
+import { hasConfiguredRentalAddonPrice, isEligibleRentalAddon } from '@/lib/rentalAddonEligibility';
 import { nextWheelSize, SUPPORTED_WHEEL_SIZES, validateUniqueWheelSizes } from '@/lib/inventoryWheelSizes';
 
 import { FileUploader } from '@/components/ui/file-uploader';
@@ -25,7 +26,7 @@ function defaultBike(): InventoryItem {
   return { id: `inv_${Date.now()}_${Math.random().toString(36).slice(2,7)}`, itemType:'bike', name:'', description:'', imageUrl:'', additionalImageUrls:[], active:true, availableForRental:true, availableForSale:false, hasWheelSizes:true, wheelSizes:[{size:'26',stock:0}], maintenanceStock:0, pricePerHour:0, priceFrom5thHour:0, pricePerDay:0, pricePerWeek:0, pricePerMonth:0, price1Hour:0, price2Hours:0, price3Hours:0, price4Hours:0, price8Hours:0, price24Hours:0, price1Week:0, price1Month:0 };
 }
 function defaultAccessory(): InventoryItem {
-  return { id: `inv_${Date.now()}_${Math.random().toString(36).slice(2,7)}`, itemType:'accessory', name:'', description:'', imageUrl:'', additionalImageUrls:[], active:true, availableForRental:true, availableForSale:false, hasWheelSizes:false, stock:0, maintenanceStock:0, addonFlatPrice:0, pricePerHour:0, priceFrom5thHour:0, pricePerDay:0, pricePerWeek:0, pricePerMonth:0, price1Hour:0, price2Hours:0, price3Hours:0, price4Hours:0, price8Hours:0, price24Hours:0, price1Week:0, price1Month:0 };
+  return { id: `inv_${Date.now()}_${Math.random().toString(36).slice(2,7)}`, itemType:'accessory', name:'', description:'', imageUrl:'', additionalImageUrls:[], active:true, availableForRental:false, rentalCatalog:true, availableForSale:false, hasWheelSizes:false, stock:0, maintenanceStock:0, addonFlatPrice:0, pricePerHour:0, priceFrom5thHour:0, pricePerDay:0, pricePerWeek:0, pricePerMonth:0, price1Hour:0, price2Hours:0, price3Hours:0, price4Hours:0, price8Hours:0, price24Hours:0, price1Week:0, price1Month:0 };
 }
 function defaultCombo(): ComboProduct {
   return { id: `combo_${Date.now()}_${Math.random().toString(36).slice(2,7)}`, name:'', description:'', imageUrl:'', additionalImageUrls:[], active:true, availableForRental:true, availableForSale:false, components:[], pricePerHour:0, priceFrom5thHour:0, pricePerDay:0, pricePerWeek:0, pricePerMonth:0, price1Hour:0, price2Hours:0, price3Hours:0, price4Hours:0, price8Hours:0, price24Hours:0, price1Week:0, price1Month:0 };
@@ -168,7 +169,9 @@ export default function InventoryPage() {
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
 
   const bikes = inventory.filter(i => i.itemType === 'bike' && (!i.availableForSale || i.availableForRental));
-  const accessories = inventory.filter(i => i.itemType === 'accessory' && (!i.availableForSale || i.availableForRental));
+  const accessories = inventory.filter(i => i.itemType === 'accessory' && isEligibleRentalAddon(i, combos));
+  const accessoriesMissingRentalPrice = useMemo(() => inventory.filter(item => item.active
+    && isEligibleRentalAddon(item, combos) && !hasConfiguredRentalAddonPrice(item)), [inventory, combos]);
   const q = search.toLowerCase();
   const filteredBikes = bikes.filter(b => b.name.toLowerCase().includes(q));
   const filteredAccessories = accessories.filter(a => a.name.toLowerCase().includes(q));
@@ -470,6 +473,13 @@ export default function InventoryPage() {
           <Button onClick={()=>openAdd('accessory')} className="bg-brand-yellow text-brand-black font-black rounded-xl h-10 px-5 hover:bg-brand-yellow/90">
             <Plus className="w-4 h-4 mr-2"/> Nuevo Accesorio
           </Button>
+          {accessoriesMissingRentalPrice.length > 0 && <section role="alert" className="rounded-2xl border border-amber-500/30 bg-amber-50 p-4 text-amber-950">
+            <div className="flex items-start gap-3"><AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-700"/><div className="min-w-0 flex-1">
+              <h3 className="font-black">{accessoriesMissingRentalPrice.length} accesorio(s) de alquiler necesitan tarifa</h3>
+              <p className="mt-1 text-sm">Aparecerán en el paso 3, pero no se pueden reservar hasta configurar un precio válido o marcarlos explícitamente como gratuitos.</p>
+              <div className="mt-3 flex flex-wrap gap-2">{accessoriesMissingRentalPrice.map(item => <Button key={item.id} type="button" size="sm" variant="outline" onClick={()=>openEdit(item,'accessory')} className="border-amber-700/30 bg-white text-amber-950 hover:bg-amber-100">Configurar: {item.name}</Button>)}</div>
+            </div></div>
+          </section>}
           {filteredAccessories.length===0 ? <p className="text-center py-16 text-white/20 font-bold text-sm">No hay accesorios registrados</p> : filteredAccessories.map(a=><ItemRow key={a.id} item={a} type="accessory" openEdit={openEdit} setDeleteConfirm={setDeleteConfirm}/>)}
         </TabsContent>
 
@@ -773,6 +783,10 @@ export default function InventoryPage() {
                     </label>
                     {modal.type === 'accessory' && <>
                       <label className="flex items-center gap-2 cursor-pointer">
+                        <Checkbox checked={editItem.rentalCatalog !== false} onCheckedChange={v=>setEditItem({...editItem,rentalCatalog:Boolean(v)})} className="data-[state=checked]:bg-brand-yellow data-[state=checked]:border-brand-yellow"/>
+                        <span className="text-xs font-bold text-white/60">Pertenece al catálogo de alquiler</span>
+                      </label>
+                      <label className="flex items-center gap-2 cursor-pointer">
                         <Checkbox checked={Boolean(editItem.excludeFromRentalAddons)} onCheckedChange={v=>setEditItem({...editItem,excludeFromRentalAddons:Boolean(v)})} className="data-[state=checked]:bg-red-500 data-[state=checked]:border-red-500"/>
                         <span className="text-xs font-bold text-white/60">Excluir de complementos de alquiler</span>
                       </label>
@@ -783,11 +797,11 @@ export default function InventoryPage() {
                     </>}
                     <label className="flex items-center gap-2 cursor-pointer">
                       <Checkbox checked={Boolean(editItem.availableForRental)} onCheckedChange={v=>setEditItem({...editItem,availableForRental:Boolean(v)})} className="data-[state=checked]:bg-brand-yellow data-[state=checked]:border-brand-yellow"/>
-                    <span className="text-xs font-bold text-white/60">Disponible en catálogo de alquiler</span>
+                    <span className="text-xs font-bold text-white/60">{modal.type === 'accessory' ? 'Alquilable individualmente (legacy)' : 'Disponible en catálogo de alquiler'}</span>
                     </label>
                   </div>
                   <p className="text-[11px] text-white/45">
-                    Los accesorios activos del catálogo de alquiler y los que usan combinados pueden ofrecerse como complementos. Exclúyelos explícitamente si BRIZ no quiere ofrecerlos; el stock físico siempre es compartido.
+                    La pertenencia al catálogo controla si aparece como complemento; «alquilable individualmente» se conserva para compatibilidad histórica. Los productos exclusivos de venta quedan fuera. El stock físico siempre es compartido.
                   </p>
                 </div>
 

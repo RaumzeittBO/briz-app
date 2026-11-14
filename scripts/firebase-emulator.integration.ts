@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { createRequire } from 'node:module';
 import { initializeApp } from 'firebase/app';
-import { getAuth, createUserWithEmailAndPassword, connectAuthEmulator, reload } from 'firebase/auth';
+import { getAuth, createUserWithEmailAndPassword, connectAuthEmulator, reload, confirmPasswordReset, verifyPasswordResetCode, signInWithEmailAndPassword, applyActionCode } from 'firebase/auth';
 import { getFunctions, connectFunctionsEmulator, httpsCallable } from 'firebase/functions';
 import { connectFirestoreEmulator, getFirestore, doc, setDoc } from 'firebase/firestore';
 import { connectStorageEmulator, getStorage, ref as storageRef, uploadBytes } from 'firebase/storage';
@@ -121,8 +121,13 @@ try {
     });
     await adminDb.collection('inventory').doc('acc-emulator').set({
         id: 'acc-emulator', itemType: 'accessory', name: 'Emulator Lock', active: true,
-        availableForRental: true, hasWheelSizes: false, stock: 3,
+        availableForRental: false, availableAsRentalAddon: false, rentalCatalog: true, availableForSale: false, hasWheelSizes: false, stock: 3,
         addonFlatPrice: 7,
+    });
+    await adminDb.collection('inventory').doc('acc-catalog-only-emulator').set({
+        id: 'acc-catalog-only-emulator', itemType: 'accessory', name: 'Rental catalog only', active: true,
+        availableForRental: false, availableAsRentalAddon: false, rentalCatalog: true, availableForSale: false,
+        hasWheelSizes: false, stock: 1, addonFlatPrice: 3,
     });
     await adminDb.collection('inventory').doc('acc-addon-only-emulator').set({
         id: 'acc-addon-only-emulator', itemType: 'accessory', name: 'Addon only', active: true,
@@ -286,6 +291,16 @@ try {
         pickupTime: '14:00', duration: '1 hora', paymentMethod: 'QR',
     });
     assert.equal(addOnOnlyBooking.total, 20, 'An accessory can be a booking add-on while individual rental is disabled.');
+    await adminDb.doc(`_requestLimits/reservations_${createHash('sha256').update(userA.uid).digest('hex')}`).delete();
+    const automaticCatalogBooking = await call<{ reservationCode: string; total: number }>(userA.functions, 'createRentalGroup', {
+        idempotencyKey: `catalog_only_${crypto.randomUUID()}`,
+        lines: [{ productId: 'bike-race-emulator', productType: 'single', quantity: 1 }],
+        accessories: [{ itemId: 'acc-catalog-only-emulator', quantity: 1 }],
+        date: new Intl.DateTimeFormat('en-CA', { timeZone: 'America/La_Paz' }).format(new Date(Date.now() + 37 * 24 * 60 * 60 * 1000)),
+        pickupTime: '14:00', duration: '1 hora', paymentMethod: 'QR',
+    });
+    assert.equal(automaticCatalogBooking.total, 18, 'Rental-catalog membership offers an accessory without individual-rental/add-on flags or combo membership.');
+    pass('Explicit rental catalog membership exposes active accessories while sale-only and excluded items remain unavailable');
     await adminDb.collection('inventory').doc('acc-addon-only-emulator').update({ excludeFromRentalAddons: true });
     await adminDb.doc(`_requestLimits/reservations_${createHash('sha256').update(userA.uid).digest('hex')}`).delete();
     await assert.rejects(() => call(userA.functions, 'createRentalGroup', {
@@ -560,11 +575,73 @@ try {
     await call(userB.functions, 'createCustomerProfile');
     await adminDb.collection('customerProfiles').doc(userB.uid).update({ phone: '' });
     await adminDb.collection('customers').doc(userB.uid).update({ phone: '' });
-    await adminDb.collection('customerPrivate').doc(userB.uid).set({ autofotoPath: `customerUploads/${userB.uid}/selfie.jpg` }, { merge: true });
+    const recoveryFixtureImage = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]);
+    const userBFilePaths = {
+        autofotoPath: `customerUploads/${userB.uid}/selfie.jpg`,
+        documentoPath: `customerUploads/${userB.uid}/document-front.png`,
+        documentoReversoPath: `customerUploads/${userB.uid}/document-back.png`,
+    };
+    for (const path of Object.values(userBFilePaths)) await uploadBytes(storageRef(userB.storage, path), recoveryFixtureImage, { contentType: 'image/png' });
+    await adminDb.collection('customerPrivate').doc(userB.uid).set(userBFilePaths, { merge: true });
     const completion = await call<{ profile: { name: string; phone: string; ci: string } }>(userB.functions, 'completeCustomerProfile', { name: 'Malicious overwrite', phone: '+59170000002' });
     assert.deepEqual({ name: completion.profile.name, phone: completion.profile.phone, ci: completion.profile.ci }, { name: 'Rider B', phone: '+59170000002', ci: 'TEST-1002' }, 'Profile completion fills only missing values and preserves existing values.');
-    assert.equal((await adminDb.collection('customerPrivate').doc(userB.uid).get()).get('autofotoPath'), `customerUploads/${userB.uid}/selfie.jpg`, 'Profile completion leaves private file associations intact.');
+    assert.deepEqual((await adminDb.collection('customerPrivate').doc(userB.uid).get()).data(), userBFilePaths, 'Profile completion leaves all private file associations intact.');
     pass('Verified customer profile completion fills only missing fields and preserves private files');
+
+    const recoveryEmail = 'verified-recovery@example.test';
+    const recoveryOriginalPassword = 'TestPass#123';
+    const recoveryNewPassword = 'RecoveredPass#456';
+    const recoveryUser = await client(recoveryEmail, recoveryOriginalPassword);
+    assert.equal((await adminDb.doc(`pendingCustomerRegistrations/${recoveryUser.uid}`).get()).exists, false, 'Recovery account has no temporary registration record.');
+    await adminDb.collection('rentals').doc('recovered-email-history').set({
+        id: 'recovered-email-history', reservationCode: 'BRIZ-RECOVERY-TEST', customerEmail: recoveryEmail,
+        customerName: 'Historic Recovery Customer', customerPhone: '', customerCI: '',
+        productType: 'single', productId: 'bike-emulator', productName: 'Emulator Bike', quantity: 1,
+        date: '2026-11-10', pickupTime: '10:00', duration: '1 hora', status: 'returned', total: 20,
+    });
+    const otherBrowserApp = initializeApp(firebaseConfig, `recovery-other-browser-${Date.now()}`);
+    const otherBrowserAuth = getAuth(otherBrowserApp);
+    const otherBrowserFunctions = getFunctions(otherBrowserApp);
+    const otherBrowserStorage = getStorage(otherBrowserApp);
+    connectAuthEmulator(otherBrowserAuth, 'http://127.0.0.1:9099', { disableWarnings: true });
+    connectFunctionsEmulator(otherBrowserFunctions, '127.0.0.1', 5001);
+    connectStorageEmulator(otherBrowserStorage, '127.0.0.1', 9199);
+    const verificationLink = await adminAuth.generateEmailVerificationLink(recoveryEmail);
+    const verificationCode = new URL(verificationLink).searchParams.get('oobCode');
+    assert.ok(verificationCode, 'Firebase Auth Emulator supplied a verification action code.');
+    await applyActionCode(otherBrowserAuth, verificationCode!);
+    await reload(recoveryUser.auth.currentUser!);
+    assert.equal(recoveryUser.auth.currentUser?.emailVerified, true, 'Verification action completed in another browser session.');
+    const resetLink = await adminAuth.generatePasswordResetLink(recoveryEmail);
+    const resetCode = new URL(resetLink).searchParams.get('oobCode');
+    assert.ok(resetCode, 'Firebase Auth Emulator supplied a reset action code.');
+    assert.equal(await verifyPasswordResetCode(recoveryUser.auth, resetCode!), recoveryEmail);
+    await confirmPasswordReset(recoveryUser.auth, resetCode!, recoveryNewPassword);
+    const recoveredCredential = await signInWithEmailAndPassword(otherBrowserAuth, recoveryEmail, recoveryNewPassword);
+    await recoveredCredential.user.getIdToken(true);
+    const recoveredProfile = await call<{ profile: { id: string; authUid: string; email: string; name: string; missingPrivateFiles: string[] }; recoveredWithoutPendingRegistration: boolean }>(otherBrowserFunctions, 'createCustomerProfile');
+    assert.equal(recoveredProfile.profile.authUid, recoveryUser.uid);
+    assert.equal(recoveredProfile.profile.email, recoveryEmail);
+    assert.equal(recoveredProfile.profile.name, '');
+    assert.deepEqual(recoveredProfile.profile.missingPrivateFiles, ['autofoto', 'documento', 'documentoReverso']);
+    assert.equal(recoveredProfile.recoveredWithoutPendingRegistration, true);
+    const recoveryHistory = await call<{ rentals: Array<{ id: string }> }>(otherBrowserFunctions, 'getMyRentals');
+    assert.ok(recoveryHistory.rentals.some(rental => rental.id === 'recovered-email-history'), 'Verified email keeps access to historical rentals without relinking by personal data.');
+    const recoveryFilePaths = {
+        autofoto: `customerUploads/${recoveryUser.uid}/recovery-autofoto-test.png`,
+        documento: `customerUploads/${recoveryUser.uid}/recovery-documento-test.png`,
+        documentoReverso: `customerUploads/${recoveryUser.uid}/recovery-documentoReverso-test.png`,
+    };
+    for (const path of Object.values(recoveryFilePaths)) await uploadBytes(storageRef(otherBrowserStorage, path), recoveryFixtureImage, { contentType: 'image/png' });
+    const recoveredCompletion = await call<{ profile: { name: string; phone: string; ci: string; missingPrivateFiles: string[] } }>(otherBrowserFunctions, 'completeCustomerProfile', {
+        name: 'Verified Recovery Customer', phone: '+59170000003', ci: 'RECOVERY-1003', privateFiles: recoveryFilePaths,
+    });
+    assert.deepEqual({ name: recoveredCompletion.profile.name, phone: recoveredCompletion.profile.phone, ci: recoveredCompletion.profile.ci }, {
+        name: 'Verified Recovery Customer', phone: '+59170000003', ci: 'RECOVERY-1003',
+    });
+    assert.deepEqual(recoveredCompletion.profile.missingPrivateFiles, []);
+    assert.equal((await adminDb.doc(`customerPrivate/${recoveryUser.uid}`).get()).get('documentoReversoPath'), recoveryFilePaths.documentoReverso);
+    pass('Verified account recovers without pending data after password reset on a second browser, retains email history, and requests only absent private files');
     await adminDb.collection('customers').doc(userB.uid).update({ store: 'shop-b' });
     await adminDb.collection('adminUsers').doc(userB.uid).set({ uid: userB.uid, role: 'manager', active: true, store: 'shop-b' });
     const raceDate = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000);
