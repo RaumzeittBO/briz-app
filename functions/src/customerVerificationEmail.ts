@@ -165,15 +165,41 @@ export function createVerificationEmail(
     };
 }
 
-export type VerificationRateState = { windowStartedAt: number; lastAttemptAt: number; count: number };
+export type VerificationRateState = {
+    windowStartedAt: number;
+    lastAttemptAt: number;
+    count: number;
+    deliveryState?: 'pending' | 'sent' | 'ambiguous';
+};
+
+export class VerificationDeliveryError extends Error {
+    constructor(readonly outcome: 'definitive' | 'ambiguous') {
+        super(outcome === 'definitive' ? 'resend-send-rejected' : 'resend-send-ambiguous');
+        this.name = 'VerificationDeliveryError';
+    }
+}
 
 export async function deliverVerificationEmail(
     transport: { send: (payload: VerificationEmailPayload, options: { idempotencyKey: string }) => Promise<{ error?: unknown | null }> },
     payload: VerificationEmailPayload,
     idempotencyKey: string,
 ): Promise<void> {
-    const result = await transport.send(payload, { idempotencyKey });
-    if (result.error) throw new Error('resend-send-failed');
+    let result: { error?: unknown | null };
+    try {
+        result = await transport.send(payload, { idempotencyKey });
+    } catch {
+        throw new VerificationDeliveryError('ambiguous');
+    }
+    if (!result.error) return;
+    const errorData = result.error && typeof result.error === 'object'
+        ? result.error as { statusCode?: unknown; status?: unknown }
+        : undefined;
+    const statusCode = typeof errorData?.statusCode === 'number'
+        ? errorData.statusCode
+        : typeof errorData?.status === 'number' ? errorData.status : undefined;
+    throw new VerificationDeliveryError(statusCode !== undefined && statusCode >= 400 && statusCode < 500
+        ? 'definitive'
+        : 'ambiguous');
 }
 
 export function nextVerificationRateState(
@@ -183,10 +209,26 @@ export function nextVerificationRateState(
     const windowMs = 24 * 60 * 60 * 1000;
     const cooldownMs = 60 * 1000;
     const expired = !current || now - current.windowStartedAt >= windowMs;
-    const state = expired ? { windowStartedAt: now, lastAttemptAt: 0, count: 0 } : current;
+    const state: VerificationRateState = expired
+        ? { windowStartedAt: now, lastAttemptAt: 0, count: 0 }
+        : current;
+    if (state.deliveryState === 'ambiguous') throw new Error('verification-result-ambiguous');
     if (state.lastAttemptAt && now - state.lastAttemptAt < cooldownMs) {
         throw new Error('verification-cooldown');
     }
+    if (state.deliveryState === 'pending') throw new Error('verification-result-ambiguous');
     if (state.count >= 5) throw new Error('verification-daily-limit');
-    return { ...state, lastAttemptAt: now, count: state.count + 1 };
+    return { ...state, lastAttemptAt: now, count: state.count + 1, deliveryState: 'pending' };
+}
+
+export function rollbackDefinitiveVerificationAttempt(
+    current: VerificationRateState,
+    previousLastAttemptAt: number,
+): VerificationRateState {
+    return {
+        ...current,
+        lastAttemptAt: previousLastAttemptAt,
+        count: Math.max(0, current.count - 1),
+        deliveryState: 'sent',
+    };
 }

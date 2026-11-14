@@ -5,6 +5,8 @@ import {
     createVerificationEmail,
     deliverVerificationEmail,
     nextVerificationRateState,
+    rollbackDefinitiveVerificationAttempt,
+    type VerificationRateState,
 } from './customerVerificationEmail';
 
 const firebaseActionLink = 'https://briz-4ef3a.firebaseapp.com/__/auth/action?apiKey=public-test-key&mode=verifyEmail&oobCode=fictional_code_123';
@@ -56,7 +58,7 @@ test('renders Spanish and English responsive brand messages with HTML and plain 
     assert.match(en.text, /Welcome to BRIZ!/);
 });
 
-test('uses provider idempotency and converts provider failures into a sanitized error', async () => {
+test('uses provider idempotency and classifies provider failures without exposing details', async () => {
     const payload = createVerificationEmail('rider@example.test', 'https://www.briz.com.bo/verify-email?oobCode=fake', 'es');
     const attempts: Array<{ key: string; to: string }> = [];
     const transport = {
@@ -73,7 +75,19 @@ test('uses provider idempotency and converts provider failures into a sanitized 
 
     await assert.rejects(
         () => deliverVerificationEmail({ send: async () => ({ error: { message: 'sensitive provider detail' } }) }, payload, 'attempt-2'),
-        error => error instanceof Error && error.message === 'resend-send-failed' && !error.message.includes('sensitive'),
+        error => error instanceof Error && error.message === 'resend-send-ambiguous' && !error.message.includes('sensitive'),
+    );
+    await assert.rejects(
+        () => deliverVerificationEmail({ send: async () => ({ error: { statusCode: 422, message: 'sensitive provider detail' } }) }, payload, 'attempt-3'),
+        error => error instanceof Error && error.message === 'resend-send-rejected' && !error.message.includes('sensitive'),
+    );
+    await assert.rejects(
+        () => deliverVerificationEmail({ send: async () => ({ error: { statusCode: 503 } }) }, payload, 'attempt-4'),
+        error => error instanceof Error && error.message === 'resend-send-ambiguous',
+    );
+    await assert.rejects(
+        () => deliverVerificationEmail({ send: async () => { throw new Error('sensitive transport detail'); } }, payload, 'attempt-5'),
+        error => error instanceof Error && error.message === 'resend-send-ambiguous' && !error.message.includes('sensitive'),
     );
 });
 
@@ -82,11 +96,37 @@ test('applies a per-account cooldown and a five-attempt rolling daily limit', ()
     let state = nextVerificationRateState(undefined, now);
     assert.equal(state.count, 1);
     assert.throws(() => nextVerificationRateState(state, now + 30_000), /verification-cooldown/);
+    state = { ...state, deliveryState: 'sent' };
     state = nextVerificationRateState(state, now + 60_000);
+    state = { ...state, deliveryState: 'sent' };
     state = nextVerificationRateState(state, now + 120_000);
+    state = { ...state, deliveryState: 'sent' };
     state = nextVerificationRateState(state, now + 180_000);
+    state = { ...state, deliveryState: 'sent' };
     state = nextVerificationRateState(state, now + 240_000);
+    state = { ...state, deliveryState: 'sent' };
     assert.equal(state.count, 5);
     assert.throws(() => nextVerificationRateState(state, now + 300_000), /verification-daily-limit/);
     assert.equal(nextVerificationRateState(state, now + 24 * 60 * 60 * 1000).count, 1);
+
+    const rejectedAttempt = rollbackDefinitiveVerificationAttempt(
+        { windowStartedAt: now, lastAttemptAt: now, count: 1, deliveryState: 'pending' },
+        0,
+    );
+    assert.equal(rejectedAttempt.count, 0);
+    assert.equal(rejectedAttempt.lastAttemptAt, 0);
+    assert.equal(nextVerificationRateState(rejectedAttempt, now + 1_000).count, 1);
+
+    const ambiguousAttempt: VerificationRateState = {
+        windowStartedAt: now,
+        lastAttemptAt: now,
+        count: 1,
+        deliveryState: 'ambiguous',
+    };
+    assert.throws(() => nextVerificationRateState(ambiguousAttempt, now + 60_000), /verification-result-ambiguous/);
+    assert.equal(nextVerificationRateState(ambiguousAttempt, now + 24 * 60 * 60 * 1000).count, 1);
+    assert.throws(
+        () => nextVerificationRateState({ ...ambiguousAttempt, deliveryState: 'pending' }, now + 60_000),
+        /verification-result-ambiguous/,
+    );
 });
