@@ -232,13 +232,27 @@ export default function RentalCheckoutWizard({
 
     // Build real rental accessories list from inventory
     const availableAddonAccessories = useMemo(() => {
+        const isUrbanBike = cart.some(cartItem => {
+            const p = cartItem.product;
+            return p?.category === 'Urbanas' || p?.id?.includes('urbana') || p?.name?.toLowerCase().includes('urbana');
+        });
+        const comboHasBasket = cart.some(cartItem => {
+            if (cartItem.product?.type === 'combo' && Array.isArray(cartItem.product.components)) {
+                return cartItem.product.components.some((comp: any) => {
+                    const compItem = inventory.find(i => i.id === comp.inventoryItemId);
+                    return compItem?.id?.includes('canasta') || compItem?.name?.toLowerCase().includes('canasta');
+                });
+            }
+            return false;
+        });
+
         return inventory
             .filter(item => isEligibleRentalAddon(item, combos))
             .map(item => {
                 const intervalStock = getAvailableStockForInterval(item.id, undefined, date, pickupTime, duration);
                 const usedInCartCombos = cartComponentDemands.get(item.id) || 0;
                 const remainingStock = Math.max(0, intervalStock - usedInCartCombos);
-                const unitPrice = getAccessoryAddonUnitPrice(item, duration);
+                const unitPrice = getAccessoryAddonUnitPrice(item, duration, { isUrbanBike, comboHasBasket });
                 const meta = ACCESSORY_META[item.id] || { icon: '🛡️', order: 50 };
                 return {
                     item,
@@ -251,7 +265,7 @@ export default function RentalCheckoutWizard({
                 };
             })
             .sort((a, b) => a.order - b.order || a.item.name.localeCompare(b.item.name));
-    }, [inventory, combos, date, pickupTime, duration, getAvailableStockForInterval, cartComponentDemands]);
+    }, [inventory, combos, date, pickupTime, duration, getAvailableStockForInterval, cartComponentDemands, cart]);
 
     // Automatically clamp selected accessory quantities if remainingStock drops (e.g. when changing date/time)
     useEffect(() => {
@@ -1090,6 +1104,13 @@ export default function RentalCheckoutWizard({
                         {/* Duration Selector Rate */}
                         <div className="space-y-2">
                             <Label className="text-[10px] text-brand-black/50 font-bold uppercase tracking-widest font-maiandra">{language === 'es' ? 'Selecciona la Duración de tu Reserva' : 'Select Your Rental Duration'}</Label>
+                            {cart.length > 0 && cart.every(i => i.product.itemType === 'accessory') && (
+                                <p className="text-[11px] text-amber-600 font-bold">
+                                    {language === 'es'
+                                        ? 'Alquiler individual de accesorios: tarifa plana de 20 Bs. (máximo 24 horas; no disponible por semana o mes).'
+                                        : 'Individual accessory rental: flat 20 Bs. rate (up to 24 hours; not available for week or month).'}
+                                </p>
+                            )}
                             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
                                 {[
                                     { label: '1 Hora', value: '1 hora' },
@@ -1100,7 +1121,13 @@ export default function RentalCheckoutWizard({
                                     { label: '24 Horas', value: '24 horas' },
                                     { label: '1 Semana', value: '1 semana' },
                                     { label: '1 Mes', value: '1 mes' }
-                                ].map(tier => {
+                                ]
+                                .filter(tier => {
+                                    const isAccessoryOnly = cart.length > 0 && cart.every(i => i.product.itemType === 'accessory');
+                                    if (isAccessoryOnly && (tier.value.includes('semana') || tier.value.includes('mes'))) return false;
+                                    return true;
+                                })
+                                .map(tier => {
                                     const isSelected = duration === tier.value;
                                     return (
                                         <button

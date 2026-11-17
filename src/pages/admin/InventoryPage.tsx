@@ -26,7 +26,7 @@ function defaultBike(): InventoryItem {
   return { id: `inv_${Date.now()}_${Math.random().toString(36).slice(2,7)}`, itemType:'bike', name:'', description:'', imageUrl:'', additionalImageUrls:[], active:true, availableForRental:true, availableForSale:false, hasWheelSizes:true, wheelSizes:[{size:'26',stock:0}], maintenanceStock:0, pricePerHour:0, priceFrom5thHour:0, pricePerDay:0, pricePerWeek:0, pricePerMonth:0, price1Hour:0, price2Hours:0, price3Hours:0, price4Hours:0, price8Hours:0, price24Hours:0, price1Week:0, price1Month:0 };
 }
 function defaultAccessory(): InventoryItem {
-  return { id: `inv_${Date.now()}_${Math.random().toString(36).slice(2,7)}`, itemType:'accessory', name:'', description:'', imageUrl:'', additionalImageUrls:[], active:true, availableForRental:false, rentalCatalog:true, availableForSale:false, hasWheelSizes:false, stock:0, maintenanceStock:0, addonFlatPrice:0, pricePerHour:0, priceFrom5thHour:0, pricePerDay:0, pricePerWeek:0, pricePerMonth:0, price1Hour:0, price2Hours:0, price3Hours:0, price4Hours:0, price8Hours:0, price24Hours:0, price1Week:0, price1Month:0 };
+  return { id: `inv_${Date.now()}_${Math.random().toString(36).slice(2,7)}`, itemType:'accessory', name:'', description:'', imageUrl:'', additionalImageUrls:[], active:true, availableForRental:false, rentalCatalog:true, availableForSale:false, hasWheelSizes:false, stock:0, maintenanceStock:0, individualRentalPrice:20, addonFlatPrice:10, addonPricingMode:'flat', pricePerHour:0, priceFrom5thHour:0, pricePerDay:0, pricePerWeek:0, pricePerMonth:0, price1Hour:0, price2Hours:0, price3Hours:0, price4Hours:0, price8Hours:0, price24Hours:0, price1Week:0, price1Month:0 };
 }
 function defaultCombo(): ComboProduct {
   return { id: `combo_${Date.now()}_${Math.random().toString(36).slice(2,7)}`, name:'', description:'', imageUrl:'', additionalImageUrls:[], active:true, availableForRental:true, availableForSale:false, components:[], pricePerHour:0, priceFrom5thHour:0, pricePerDay:0, pricePerWeek:0, pricePerMonth:0, price1Hour:0, price2Hours:0, price3Hours:0, price4Hours:0, price8Hours:0, price24Hours:0, price1Week:0, price1Month:0 };
@@ -61,40 +61,141 @@ function PriceFields({ editItem, setEditItem }: any) {
   return (
     <div className="space-y-4">
       {(editItem.availableForRental || editItem.itemType === 'accessory') && (
-        <div className="space-y-3">
-          <h4 className="text-xs font-black text-brand-yellow uppercase tracking-widest">Precios de Alquiler (Bs.)</h4>
-          {editItem.itemType === 'accessory' && (
-            <div className="bg-brand-yellow/10 border border-brand-yellow/25 rounded-xl p-3 space-y-1">
-              <Label className="text-[10px] text-brand-yellow font-black uppercase">
-                Tarifa Fija como Extra en Wizard (Bs.) — Opcional
-              </Label>
-              <Input
-                type="number"
-                min={0}
-                placeholder="Ej. 5 o 10 Bs. por alquiler"
-                value={toEditableNumber(editItem.addonFlatPrice)}
-                onChange={e => handlePriceChange('addonFlatPrice', e.target.value)}
-                className="bg-black/40 border-white/10 h-10 font-bold text-brand-yellow rounded-xl"
-              />
-              <p className="text-[9px] text-white/40 font-medium">
-                Si es mayor a 0, se cobrará como tarifa fija. Si queda vacío o en 0, se usarán las tarifas por duración. Marca «Gratis» explícitamente para ofrecerlo sin costo.
-              </p>
+        <div className="space-y-4">
+          <h4 className="text-xs font-black text-brand-yellow uppercase tracking-widest">
+            {editItem.itemType === 'accessory' ? 'Tarifas del Accesorio (Dos Modalidades)' : 'Precios de Alquiler (Bs.)'}
+          </h4>
+
+          {editItem.itemType === 'accessory' ? (
+            <div className="space-y-4">
+              {/* Modalidad 1: Alquiler Individual */}
+              <div className="bg-brand-yellow/10 border border-brand-yellow/25 rounded-2xl p-4 space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs text-brand-yellow font-black uppercase">
+                    Modalidad 1: Alquiler Individual (Sin Bicicleta)
+                  </Label>
+                  <Badge className="bg-brand-yellow/20 text-brand-yellow border-brand-yellow/30 text-[9px] font-black">
+                    1 a 24 horas
+                  </Badge>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-center">
+                  <div>
+                    <Label className="text-[10px] text-white/60 font-bold uppercase">
+                      Tarifa Plana (Bs.)
+                    </Label>
+                    <Input
+                      type="number"
+                      min={0}
+                      placeholder="20 Bs. (predeterminado)"
+                      value={toEditableNumber(editItem.individualRentalPrice)}
+                      onChange={e => handlePriceChange('individualRentalPrice', e.target.value)}
+                      className="bg-black/40 border-white/10 h-10 font-bold text-brand-yellow rounded-xl mt-1"
+                    />
+                  </div>
+                  <p className="text-[10px] text-white/50 leading-relaxed">
+                    Mismo importe de 1 a 24 horas. El cliente no necesita agregar bicicleta. No permite alquiler semanal ni mensual.
+                  </p>
+                </div>
+              </div>
+
+              {/* Modalidad 2: Accesorio Complementario */}
+              <div className="bg-white/5 border border-white/10 rounded-2xl p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs text-white font-black uppercase">
+                    Modalidad 2: Complemento (Con Bicicleta)
+                  </Label>
+                  <label className="flex items-center gap-2 cursor-pointer text-xs font-bold text-white/80">
+                    <input
+                      type="checkbox"
+                      checked={Boolean(editItem.rentalAddonFree)}
+                      onChange={e => setEditItem({ ...editItem, rentalAddonFree: e.target.checked })}
+                      className="rounded accent-brand-yellow"
+                    />
+                    Gratis como complemento
+                  </label>
+                </div>
+
+                {!editItem.rentalAddonFree && (
+                  <div className="space-y-3 pt-1 border-t border-white/5">
+                    <div className="flex gap-4">
+                      <label className="flex items-center gap-2 text-xs font-bold text-white/70 cursor-pointer">
+                        <input
+                          type="radio"
+                          name="addonPricingMode"
+                          checked={editItem.addonPricingMode !== 'hourly'}
+                          onChange={() => setEditItem({ ...editItem, addonPricingMode: 'flat' })}
+                          className="accent-brand-yellow"
+                        />
+                        Monto fijo por alquiler
+                      </label>
+                      <label className="flex items-center gap-2 text-xs font-bold text-white/70 cursor-pointer">
+                        <input
+                          type="radio"
+                          name="addonPricingMode"
+                          checked={editItem.addonPricingMode === 'hourly'}
+                          onChange={() => setEditItem({ ...editItem, addonPricingMode: 'hourly' })}
+                          className="accent-brand-yellow"
+                        />
+                        Tarifa por hora
+                      </label>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {editItem.addonPricingMode === 'hourly' ? (
+                        <div>
+                          <Label className="text-[10px] text-white/60 font-bold uppercase">
+                            Suplemento por Hora (Bs./h)
+                          </Label>
+                          <Input
+                            type="number"
+                            min={0}
+                            placeholder="Ej. 5 Bs./hora (Canasta)"
+                            value={toEditableNumber(editItem.pricePerHour)}
+                            onChange={e => handlePriceChange('pricePerHour', e.target.value)}
+                            className="bg-black/40 border-white/10 h-10 font-bold text-brand-yellow rounded-xl mt-1"
+                          />
+                        </div>
+                      ) : (
+                        <div>
+                          <Label className="text-[10px] text-white/60 font-bold uppercase">
+                            Suplemento Fijo (Bs.)
+                          </Label>
+                          <Input
+                            type="number"
+                            min={0}
+                            placeholder="Ej. 10 Bs. (Casco, Candado, Luces, Portacelular)"
+                            value={toEditableNumber(editItem.addonFlatPrice)}
+                            onChange={e => handlePriceChange('addonFlatPrice', e.target.value)}
+                            className="bg-black/40 border-white/10 h-10 font-bold text-brand-yellow rounded-xl mt-1"
+                          />
+                        </div>
+                      )}
+                      <p className="text-[10px] text-white/50 leading-relaxed self-center">
+                        {editItem.id?.includes('canasta') || editItem.name?.toLowerCase().includes('canasta')
+                          ? 'Canasta: tarifa especial de Bs 5/h en bicis urbanas; no se duplica si ya forma parte de una combinada.'
+                          : 'Configura si este suplemento se cobra como tarifa fija por servicio o por cada hora de uso.'}
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 gap-3">
+              {fields.map(p => (
+                <div key={p.k} className="space-y-1">
+                  <Label className="text-[10px] text-white/40 font-bold uppercase">{p.l}</Label>
+                  <Input
+                    type="number"
+                    min={0}
+                    value={toEditableNumber((editItem as any)[p.k])}
+                    onChange={e => handlePriceChange(p.k, e.target.value)}
+                    className="bg-black/40 border-white/10 h-10 font-bold text-brand-yellow rounded-xl"
+                  />
+                </div>
+              ))}
             </div>
           )}
-          <div className="grid grid-cols-2 gap-3">
-            {fields.map(p => (
-              <div key={p.k} className="space-y-1">
-                <Label className="text-[10px] text-white/40 font-bold uppercase">{p.l}</Label>
-                <Input
-                  type="number"
-                  min={0}
-                  value={toEditableNumber((editItem as any)[p.k])}
-                  onChange={e => handlePriceChange(p.k, e.target.value)}
-                  className="bg-black/40 border-white/10 h-10 font-bold text-brand-yellow rounded-xl"
-                />
-              </div>
-            ))}
-          </div>
         </div>
       )}
 
@@ -107,6 +208,7 @@ function normalizeInventoryDraft(draft: any) {
     'stock',
     'maintenanceStock',
     'addonFlatPrice',
+    'individualRentalPrice',
     'salePrice',
     'pricePerHour',
     'priceFrom5thHour',

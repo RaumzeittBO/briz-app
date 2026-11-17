@@ -11,6 +11,9 @@ import { onDocumentCreated, onDocumentWritten } from 'firebase-functions/v2/fire
 import {
     aggregateDemands,
     accessoryUnitPrice,
+    calculateIndividualAccessoryPrice,
+    calculateAccessoryAddonPrice,
+    isAccessoryDurationAllowedForIndividual,
     calculatePrice,
     getRentalWindow,
     isBlocking,
@@ -969,11 +972,37 @@ export const createRentalGroup = onCall(callable(), async (request) => {
                 }
             }
         }
+        const onlyAccessories = input.lines.every((line) => {
+            const item = inventoryById.get(line.productId);
+            return item?.itemType === 'accessory';
+        });
+        if (onlyAccessories && !isAccessoryDurationAllowedForIndividual(input.duration)) {
+            throw new HttpsError('invalid-argument', 'El alquiler individual de accesorios no admite modalidad semanal ni mensual (máximo 24 horas).');
+        }
+
+        const isUrbanBike = input.lines.some((line) => {
+            const item = inventoryById.get(line.productId);
+            const combo = comboById.get(line.productId);
+            if (item?.category === 'Urbanas' || item?.id?.includes('urbana') || item?.name?.toLowerCase().includes('urbana')) return true;
+            if (combo?.category === 'Urbanas' || combo?.id?.includes('urbana') || combo?.name?.toLowerCase().includes('urbana')) return true;
+            return false;
+        });
+        const comboHasBasket = input.lines.some((line) => {
+            if (line.productType === 'combo') {
+                const combo = comboById.get(line.productId);
+                return combo?.components.some((comp) => {
+                    const compItem = inventoryById.get(comp.inventoryItemId);
+                    return compItem?.id?.includes('canasta') || compItem?.name?.toLowerCase().includes('canasta');
+                });
+            }
+            return false;
+        });
+
         for (const accessory of input.accessories || []) {
             const item = inventoryById.get(accessory.itemId);
             if (!item || !isEligibleRentalAddon(item, combos)) throw new HttpsError('failed-precondition', 'Uno de los accesorios ya no está disponible como complemento.');
             if (!hasConfiguredRentalAddonPrice(item)) throw new HttpsError('failed-precondition', `${item.name} necesita una tarifa de alquiler o estar marcado expresamente como gratuito.`);
-            try { accessoryUnitPrice(item, input.duration); }
+            try { accessoryUnitPrice(item, input.duration, { isUrbanBike, comboHasBasket }); }
             catch { throw new HttpsError('failed-precondition', `${item.name} no tiene una tarifa configurada para la duración seleccionada.`); }
         }
 
@@ -984,7 +1013,7 @@ export const createRentalGroup = onCall(callable(), async (request) => {
         for (const line of input.lines) {
             const product = line.productType === 'combo' ? comboById.get(line.productId) : inventoryById.get(line.productId);
             const lineTotal = product && 'itemType' in product && product.itemType === 'accessory'
-                ? accessoryUnitPrice(product, input.duration) * line.quantity
+                ? calculateIndividualAccessoryPrice(product, input.duration, line.quantity)
                 : sumLinePrice(product, input.duration, line.quantity);
             const combo = line.productType === 'combo' ? comboById.get(line.productId) : undefined;
             const componentSelections = combo?.components.map((component) => {
@@ -1007,7 +1036,7 @@ export const createRentalGroup = onCall(callable(), async (request) => {
         }
         for (const accessory of input.accessories || []) {
             const item = inventoryById.get(accessory.itemId)!;
-            const lineTotal = accessoryUnitPrice(item, input.duration) * accessory.quantity;
+            const lineTotal = calculateAccessoryAddonPrice(item, input.duration, accessory.quantity, { isUrbanBike, comboHasBasket });
             requestedDemands.push({ itemId: item.id, quantity: accessory.quantity });
             rentalLines.push({
                 productType: 'single', productId: item.id, productName: item.name,
@@ -1729,7 +1758,9 @@ export const updateRentalGroup = onCall(callable(), async (request) => {
                 if ((component.requiresWheelSize || componentItem?.hasWheelSizes) && componentItem?.hasWheelSizes && componentItem.wheelSizes && componentItem.wheelSizes.length > 1 && !line.selectedWheelSize) throw new HttpsError('invalid-argument', 'Selecciona el aro del combo.');
                 return { inventoryItemId: component.inventoryItemId, ...(componentItem?.hasWheelSizes && line.selectedWheelSize ? { wheelSize: line.selectedWheelSize } : {}) };
             });
-            const computed = item?.itemType === 'accessory' ? accessoryUnitPrice(item, duration) * line.quantity : sumLinePrice(product, duration, line.quantity);
+            const computed = item?.itemType === 'accessory'
+                ? ((line as { notes?: string }).notes?.includes('adicional') ? calculateAccessoryAddonPrice(item, duration, line.quantity) : calculateIndividualAccessoryPrice(item, duration, line.quantity))
+                : sumLinePrice(product, duration, line.quantity);
             if (hasPaid && (!existing || existing.productId !== line.productId || existing.productType !== line.productType || Number(existing.quantity) !== line.quantity)) throw new HttpsError('failed-precondition', 'El pedido ya tiene un pago registrado. Cambiar productos o cantidades requiere registrar el ajuste de pago por separado.');
             const data: DocumentData = {
                 ...oldRows[0], ...(existing || {}), id: line.id || db.collection('rentals').doc().id,

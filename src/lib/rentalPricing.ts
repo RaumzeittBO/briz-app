@@ -3,6 +3,8 @@ import type { ComboProduct, InventoryItem } from '@/context/StoreContext';
 export interface PricingSource {
     id?: string;
     itemType?: 'bike' | 'accessory';
+    name?: string;
+    category?: string;
     pricePerHour?: number;
     priceFrom5thHour?: number;
     pricePerDay?: number;
@@ -18,6 +20,8 @@ export interface PricingSource {
     price1Month?: number;
     addonFlatPrice?: number;
     rentalAddonFree?: boolean;
+    individualRentalPrice?: number;
+    addonPricingMode?: 'flat' | 'hourly';
 }
 
 /**
@@ -65,18 +69,124 @@ export function parseDurationToHours(duration: string | number): number {
     return 1;
 }
 
+export const DEFAULT_INDIVIDUAL_ACCESSORY_PRICE = 20;
+
+export interface AccessoryPricingContext {
+    modality?: 'individual' | 'addon';
+    isUrbanBike?: boolean;
+    comboHasBasket?: boolean;
+}
+
 /**
- * Returns the effective unit price for an accessory added as an extra in a rental.
- * Respects admin-configured prices first, falling back to DEFAULT_ACCESSORY_RENTAL_PRICES.
+ * Checks if the requested duration is allowed for individual accessory rental.
+ * Individual accessory rentals are strictly capped at 24 hours (1 to 24 hours)
+ * and reject weekly ("semana", "week") and monthly ("mes", "month") rentals.
  */
-export function getAccessoryAddonUnitPrice(item: InventoryItem, duration: string = '1 Hora'): number | null {
+export function isAccessoryDurationAllowedForIndividual(duration: string | number): boolean {
+    const d = (typeof duration === 'number' ? `${duration} horas` : duration || '').toLowerCase().trim();
+    if (!d) return true;
+    if (d.includes('mes') || d.includes('month') || d.includes('semana') || d.includes('week')) {
+        return false;
+    }
+    const hours = parseDurationToHours(duration);
+    return hours <= 24;
+}
+
+/**
+ * Calculates individual accessory rental price (rented without a bike or as an independent line).
+ * Rule: Flat rate of Bs 20 per accessory from 1 hour to 24 hours.
+ * Rejects weekly and monthly rentals.
+ */
+export function calculateIndividualAccessoryPrice(
+    pricing: PricingSource | InventoryItem,
+    duration: string | number,
+    quantity: number = 1
+): number {
+    const safeQty = Math.max(0, Number.isFinite(quantity) ? Math.floor(quantity) : 0);
+    if (safeQty === 0) return 0;
+    if (!isAccessoryDurationAllowedForIndividual(duration)) {
+        throw new Error('El alquiler individual de accesorios no admite modalidad semanal ni mensual (máximo 24 horas).');
+    }
+    const configuredPrice = typeof pricing.individualRentalPrice === 'number' && pricing.individualRentalPrice > 0
+        ? pricing.individualRentalPrice
+        : DEFAULT_INDIVIDUAL_ACCESSORY_PRICE;
+    return configuredPrice * safeQty;
+}
+
+/**
+ * Returns the effective unit price for an accessory added as an extra in a rental (complement with bike).
+ * Respects admin-configured prices, addonPricingMode, urban basket special rates and basket deduplication.
+ */
+export function getAccessoryAddonUnitPrice(
+    item: InventoryItem | PricingSource,
+    duration: string = '1 Hora',
+    context?: AccessoryPricingContext
+): number | null {
     if (item.rentalAddonFree === true) return 0;
-    const customFlat = (item as PricingSource).addonFlatPrice;
+
+    const isBasket = Boolean(
+        item.id?.includes('canasta') ||
+        item.category?.toLowerCase().includes('canasta') ||
+        (item as { name?: string }).name?.toLowerCase().includes('canasta')
+    );
+
+    // Basket deduplication: if the combo already includes a basket, do not double-charge
+    if (isBasket && context?.comboHasBasket) {
+        return 0;
+    }
+
+    // Special rate for basket when paired with an urban bike: Bs 5 per hour
+    if (isBasket && context?.isUrbanBike) {
+        const hours = Math.min(24, Math.max(1, parseDurationToHours(duration)));
+        const hourlyRate = typeof item.pricePerHour === 'number' && item.pricePerHour > 0 ? item.pricePerHour : 5;
+        return hourlyRate * hours;
+    }
+
+    // Explicit pricing mode: hourly
+    if (item.addonPricingMode === 'hourly') {
+        const hours = parseDurationToHours(duration);
+        const hourlyRate = typeof item.pricePerHour === 'number' && item.pricePerHour > 0
+            ? item.pricePerHour
+            : (typeof item.addonFlatPrice === 'number' && item.addonFlatPrice > 0 ? item.addonFlatPrice : 5);
+        return hourlyRate * Math.max(1, hours);
+    }
+
+    // Explicit custom flat supplement configured by admin
+    const customFlat = item.addonFlatPrice;
     if (typeof customFlat === 'number' && customFlat > 0) {
         return customFlat;
     }
-    const calc = calculateProductRentalPrice(item, duration, 1);
+
+    // Default known add-on supplements when not explicitly configured
+    if (item.id === 'acc_casco_adulto' || item.id === 'acc_casco_nino' || item.id === 'acc_portacelular' || item.id === 'acc_linterna_bocina' || item.id === 'acc_candado_seguridad') {
+        return 10;
+    }
+    if (isBasket) {
+        const hours = Math.min(24, Math.max(1, parseDurationToHours(duration)));
+        return 5 * hours;
+    }
+
+    // Fall back to tiered pricing
+    const calc = calculateProductRentalPrice(item, duration, 1, { modality: 'addon', ...context });
     return calc > 0 ? calc : null;
+}
+
+/**
+ * Calculates add-on complement price for an accessory line.
+ */
+export function calculateAccessoryAddonPrice(
+    item: InventoryItem | PricingSource,
+    duration: string,
+    quantity: number = 1,
+    context?: AccessoryPricingContext
+): number {
+    const safeQty = Math.max(0, Number.isFinite(quantity) ? Math.floor(quantity) : 0);
+    if (safeQty === 0) return 0;
+    const unitPrice = getAccessoryAddonUnitPrice(item, duration, context);
+    if (unitPrice === null) {
+        throw new Error(`El accesorio ${(item as { name?: string }).name || item.id} no tiene una tarifa de complemento configurada.`);
+    }
+    return unitPrice * safeQty;
 }
 
 /**
@@ -84,14 +194,16 @@ export function getAccessoryAddonUnitPrice(item: InventoryItem, duration: string
  * public checkout (`RentalCheckoutWizard`), `StoreContext.calculatePrice`, and `AdminRentalsPage`.
  *
  * Commercial rules:
- * 1. Uses explicit tier fields (`price1Hour`, `price2Hours`, `price3Hours`, `price4Hours`, `price8Hours`, `price24Hours`, `price1Week`, `price1Month`) when > 0.
- * 2. Commercial 5th-hour rule: for hourly durations from 5h up to 24h, if a specific tier (like 8h) is not set or if 5-24h is selected, caps/matches the 24-Hour (Full Day) rate when `price24Hours` / `pricePerDay` is configured, unless `price8Hours` is specifically requested and configured.
- * 3. Multi-day (`N Días`): `days * fullDayRate` (or `price1Week` when 7 days and `price1Week > 0`).
+ * 1. For individual accessories (modality: 'individual' or standalone): flat rate of Bs 20 up to 24h, weekly/monthly rejected.
+ * 2. Uses explicit tier fields (`price1Hour`, `price2Hours`, `price3Hours`, `price4Hours`, `price8Hours`, `price24Hours`, `price1Week`, `price1Month`) when > 0.
+ * 3. Commercial 5th-hour rule: for hourly durations from 5h up to 24h, caps/matches the 24-Hour (Full Day) rate.
+ * 4. Multi-day (`N Días`): `days * fullDayRate` (or `price1Week` when 7 days and `price1Week > 0`).
  */
 export function calculateProductRentalPrice(
     pricing: PricingSource | InventoryItem | ComboProduct | undefined | null,
     duration: string,
-    quantity: number = 1
+    quantity: number = 1,
+    context?: AccessoryPricingContext
 ): number {
     if (!pricing) return 0;
     const safeQty = Math.max(0, Number.isFinite(quantity) ? Math.floor(quantity) : 0);
@@ -99,8 +211,13 @@ export function calculateProductRentalPrice(
 
     if ('itemType' in pricing && pricing.itemType === 'accessory') {
         if (pricing.rentalAddonFree === true) return 0;
-        const customFlat = Number(pricing.addonFlatPrice || 0);
-        if (customFlat > 0) return customFlat * safeQty;
+        if (context?.modality === 'addon') {
+            const customFlat = Number(pricing.addonFlatPrice || 0);
+            if (customFlat > 0) return customFlat * safeQty;
+        } else {
+            // Standalone / individual rental
+            return calculateIndividualAccessoryPrice(pricing, duration, safeQty);
+        }
     }
 
     const pHr = Math.max(0, Number(pricing.pricePerHour || 0));

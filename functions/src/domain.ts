@@ -27,12 +27,16 @@ export interface CatalogItem {
     price1Week?: number;
     price1Month?: number;
     addonFlatPrice?: number;
+    individualRentalPrice?: number;
+    addonPricingMode?: 'flat' | 'hourly';
+    category?: string;
     store?: string;
 }
 
 export interface Combo {
     id: string;
     name: string;
+    category?: string;
     active: boolean;
     availableForRental: boolean;
     components: Array<{ inventoryItemId: string; quantity: number; requiresWheelSize: boolean }>;
@@ -140,13 +144,85 @@ export function calculatePrice(pricing: CatalogItem | Combo | undefined, duratio
     return Number.isFinite(unit) && unit >= 0 ? unit * quantity : 0;
 }
 
-export function accessoryUnitPrice(item: CatalogItem, duration: string): number {
+export const DEFAULT_INDIVIDUAL_ACCESSORY_PRICE = 20;
+
+export interface AccessoryPricingContext {
+    modality?: 'individual' | 'addon';
+    isUrbanBike?: boolean;
+    comboHasBasket?: boolean;
+}
+
+export function isAccessoryDurationAllowedForIndividual(duration: string | number): boolean {
+    const d = (typeof duration === 'number' ? `${duration} horas` : duration || '').toLowerCase().trim();
+    if (!d) return true;
+    if (d.includes('mes') || d.includes('month') || d.includes('semana') || d.includes('week')) {
+        return false;
+    }
+    const hours = parseDurationHours(duration);
+    return hours <= 24;
+}
+
+export function calculateIndividualAccessoryPrice(item: CatalogItem, duration: string, quantity: number): number {
+    if (!Number.isInteger(quantity) || quantity < 1) return 0;
+    if (!isAccessoryDurationAllowedForIndividual(duration)) {
+        throw new Error('El alquiler individual de accesorios no admite modalidad semanal ni mensual (máximo 24 horas).');
+    }
+    const rate = typeof item.individualRentalPrice === 'number' && item.individualRentalPrice > 0
+        ? item.individualRentalPrice
+        : DEFAULT_INDIVIDUAL_ACCESSORY_PRICE;
+    return rate * quantity;
+}
+
+export function accessoryUnitPrice(item: CatalogItem, duration: string, context?: AccessoryPricingContext): number {
     if (item.rentalAddonFree === true) return 0;
+
+    const isBasket = Boolean(
+        item.id?.includes('canasta') ||
+        item.category?.toLowerCase().includes('canasta') ||
+        item.name?.toLowerCase().includes('canasta')
+    );
+
+    // Basket deduplication: if combo already has basket, don't charge addon basket twice
+    if (isBasket && context?.comboHasBasket) {
+        return 0;
+    }
+
+    // Special rate for basket with urban bike: Bs 5/hour
+    if (isBasket && context?.isUrbanBike) {
+        const hours = Math.min(24, Math.max(1, parseDurationHours(duration)));
+        const hourlyRate = typeof item.pricePerHour === 'number' && item.pricePerHour > 0 ? item.pricePerHour : 5;
+        return hourlyRate * hours;
+    }
+
+    if (item.addonPricingMode === 'hourly') {
+        const hours = parseDurationHours(duration);
+        const hourlyRate = typeof item.pricePerHour === 'number' && item.pricePerHour > 0
+            ? item.pricePerHour
+            : (typeof item.addonFlatPrice === 'number' && item.addonFlatPrice > 0 ? item.addonFlatPrice : 5);
+        return hourlyRate * Math.max(1, hours);
+    }
+
     if (typeof item.addonFlatPrice === 'number' && item.addonFlatPrice > 0) return item.addonFlatPrice;
+
+    // Default known supplements
+    if (item.id === 'acc_casco_adulto' || item.id === 'acc_casco_nino' || item.id === 'acc_portacelular' || item.id === 'acc_linterna_bocina' || item.id === 'acc_candado_seguridad') {
+        return 10;
+    }
+    if (isBasket) {
+        const hours = Math.min(24, Math.max(1, parseDurationHours(duration)));
+        return 5 * hours;
+    }
+
     if (!hasConfiguredRentalAddonPrice(item)) throw new Error('Este accesorio necesita una tarifa de alquiler o estar marcado expresamente como gratuito.');
     const price = calculatePrice(item, duration, 1);
     if (price <= 0) throw new Error('Configura una tarifa para la duración seleccionada o marca el accesorio como gratuito.');
     return price;
+}
+
+export function calculateAccessoryAddonPrice(item: CatalogItem, duration: string, quantity: number, context?: AccessoryPricingContext): number {
+    if (!Number.isInteger(quantity) || quantity < 1) return 0;
+    const unit = accessoryUnitPrice(item, duration, context);
+    return unit * quantity;
 }
 
 export function parseDateTime(date: string, time: string): number {

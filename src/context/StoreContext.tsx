@@ -109,6 +109,8 @@ export interface InventoryItem {
     pricePerMonth: number;
     salePrice?: number;
     addonFlatPrice?: number;
+    individualRentalPrice?: number;
+    addonPricingMode?: 'flat' | 'hourly';
 
     // Pricing tiers
     price1Hour?: number;

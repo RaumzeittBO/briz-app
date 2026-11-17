@@ -788,16 +788,32 @@ export default function AdminRentalsPage() {
 
     const rentalCartItems = newRentalCart.filter(item => item.product.itemType !== 'accessory');
     const accessoryCartItems = newRentalCart.filter(item => item.product.itemType === 'accessory');
-    if (rentalCartItems.length === 0) { alert('Agrega al menos una bicicleta o un combo al alquiler.'); return; }
+    const hasOnlyAccessories = rentalCartItems.length === 0 && accessoryCartItems.length > 0;
 
-    const lines = rentalCartItems.map(item => ({
-      productId: item.product.id,
-      productType: (item.product.components !== undefined ? 'combo' : 'single') as 'combo' | 'single',
-      quantity: item.quantity,
-      ...(item.selectedWheelSize ? { wheelSize: item.selectedWheelSize } : {}),
-      ...(item.componentSelections?.length ? { componentSelections: item.componentSelections } : {}),
-    }));
-    const accessories = accessoryCartItems.map(item => ({ itemId: item.product.id, quantity: item.quantity }));
+    if (hasOnlyAccessories) {
+      const dur = newRentalForm.duration.toLowerCase();
+      if (dur.includes('semana') || dur.includes('mes')) {
+        alert('El alquiler individual de accesorios no admite modalidad semanal ni mensual (máximo 24 horas).');
+        return;
+      }
+    }
+
+    const lines = hasOnlyAccessories
+      ? accessoryCartItems.map(item => ({
+          productId: item.product.id,
+          productType: 'single' as const,
+          quantity: item.quantity,
+        }))
+      : rentalCartItems.map(item => ({
+          productId: item.product.id,
+          productType: (item.product.components !== undefined ? 'combo' : 'single') as 'combo' | 'single',
+          quantity: item.quantity,
+          ...(item.selectedWheelSize ? { wheelSize: item.selectedWheelSize } : {}),
+          ...(item.componentSelections?.length ? { componentSelections: item.componentSelections } : {}),
+        }));
+    const accessories = hasOnlyAccessories
+      ? []
+      : accessoryCartItems.map(item => ({ itemId: item.product.id, quantity: item.quantity }));
     const paymentMethod: 'QR' | 'Transferencia' | 'Efectivo' = newRentalForm.paymentMethod.toLowerCase().includes('qr')
       ? 'QR' : newRentalForm.paymentMethod.toLowerCase().includes('transfer') ? 'Transferencia' : 'Efectivo';
     const adminCustomer = {
