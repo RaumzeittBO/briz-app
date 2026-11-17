@@ -15,6 +15,7 @@ import {
     calculateAccessoryAddonPrice,
     isAccessoryDurationAllowedForIndividual,
     calculatePrice,
+    findComboComponentItem,
     getRentalWindow,
     isBlocking,
     isHolding,
@@ -31,7 +32,7 @@ import {
     type RentalLike,
 } from './domain';
 import { DEFAULT_RENTAL_HOURS, validateRentalBusinessHours } from './businessHours';
-import { CUSTOMER_PRIVATE_FILE_SPECS, ownedCustomerStoragePath, resolveCustomerPrivateFiles } from './customerPrivateFiles';
+import { CUSTOMER_PRIVATE_FILE_SPECS, bucketNamesMatch, getPathVariants, ownedCustomerStoragePath, resolveCustomerPrivateFiles } from './customerPrivateFiles';
 import { Resend } from 'resend';
 import { buildBrizVerificationUrl, createVerificationEmail, deliverVerificationEmail, nextVerificationRateState, rollbackDefinitiveVerificationAttempt, VerificationDeliveryError, type EmailLanguage, type VerificationRateState } from './customerVerificationEmail';
 
@@ -453,8 +454,9 @@ export const completeCustomerProfile = onCall(callable(), async (request) => {
     if (Object.keys(providedPrivateFiles).some(key => !allowedFileKeys.has(key))) throw new HttpsError('invalid-argument', 'Los archivos del perfil no son válidos.');
     const pathFields: Record<string, string> = { autofoto: 'autofotoPath', documento: 'documentoPath', documentoReverso: 'documentoReversoPath' };
     const safePrivateFiles: Record<string, string> = {};
+    const allowedToUpload = new Set([...privateState.missing, ...privateState.needsReview]);
     for (const [label, rawPath] of Object.entries(providedPrivateFiles)) {
-        if (!privateState.missing.includes(label as 'autofoto' | 'documento' | 'documentoReverso')) {
+        if (!allowedToUpload.has(label as 'autofoto' | 'documento' | 'documentoReverso')) {
             throw new HttpsError('already-exists', 'Ese archivo ya está vinculado al perfil y no se reemplazó.');
         }
         const path = ownedCustomerStoragePath(uid, '', rawPath, getStorage().bucket().name);
@@ -466,10 +468,15 @@ export const completeCustomerProfile = onCall(callable(), async (request) => {
     if (privateState.missing.some(label => !safePrivateFiles[pathFields[label]])) {
         throw new HttpsError('failed-precondition', 'Sube únicamente la fotografía o los lados del documento que todavía faltan.');
     }
+    const uploadedLabels = new Set(Object.keys(safePrivateFiles).map(field => {
+        const found = Object.entries(pathFields).find(([, p]) => p === field);
+        return found ? (found[0] as 'autofoto' | 'documento' | 'documentoReverso') : null;
+    }).filter(Boolean));
+    const remainingMissing = privateState.missing.filter(label => !uploadedLabels.has(label));
+    const remainingNeedsReview = privateState.needsReview.filter(label => !uploadedLabels.has(label));
     if (missing.length === 0 && Object.keys(safePrivateFiles).length === 0) {
-        return { profile: { ...profile, missingPrivateFiles: privateState.missing, privateFilesNeedReview: privateState.needsReview }, alreadyComplete: true };
+        return { profile: { ...profile, missingPrivateFiles: remainingMissing, privateFilesNeedReview: remainingNeedsReview }, alreadyComplete: true };
     }
-    const remainingFiles = privateState.missing.filter(label => !safePrivateFiles[pathFields[label]]);
     await db.runTransaction(async (tx) => {
         const [latestProfile, latestCustomer, latestPrivate] = await Promise.all([tx.get(profileRef), tx.get(customerRef), tx.get(privateRef)]);
         if (!latestProfile.exists || latestProfile.data()?.authUid !== uid || !latestCustomer.exists || latestCustomer.data()?.authUid !== uid) {
@@ -489,13 +496,13 @@ export const completeCustomerProfile = onCall(callable(), async (request) => {
             if (current && current === path) return [field, path];
             return [field, path];
         }));
-        tx.update(profileRef, { ...safePatch, missingPrivateFiles: remainingFiles, privateFilesNeedReview: privateState.needsReview, updatedAt: FieldValue.serverTimestamp() });
+        tx.update(profileRef, { ...safePatch, missingPrivateFiles: remainingMissing, privateFilesNeedReview: remainingNeedsReview, updatedAt: FieldValue.serverTimestamp() });
         tx.update(customerRef, { ...safePatch, updatedAt: FieldValue.serverTimestamp() });
         if (Object.keys(privatePatch).length) tx.set(privateRef, { ...privatePatch, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
     });
     // Keep only non-sensitive completion flags on the owner's profile document;
     // the actual Storage paths remain in customerPrivate.
-    return { profile: { ...profile, ...patch, missingPrivateFiles: remainingFiles, privateFilesNeedReview: privateState.needsReview }, alreadyComplete: false };
+    return { profile: { ...profile, ...patch, missingPrivateFiles: remainingMissing, privateFilesNeedReview: remainingNeedsReview }, alreadyComplete: false };
 });
 
 export const beginCustomerRegistration = onCall(callable(), async (request) => {
@@ -755,14 +762,14 @@ export const getAdminCustomerFiles = onCall(callable(), async (request) => {
         let objectPath = reference;
         if (reference.startsWith('gs://')) {
             const match = /^gs:\/\/([^/]+)\/(.+)$/.exec(reference);
-            if (!match || match[1] !== bucket.name) return '';
+            if (!match || !bucketNamesMatch(match[1], bucket.name)) return '';
             objectPath = match[2];
         } else if (/^https?:\/\//i.test(reference)) {
             try {
                 const url = new URL(reference);
                 if (url.protocol !== 'https:' || url.hostname !== 'firebasestorage.googleapis.com') return '';
                 const match = /^\/v0\/b\/([^/]+)\/o\/(.+)$/.exec(url.pathname);
-                if (!match || match[1] !== bucket.name) return '';
+                if (!match || !bucketNamesMatch(match[1], bucket.name)) return '';
                 objectPath = decodeURIComponent(match[2]);
             } catch {
                 return '';
@@ -785,34 +792,113 @@ export const getAdminCustomerFiles = onCall(callable(), async (request) => {
         if ([...ownedLegacyRoots].some((root) => objectPath.startsWith(root))) return objectPath;
         return '';
     };
-    const signFile = async (...candidates: unknown[]): Promise<{ url: string | null; state: 'available' | 'missing' | 'needs_review' }> => {
-        const references = candidates.map(value => cleanString(value, 1500)).filter(Boolean);
-        const validPaths = [...new Set(references.map(resolveObjectPath).filter(Boolean))];
-        const hasUnresolvableReference = references.some(value => !resolveObjectPath(value));
-        if (!validPaths.length) return { url: null, state: 'needs_review' };
-        let file: ReturnType<typeof bucket.file> | undefined;
-        for (const path of validPaths) {
-            const candidate = bucket.file(path);
-            const [exists] = await candidate.exists();
-            if (exists) { file = candidate; break; }
+        let totalAggregateBytes = 0;
+        const MAX_TOTAL_AGGREGATE_BYTES = 6 * 1024 * 1024; // 6MB total payload ceiling across all 3 customer files
+        const MAX_FALLBACK_FILE_SIZE = 2 * 1024 * 1024;    // 2MB individual file ceiling for emergency fallback
+
+        const signFile = async (...candidates: unknown[]): Promise<{ url: string | null; state: 'available' | 'missing' | 'needs_review' | 'technical_error'; error?: string; fallbackReason?: string }> => {
+        // 1. Check if candidate is a legacy inline base64 data URL before length truncations
+        for (const candidate of candidates) {
+            if (typeof candidate === 'string' && candidate.startsWith('data:image/') && candidate.includes(';base64,')) {
+                if (candidate.length > 2 * 1024 * 1024) {
+                    return { url: null, state: 'technical_error', error: 'Archivo embebido excede el tamaño máximo permitido de 2MB.' };
+                }
+                totalAggregateBytes += candidate.length;
+                if (totalAggregateBytes > MAX_TOTAL_AGGREGATE_BYTES) {
+                    return { url: null, state: 'technical_error', error: 'El tamaño acumulado de documentos supera el límite de seguridad de 6MB.' };
+                }
+                return { url: candidate, state: 'available', fallbackReason: 'legacy_embedded_data_url' };
+            }
         }
-        if (!file) return { url: null, state: hasUnresolvableReference ? 'needs_review' : 'missing' };
+
+        const references = candidates.map(value => (typeof value === 'string' && !value.startsWith('data:') ? cleanString(value, 1500) : '')).filter(Boolean);
+        const resolvedPaths = [...new Set(references.map(resolveObjectPath).filter(Boolean))];
+        const hasUnresolvableReference = references.some(value => !resolveObjectPath(value));
+        if (!resolvedPaths.length) return { url: null, state: 'needs_review' };
+
+        // Expand candidate paths to include format variants (e.g. .jpg <-> .jpeg)
+        const validPaths = [...new Set(resolvedPaths.flatMap(getPathVariants))];
+
+        let file: ReturnType<typeof bucket.file> | undefined;
+        let storageAccessError = false;
+        for (const path of validPaths) {
+            try {
+                const candidate = bucket.file(path);
+                const [exists] = await candidate.exists();
+                if (exists) { file = candidate; break; }
+            } catch (err: any) {
+                storageAccessError = true;
+            }
+        }
+        if (!file) {
+            if (storageAccessError) {
+                return { url: null, state: 'technical_error', error: 'Error de acceso a Storage o permisos insuficientes en el bucket.' };
+            }
+            return { url: null, state: hasUnresolvableReference ? 'needs_review' : 'missing' };
+        }
+
         // The Storage Emulator has no signing identity. In local tests only,
         // return the already-authorized bytes through this callable response;
-        // production always uses a five-minute signed URL.
+        // production always attempts a five-minute signed URL.
         if (process.env.FUNCTIONS_EMULATOR === 'true' || process.env.FIREBASE_STORAGE_EMULATOR_HOST) {
             const [[contents], [metadata]] = await Promise.all([file.download(), file.getMetadata()]);
-            return { url: `data:${metadata.contentType || 'application/octet-stream'};base64,${contents.toString('base64')}`, state: 'available' };
+            return { url: `data:${metadata.contentType || 'image/jpeg'};base64,${contents.toString('base64')}`, state: 'available' };
         }
-        const [url] = await file.getSignedUrl({ action: 'read', expires: Date.now() + 5 * 60 * 1000, version: 'v4' });
-        return { url, state: 'available' };
+
+        try {
+            const [url] = await file.getSignedUrl({ action: 'read', expires: Date.now() + 5 * 60 * 1000, version: 'v4' });
+            return { url, state: 'available' };
+        } catch (signErr: any) {
+            // Emergency fallback: used only if Cloud Functions runtime identity lacks roles/iam.serviceAccountTokenCreator.
+            // Enforce 2MB individual limit and 6MB aggregate limit to prevent Cloud Functions OOM and payload exhaustion.
+            try {
+                const [metadata] = await file.getMetadata();
+                const fileSize = Number(metadata.size) || 0;
+                if (fileSize > MAX_FALLBACK_FILE_SIZE) {
+                    return {
+                        url: null,
+                        state: 'technical_error',
+                        error: `El archivo supera el límite de 2MB para descarga directa (${Math.round(fileSize / (1024 * 1024))}MB > 2MB). Se requiere configurar el rol IAM 'Service Account Token Creator' en Google Cloud para URLs firmadas V4.`,
+                    };
+                }
+                totalAggregateBytes += fileSize * 1.37;
+                if (totalAggregateBytes > MAX_TOTAL_AGGREGATE_BYTES) {
+                    return {
+                        url: null,
+                        state: 'technical_error',
+                        error: 'El tamaño total acumulado de documentos supera el límite de 6MB para streaming directo. Configure el rol IAM V4.',
+                    };
+                }
+                const contentType = String(metadata.contentType || 'image/jpeg');
+                const isAllowedType = contentType.startsWith('image/') || contentType === 'application/pdf';
+                if (!isAllowedType) {
+                    return {
+                        url: null,
+                        state: 'technical_error',
+                        error: 'Tipo de archivo no admitido para visualización privada.',
+                    };
+                }
+                const [contents] = await file.download();
+                return {
+                    url: `data:${contentType};base64,${contents.toString('base64')}`,
+                    state: 'available',
+                    fallbackReason: 'iam_signing_unsupported',
+                };
+            } catch (downloadErr: any) {
+                return {
+                    url: null,
+                    state: 'technical_error',
+                    error: 'La cuenta de servicio de backend no tiene permiso para firmar URLs V4 ni para descargar el objeto de Storage.',
+                };
+            }
+        }
     };
     const fields = [
         ['autofoto', ['autofotoPath', 'autofotoUrl', 'selfiePath', 'selfieUrl', 'photoPath', 'photoUrl']],
         ['documento', ['documentoPath', 'documentoUrl', 'documentFrontPath', 'documentFrontUrl']],
         ['documentoReverso', ['documentoReversoPath', 'documentoReversoUrl', 'documentBackPath', 'documentBackUrl']],
     ] as const;
-    const files: Record<string, { url: string | null; state: 'available' | 'missing' | 'needs_review' }> = {};
+    const files: Record<string, { url: string | null; state: 'available' | 'missing' | 'needs_review' | 'technical_error'; error?: string; fallbackReason?: string }> = {};
     for (const [name, pathFields] of fields) {
         files[name] = await signFile(...pathFields.flatMap((field) => [privateData[field], legacyData[field]]));
     }
@@ -946,13 +1032,19 @@ export const createRentalGroup = onCall(callable(), async (request) => {
                 }
                 for (const component of combo.components) {
                     const componentItem = inventoryById.get(component.inventoryItemId);
+                    if (!componentItem) {
+                        throw new HttpsError('failed-precondition', `El componente '${component.inventoryItemId}' de la combinada requiere vinculación administrativa explícita en Inventario antes de reservarse.`);
+                    }
+                    if (!componentItem.active) {
+                        throw new HttpsError('failed-precondition', `El componente '${componentItem.name}' del combo ya no está disponible.`);
+                    }
+                    if (combo.store && componentItem.store && combo.store !== 'all' && componentItem.store !== 'all' && combo.store !== componentItem.store) {
+                        throw new HttpsError('failed-precondition', `El componente '${componentItem.name}' está registrado en otra sucursal (${componentItem.store}) y no coincide con la combinada (${combo.store}).`);
+                    }
                     const selectedWheel = selections.find((selection) => selection.inventoryItemId === component.inventoryItemId)?.wheelSize || line.wheelSize;
                     // A combo may use an active component that is not offered for standalone rental.
                     // The combo's own availability flag controls the offer; component inventory is
                     // still reserved below through the shared physical-demand calculation.
-                    if (!componentItem || !componentItem.active) {
-                        throw new HttpsError('failed-precondition', 'Un componente del combo ya no está disponible.');
-                    }
                     if ((component.requiresWheelSize || componentItem.hasWheelSizes)
                         && componentItem.hasWheelSizes
                         && componentItem.wheelSizes && componentItem.wheelSizes.length > 1
@@ -1294,7 +1386,7 @@ function assertComboSelections(rows: DocumentData[], inventory: CatalogItem[], c
         const combo = combosById.get(String(row.productId));
         if (!combo) throw new HttpsError('failed-precondition', `No se puede validar el combo histórico ${String(row.productName || row.productId)}.`);
         for (const component of combo.components) {
-            const item = inventoryById.get(component.inventoryItemId);
+            const item = inventoryById.get(component.inventoryItemId) || findComboComponentItem(component.inventoryItemId, inventory).item;
             if (!item?.hasWheelSizes || (item.wheelSizes || []).length < 2) continue;
             const selection = Array.isArray(row.componentSelections) ? row.componentSelections.find((entry: { inventoryItemId?: string }) => entry.inventoryItemId === component.inventoryItemId) : undefined;
             const wheelSize = selection?.wheelSize || (combo.components.length === 1 ? row.selectedWheelSize : undefined);
@@ -2178,6 +2270,133 @@ export const releaseUnlinkedMaintenanceStock = onCall(callable(), async (request
         tx.create(auditRef, { itemId, store: item.store || role.store || 'principal', actorUid: uid, action: 'maintenance_release', before, after, createdAt: Timestamp.now() });
     });
     return { ok: true };
+});
+
+export const reconcileInventoryMaintenanceDiscrepancy = onCall(callable(), async (request) => {
+    const { uid } = requireAuth(request);
+    if (!exactObject(request.data)) throw new HttpsError('invalid-argument', 'Conciliación inválida.');
+    const itemId = cleanString(request.data.itemId, 150);
+    const operationId = cleanString(request.data.operationId, 100);
+    const reason = cleanString(request.data.reason, 500);
+    const adminConfirmation = request.data.adminConfirmation === true;
+
+    if (!itemId || !operationId || !/^[A-Za-z0-9_-]+$/.test(operationId)) {
+        throw new HttpsError('invalid-argument', 'Parámetros de conciliación inválidos.');
+    }
+    if (!reason || reason.trim().length < 10) {
+        throw new HttpsError('invalid-argument', 'El motivo de la conciliación extraordinaria es obligatorio (mínimo 10 caracteres).');
+    }
+    if (!adminConfirmation) {
+        throw new HttpsError('failed-precondition', 'Se requiere confirmación explícita del administrador para conciliar la discrepancia de taller.');
+    }
+
+    const roleRef = db.doc(`adminUsers/${uid}`);
+    const itemRef = db.doc(`inventory/${itemId}`);
+    const operationRef = db.doc(`adminUsers/${uid}/maintenanceReconciliationOperations/${operationId}`);
+    const auditRef = db.collection('inventoryStockAudits').doc();
+
+    const result = await db.runTransaction(async (tx) => {
+        const [roleSnap, itemSnap, operationSnap, ordersSnap] = await Promise.all([
+            tx.get(roleRef),
+            tx.get(itemRef),
+            tx.get(operationRef),
+            tx.get(db.collection('serviceOrders').where('inventoryItemId', '==', itemId)),
+        ]);
+
+        if (operationSnap.exists) {
+            return { duplicate: true, message: 'Esta operación ya fue ejecutada previamente.' };
+        }
+
+        const role = roleSnap.data();
+        const item = itemSnap.data() as CatalogItem | undefined;
+
+        if (!roleSnap.exists || role?.active !== true || !['admin', 'manager'].includes(String(role.role))) {
+            throw new HttpsError('permission-denied', 'No tienes permiso para conciliar inventario.');
+        }
+        if (!itemSnap.exists || !item) {
+            throw new HttpsError('not-found', 'No se encontró el artículo de inventario.');
+        }
+        if (role.role === 'manager' && role.store !== 'all' && item.store !== role.store) {
+            throw new HttpsError('permission-denied', 'El artículo pertenece a otra sucursal.');
+        }
+
+        let activeOrdersTotal = 0;
+        const activeOrdersByWheel: Record<string, number> = {};
+        for (const orderSnap of ordersSnap.docs) {
+            const order = orderSnap.data();
+            if (order.ownership !== 'briz' || order.inventoryReleased === true || ['Listo', 'Cancelado'].includes(String(order.status))) {
+                continue;
+            }
+            const qty = Math.max(1, Number(order.quantity || order.maintenanceQuantity) || 1);
+            activeOrdersTotal += qty;
+            if (order.wheelSize) {
+                activeOrdersByWheel[order.wheelSize] = (activeOrdersByWheel[order.wheelSize] || 0) + qty;
+            }
+        }
+
+        const currentRootMaint = Number(item.maintenanceStock) || 0;
+        const before = {
+            stock: Number(item.stock) || 0,
+            maintenanceStock: currentRootMaint,
+            wheelSizes: item.wheelSizes?.map(w => ({ size: w.size, stock: Number(w.stock) || 0, maintenanceStock: Number(w.maintenanceStock) || 0 })),
+        };
+
+        const nextWheelSizes = item.hasWheelSizes && item.wheelSizes
+            ? item.wheelSizes.map(w => ({
+                ...w,
+                stock: Number(w.stock) || 0,
+                maintenanceStock: activeOrdersByWheel[w.size] || 0,
+            }))
+            : undefined;
+
+        const nextRootMaintenance = activeOrdersTotal;
+
+        const after = {
+            stock: Number(item.stock) || 0,
+            maintenanceStock: nextRootMaintenance,
+            wheelSizes: nextWheelSizes?.map(w => ({ size: w.size, stock: w.stock, maintenanceStock: w.maintenanceStock })),
+        };
+
+        const updateData: Record<string, unknown> = {
+            maintenanceStock: nextRootMaintenance,
+        };
+        if (nextWheelSizes) {
+            updateData.wheelSizes = nextWheelSizes;
+        }
+
+        tx.update(itemRef, updateData);
+        tx.create(operationRef, {
+            itemId,
+            operationId,
+            reason,
+            actorUid: uid,
+            actorEmail: request.auth?.token?.email || role.email || '',
+            before,
+            after,
+            activeOrdersCount: activeOrdersTotal,
+            createdAt: Timestamp.now(),
+        });
+        tx.create(auditRef, {
+            itemId,
+            store: item.store || role.store || 'principal',
+            actorUid: uid,
+            action: 'extraordinary_maintenance_reconciliation',
+            reason,
+            before,
+            after,
+            createdAt: Timestamp.now(),
+        });
+
+        return {
+            duplicate: false,
+            before,
+            after,
+            activeOrdersCount: activeOrdersTotal,
+            message: 'Conciliación extraordinaria completada exitosamente.',
+        };
+    });
+
+    return result;
 });
 
 export const sendReservationNotification = onDocumentCreated({

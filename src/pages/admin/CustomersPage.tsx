@@ -266,7 +266,20 @@ export default function CustomersPage() {
                                                     <User className="w-16 h-16 text-brand-charcoal/20" />
                                                 )}
                                             </div>
-                                            {!customerFilesLoading && !customerFilesError && !selfieUrl && <p className="mt-2 text-xs font-medium text-brand-charcoal/55">{currentCustomerFiles?.autofoto.state === 'needs_review' ? 'No hay una referencia segura para localizar la fotografía; requiere revisión manual.' : 'La referencia de la fotografía apunta a un archivo que no existe.'}</p>}
+                                            {!customerFilesLoading && !customerFilesError && !selfieUrl && (
+                                                <p className={`mt-2 text-xs font-medium ${currentCustomerFiles?.autofoto.state === 'technical_error' ? 'text-red-500 font-bold' : 'text-brand-charcoal/55'}`}>
+                                                    {currentCustomerFiles?.autofoto.state === 'technical_error'
+                                                        ? `Error técnico: ${currentCustomerFiles.autofoto.error || 'Sin acceso a Storage.'}`
+                                                        : currentCustomerFiles?.autofoto.state === 'needs_review'
+                                                            ? 'No hay una referencia segura para localizar la fotografía; requiere revisión manual.'
+                                                            : 'La referencia de la fotografía apunta a un archivo que no existe.'}
+                                                </p>
+                                            )}
+                                            {selfieUrl && currentCustomerFiles?.autofoto.fallbackReason === 'iam_signing_unsupported' && (
+                                                <p className="mt-1 text-[10px] text-amber-700 bg-amber-50 p-1.5 rounded-lg border border-amber-200">
+                                                    Streaming backend activo (sin rol IAM Token Creator)
+                                                </p>
+                                            )}
                                         </div>
 
                                         <div className="rounded-3xl border border-brand-yellow/15 bg-white p-4 shadow-sm">
@@ -285,11 +298,35 @@ export default function CustomersPage() {
                                                     </div>
                                                 )}
                                             </div>
-                                            {!customerFilesLoading && !customerFilesError && currentCustomerFiles && !documentFrontUrl && <p className="text-xs text-brand-charcoal/55">{currentCustomerFiles.documento.state === 'needs_review' ? 'No hay una referencia segura para localizar el anverso; requiere revisión manual.' : 'La referencia del anverso apunta a un archivo que no existe.'}</p>}
-                                            {!customerFilesLoading && !customerFilesError && currentCustomerFiles && !documentBackUrl && <p className="text-xs text-brand-charcoal/55">{currentCustomerFiles.documentoReverso.state === 'needs_review' ? 'No hay una referencia segura para localizar el reverso; requiere revisión manual.' : 'La referencia del reverso apunta a un archivo que no existe.'}</p>}
+                                            {!customerFilesLoading && !customerFilesError && currentCustomerFiles && !documentFrontUrl && (
+                                                <p className={`text-xs ${currentCustomerFiles.documento.state === 'technical_error' ? 'text-red-500 font-bold' : 'text-brand-charcoal/55'}`}>
+                                                    {currentCustomerFiles.documento.state === 'technical_error'
+                                                        ? `Error técnico anverso: ${currentCustomerFiles.documento.error || 'Sin acceso a Storage.'}`
+                                                        : currentCustomerFiles.documento.state === 'needs_review'
+                                                            ? 'No hay una referencia segura para localizar el anverso; requiere revisión manual.'
+                                                            : 'La referencia del anverso apunta a un archivo que no existe.'}
+                                                </p>
+                                            )}
+                                            {!customerFilesLoading && !customerFilesError && currentCustomerFiles && !documentBackUrl && (
+                                                <p className={`text-xs mt-1 ${currentCustomerFiles.documentoReverso.state === 'technical_error' ? 'text-red-500 font-bold' : 'text-brand-charcoal/55'}`}>
+                                                    {currentCustomerFiles.documentoReverso.state === 'technical_error'
+                                                        ? `Error técnico reverso: ${currentCustomerFiles.documentoReverso.error || 'Sin acceso a Storage.'}`
+                                                        : currentCustomerFiles.documentoReverso.state === 'needs_review'
+                                                            ? 'No hay una referencia segura para localizar el reverso; requiere revisión manual.'
+                                                            : 'La referencia del reverso apunta a un archivo que no existe.'}
+                                                </p>
+                                            )}
                                             
                                             <div className="space-y-4 max-h-[680px] overflow-y-auto pr-1">
-                                                {!customerFilesLoading && !customerFilesError && !documentFrontUrl && !documentBackUrl && <p className="rounded-xl bg-brand-yellow/10 p-3 text-sm font-medium text-brand-charcoal/65">{currentCustomerFiles?.documento.state === 'needs_review' || currentCustomerFiles?.documentoReverso.state === 'needs_review' ? 'La referencia de uno o más documentos antiguos requiere revisión; no se confirmó que hayan sido eliminados.' : 'Las referencias de los documentos apuntan a archivos que no existen.'}</p>}
+                                                {!customerFilesLoading && !customerFilesError && !documentFrontUrl && !documentBackUrl && (
+                                                    <p className="rounded-xl bg-brand-yellow/10 p-3 text-sm font-medium text-brand-charcoal/65">
+                                                        {currentCustomerFiles?.documento.state === 'technical_error' || currentCustomerFiles?.documentoReverso.state === 'technical_error'
+                                                            ? 'Se presentó un problema técnico de permisos al acceder a Storage. Revisa los permisos IAM de Cloud Functions.'
+                                                            : currentCustomerFiles?.documento.state === 'needs_review' || currentCustomerFiles?.documentoReverso.state === 'needs_review'
+                                                                ? 'La referencia de uno o más documentos antiguos requiere revisión; no se confirmó que hayan sido eliminados.'
+                                                                : 'Las referencias de los documentos apuntan a archivos que no existen.'}
+                                                    </p>
+                                                )}
                                                 {/* Anverso / Front Side */}
                                                 <div>
                                                     {documentFrontUrl && (documentBackUrl || isPdfDocument(documentFrontUrl)) && (

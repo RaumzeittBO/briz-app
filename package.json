@@ -13,6 +13,7 @@
     "test:firebase-config": "npx tsx scripts/firebase-config.test.ts",
     "test:rental-addons": "npx tsx scripts/rental-addon-eligibility.test.ts",
     "test:accessory-modalities": "npx tsx scripts/accessory-pricing-modalities.test.ts",
+    "test:mamachari-workshop": "npx tsx scripts/mamachari-workshop-documents.test.ts",
     "test:rental-schedule": "npx tsx scripts/rental-schedule.test.ts",
     "test:customer-private-files": "npx tsx scripts/customer-private-files.test.ts",
     "test:customer-profile-completion": "npx tsx scripts/customer-profile-completion.test.ts",

@@ -247,6 +247,63 @@ export function getRentalWindow(rental: RentalLike): RentalWindow {
     return { startMs, endMs };
 }
 
+export function findComboComponentItem(
+    componentId: string,
+    inventory: CatalogItem[],
+    targetStore?: string
+): { item?: CatalogItem; isAliasMatch: boolean; storeMismatch?: boolean; mismatchedStore?: string } {
+    const exact = inventory.find(i => i.id === componentId);
+    if (exact) {
+        if (targetStore && exact.store && targetStore !== 'all' && exact.store !== 'all' && exact.store !== targetStore) {
+            return { item: exact, isAliasMatch: false, storeMismatch: true, mismatchedStore: exact.store };
+        }
+        return { item: exact, isAliasMatch: false };
+    }
+
+    const lowerId = componentId.toLowerCase();
+    const expectedType: 'bike' | 'accessory' | undefined = lowerId.startsWith('bike_')
+        ? 'bike'
+        : lowerId.startsWith('acc_')
+            ? 'accessory'
+            : undefined;
+
+    const norm = lowerId.replace(/^(bike_|acc_|inv_)/, '').replace(/_/g, ' ').trim();
+    if (norm && norm.length >= 3) {
+        // 1. Try exact normalized name match (respecting expected type if known)
+        const exactMatches = inventory.filter(i => {
+            if (!i.active) return false;
+            if (expectedType && i.itemType && i.itemType !== expectedType) return false;
+            return i.name.toLowerCase().trim() === norm;
+        });
+        if (exactMatches.length === 1) {
+            const candidate = exactMatches[0];
+            if (targetStore && candidate.store && targetStore !== 'all' && candidate.store !== 'all' && candidate.store !== targetStore) {
+                return { item: candidate, isAliasMatch: true, storeMismatch: true, mismatchedStore: candidate.store };
+            }
+            return { item: candidate, isAliasMatch: true };
+        }
+
+        // 2. Try substring match, but strictly reject generic words and ambiguous multiple matches
+        const genericWords = new Set(['bike', 'bici', 'bicicleta', 'acc', 'accesorio', 'combo', 'item']);
+        if (!genericWords.has(norm)) {
+            const partialMatches = inventory.filter(i => {
+                if (!i.active) return false;
+                if (expectedType && i.itemType && i.itemType !== expectedType) return false;
+                return i.name.toLowerCase().includes(norm);
+            });
+            // Strictly require exactly 1 unique match to prevent ambiguous substitutions
+            if (partialMatches.length === 1) {
+                const candidate = partialMatches[0];
+                if (targetStore && candidate.store && targetStore !== 'all' && candidate.store !== 'all' && candidate.store !== targetStore) {
+                    return { item: candidate, isAliasMatch: true, storeMismatch: true, mismatchedStore: candidate.store };
+                }
+                return { item: candidate, isAliasMatch: true };
+            }
+        }
+    }
+    return { item: undefined, isAliasMatch: false };
+}
+
 export function rentalDemands(rental: Pick<RentalLike, 'productType' | 'productId' | 'quantity' | 'selectedWheelSize' | 'componentSelections' | 'selectedAccessories'>, inventory: CatalogItem[], combos: Combo[]): Demand[] {
     if (rental.productId.startsWith('srv_')) return [];
     const qty = Math.floor(Number(rental.quantity));
@@ -260,8 +317,8 @@ export function rentalDemands(rental: Pick<RentalLike, 'productType' | 'productI
         const combo = combos.find(candidate => candidate.id === rental.productId);
         if (!combo) return [];
         for (const component of combo.components) {
-            const item = inventory.find(candidate => candidate.id === component.inventoryItemId);
-            if (!item) continue;
+            const { item, storeMismatch } = findComboComponentItem(component.inventoryItemId, inventory, combo.store);
+            if (!item || storeMismatch) continue;
             const selected = rental.componentSelections?.find(candidate => candidate.inventoryItemId === component.inventoryItemId)?.wheelSize;
             const wheelSize = item.hasWheelSizes
                 ? selected || (combo.components.length === 1 ? rental.selectedWheelSize : undefined) || item.wheelSizes?.[0]?.size

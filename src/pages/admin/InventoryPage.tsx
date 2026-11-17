@@ -8,7 +8,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Search, Plus, Edit, Trash2, Image as ImageIcon, Bike, Wrench, Layers, X, Settings, GripVertical, ShieldCheck, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import { useStore } from '@/context/StoreContext';
 import type { InventoryItem, ComboProduct, WheelSizeEntry, ComboComponent } from '@/context/StoreContext';
-import { getRentalInventoryDemands } from '@/lib/rentalAvailability';
+import { getRentalInventoryDemands, findComboComponentItem } from '@/lib/rentalAvailability';
 import { hasConfiguredRentalAddonPrice, isEligibleRentalAddon } from '@/lib/rentalAddonEligibility';
 import { nextWheelSize, SUPPORTED_WHEEL_SIZES, validateUniqueWheelSizes } from '@/lib/inventoryWheelSizes';
 
@@ -247,8 +247,8 @@ function normalizeInventoryDraft(draft: any) {
 export default function InventoryPage() {
   const navigate = useNavigate();
   const { 
-    adminStoreScope, inventory, combos, rentals, serviceOrders, addInventoryItem, updateInventoryItem, deleteInventoryItem, releaseUnlinkedMaintenanceUnit,
-    addCombo, updateCombo, deleteCombo, getComboAvailability, adjustInventoryStock,
+    adminStoreScope, inventory, combos, rentals, serviceOrders, addInventoryItem, updateInventoryItem, deleteInventoryItem, releaseUnlinkedMaintenanceUnit, reconcileMaintenanceDiscrepancy,
+    addCombo, updateCombo, deleteCombo, getComboAvailability, getComboAvailabilityReport, adjustInventoryStock,
     bikeCategories, accessoryCategories, addBikeCategory, addAccessoryCategory, deleteBikeCategory, updateBikeCategory, reorderBikeCategories
   } = useStore();
 
@@ -264,11 +264,47 @@ export default function InventoryPage() {
   const [stockManagerNotice, setStockManagerNotice] = useState('');
   const [stockSavingKey, setStockSavingKey] = useState('');
 
+  const [reconcileModalItem, setReconcileModalItem] = useState<InventoryItem | null>(null);
+  const [reconciliationReason, setReconciliationReason] = useState('');
+  const [reconciliationConfirm, setReconciliationConfirm] = useState(false);
+  const [reconciliationLoading, setReconciliationLoading] = useState(false);
+  const [reconciliationError, setReconciliationError] = useState('');
+  const [reconciliationSuccess, setReconciliationSuccess] = useState('');
+
   const [categoryManagerOpen, setCategoryManagerOpen] = useState(false);
   const [editingCat, setEditingCat] = useState<string | null>(null);
   const [editingVal, setEditingVal] = useState("");
   const [newCategoryName, setNewCategoryName] = useState("");
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
+
+  const getMaintenanceDiscrepancy = (item: InventoryItem) => {
+    const activeOrders = serviceOrders.filter(o => o.inventoryItemId === item.id && o.ownership === 'briz' && !o.inventoryReleased && !['Listo', 'Cancelado'].includes(o.status));
+    const activeCount = activeOrders.reduce((sum, o) => sum + Math.max(1, Number(o.quantity || o.maintenanceQuantity) || 1), 0);
+    const rootMaint = Number(item.maintenanceStock || 0);
+    const wheelMaintTotal = item.hasWheelSizes && item.wheelSizes
+      ? item.wheelSizes.reduce((s, w) => s + Number(w.maintenanceStock || 0), 0)
+      : 0;
+
+    const hasRootVsWheelDiscrepancy = item.hasWheelSizes && rootMaint !== wheelMaintTotal;
+    const hasOrphanMaintenance = rootMaint > activeCount || Boolean(item.hasWheelSizes && (item.wheelSizes || []).some(w => {
+      const ordersForWheel = activeOrders.filter(o => o.wheelSize === w.size).reduce((s, o) => s + Math.max(1, Number(o.quantity || o.maintenanceQuantity) || 1), 0);
+      return Number(w.maintenanceStock || 0) > ordersForWheel;
+    }));
+
+    if (hasRootVsWheelDiscrepancy || hasOrphanMaintenance) {
+      return {
+        hasDiscrepancy: true,
+        rootMaint,
+        activeCount,
+        wheelMaintTotal,
+        hasRootVsWheelDiscrepancy,
+        description: rootMaint > 0 && activeCount === 0
+          ? `Figura con ${rootMaint} unidad(es) en taller pero no tiene órdenes activas. Reintegrar sumaría existencias duplicadas.`
+          : `Discrepancia entre registro de taller (${rootMaint}) y órdenes activas (${activeCount}).`
+      };
+    }
+    return { hasDiscrepancy: false, rootMaint, activeCount, wheelMaintTotal, description: '' };
+  };
 
   const bikes = inventory.filter(i => i.itemType === 'bike' && (!i.availableForSale || i.availableForRental));
   const accessories = inventory.filter(i => i.itemType === 'accessory' && isEligibleRentalAddon(i, combos));
@@ -495,13 +531,34 @@ export default function InventoryPage() {
                 </Badge>
               )}
               {type === 'bike' && <Badge className="bg-brand-charcoal/5 text-brand-charcoal border-brand-charcoal/10 text-[10px] font-black rounded-md">Flota física: {physicalTotal}</Badge>}
+              {(() => {
+                const disc = getMaintenanceDiscrepancy(item);
+                if (!disc.hasDiscrepancy) return null;
+                return (
+                  <Button
+                    size="sm"
+                    onClick={() => {
+                      setReconcileModalItem(item);
+                      setReconciliationReason('');
+                      setReconciliationConfirm(false);
+                      setReconciliationError('');
+                      setReconciliationSuccess('');
+                    }}
+                    className="h-7 rounded-lg bg-amber-500/20 text-amber-950 px-2 text-[10px] font-black hover:bg-amber-500/30 border border-amber-500/40 flex items-center gap-1"
+                  >
+                    <ShieldCheck className="w-3 h-3 text-amber-700" /> Conciliación extraordinaria
+                  </Button>
+                );
+              })()}
               {type === 'bike' && item.hasWheelSizes && Array.isArray(unlinkedMaintenance) && unlinkedMaintenance.map(wheel => {
                 const key = `${item.id}::${wheel.size}`;
+                const disc = getMaintenanceDiscrepancy(item);
+                if (disc.hasDiscrepancy && disc.activeCount === 0) return null;
                 return <Button key={key} size="sm" disabled={releasingMaintenanceKey === key} onClick={() => handleReleaseUnlinkedMaintenance(item, wheel.size)} className="h-7 rounded-lg bg-emerald-100 px-2 text-[10px] font-bold text-emerald-800 hover:bg-emerald-200">
                   {releasingMaintenanceKey === key ? 'Guardando…' : `Reintegrar aro ${wheel.size}`}
                 </Button>;
               })}
-              {type === 'bike' && !item.hasWheelSizes && unlinkedMaintenance === true && <Button size="sm" disabled={releasingMaintenanceKey === `${item.id}::`} onClick={() => handleReleaseUnlinkedMaintenance(item)} className="h-7 rounded-lg bg-emerald-100 px-2 text-[10px] font-bold text-emerald-800 hover:bg-emerald-200">
+              {type === 'bike' && !item.hasWheelSizes && unlinkedMaintenance === true && !getMaintenanceDiscrepancy(item).hasDiscrepancy && <Button size="sm" disabled={releasingMaintenanceKey === `${item.id}::`} onClick={() => handleReleaseUnlinkedMaintenance(item)} className="h-7 rounded-lg bg-emerald-100 px-2 text-[10px] font-bold text-emerald-800 hover:bg-emerald-200">
                 {releasingMaintenanceKey === `${item.id}::` ? 'Guardando…' : 'Reintegrar unidad reparada'}
               </Button>}
             </div>
@@ -701,7 +758,22 @@ export default function InventoryPage() {
                           {inRental}
                         </td>
                         <td className="p-3.5 text-center font-black text-amber-600 text-sm">
-                          {inMaint}
+                          <div>{inMaint}</div>
+                          {getMaintenanceDiscrepancy(item).hasDiscrepancy && (
+                            <Button
+                              size="sm"
+                              onClick={() => {
+                                setReconcileModalItem(item);
+                                setReconciliationReason('');
+                                setReconciliationConfirm(false);
+                                setReconciliationError('');
+                                setReconciliationSuccess('');
+                              }}
+                              className="mt-1 h-6 px-2 text-[9px] bg-amber-500/20 text-amber-900 border border-amber-500/30 rounded-md font-bold hover:bg-amber-500/30 cursor-pointer"
+                            >
+                              Conciliar
+                            </Button>
+                          )}
                         </td>
                         <td className="p-3.5 text-center font-black text-brand-charcoal text-sm">
                           {totalFleet}
@@ -1007,59 +1079,234 @@ export default function InventoryPage() {
         </div>
       )}
 
-      {stockManagerCombo && <div className="fixed inset-0 z-[150] flex items-center justify-center bg-black/70 p-3 backdrop-blur-sm">
-        <div role="dialog" aria-modal="true" aria-labelledby="combo-stock-title" className="max-h-[92vh] w-full max-w-3xl overflow-y-auto rounded-3xl border border-brand-yellow/25 bg-brand-charcoal p-5 shadow-2xl sm:p-7">
-          <div className="flex items-start justify-between gap-4 border-b border-white/10 pb-4">
-            <div>
-              <p className="text-[10px] font-black uppercase tracking-widest text-brand-yellow">Inventario físico compartido</p>
-              <h2 id="combo-stock-title" className="mt-1 text-2xl font-black text-white">Gestionar stock · {stockManagerCombo.name}</h2>
-              <p className="mt-1 text-sm text-white/60">Disponibilidad actual: <strong className="text-brand-yellow">{getComboAvailability(stockManagerCombo.id)}</strong> combinado(s).</p>
-            </div>
-            <Button type="button" variant="ghost" size="icon" onClick={()=>setStockManagerCombo(null)} aria-label="Cerrar"><X className="h-5 w-5"/></Button>
-          </div>
-          <div className="mt-5 space-y-4">
-            {stockManagerCombo.components.map((component, index) => {
-              const item = inventory.find(candidate => candidate.id === component.inventoryItemId);
-              if (!item) return <div key={component.inventoryItemId} role="alert" className="rounded-xl bg-red-500/10 p-3 text-sm text-red-200">Falta inventario para el componente {component.inventoryItemId}.</div>;
-              const rented = activeDemandsByItem.get(item.id);
-              const sizes = item.hasWheelSizes ? item.wheelSizes || [] : [{ size: '', stock: Number(item.stock || 0), maintenanceStock: Number(item.maintenanceStock || 0) }];
-              const available = item.hasWheelSizes ? sizes.reduce((sum, wheel) => sum + Number(wheel.stock || 0), 0) : Number(item.stock || 0);
-              const capacity = Math.floor(available / Math.max(1, component.quantity));
-              const limits = capacity <= getComboAvailability(stockManagerCombo.id);
-              return <section key={`${component.inventoryItemId}-${index}`} className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div><h3 className="font-black text-white">{item.name}</h3><p className="text-xs text-white/55">Requerido por combinado: {component.quantity} unidad(es)</p></div>
-                  {limits && <Badge className="border-amber-300/30 bg-amber-300/10 text-amber-100">Limita la capacidad</Badge>}
+      {stockManagerCombo && (() => {
+        const comboReport = getComboAvailabilityReport(stockManagerCombo.id);
+        return (
+          <div className="fixed inset-0 z-[150] flex items-center justify-center bg-black/70 p-3 backdrop-blur-sm">
+            <div role="dialog" aria-modal="true" aria-labelledby="combo-stock-title" className="max-h-[92vh] w-full max-w-3xl overflow-y-auto rounded-3xl border border-brand-yellow/25 bg-brand-charcoal p-5 shadow-2xl sm:p-7">
+              <div className="flex items-start justify-between gap-4 border-b border-white/10 pb-4">
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-widest text-brand-yellow">Inventario físico compartido</p>
+                  <h2 id="combo-stock-title" className="mt-1 text-2xl font-black text-white">Gestionar stock · {stockManagerCombo.name}</h2>
+                  <div className="flex flex-wrap items-center gap-2 mt-1">
+                    <p className="text-sm text-white/60">
+                      Disponibilidad calculada: <strong className="text-brand-yellow">{comboReport.available}</strong> combinado(s).
+                    </p>
+                    {comboReport.bottleneckReason && (
+                      <Badge className="bg-amber-500/20 text-amber-200 border-amber-500/40 text-[10px] font-bold">
+                        Cuello de botella: {comboReport.bottleneckReason}
+                      </Badge>
+                    )}
+                  </div>
                 </div>
-                <div className="mt-3 space-y-2">
-                  {sizes.map(wheel => {
-                    const size = wheel.size || undefined;
-                    const key = `${item.id}::${size || ''}`;
-                    const stock = Number(wheel.stock || 0);
-                    const rentedCount = size ? Number(rented?.byWheelSize[size] || 0) : Number(rented?.total || 0);
-                    const maintenance = Number(wheel.maintenanceStock || 0);
-                    const total = stock + rentedCount + maintenance;
-                    const sharedNames = combos.filter(other => other.id !== stockManagerCombo.id && other.active && other.availableForRental && other.components.some(part => part.inventoryItemId === item.id)).map(other => other.name);
-                    return <div key={key} className="grid grid-cols-1 gap-3 rounded-xl bg-black/20 p-3 sm:grid-cols-[1fr_1fr_1fr_190px] sm:items-center">
-                      <div className="text-sm font-bold text-white">{size ? `Aro ${size}` : 'Stock general'}<span className="block text-xs font-medium text-white/55">Disponible: {stock} · Alquilado: {rentedCount}</span></div>
-                      <div className="text-xs text-white/65">En taller: {maintenance}</div>
-                      <div className="text-xs font-bold text-brand-yellow">Total físico: {total}</div>
-                      <div className="flex gap-2">
-                        <Input aria-label={`Ajuste de stock ${item.name} ${size || ''}`} type="number" step="1" value={stockDeltas[key] || ''} onChange={event=>setStockDeltas(current=>({...current,[key]:event.target.value}))} placeholder="+ / − unidades" className="h-9 min-w-0 bg-black/30 text-white" />
-                        <Button type="button" size="sm" disabled={stockSavingKey === key || !stockDeltas[key]} onClick={()=>handleStockAdjustment(item, stockDeltas[key], size)} className="h-9 bg-brand-yellow px-3 font-black text-brand-black">{stockSavingKey === key ? '…' : 'Aplicar'}</Button>
+                <Button type="button" variant="ghost" size="icon" onClick={()=>setStockManagerCombo(null)} aria-label="Cerrar"><X className="h-5 w-5"/></Button>
+              </div>
+              <div className="mt-5 space-y-4">
+                {stockManagerCombo.components.map((component, index) => {
+                  const exactItem = inventory.find(candidate => candidate.id === component.inventoryItemId);
+                  const lookup = findComboComponentItem(component.inventoryItemId, inventory);
+                  const item = exactItem || lookup.item;
+                  const isAlias = lookup.isAliasMatch && !exactItem;
+                  const diag = comboReport.components.find((d: any) => d.inventoryItemId === component.inventoryItemId);
+
+                  if (!item) {
+                    return (
+                      <div key={component.inventoryItemId} role="alert" className="rounded-xl bg-red-500/10 p-4 text-sm text-red-200 border border-red-500/20">
+                        <p className="font-bold">Falta inventario para el componente: {component.inventoryItemId}</p>
+                        <p className="text-xs text-red-300 mt-1">No existe ningún artículo en el inventario con este identificador ni con un nombre equivalente.</p>
                       </div>
-                      {sharedNames.length > 0 && <p className="sm:col-span-4 text-[11px] text-amber-200/80">También comparte stock con: {sharedNames.join(', ')}. Se pedirá confirmar cada ajuste.</p>}
-                    </div>;
-                  })}
-                </div>
-              </section>;
-            })}
+                    );
+                  }
+
+                  const rented = activeDemandsByItem.get(item.id);
+                  const sizes = item.hasWheelSizes ? item.wheelSizes || [] : [{ size: '', stock: Number(item.stock || 0), maintenanceStock: Number(item.maintenanceStock || 0) }];
+                  const available = item.hasWheelSizes ? sizes.reduce((sum, wheel) => sum + Number(wheel.stock || 0), 0) : Number(item.stock || 0);
+                  const capacity = Math.floor(available / Math.max(1, component.quantity));
+                  const limits = diag?.isBottleneck || capacity <= comboReport.available;
+
+                  return (
+                    <section key={`${component.inventoryItemId}-${index}`} className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+                      {isAlias && (
+                        <div className="mb-3 rounded-xl bg-amber-500/15 p-3 text-xs text-amber-200 border border-amber-500/30 flex flex-wrap items-center justify-between gap-2">
+                          <div>
+                            <strong>Vinculado por coincidencia de nombre:</strong> Se asoció <em>"{item.name}"</em> (ID: <code className="bg-black/30 px-1 py-0.5 rounded">{item.id}</code>) al componente <code className="bg-black/30 px-1 py-0.5 rounded">{component.inventoryItemId}</code>.
+                          </div>
+                          <Button
+                            size="sm"
+                            onClick={async () => {
+                              try {
+                                const updatedComps = stockManagerCombo.components.map((c, i) => i === index ? { ...c, inventoryItemId: item.id } : c);
+                                await updateCombo(stockManagerCombo.id, { components: updatedComps });
+                                setStockManagerCombo({ ...stockManagerCombo, components: updatedComps });
+                                setStockManagerNotice(`Se actualizó permanentemente la referencia del componente a "${item.name}" (${item.id}).`);
+                              } catch (err: any) {
+                                setStockManagerError(`Error al actualizar el componente: ${err?.message || err}`);
+                              }
+                            }}
+                            className="bg-brand-yellow text-brand-black font-black text-xs h-7 hover:bg-brand-yellow/90 cursor-pointer"
+                          >
+                            Vincular permanentemente con {item.name}
+                          </Button>
+                        </div>
+                      )}
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div>
+                          <h3 className="font-black text-white">{item.name}</h3>
+                          <p className="text-xs text-white/55">Requerido por combinado: {component.quantity} unidad(es)</p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {limits && (
+                            <Badge className="border-amber-300/30 bg-amber-300/10 text-amber-100">
+                              Limita la capacidad ({capacity} combinados máx.)
+                            </Badge>
+                          )}
+                          <Badge className="border-white/10 bg-white/5 text-white/70">
+                            Capacidad: {capacity}
+                          </Badge>
+                        </div>
+                      </div>
+                      <div className="mt-3 space-y-2">
+                        {sizes.map(wheel => {
+                          const size = wheel.size || undefined;
+                          const key = `${item.id}::${size || ''}`;
+                          const stock = Number(wheel.stock || 0);
+                          const rentedCount = size ? Number(rented?.byWheelSize[size] || 0) : Number(rented?.total || 0);
+                          const maintenance = Number(wheel.maintenanceStock || 0);
+                          const total = stock + rentedCount + maintenance;
+                          const sharedNames = combos.filter(other => other.id !== stockManagerCombo.id && other.active && other.availableForRental && other.components.some(part => part.inventoryItemId === item.id)).map(other => other.name);
+                          return (
+                            <div key={key} className="grid grid-cols-1 gap-3 rounded-xl bg-black/20 p-3 sm:grid-cols-[1fr_1fr_1fr_190px] sm:items-center">
+                              <div className="text-sm font-bold text-white">
+                                {size ? `Aro ${size}` : 'Stock general'}
+                                <span className="block text-xs font-medium text-white/55">Disponible: {stock} · Alquilado: {rentedCount}</span>
+                              </div>
+                              <div className="text-xs text-white/65">En taller: {maintenance}</div>
+                              <div className="text-xs font-bold text-brand-yellow">Total físico: {total}</div>
+                              <div className="flex gap-2">
+                                <Input aria-label={`Ajuste de stock ${item.name} ${size || ''}`} type="number" step="1" value={stockDeltas[key] || ''} onChange={event=>setStockDeltas(current=>({...current,[key]:event.target.value}))} placeholder="+ / − unidades" className="h-9 min-w-0 bg-black/30 text-white" />
+                                <Button type="button" size="sm" disabled={stockSavingKey === key || !stockDeltas[key]} onClick={()=>handleStockAdjustment(item, stockDeltas[key], size)} className="h-9 bg-brand-yellow px-3 font-black text-brand-black">{stockSavingKey === key ? '…' : 'Aplicar'}</Button>
+                              </div>
+                              {sharedNames.length > 0 && <p className="sm:col-span-4 text-[11px] text-amber-200/80">También comparte stock con: {sharedNames.join(', ')}. Se pedirá confirmar cada ajuste.</p>}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </section>
+                  );
+                })}
+              </div>
+              {stockManagerError && <p role="alert" className="mt-4 rounded-xl border border-red-400/30 bg-red-500/10 p-3 text-sm font-bold text-red-200">{stockManagerError}</p>}
+              {stockManagerNotice && <p role="status" className="mt-4 rounded-xl border border-emerald-400/30 bg-emerald-500/10 p-3 text-sm font-bold text-emerald-100">{stockManagerNotice}</p>}
+              <div className="mt-5 flex justify-end border-t border-white/10 pt-4"><Button type="button" variant="outline" onClick={()=>setStockManagerCombo(null)} className="border-white/20 text-white hover:bg-white/10">Cerrar</Button></div>
+            </div>
           </div>
-          {stockManagerError && <p role="alert" className="mt-4 rounded-xl border border-red-400/30 bg-red-500/10 p-3 text-sm font-bold text-red-200">{stockManagerError}</p>}
-          {stockManagerNotice && <p role="status" className="mt-4 rounded-xl border border-emerald-400/30 bg-emerald-500/10 p-3 text-sm font-bold text-emerald-100">{stockManagerNotice}</p>}
-          <div className="mt-5 flex justify-end border-t border-white/10 pt-4"><Button type="button" variant="outline" onClick={()=>setStockManagerCombo(null)} className="border-white/20 text-white hover:bg-white/10">Cerrar</Button></div>
+        );
+      })()}
+
+      {/* EXTRAORDINARY WORKSHOP RECONCILIATION MODAL */}
+      {reconcileModalItem && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 backdrop-blur-md bg-black/70">
+          <div className="bg-brand-charcoal border border-amber-500/30 rounded-3xl p-6 max-w-lg w-full shadow-2xl space-y-5">
+            <div className="flex justify-between items-start border-b border-white/10 pb-3">
+              <div>
+                <Badge className="bg-amber-500/20 text-amber-200 border-amber-500/40 text-[10px] font-black uppercase mb-1">
+                  Auditoría extraordinaria
+                </Badge>
+                <h3 className="text-xl font-black text-white">Conciliación de taller</h3>
+                <p className="text-white/60 text-xs mt-0.5">{reconcileModalItem.name} ({reconcileModalItem.id})</p>
+              </div>
+              <Button variant="ghost" size="icon" onClick={() => setReconcileModalItem(null)} className="text-white/40 hover:text-white">
+                <X className="w-5 h-5" />
+              </Button>
+            </div>
+
+            <div className="rounded-2xl bg-black/30 p-4 border border-white/5 space-y-3 text-xs">
+              <div className="grid grid-cols-2 gap-2 text-white/70">
+                <div>Stock en estante / disponible: <strong className="text-white font-mono">{reconcileModalItem.hasWheelSizes ? (reconcileModalItem.wheelSizes || []).reduce((s, w) => s + (w.stock || 0), 0) : reconcileModalItem.stock || 0}</strong></div>
+                <div>En taller registrado: <strong className="text-amber-300 font-mono">{reconcileModalItem.maintenanceStock || 0}</strong></div>
+              </div>
+              <p className="text-amber-200/90 bg-amber-500/10 p-3 rounded-xl border border-amber-500/20 leading-relaxed">
+                <strong>Discrepancia detectada:</strong> Físicamente solo existe 1 unidad física. En el sistema figuran unidades en taller sin una orden activa de servicio. Si se utilizara «Reintegrar», el stock disponible aumentaría erróneamente a 2 unidades.
+              </p>
+              <p className="text-emerald-200/90 bg-emerald-500/10 p-3 rounded-xl border border-emerald-500/20 leading-relaxed">
+                <strong>Acción de conciliación:</strong> Se limpiará el contador de taller a 0 unidades y se mantendrá el stock disponible intacto (total flota física: 1 unidad). Quedará registrado en la auditoría con tu usuario y motivo.
+              </p>
+            </div>
+
+            <div className="space-y-3">
+              <div>
+                <Label className="text-xs font-bold text-white mb-1.5 block">
+                  Motivo obligatorio de la conciliación *
+                </Label>
+                <Textarea
+                  value={reconciliationReason}
+                  onChange={e => setReconciliationReason(e.target.value)}
+                  placeholder="Ej: Corrección de stock duplicado de cuatriciclo: existe 1 sola unidad física y no hay orden activa en taller."
+                  rows={3}
+                  className="bg-black/30 border-white/10 text-white text-xs rounded-xl"
+                />
+              </div>
+
+              <div className="flex items-start gap-2.5 pt-1">
+                <Checkbox
+                  id="reconcileConfirm"
+                  checked={reconciliationConfirm}
+                  onCheckedChange={v => setReconciliationConfirm(Boolean(v))}
+                  className="mt-0.5 border-white/30 data-[state=checked]:bg-brand-yellow data-[state=checked]:text-brand-black"
+                />
+                <label htmlFor="reconcileConfirm" className="text-xs text-white/80 cursor-pointer font-medium leading-relaxed">
+                  Confirmo que existe 1 única unidad física de este artículo y autorizo la conciliación extraordinaria de inventario.
+                </label>
+              </div>
+            </div>
+
+            {reconciliationError && (
+              <p className="text-xs font-bold text-red-300 bg-red-500/10 p-3 rounded-xl border border-red-500/20">
+                {reconciliationError}
+              </p>
+            )}
+            {reconciliationSuccess && (
+              <p className="text-xs font-bold text-emerald-300 bg-emerald-500/10 p-3 rounded-xl border border-emerald-500/20">
+                {reconciliationSuccess}
+              </p>
+            )}
+
+            <div className="flex gap-3 pt-2">
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => setReconcileModalItem(null)}
+                className="flex-1 h-11 rounded-xl text-white/50 hover:text-white hover:bg-white/5 font-bold cursor-pointer"
+              >
+                Cancelar
+              </Button>
+              <Button
+                type="button"
+                disabled={reconciliationLoading || reconciliationReason.trim().length < 10 || !reconciliationConfirm}
+                onClick={async () => {
+                  setReconciliationLoading(true);
+                  setReconciliationError('');
+                  setReconciliationSuccess('');
+                  try {
+                    const res = await reconcileMaintenanceDiscrepancy(reconcileModalItem.id, reconciliationReason.trim(), true);
+                    setReconciliationSuccess(res.message || 'Conciliación completada exitosamente.');
+                    setTimeout(() => {
+                      setReconcileModalItem(null);
+                    }, 1200);
+                  } catch (err: any) {
+                    setReconciliationError(err?.message || 'Error al ejecutar la conciliación.');
+                  } finally {
+                    setReconciliationLoading(false);
+                  }
+                }}
+                className="flex-1 h-11 bg-brand-yellow text-brand-black font-black rounded-xl hover:bg-brand-yellow/90 cursor-pointer"
+              >
+                {reconciliationLoading ? 'Procesando…' : 'Ejecutar conciliación'}
+              </Button>
+            </div>
+          </div>
         </div>
-      </div>}
+      )}
 
       {/* DELETE CONFIRMATION MODAL */}
       {deleteConfirm && (

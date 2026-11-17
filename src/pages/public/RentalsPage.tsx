@@ -34,6 +34,7 @@ type DisplayProduct = {
   wheelSizes?: { size: string; stock: number }[];
   stock?: number;
   comboAvailability?: number;
+  bottleneckReason?: string;
   components?: { name: string; qty: number; requiresWheelSize: boolean }[];
   pricePerHour: number; priceFrom5thHour: number; pricePerDay: number; pricePerWeek: number; pricePerMonth: number;
   price1Hour?: number; price2Hours?: number; price3Hours?: number; price4Hours?: number; price8Hours?: number; price24Hours?: number; price1Week?: number; price1Month?: number;
@@ -69,7 +70,7 @@ const translateProductName = (product: Pick<DisplayProduct, 'name' | 'nameEn'>, 
 
 export default function RentalsPage() {
   const { language } = useLanguage();
-  const { inventory, combos, getComboAvailability, currentCustomer, events, bikeCategories, publicBusinessConfig } = useStore();
+  const { inventory, combos, getComboAvailability, getComboAvailabilityReport, currentCustomer, events, bikeCategories, publicBusinessConfig } = useStore();
 
   const sortCategories = (a: string, b: string) => {
     const indexA = bikeCategories.indexOf(a);
@@ -179,10 +180,11 @@ export default function RentalsPage() {
 
     // Combos
     combos.filter(c => c.active && c.availableForRental).forEach(c => {
-      const avail = getComboAvailability(c.id);
+      const report = getComboAvailabilityReport(c.id);
+      const avail = report.available;
       const comps = c.components.map(comp => {
         const item = inventory.find(i => i.id === comp.inventoryItemId);
-        return { name: item?.name || '?', qty: comp.quantity, requiresWheelSize: comp.requiresWheelSize };
+        return { name: item?.name || comp.inventoryItemId, qty: comp.quantity, requiresWheelSize: comp.requiresWheelSize };
       });
 
       // Check if any component requires wheel size
@@ -232,7 +234,9 @@ export default function RentalsPage() {
         type: 'combo', hasWheelSizes: hasWS, wheelSizes: ws,
         category: c.category || 'Bicicletas',
         secondaryCategories: c.secondaryCategories,
-        comboAvailability: avail, components: comps,
+        comboAvailability: avail,
+        bottleneckReason: report.bottleneckReason,
+        components: comps,
         pricePerHour: c.pricePerHour, priceFrom5thHour: c.priceFrom5thHour,
         pricePerDay: c.pricePerDay, pricePerWeek: c.pricePerWeek, pricePerMonth: c.pricePerMonth,
         price1Hour: c.price1Hour, price2Hours: c.price2Hours, price3Hours: c.price3Hours,
@@ -242,7 +246,7 @@ export default function RentalsPage() {
     });
 
     return items;
-  }, [inventory, combos, getComboAvailability]);
+  }, [inventory, combos, getComboAvailability, getComboAvailabilityReport]);
 
   const categories = useMemo(() => {
     const productCategorySet = new Set<string>();
@@ -399,8 +403,13 @@ export default function RentalsPage() {
                       
                       {/* Availability badge */}
                       {avail <= 0 ? (
-                        <Badge className="absolute top-4 right-4 bg-brand-charcoal text-white text-[10px] font-black uppercase border-0">
-                          {language === 'es' ? 'Agotado' : 'Out of stock'}
+                        <Badge
+                          title={p.bottleneckReason || 'Agotado'}
+                          className="absolute top-4 right-4 bg-brand-charcoal text-white text-[9px] font-black uppercase border-0 max-w-[180px] truncate"
+                        >
+                          {p.type === 'combo' && p.bottleneckReason && p.bottleneckReason !== 'Disponible'
+                            ? p.bottleneckReason
+                            : (language === 'es' ? 'Agotado' : 'Out of stock')}
                         </Badge>
                       ) : (
                         <Badge className="absolute top-4 right-4 text-[9px] font-black uppercase px-2 py-1 border-0 bg-brand-yellow text-brand-black">
@@ -747,9 +756,11 @@ export default function RentalsPage() {
                       >
                         <div className="relative aspect-[4/3] bg-white overflow-hidden rounded-t-[1.8rem] flex items-center justify-center">
                           {p.imageUrl ? <img src={p.imageUrl} alt={translateProductName(p, language)} className="w-full h-full object-contain p-4" /> : <Bike className="w-12 h-12 text-brand-yellow/30" />}
-                          <Badge className={`absolute top-4 right-4 text-[9px] font-black uppercase px-2 py-1 border-0 ${avail <= 0 ? 'bg-brand-charcoal text-white' : 'bg-brand-yellow text-brand-black'}`}>
+                          <Badge className={`absolute top-4 right-4 text-[9px] font-black uppercase px-2 py-1 border-0 max-w-[180px] truncate ${avail <= 0 ? 'bg-brand-charcoal text-white' : 'bg-brand-yellow text-brand-black'}`}>
                             {avail <= 0
-                              ? (language === 'es' ? 'Agotado' : 'Out of stock')
+                              ? (p.type === 'combo' && p.bottleneckReason && p.bottleneckReason !== 'Disponible'
+                                  ? p.bottleneckReason
+                                  : (language === 'es' ? 'Agotado' : 'Out of stock'))
                               : p.type === 'combo'
                                 ? 'Combo'
                                 : p.itemType === 'bike'
