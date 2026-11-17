@@ -81,12 +81,41 @@ export async function getAdminCustomers(): Promise<Record<string, unknown>[]> {
 }
 
 export interface AdminCustomerFiles {
-    files: Record<'autofoto' | 'documento' | 'documentoReverso', { url: string | null; state: 'available' | 'missing' | 'needs_review' }>;
+    files: Record<'autofoto' | 'documento' | 'documentoReverso', {
+        url: string | null;
+        state: 'available' | 'missing' | 'needs_review' | 'technical_error';
+        error?: string;
+        fallbackReason?: string;
+    }>;
     expiresInSeconds: number;
 }
 
 export async function getAdminCustomerFiles(customerId: string): Promise<AdminCustomerFiles> {
     const result = await httpsCallable<{ customerId: string }, AdminCustomerFiles>(functions, 'getAdminCustomerFiles')({ customerId });
+    return result.data;
+}
+
+export interface ReconcileMaintenanceInput {
+    itemId: string;
+    operationId: string;
+    reason: string;
+    adminConfirmation: boolean;
+}
+
+export async function reconcileInventoryMaintenanceDiscrepancy(input: ReconcileMaintenanceInput): Promise<{
+    duplicate: boolean;
+    before?: unknown;
+    after?: unknown;
+    activeOrdersCount?: number;
+    message: string;
+}> {
+    const result = await httpsCallable<ReconcileMaintenanceInput, {
+        duplicate: boolean;
+        before?: unknown;
+        after?: unknown;
+        activeOrdersCount?: number;
+        message: string;
+    }>(functions, 'reconcileInventoryMaintenanceDiscrepancy')(input);
     return result.data;
 }
 

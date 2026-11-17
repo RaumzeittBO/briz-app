@@ -242,6 +242,221 @@ export function getAvailableStockForInterval(params: {
 }
 
 /**
+ * Resolves an inventory item for a combo component, supporting strict ID lookup
+ * and resilient alias matching if an item was recreated with a generated ID.
+ */
+export function findComboComponentItem(
+    componentId: string,
+    inventory: InventoryItem[]
+): { item?: InventoryItem; isAliasMatch: boolean } {
+    const exact = inventory.find(i => i.id === componentId);
+    if (exact) return { item: exact, isAliasMatch: false };
+
+    // Fallback alias resolution (e.g. 'bike_mamachari' -> item with name 'Mamachari')
+    const norm = componentId.toLowerCase().replace(/^(bike_|acc_|inv_)/, '').replace(/_/g, ' ').trim();
+    if (norm) {
+        const byExactName = inventory.find(i => i.active && i.name.toLowerCase().trim() === norm);
+        if (byExactName) return { item: byExactName, isAliasMatch: true };
+
+        const byIncludesName = inventory.find(i => i.active && i.name.toLowerCase().includes(norm));
+        if (byIncludesName) return { item: byIncludesName, isAliasMatch: true };
+    }
+    return { item: undefined, isAliasMatch: false };
+}
+
+export interface ComboComponentDiagnostic {
+    inventoryItemId: string;
+    resolvedItemId?: string;
+    isAliasMatch: boolean;
+    name: string;
+    requiredQuantity: number;
+    availableStock: number;
+    capacity: number;
+    isBottleneck: boolean;
+    reasonCode: 'ok' | 'missing_item' | 'out_of_stock' | 'reserved' | 'in_maintenance' | 'wheel_size_unavailable';
+    reasonMessage: string;
+}
+
+export interface ComboAvailabilityReport {
+    comboId: string;
+    comboName: string;
+    available: number;
+    isAvailable: boolean;
+    bottleneckReason: string;
+    bottleneckComponentName?: string;
+    components: ComboComponentDiagnostic[];
+}
+
+/**
+ * Detailed diagnostic breakdown explaining why a combo is available or unavailable,
+ * pinpointing missing components, wheel size issues, workshop/maintenance, or stock limits.
+ */
+export function getComboAvailabilityDiagnostics(params: {
+    inventory: InventoryItem[];
+    combos: ComboProduct[];
+    rentals: Rental[];
+    comboId?: string;
+    combo?: ComboProduct;
+    wheelSize?: string;
+    date?: string;
+    pickupTime?: string;
+    duration?: string | number;
+    excludeReservationCode?: string;
+    includePendingReservations?: boolean;
+}): ComboAvailabilityReport {
+    const { combos, inventory, wheelSize } = params;
+    const combo = params.combo || combos.find(c => c.id === params.comboId);
+    const comboId = combo?.id || params.comboId || '';
+    if (!combo) {
+        return {
+            comboId,
+            comboName: 'Combinada desconocida',
+            available: 0,
+            isAvailable: false,
+            bottleneckReason: 'Combinada inexistente',
+            components: [],
+        };
+    }
+    if (!combo.active) {
+        return {
+            comboId,
+            comboName: combo.name,
+            available: 0,
+            isAvailable: false,
+            bottleneckReason: 'Combinada inactiva en el catálogo',
+            components: [],
+        };
+    }
+    if (combo.components.length === 0) {
+        return {
+            comboId,
+            comboName: combo.name,
+            available: 0,
+            isAvailable: false,
+            bottleneckReason: 'Sin componentes configurados',
+            components: [],
+        };
+    }
+
+    const componentReports: ComboComponentDiagnostic[] = [];
+    let minCapacity = Infinity;
+
+    for (const comp of combo.components) {
+        const { item, isAliasMatch } = findComboComponentItem(comp.inventoryItemId, inventory);
+        const reqQty = Math.max(1, comp.quantity);
+
+        if (!item || !item.active) {
+            componentReports.push({
+                inventoryItemId: comp.inventoryItemId,
+                resolvedItemId: undefined,
+                isAliasMatch: false,
+                name: item?.name || comp.inventoryItemId,
+                requiredQuantity: reqQty,
+                availableStock: 0,
+                capacity: 0,
+                isBottleneck: true,
+                reasonCode: 'missing_item',
+                reasonMessage: `Componente inexistente o inactivo en inventario (${comp.inventoryItemId})`,
+            });
+            minCapacity = 0;
+            continue;
+        }
+
+        const compWs = (comp.requiresWheelSize || item.hasWheelSizes) ? wheelSize : undefined;
+        if (compWs && item.hasWheelSizes && !item.wheelSizes?.some(w => w.size === compWs)) {
+            componentReports.push({
+                inventoryItemId: comp.inventoryItemId,
+                resolvedItemId: item.id,
+                isAliasMatch,
+                name: item.name,
+                requiredQuantity: reqQty,
+                availableStock: 0,
+                capacity: 0,
+                isBottleneck: true,
+                reasonCode: 'wheel_size_unavailable',
+                reasonMessage: `Aro ${compWs} no disponible para ${item.name}`,
+            });
+            minCapacity = 0;
+            continue;
+        }
+
+        const itemAvail = getAvailableStockForInterval({
+            ...params,
+            itemId: item.id,
+            wheelSize: compWs,
+        });
+        const capacity = Math.floor(itemAvail / reqQty);
+
+        let reasonCode: ComboComponentDiagnostic['reasonCode'] = 'ok';
+        let reasonMessage = 'Disponible';
+
+        if (capacity <= 0) {
+            if ((Number(item.maintenanceStock) || 0) > 0) {
+                reasonCode = 'in_maintenance';
+                reasonMessage = `${item.name}: unidades en mantenimiento / taller`;
+            } else if (itemAvail === 0) {
+                reasonCode = 'out_of_stock';
+                reasonMessage = `${item.name}: sin existencias disponibles`;
+            }
+        }
+
+        componentReports.push({
+            inventoryItemId: comp.inventoryItemId,
+            resolvedItemId: item.id,
+            isAliasMatch,
+            name: item.name,
+            requiredQuantity: reqQty,
+            availableStock: itemAvail,
+            capacity,
+            isBottleneck: false, // determined below
+            reasonCode,
+            reasonMessage,
+        });
+
+        minCapacity = Math.min(minCapacity, capacity);
+    }
+
+    const effectiveAvailable = minCapacity === Infinity ? 0 : Math.max(0, minCapacity);
+
+    // Flag bottlenecks
+    componentReports.forEach(c => {
+        if (c.capacity === effectiveAvailable) {
+            c.isBottleneck = true;
+        }
+    });
+
+    const bottleneck = componentReports.find(c => c.isBottleneck && c.capacity === 0) ||
+        componentReports.find(c => c.isBottleneck);
+
+    let bottleneckReason = 'Disponible';
+    if (effectiveAvailable === 0) {
+        if (bottleneck) {
+            if (bottleneck.reasonCode === 'missing_item') {
+                bottleneckReason = `Componente no registrado (${bottleneck.name})`;
+            } else if (bottleneck.reasonCode === 'in_maintenance') {
+                bottleneckReason = `${bottleneck.name} en taller/mantenimiento`;
+            } else if (bottleneck.reasonCode === 'wheel_size_unavailable') {
+                bottleneckReason = `Aro no disponible para ${bottleneck.name}`;
+            } else {
+                bottleneckReason = `${bottleneck.name} sin stock disponible`;
+            }
+        } else {
+            bottleneckReason = 'Sin disponibilidad para este horario';
+        }
+    }
+
+    return {
+        comboId,
+        comboName: combo.name,
+        available: effectiveAvailable,
+        isAvailable: effectiveAvailable > 0,
+        bottleneckReason,
+        bottleneckComponentName: bottleneck?.name,
+        components: componentReports,
+    };
+}
+
+/**
  * Calculates combo availability for a specific time window (and optional bike wheel size).
  */
 export function getComboAvailabilityForInterval(params: {
@@ -256,22 +471,6 @@ export function getComboAvailabilityForInterval(params: {
     excludeReservationCode?: string;
     includePendingReservations?: boolean;
 }): number {
-    const { comboId, combos, inventory, wheelSize } = params;
-    const combo = combos.find(c => c.id === comboId);
-    if (!combo || !combo.active || combo.components.length === 0) return 0;
-
-    let minAvail = Infinity;
-    for (const comp of combo.components) {
-        const item = inventory.find(i => i.id === comp.inventoryItemId);
-        if (!item || !item.active) return 0;
-        const compWs = (comp.requiresWheelSize || item.hasWheelSizes) ? wheelSize : undefined;
-        const itemAvail = getAvailableStockForInterval({
-            ...params,
-            itemId: item.id,
-            wheelSize: compWs,
-        });
-        const possible = Math.floor(itemAvail / Math.max(1, comp.quantity));
-        minAvail = Math.min(minAvail, possible);
-    }
-    return minAvail === Infinity ? 0 : Math.max(0, minAvail);
+    const report = getComboAvailabilityDiagnostics(params);
+    return report.available;
 }

@@ -23,6 +23,23 @@ function cleanReference(value: unknown): string {
     return typeof value === 'string' ? value.trim().slice(0, 1500) : '';
 }
 
+export function bucketNamesMatch(a: string, b: string): boolean {
+    if (!a || !b) return false;
+    if (a === b) return true;
+    const clean = (s: string) => s.replace(/\.(appspot\.com|firebasestorage\.app)$/, '');
+    return clean(a) === clean(b);
+}
+
+export function getPathVariants(path: string): string[] {
+    const list = [path];
+    if (path.endsWith('.jpg')) {
+        list.push(path.slice(0, -4) + '.jpeg');
+    } else if (path.endsWith('.jpeg')) {
+        list.push(path.slice(0, -5) + '.jpg');
+    }
+    return list;
+}
+
 /** Accept only a bucket reference rooted in the verified UID or its exact linked legacy customer. */
 export function ownedCustomerStoragePath(uid: string, legacyCustomerId: string, value: unknown, bucketName: string): string {
     const reference = cleanReference(value);
@@ -30,14 +47,14 @@ export function ownedCustomerStoragePath(uid: string, legacyCustomerId: string, 
     let objectPath = reference;
     if (reference.startsWith('gs://')) {
         const match = /^gs:\/\/([^/]+)\/(.+)$/.exec(reference);
-        if (!match || match[1] !== bucketName) return '';
+        if (!match || !bucketNamesMatch(match[1], bucketName)) return '';
         objectPath = match[2];
     } else if (/^https?:\/\//i.test(reference)) {
         try {
             const url = new URL(reference);
             if (url.protocol !== 'https:' || url.hostname !== 'firebasestorage.googleapis.com') return '';
             const match = /^\/v0\/b\/([^/]+)\/o\/(.+)$/.exec(url.pathname);
-            if (!match || match[1] !== bucketName) return '';
+            if (!match || !bucketNamesMatch(match[1], bucketName)) return '';
             objectPath = decodeURIComponent(match[2]);
         } catch { return ''; }
     } else if (reference.includes('?') || reference.includes('#')) {
@@ -76,10 +93,18 @@ export async function resolveCustomerPrivateFiles(
                 ambiguousReference = true;
                 continue;
             }
-            // Do not catch permission or transport errors here: an unknown result is not a missing file.
-            const [exists] = await bucket.file(candidate).exists();
-            if (exists) {
-                foundPath = candidate;
+            const variants = getPathVariants(candidate);
+            let existsInStorage = false;
+            for (const variant of variants) {
+                // Do not catch permission or transport errors here: an unknown result is not a missing file.
+                const [exists] = await bucket.file(variant).exists();
+                if (exists) {
+                    foundPath = variant;
+                    existsInStorage = true;
+                    break;
+                }
+            }
+            if (existsInStorage) {
                 break;
             }
         }

@@ -42,7 +42,7 @@ import { SHOP_SEED_CATEGORIES } from '../data/shopSeedData';
 import { DEFAULT_PUBLIC_BUSINESS_CONFIG, mergePublicBusinessConfig, type PublicBusinessConfig, type PublicBusinessConfigUpdate } from '../lib/businessConfig';
 import { savePublicBusinessConfig } from '../lib/publicBusinessSettings';
 import { addInventoryCategory } from '../lib/inventoryCategories';
-import { beginCustomerRegistration, sendCustomerVerificationEmail as sendCustomerVerificationEmailBackend, createCustomerProfile as createCustomerProfileBackend, completeCustomerProfile as completeCustomerProfileBackend, getMyRentals as getMyRentalsBackend, getAdminCustomers as getAdminCustomersBackend, createRentalGroup as createRentalGroupBackend, createServiceOrder as createServiceOrderBackend, createBrizMaintenanceOrder, updateBrizMaintenanceOrder, releaseBrizMaintenanceOrder, releaseUnlinkedMaintenanceStock as releaseUnlinkedMaintenanceStockBackend, adjustInventoryStock as adjustInventoryStockBackend, type CustomerRecoveryFiles, type PublicCustomerProfile, type ReservationGroupInput } from '../lib/backend';
+import { beginCustomerRegistration, sendCustomerVerificationEmail as sendCustomerVerificationEmailBackend, createCustomerProfile as createCustomerProfileBackend, completeCustomerProfile as completeCustomerProfileBackend, getMyRentals as getMyRentalsBackend, getAdminCustomers as getAdminCustomersBackend, createRentalGroup as createRentalGroupBackend, createServiceOrder as createServiceOrderBackend, createBrizMaintenanceOrder, updateBrizMaintenanceOrder, releaseBrizMaintenanceOrder, releaseUnlinkedMaintenanceStock as releaseUnlinkedMaintenanceStockBackend, reconcileInventoryMaintenanceDiscrepancy as reconcileInventoryMaintenanceDiscrepancyBackend, adjustInventoryStock as adjustInventoryStockBackend, type CustomerRecoveryFiles, type PublicCustomerProfile, type ReservationGroupInput } from '../lib/backend';
 import { calculateProductRentalPrice } from '../lib/rentalPricing';
 
 const CUSTOMER_VERIFICATION_EMAIL_KEY = 'briz_customer_verification_email';
@@ -56,6 +56,9 @@ function customerVerificationActionSettings() {
 import {
     getAvailableStockForInterval as calcItemStockForInterval,
     getComboAvailabilityForInterval as calcComboAvailForInterval,
+    getComboAvailabilityDiagnostics,
+    findComboComponentItem,
+    type ComboAvailabilityReport,
 } from '../lib/rentalAvailability';
 
 export type { CyclingRoute };
@@ -444,11 +447,19 @@ interface StoreContextType {
     updateServiceOrder: (id: string, so: Partial<ServiceOrder>) => Promise<void>;
     releaseMaintenanceOrder: (id: string) => Promise<void>;
     releaseUnlinkedMaintenanceUnit: (itemId: string, wheelSize: string | undefined, operationId: string) => Promise<void>;
+    reconcileMaintenanceDiscrepancy: (itemId: string, reason: string, adminConfirmation: boolean, operationId?: string) => Promise<any>;
     deleteServiceOrder: (id: string) => Promise<void>;
 
     // Helpers
     getItemStock: (itemId: string, wheelSize?: string) => number;
     getComboAvailability: (comboId: string, wheelSize?: string) => number;
+    getComboAvailabilityReport: (
+        comboId: string,
+        wheelSize?: string,
+        date?: string,
+        pickupTime?: string,
+        duration?: string | number
+    ) => ComboAvailabilityReport;
     getAvailableStockForInterval: (
         itemId: string,
         wheelSize?: string,
@@ -909,14 +920,34 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
         if (!combo || combo.components.length === 0) return 0;
         let minAvail = Infinity;
         for (const comp of combo.components) {
-            const item = inventory.find(i => i.id === comp.inventoryItemId);
-            if (!item) return 0;
+            const { item } = findComboComponentItem(comp.inventoryItemId, inventory);
+            if (!item || !item.active) return 0;
             const ws = (comp.requiresWheelSize || item.hasWheelSizes) ? wheelSize : undefined;
             const itemStock = getItemStock(item.id, ws);
             const possible = Math.floor(itemStock / Math.max(1, comp.quantity));
             minAvail = Math.min(minAvail, possible);
         }
         return minAvail === Infinity ? 0 : Math.max(0, minAvail);
+    };
+
+    const getComboAvailabilityReport = (
+        comboId: string,
+        wheelSize?: string,
+        date?: string,
+        pickupTime?: string,
+        duration?: string | number
+    ): ComboAvailabilityReport => {
+        return getComboAvailabilityDiagnostics({
+            inventory,
+            combos,
+            rentals,
+            comboId,
+            wheelSize,
+            date,
+            pickupTime,
+            duration,
+            includePendingReservations: true,
+        });
     };
 
     const getAvailableStockForInterval = (
@@ -1491,6 +1522,8 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
     };
     const releaseMaintenanceOrder = (id: string) => releaseBrizMaintenanceOrder(id);
     const releaseUnlinkedMaintenanceUnit = (itemId: string, wheelSize: string | undefined, operationId: string) => releaseUnlinkedMaintenanceStockBackend({ itemId, wheelSize, operationId });
+    const reconcileMaintenanceDiscrepancy = (itemId: string, reason: string, adminConfirmation: boolean, operationId: string = crypto.randomUUID()) =>
+        reconcileInventoryMaintenanceDiscrepancyBackend({ itemId, reason, adminConfirmation, operationId });
 
     const updateAdminNavigationLinks = async (links: AdminNavigationLink[]) => {
         await setDoc(doc(db, 'settings', 'admin_navigation'), { links });
@@ -1559,8 +1592,8 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
         updateRental, recordRentalPaymentMovement, markRentalExpired,
         addSale, updateSaleStatus, deleteSale,
         addOrUpdateCustomer, updateCustomer, deleteCustomer, verifyCustomerRecovery,
-        addServiceOrder, updateServiceOrder, deleteServiceOrder, releaseMaintenanceOrder, releaseUnlinkedMaintenanceUnit,
-        getItemStock, getComboAvailability,
+        addServiceOrder, updateServiceOrder, deleteServiceOrder, releaseMaintenanceOrder, releaseUnlinkedMaintenanceUnit, reconcileMaintenanceDiscrepancy,
+        getItemStock, getComboAvailability, getComboAvailabilityReport,
         getAvailableStockForInterval, getComboAvailabilityForInterval,
         calculatePrice, resetAllData,
         currentCustomer, loginCustomer, resendCustomerVerification, refreshCustomerVerification, changeCustomerVerificationEmail, completeCustomerProfile, registerCustomer, logoutCustomer, getMyRentalHistory, createRentalGroup,

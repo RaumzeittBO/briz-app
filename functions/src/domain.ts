@@ -171,6 +171,22 @@ export function getRentalWindow(rental: RentalLike): RentalWindow {
     return { startMs, endMs };
 }
 
+export function findComboComponentItem(
+    componentId: string,
+    inventory: CatalogItem[]
+): { item?: CatalogItem; isAliasMatch: boolean } {
+    const exact = inventory.find(i => i.id === componentId);
+    if (exact) return { item: exact, isAliasMatch: false };
+    const norm = componentId.toLowerCase().replace(/^(bike_|acc_|inv_)/, '').replace(/_/g, ' ').trim();
+    if (norm) {
+        const byExactName = inventory.find(i => i.active && i.name.toLowerCase().trim() === norm);
+        if (byExactName) return { item: byExactName, isAliasMatch: true };
+        const byIncludesName = inventory.find(i => i.active && i.name.toLowerCase().includes(norm));
+        if (byIncludesName) return { item: byIncludesName, isAliasMatch: true };
+    }
+    return { item: undefined, isAliasMatch: false };
+}
+
 export function rentalDemands(rental: Pick<RentalLike, 'productType' | 'productId' | 'quantity' | 'selectedWheelSize' | 'componentSelections' | 'selectedAccessories'>, inventory: CatalogItem[], combos: Combo[]): Demand[] {
     if (rental.productId.startsWith('srv_')) return [];
     const qty = Math.floor(Number(rental.quantity));
@@ -184,7 +200,7 @@ export function rentalDemands(rental: Pick<RentalLike, 'productType' | 'productI
         const combo = combos.find(candidate => candidate.id === rental.productId);
         if (!combo) return [];
         for (const component of combo.components) {
-            const item = inventory.find(candidate => candidate.id === component.inventoryItemId);
+            const { item } = findComboComponentItem(component.inventoryItemId, inventory);
             if (!item) continue;
             const selected = rental.componentSelections?.find(candidate => candidate.inventoryItemId === component.inventoryItemId)?.wheelSize;
             const wheelSize = item.hasWheelSizes
