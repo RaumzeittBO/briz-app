@@ -486,6 +486,7 @@ export default function InventoryPage() {
     setEditItem({...editItem, components:[...editItem.components, {inventoryItemId:'', quantity:1, requiresWheelSize:false}]});
   };
   const removeComponent = (idx:number) => {
+    if (editItem.components.length <= 1) return;
     const c = [...editItem.components]; c.splice(idx,1);
     setEditItem({...editItem, components:c});
   };
@@ -1055,8 +1056,8 @@ export default function InventoryPage() {
                               <Input type="number" min={1} value={toEditableNumber(comp.quantity)} onChange={e=>updateComponent(idx,{quantity:e.target.value === '' ? '' as any : Number(e.target.value)})} className="bg-black/20 border-white/5 h-10 pl-10 pr-2 font-black text-brand-yellow rounded-xl text-right" />
                             </div>
                             {selectedItem?.hasWheelSizes && <Badge className="bg-brand-yellow/10 text-brand-yellow text-[8px] font-bold border-0">Requiere aro</Badge>}
-                            <Button type="button" variant="ghost" size="icon" className="text-red-400/40 hover:text-red-400 w-7 h-7 rounded-lg" onClick={()=>removeComponent(idx)}>
-                              <X className="w-3 h-3"/>
+                            <Button type="button" variant="ghost" size="icon" aria-label={`Quitar ${selectedItem?.name || 'componente'}`} title={editItem.components.length <= 1 ? 'Un combo debe conservar al menos un componente' : 'Quitar componente'} disabled={editItem.components.length <= 1} className="text-red-300 hover:text-white hover:bg-red-500/25 disabled:opacity-30 disabled:cursor-not-allowed w-9 h-9 rounded-lg" onClick={()=>removeComponent(idx)}>
+                              <X className="w-4 h-4"/>
                             </Button>
                           </div>
                         );
@@ -1222,14 +1223,14 @@ export default function InventoryPage() {
 
             <div className="rounded-2xl bg-black/30 p-4 border border-white/5 space-y-3 text-xs">
               <div className="grid grid-cols-2 gap-2 text-white/70">
-                <div>Stock en estante / disponible: <strong className="text-white font-mono">{reconcileModalItem.hasWheelSizes ? (reconcileModalItem.wheelSizes || []).reduce((s, w) => s + (w.stock || 0), 0) : reconcileModalItem.stock || 0}</strong></div>
-                <div>En taller registrado: <strong className="text-amber-300 font-mono">{reconcileModalItem.maintenanceStock || 0}</strong></div>
+                <div>Stock disponible registrado: <strong className="text-white font-mono">{reconcileModalItem.hasWheelSizes ? (reconcileModalItem.wheelSizes || []).reduce((s, w) => s + (w.stock || 0), 0) : reconcileModalItem.stock || 0}</strong></div>
+                <div>Stock en taller registrado: <strong className="text-amber-300 font-mono">{reconcileModalItem.maintenanceStock || 0}</strong></div>
               </div>
               <p className="text-amber-200/90 bg-amber-500/10 p-3 rounded-xl border border-amber-500/20 leading-relaxed">
-                <strong>Discrepancia detectada:</strong> Físicamente solo existe 1 unidad física. En el sistema figuran unidades en taller sin una orden activa de servicio. Si se utilizara «Reintegrar», el stock disponible aumentaría erróneamente a 2 unidades.
+                <strong>Discrepancia detectada:</strong> El contador de taller no coincide con las órdenes BRIZ activas vinculadas a este artículo. Estos valores describen el registro del sistema y no determinan por sí solos cuántas unidades físicas existen.
               </p>
               <p className="text-emerald-200/90 bg-emerald-500/10 p-3 rounded-xl border border-emerald-500/20 leading-relaxed">
-                <strong>Acción de conciliación:</strong> Se limpiará el contador de taller a 0 unidades y se mantendrá el stock disponible intacto (total flota física: 1 unidad). Quedará registrado en la auditoría con tu usuario y motivo.
+                <strong>Acción de conciliación:</strong> Se ajustará únicamente el contador de taller para que refleje las órdenes activas vinculadas. El stock disponible y las órdenes históricas no cambiarán. La operación quedará registrada con tu usuario y motivo.
               </p>
             </div>
 
@@ -1241,7 +1242,7 @@ export default function InventoryPage() {
                 <Textarea
                   value={reconciliationReason}
                   onChange={e => setReconciliationReason(e.target.value)}
-                  placeholder="Ej: Corrección de stock duplicado de cuatriciclo: existe 1 sola unidad física y no hay orden activa en taller."
+                  placeholder="Describe el recuento físico realizado y la discrepancia observada para este artículo."
                   rows={3}
                   className="bg-black/30 border-white/10 text-white text-xs rounded-xl"
                 />
@@ -1255,7 +1256,7 @@ export default function InventoryPage() {
                   className="mt-0.5 border-white/30 data-[state=checked]:bg-brand-yellow data-[state=checked]:text-brand-black"
                 />
                 <label htmlFor="reconcileConfirm" className="text-xs text-white/80 cursor-pointer font-medium leading-relaxed">
-                  Confirmo que existe 1 única unidad física de este artículo y autorizo la conciliación extraordinaria de inventario.
+                  Confirmo que verifiqué físicamente este artículo y autorizo ajustar solo el contador de taller según sus órdenes activas vinculadas.
                 </label>
               </div>
             </div>

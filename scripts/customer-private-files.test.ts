@@ -1,5 +1,11 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { resolveCustomerPrivateFiles, type CustomerPrivateFileBucket } from '../functions/src/customerPrivateFiles';
+
+const functionsSource = readFileSync(new URL('../functions/src/index.ts', import.meta.url), 'utf8');
+const adminFilesCallable = functionsSource.split('export const getAdminCustomerFiles =')[1]?.split('export const createRentalGroup =')[0] || '';
+assert.ok(adminFilesCallable, 'The authorized admin file endpoint must be present for the Storage access check.');
+assert.doesNotMatch(adminFilesCallable, /\.getFiles\s*\(/, 'Private document lookup must not depend on storage.objects.list.');
 
 const uid = 'customer-uid-1';
 const legacyId = 'legacy-customer-1';

@@ -7,13 +7,17 @@ import { createRequire } from 'node:module';
 const projectId = 'demo-briz-security';
 const authHost = '127.0.0.1:9099';
 const firestoreHost = '127.0.0.1:8080';
+const storageHost = '127.0.0.1:9199';
 const email = 'admin-visual@example.test';
 const password = 'BrizEmulator#123';
 
 async function assertEmulator(url: string, label: string): Promise<void> {
     try {
         const response = await fetch(url, { signal: AbortSignal.timeout(1500) });
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        // Storage Emulator responds 501 at its root path even while the API is ready.
+        if (!response.ok && !(label === 'Storage' && response.status === 501)) {
+            throw new Error(`HTTP ${response.status}`);
+        }
     } catch (error) {
         throw new Error(`${label} Emulator no responde en ${url}; no se escribieron fixtures. ${error instanceof Error ? error.message : ''}`);
     }
@@ -21,20 +25,24 @@ async function assertEmulator(url: string, label: string): Promise<void> {
 
 await assertEmulator(`http://${authHost}/`, 'Authentication');
 await assertEmulator(`http://${firestoreHost}/`, 'Firestore');
+await assertEmulator(`http://${storageHost}/`, 'Storage');
 
 // Set emulator routing before loading firebase-admin. The fixed demo project and loopback
 // hosts make this fixture incapable of writing to the production Firebase project.
 process.env.GCLOUD_PROJECT = projectId;
 process.env.FIREBASE_AUTH_EMULATOR_HOST = authHost;
 process.env.FIRESTORE_EMULATOR_HOST = firestoreHost;
+process.env.STORAGE_EMULATOR_HOST = `http://${storageHost}`;
 
 const require = createRequire(new URL('../functions/package.json', import.meta.url));
 const { initializeApp } = require('firebase-admin/app');
 const { getAuth } = require('firebase-admin/auth');
 const { getFirestore } = require('firebase-admin/firestore');
+const { getStorage } = require('firebase-admin/storage');
 const app = initializeApp({ projectId }, 'briz-admin-visual-fixture');
 const auth = getAuth(app);
 const db = getFirestore(app);
+const bucket = getStorage(app).bucket(`${projectId}.appspot.com`);
 
 let user;
 try {
@@ -105,6 +113,21 @@ await db.doc('settings/public_business').set({
         sunday: { closed: true, open: '09:00', close: '14:00' },
     },
     updatedAt: new Date(),
+});
+
+const visualCustomerId = 'visual-private-customer';
+const pngFixture = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jxioAAAAASUVORK5CYII=', 'base64');
+const pdfFixture = Buffer.from('%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 240 120]/Contents 4 0 R>>endobj\n4 0 obj<</Length 42>>stream\nBT /F1 16 Tf 20 60 Td (Fictional test document) Tj ET\nendstream endobj\ntrailer<</Root 1 0 R>>\n%%EOF', 'utf8');
+await bucket.file(`customers/${visualCustomerId}/photo.png`).save(pngFixture, { metadata: { contentType: 'image/png' } });
+await bucket.file(`customers/${visualCustomerId}/document.pdf`).save(pdfFixture, { metadata: { contentType: 'application/pdf' } });
+await db.doc(`customers/${visualCustomerId}`).set({
+    id: visualCustomerId, name: 'Cliente Ficticio de Prueba', phone: '+59170000090', ci: 'VISUAL-TEST-90',
+    email: 'private-files@example.test', store: 'cochabamba', rentalsCount: 0, purchasesCount: 0,
+});
+await db.doc(`customerPrivate/${visualCustomerId}`).set({
+    autofotoPath: `customers/${visualCustomerId}/photo.png`,
+    documentoPath: `customers/${visualCustomerId}/document.pdf`,
+    documentoReversoPath: `data:image/png;base64,${pngFixture.toString('base64')}`,
 });
 
 console.log(`Emulator-only admin fixture ready in ${projectId}.`);

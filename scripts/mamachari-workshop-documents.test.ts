@@ -109,6 +109,16 @@ console.log('Testing Mamachari availability, workshop reconciliation & customer 
     assert.equal(bikeDiag?.isAliasMatch, true);
     assert.equal(bikeDiag?.capacity, 6);
     assert.equal(bikeDiag?.isBottleneck, false);
+
+    const linkedWithoutDuplicate = { ...mamachariCombo, components: mamachariCombo.components.map(component => component.inventoryItemId === 'bike_mamachari'
+        ? { ...component, inventoryItemId: mockInventory[0].id }
+        : component) };
+    const linkedReport = getComboAvailabilityDiagnostics({ comboId: linkedWithoutDuplicate.id, combo: linkedWithoutDuplicate, inventory: mockInventory, combos: [linkedWithoutDuplicate], rentals: [] });
+    assert.equal(linkedReport.available, 2, 'Linking the existing Mamachari inventory row does not require a duplicate item.');
+    const deletedComponentReport = getComboAvailabilityDiagnostics({
+        comboId: mamachariCombo.id, combo: mamachariCombo, inventory: mockInventory.filter(item => item.id !== mockInventory[0].id), combos: [mamachariCombo], rentals: [],
+    });
+    assert.equal(deletedComponentReport.isAvailable, false, 'A deleted physical component is diagnosed as unavailable until relinked.');
 }
 
 // Test 3: Storage bucket normalization and format variants
@@ -141,34 +151,33 @@ console.log('Testing Mamachari availability, workshop reconciliation & customer 
     assert.equal(ownedCustomerStoragePath('uid123', '', badPath, 'briz-4ef3a.firebasestorage.app'), '');
 }
 
-// Test 4: Workshop reconciliation state invariant
+// Test 4: Workshop reconciliation follows per-item linked orders, not a universal unit count
 {
-    // Before: cuatriciclo has 1 stock, 1 maintenanceStock, but 0 active orders
+    // Emulator-style quad fixture: 5 units available and 3 workshop units recorded,
+    // but only two active service orders (one unit in each wheel size).
     const itemBefore = {
         id: 'bike_cuatriciclo_familiar',
         name: 'Cuatriciclo Familiar',
-        stock: 1,
-        maintenanceStock: 1,
+        stock: 0,
+        maintenanceStock: 3,
         hasWheelSizes: true,
-        wheelSizes: [{ size: '20', stock: 1, maintenanceStock: 0 }],
+        wheelSizes: [
+            { size: '20', stock: 3, maintenanceStock: 2 },
+            { size: '22', stock: 2, maintenanceStock: 1 },
+        ],
     };
 
-    // Simulated reconciliation operation
-    const activeOrdersCount = 0;
+    const activeOrdersByWheel = { '20': 1, '22': 1 };
+    const activeOrdersCount = Object.values(activeOrdersByWheel).reduce((sum, value) => sum + value, 0);
     const reconciledItem = {
         ...itemBefore,
         maintenanceStock: activeOrdersCount,
-        wheelSizes: itemBefore.wheelSizes.map(w => ({ ...w, maintenanceStock: 0 })),
+        wheelSizes: itemBefore.wheelSizes.map(w => ({ ...w, maintenanceStock: activeOrdersByWheel[w.size as keyof typeof activeOrdersByWheel] || 0 })),
     };
 
-    // Verify invariant: available stock is STILL 1 (not 2!), maintenance is 0, total physical is 1!
-    assert.equal(reconciledItem.stock, 1);
-    assert.equal(reconciledItem.maintenanceStock, 0);
-    assert.equal(reconciledItem.wheelSizes[0].stock, 1);
-    assert.equal(reconciledItem.wheelSizes[0].maintenanceStock, 0);
-
-    const totalFleet = reconciledItem.wheelSizes.reduce((s, w) => s + w.stock, 0) + reconciledItem.maintenanceStock;
-    assert.equal(totalFleet, 1, 'Physical fleet must equal 1 after reconciliation');
+    assert.equal(reconciledItem.maintenanceStock, 2, 'System workshop quantity must follow the two active service orders.');
+    assert.deepEqual(reconciledItem.wheelSizes.map(w => [w.size, w.stock, w.maintenanceStock]), [['20', 3, 1], ['22', 2, 1]]);
+    assert.equal(reconciledItem.wheelSizes.reduce((sum, wheel) => sum + wheel.stock, 0), 5, 'Reconciliation leaves available physical stock unchanged.');
 }
 
 // Test 5: Branch/Store isolation and anti-ambiguity

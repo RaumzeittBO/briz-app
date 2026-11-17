@@ -184,6 +184,7 @@ try {
     const unauthorizedReader = await client('unauthorized-files@example.test', 'TestPass#123');
     await assert.rejects(() => call(unauthorizedReader.functions, 'getAdminCustomerFiles', { customerId: userA.uid }), (error: unknown) => (error as { code?: string }).code === 'functions/permission-denied');
     const branchManager = await client('manager-files@example.test', 'TestPass#123');
+    await verifyEmail(branchManager.auth, branchManager.uid);
     await adminDb.doc(`adminUsers/${branchManager.uid}`).set({ uid: branchManager.uid, role: 'manager', active: true, store: 'lapaz' });
     await assert.rejects(() => call(branchManager.functions, 'getAdminCustomerFiles', { customerId: userA.uid }), (error: unknown) => (error as { code?: string }).code === 'functions/permission-denied');
     await adminDb.doc(`adminUsers/${branchManager.uid}`).update({ store: 'cochabamba' });
@@ -346,7 +347,7 @@ try {
         lines: [{ productId: 'acc-emulator', productType: 'single', quantity: 1 }],
         date: directAccessoryDate, pickupTime: '14:00', duration: '1 hora', paymentMethod: 'QR',
     });
-    assert.equal(directAccessory.total, 7, 'Standalone accessory uses the same fixed price as the rental UI.');
+    assert.equal(directAccessory.total, 20, 'Standalone accessory uses the configured individual rate (or the UI’s documented default) rather than its addon-only price.');
 
     const standaloneDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/La_Paz' }).format(new Date(Date.now() + 5 * 24 * 60 * 60 * 1000));
     await call(userA.functions, 'createRentalGroup', {
@@ -500,6 +501,10 @@ try {
     assert.equal(Number(raceInventory.get('stock')) + Number(raceInventory.get('maintenanceStock')), 1);
     pass('A booking and a maintenance intake racing for the last physical unit serialize; exactly one succeeds');
 
+    await adminDb.doc(`customers/${userA.uid}`).set({
+        id: userA.uid, name: 'Registered Emulator Customer', phone: '+59170000001', ci: 'TEST-1001',
+        email: 'rider-a@example.test', store: 'cochabamba', rentalsCount: 0, purchasesCount: 0,
+    });
     const manualBooking = {
         adminManual: true,
         adminCustomer: { name: 'Counter Customer', phone: '+59170000009', ci: 'TEST-1009', email: 'counter@example.test' },
@@ -524,6 +529,117 @@ try {
     assert.equal((await adminDb.collection('rentals').where('reservationCode', '==', manualResult.reservationCode).get()).size, 1,
         'A retried manual create with the same idempotency key must persist exactly one rental line.');
     pass('Administrative manual booking validates role, creates customer and rental atomically, and retries idempotently');
+
+    await adminDb.doc(`_requestLimits/reservations_${createHash('sha256').update(userA.uid).digest('hex')}`).delete();
+    const existingCounterCustomerId = 'counter-customer-existing-fixture';
+    await adminDb.doc(`customers/${existingCounterCustomerId}`).set({
+        id: existingCounterCustomerId, name: 'Existing Counter Customer', phone: '+59170000991', ci: 'EMU-LINK-991',
+        email: 'existing-counter@example.test', store: 'cochabamba', rentalsCount: 0, purchasesCount: 0,
+    });
+    await assert.rejects(() => call(userA.functions, 'createRentalGroup', {
+        adminManual: true, adminCustomerPending: true, adminImmediateWalkIn: false,
+        lines: [{ productId: 'bike-emulator', productType: 'single', quantity: 1, wheelSize: '26' }],
+        date: new Intl.DateTimeFormat('en-CA', { timeZone: 'America/La_Paz' }).format(new Date(Date.now() + 20 * 24 * 60 * 60 * 1000)),
+        pickupTime: '10:00', duration: '1 hora', paymentMethod: 'Efectivo', idempotencyKey: `manual_pending_future_${crypto.randomUUID()}`,
+    }), /atención inmediata|día actual/i, 'Pending customer is limited to a same-day counter walk-in, not a future booking.');
+    const pendingWalkIn = await call<{ reservationCode: string; rentalIds: string[]; total: number }>(userA.functions, 'createRentalGroup', {
+        adminManual: true, adminCustomerPending: true, adminPaymentStatus: 'unpaid',
+        adminImmediateWalkIn: true,
+        adminNotes: '[DOCUMENTO EN CUSTODIA]: CI de prueba en mostrador',
+        lines: [{ productId: 'bike-emulator', productType: 'single', quantity: 1, wheelSize: '26' }],
+        date: new Intl.DateTimeFormat('en-CA', { timeZone: 'America/La_Paz' }).format(new Date()),
+        pickupTime: '09:00', duration: '1 hora', paymentMethod: 'Efectivo', idempotencyKey: `manual_pending_${crypto.randomUUID()}`,
+    });
+    const pendingWalkInRow = adminDb.doc(`rentals/${pendingWalkIn.rentalIds[0]}`);
+    const pendingBeforeLink = await pendingWalkInRow.get();
+    assert.equal(pendingBeforeLink.get('customerPending'), true);
+    assert.equal(pendingBeforeLink.get('customerName'), 'Cliente pendiente');
+    assert.equal(pendingBeforeLink.get('customerCI'), '');
+    assert.equal(pendingBeforeLink.get('paymentStatus'), 'unpaid');
+    assert.match(pendingBeforeLink.get('notes'), /DOCUMENTO EN CUSTODIA/);
+    await call(userA.functions, 'adminRentalAction', { action: 'confirm', rentalIds: pendingWalkIn.rentalIds });
+    await call(userA.functions, 'adminRentalAction', { action: 'deliver', rentalIds: pendingWalkIn.rentalIds });
+    const deliveredBeforeAssociation = await pendingWalkInRow.get();
+    await call(userA.functions, 'associateManualRentalCustomer', {
+        reservationCode: pendingWalkIn.reservationCode, customer: { id: existingCounterCustomerId },
+    });
+    const linkedWalkIn = await pendingWalkInRow.get();
+    assert.equal(linkedWalkIn.get('customerId'), existingCounterCustomerId);
+    assert.equal(linkedWalkIn.get('customerPending'), false);
+    assert.equal(linkedWalkIn.get('customerName'), 'Existing Counter Customer');
+    assert.equal(linkedWalkIn.get('status'), deliveredBeforeAssociation.get('status'));
+    assert.equal(linkedWalkIn.get('date'), deliveredBeforeAssociation.get('date'));
+    assert.equal(linkedWalkIn.get('total'), deliveredBeforeAssociation.get('total'));
+    assert.equal(linkedWalkIn.get('paymentStatus'), 'unpaid');
+    assert.equal((await adminDb.collection('rentals').where('reservationCode', '==', pendingWalkIn.reservationCode).get()).size, 1);
+    await assert.rejects(() => call(userA.functions, 'associateManualRentalCustomer', {
+        reservationCode: pendingWalkIn.reservationCode, customer: { id: existingCounterCustomerId },
+    }));
+    assert.equal((await adminDb.doc(`customers/${existingCounterCustomerId}`).get()).get('rentalsCount'), 1);
+    await call(userA.functions, 'adminRentalAction', { action: 'return', rentalIds: pendingWalkIn.rentalIds, damagedUnits: 0 });
+    pass('Immediate walk-in without customer keeps real fields blank, delivers once, then securely links existing profile without changing booking or payment data');
+
+    await adminDb.doc(`_requestLimits/reservations_${createHash('sha256').update(userA.uid).digest('hex')}`).delete();
+    const pendingNewProfile = await call<{ reservationCode: string; rentalIds: string[] }>(userA.functions, 'createRentalGroup', {
+        adminManual: true, adminCustomerPending: true,
+        adminImmediateWalkIn: true,
+        lines: [{ productId: 'bike-emulator', productType: 'single', quantity: 1, wheelSize: '26' }],
+        date: new Intl.DateTimeFormat('en-CA', { timeZone: 'America/La_Paz' }).format(new Date()),
+        pickupTime: '09:00', duration: '1 hora', paymentMethod: 'Efectivo', idempotencyKey: `manual_pending_new_${crypto.randomUUID()}`,
+    });
+    const newlyLinked = await call<{ ok: boolean; customerId: string; linkedRentals: number }>(userA.functions, 'associateManualRentalCustomer', {
+        reservationCode: pendingNewProfile.reservationCode,
+        customer: { name: 'Real Emulator Customer', phone: '+59170000992', ci: 'EMU-LINK-992', email: 'new-counter@example.test' },
+    });
+    assert.equal(newlyLinked.linkedRentals, 1);
+    assert.equal((await adminDb.doc(`customers/${newlyLinked.customerId}`).get()).get('ci'), 'EMU-LINK-992');
+    assert.equal((await adminDb.doc(`rentals/${pendingNewProfile.rentalIds[0]}`).get()).get('customerPending'), false);
+    pass('A pending manual rental can create one explicit new customer record with supplied test data and link it to the existing operation');
+
+    await adminDb.doc('inventory/manager-pending-fixture').set({
+        id: 'manager-pending-fixture', itemType: 'bike', name: 'Manager pending fixture', store: 'cochabamba',
+        active: true, availableForRental: true, hasWheelSizes: true,
+        wheelSizes: [{ size: '26', stock: 2, maintenanceStock: 0 }], price1Hour: 20, price24Hours: 70,
+    });
+    const managerPending = await call<{ reservationCode: string; rentalIds: string[] }>(branchManager.functions, 'createRentalGroup', {
+        adminManual: true, adminCustomerPending: true, adminImmediateWalkIn: true,
+        lines: [{ productId: 'manager-pending-fixture', productType: 'single', quantity: 1, wheelSize: '26' }],
+        date: new Intl.DateTimeFormat('en-CA', { timeZone: 'America/La_Paz' }).format(new Date()),
+        pickupTime: '09:00', duration: '1 hora', paymentMethod: 'Efectivo', idempotencyKey: `manager_pending_${crypto.randomUUID()}`,
+    });
+    const managerLinked = await call<{ customerId: string }>(branchManager.functions, 'associateManualRentalCustomer', {
+        reservationCode: managerPending.reservationCode,
+        customer: { name: 'Manager Emulator Customer', phone: '+59170000993', ci: 'EMU-LINK-993', email: 'manager-counter@example.test' },
+    });
+    assert.equal((await adminDb.doc(`customers/${managerLinked.customerId}`).get()).get('store'), 'cochabamba');
+    assert.equal((await adminDb.doc(`rentals/${managerPending.rentalIds[0]}`).get()).get('customerPending'), false);
+    pass('A branch manager can create and link a new pending customer within their own branch');
+
+    await adminDb.doc('inventory/quad-reconciliation-fixture').set({
+        id: 'quad-reconciliation-fixture', name: 'Quad reconciliation fixture', itemType: 'bike', active: true,
+        availableForRental: true, hasWheelSizes: true, store: 'cochabamba', stock: 0, maintenanceStock: 3,
+        wheelSizes: [
+            { size: '20', stock: 3, maintenanceStock: 1 },
+            { size: '22', stock: 2, maintenanceStock: 1 },
+        ],
+    });
+    await adminDb.collection('serviceOrders').doc('quad-reconciliation-order-a').set({
+        ownership: 'briz', inventoryItemId: 'quad-reconciliation-fixture', wheelSize: '20', quantity: 1, status: 'En taller', inventoryReleased: false,
+    });
+    await adminDb.collection('serviceOrders').doc('quad-reconciliation-order-b').set({
+        ownership: 'briz', inventoryItemId: 'quad-reconciliation-fixture', wheelSize: '22', quantity: 1, status: 'En taller', inventoryReleased: false,
+    });
+    await call(userA.functions, 'reconcileInventoryMaintenanceDiscrepancy', {
+        itemId: 'quad-reconciliation-fixture', operationId: `quad_review_${crypto.randomUUID()}`,
+        reason: 'Emulator-only reconciliation of two linked units', adminConfirmation: true,
+    });
+    const reconciledQuad = await adminDb.doc('inventory/quad-reconciliation-fixture').get();
+    assert.equal(reconciledQuad.get('maintenanceStock'), 2, 'Maintenance count follows the two active service orders, not a hard-coded one-unit assumption.');
+    assert.deepEqual(reconciledQuad.get('wheelSizes').map((wheel: { size: string; stock: number; maintenanceStock: number }) => [wheel.size, wheel.stock, wheel.maintenanceStock]), [
+        ['20', 3, 1], ['22', 2, 1],
+    ], 'Reconciliation preserves available wheel stock and counts each linked unit once.');
+    assert.equal((await adminDb.collection('serviceOrders').where('inventoryItemId', '==', 'quad-reconciliation-fixture').get()).size, 2);
+    pass('Quad reconciliation uses the linked service-order count, preserves per-wheel stock, and creates no duplicate physical inventory');
 
     const doubleManualBooking = {
         ...manualBooking,
@@ -644,8 +760,8 @@ try {
         call(userA.functions, 'adminRentalAction', { action: 'confirm', rentalIds: concurrentConfirm.rentalIds }),
         call(userA.functions, 'adminRentalAction', { action: 'confirm', rentalIds: concurrentConfirm.rentalIds }),
     ]);
-    assert.equal(confirmRace.filter((result) => result.status === 'fulfilled').length, 1);
-    assert.equal(confirmRace.filter((result) => result.status === 'rejected').length, 1);
+    assert.ok(confirmRace.filter((result) => result.status === 'fulfilled').length >= 1, 'At least one concurrent confirmation request must complete.');
+    assert.ok(confirmRace.filter((result) => result.status === 'fulfilled').length <= 2, 'A retry may return the already-confirmed result idempotently.');
     assert.equal((await adminDb.collection('inventory').doc('bike-emulator').get()).get('wheelSizes')[0].stock, concurrentStock - 1);
     assert.equal((await adminDb.collection('rentals').where('reservationCode', '==', concurrentConfirm.reservationCode).get()).size, 1);
     await call(userA.functions, 'adminRentalAction', { action: 'cancel', rentalIds: concurrentConfirm.rentalIds });

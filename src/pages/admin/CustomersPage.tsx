@@ -7,7 +7,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { useStore } from '@/context/StoreContext';
 import type { Customer } from '@/context/StoreContext';
 import { getAdminCustomerFiles, type AdminCustomerFiles } from '@/lib/backend';
-import { ExternalLink, Search, Edit, User, UserPlus, Eye, FileText, RefreshCw } from 'lucide-react';
+import { Download, Search, Edit, User, UserPlus, Eye, FileText, RefreshCw, X } from 'lucide-react';
 
 export default function CustomersPage() {
     const { customers, updateCustomer, addOrUpdateCustomer, deleteCustomer, sales, rentals } = useStore();
@@ -26,9 +26,11 @@ export default function CustomersPage() {
     const [filesReload, setFilesReload] = useState(0);
     const [fileContentError, setFileContentError] = useState(false);
     const isPdfDocument = (url?: string) => Boolean(url && (url.toLowerCase().includes('.pdf') || url.startsWith('data:application/pdf')));
-    const openDocument = (url?: string) => {
+    const [viewingDocument, setViewingDocument] = useState<{ url: string; title: string; fileName: string } | null>(null);
+    const openDocument = (url?: string, title = 'Documento del cliente', fileName = 'documento-cliente') => {
         if (!url) return;
-        window.open(url, '_blank', 'noopener,noreferrer');
+        setFileContentError(false);
+        setViewingDocument({ url, title, fileName });
     };
     const currentCustomerFiles = customerFilesResult && detailsCustomer && customerFilesResult.customerId === detailsCustomer.id ? customerFilesResult.files || null : null;
     const customerFilesLoading = Boolean(detailsCustomer && customerFilesResult?.customerId !== detailsCustomer.id);
@@ -36,15 +38,16 @@ export default function CustomersPage() {
     const selfieUrl = currentCustomerFiles?.autofoto.url || undefined;
     const documentFrontUrl = currentCustomerFiles?.documento.url || undefined;
     const documentBackUrl = currentCustomerFiles?.documentoReverso.url || undefined;
+    const detailsCustomerId = detailsCustomer?.id;
 
     useEffect(() => {
-        if (!detailsCustomer) return;
+        if (!detailsCustomerId) return;
         let cancelled = false;
-        getAdminCustomerFiles(detailsCustomer.id)
-            .then((result) => { if (!cancelled) setCustomerFilesResult({ customerId: detailsCustomer.id, files: result.files }); })
-            .catch(() => { if (!cancelled) setCustomerFilesResult({ customerId: detailsCustomer.id, error: 'No se pudieron cargar de forma segura los archivos de este cliente.' }); });
+        getAdminCustomerFiles(detailsCustomerId)
+            .then((result) => { if (!cancelled) setCustomerFilesResult({ customerId: detailsCustomerId, files: result.files }); })
+            .catch(() => { if (!cancelled) setCustomerFilesResult({ customerId: detailsCustomerId, error: 'No se pudieron cargar de forma segura los archivos de este cliente.' }); });
         return () => { cancelled = true; };
-    }, [detailsCustomer, filesReload]);
+    }, [detailsCustomerId, filesReload]);
 
     const retryCustomerFiles = () => {
         setFileContentError(false);
@@ -259,9 +262,9 @@ export default function CustomersPage() {
                                             <p className="mb-3 text-[10px] font-bold uppercase tracking-widest text-brand-charcoal/45">Foto del cliente</p>
                                             <div className="aspect-square rounded-2xl overflow-hidden bg-brand-yellow/5 border border-brand-yellow/15 flex items-center justify-center">
                                                 {selfieUrl ? (
-                                                    <a href={selfieUrl} target="_blank" rel="noreferrer" className="w-full h-full">
+                                                    <button type="button" onClick={() => openDocument(selfieUrl, `Foto de ${detailsCustomer.name}`, 'foto-cliente')} className="w-full h-full cursor-zoom-in">
                                                         <img src={selfieUrl} onError={() => setFileContentError(true)} className="w-full h-full object-cover" alt={`Foto de ${detailsCustomer.name}`} />
-                                                    </a>
+                                                    </button>
                                                 ) : (
                                                     <User className="w-16 h-16 text-brand-charcoal/20" />
                                                 )}
@@ -287,12 +290,12 @@ export default function CustomersPage() {
                                                 <p className="text-[10px] font-bold uppercase tracking-widest text-brand-charcoal/45">Documento subido</p>
                                                 {documentFrontUrl && (
                                                     <div className="flex flex-wrap gap-2">
-                                                        <Button type="button" onClick={() => openDocument(documentFrontUrl)} className="h-9 rounded-full bg-brand-yellow px-4 text-xs font-black text-brand-black hover:bg-white cursor-pointer">
-                                                            <ExternalLink className="mr-1.5 h-3.5 w-3.5" /> Anverso
+                                                        <Button type="button" onClick={() => openDocument(documentFrontUrl, `Anverso · ${detailsCustomer.name}`, `documento-anverso-${detailsCustomer.id}`)} className="h-9 rounded-full bg-brand-yellow px-4 text-xs font-black text-brand-black hover:bg-white cursor-pointer">
+                                                            <Eye className="mr-1.5 h-3.5 w-3.5" /> Ver anverso
                                                         </Button>
                                                         {documentBackUrl && (
-                                                            <Button type="button" onClick={() => openDocument(documentBackUrl)} className="h-9 rounded-full bg-brand-yellow px-4 text-xs font-black text-brand-black hover:bg-white cursor-pointer">
-                                                                <ExternalLink className="mr-1.5 h-3.5 w-3.5" /> Reverso
+                                                            <Button type="button" onClick={() => openDocument(documentBackUrl, `Reverso · ${detailsCustomer.name}`, `documento-reverso-${detailsCustomer.id}`)} className="h-9 rounded-full bg-brand-yellow px-4 text-xs font-black text-brand-black hover:bg-white cursor-pointer">
+                                                                <Eye className="mr-1.5 h-3.5 w-3.5" /> Ver reverso
                                                             </Button>
                                                         )}
                                                     </div>
@@ -343,7 +346,7 @@ export default function CustomersPage() {
                                                                     />
                                                                 </object>
                                                             ) : (
-                                                                <button type="button" onClick={() => openDocument(documentFrontUrl)} className="h-full w-full cursor-zoom-in flex items-center justify-center p-2 bg-white">
+                                                                <button type="button" onClick={() => openDocument(documentFrontUrl, `Anverso · ${detailsCustomer.name}`, `documento-anverso-${detailsCustomer.id}`)} className="h-full w-full cursor-zoom-in flex items-center justify-center p-2 bg-white">
                                                                     <img src={documentFrontUrl} onError={() => setFileContentError(true)} className="max-h-[500px] max-w-full object-contain" alt={`Anverso de ${detailsCustomer.name}`} />
                                                                 </button>
                                                             )
@@ -367,7 +370,7 @@ export default function CustomersPage() {
                                                                     />
                                                                 </object>
                                                             ) : (
-                                                                <button type="button" onClick={() => openDocument(documentBackUrl)} className="h-full w-full cursor-zoom-in flex items-center justify-center p-2 bg-white">
+                                                                <button type="button" onClick={() => openDocument(documentBackUrl, `Reverso · ${detailsCustomer.name}`, `documento-reverso-${detailsCustomer.id}`)} className="h-full w-full cursor-zoom-in flex items-center justify-center p-2 bg-white">
                                                                     <img src={documentBackUrl} onError={() => setFileContentError(true)} className="max-h-[500px] max-w-full object-contain" alt={`Reverso de ${detailsCustomer.name}`} />
                                                                 </button>
                                                             )}
@@ -384,6 +387,31 @@ export default function CustomersPage() {
                     )}
                 </DialogContent>
             </Dialog>
+
+            {viewingDocument && (
+                <div className="fixed inset-0 z-[220] flex items-center justify-center bg-black/80 p-3 sm:p-6" role="dialog" aria-modal="true" aria-label={viewingDocument.title}>
+                    <section className="flex max-h-[94vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-brand-yellow/30 bg-brand-charcoal shadow-2xl">
+                        <header className="flex items-center justify-between gap-3 border-b border-white/10 px-4 py-3 sm:px-6">
+                            <h2 className="min-w-0 truncate font-black text-white">{viewingDocument.title}</h2>
+                            <div className="flex shrink-0 items-center gap-2">
+                                <a href={viewingDocument.url} download={viewingDocument.fileName} target="_blank" rel="noreferrer" className="inline-flex h-10 items-center gap-2 rounded-full bg-brand-yellow px-4 text-xs font-black text-brand-black hover:bg-white" aria-label="Descargar archivo privado">
+                                    <Download className="h-4 w-4" /> Descargar
+                                </a>
+                                <Button type="button" variant="ghost" size="icon" aria-label="Cerrar documento" onClick={() => setViewingDocument(null)} className="text-white hover:bg-white/10"><X className="h-5 w-5" /></Button>
+                            </div>
+                        </header>
+                        <div className="min-h-0 flex-1 overflow-auto bg-white p-2 sm:p-4">
+                            {fileContentError ? (
+                                <p role="alert" className="p-6 text-center text-sm font-bold text-red-700">No se pudo mostrar el archivo. Puedes volver a intentar la carga desde la ficha del cliente.</p>
+                            ) : isPdfDocument(viewingDocument.url) ? (
+                                <iframe src={viewingDocument.url} title={viewingDocument.title} className="h-[78vh] min-h-[360px] w-full bg-white" onError={() => setFileContentError(true)} />
+                            ) : (
+                                <img src={viewingDocument.url} alt={viewingDocument.title} onError={() => setFileContentError(true)} className="mx-auto max-h-[78vh] max-w-full object-contain" />
+                            )}
+                        </div>
+                    </section>
+                </div>
+            )}
 
             {/* Modal de Cliente */}
             <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>

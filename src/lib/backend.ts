@@ -38,6 +38,8 @@ export interface ReservationGroupInput {
     transport?: { delivery: boolean; pickup: boolean; address: string; lat: number; lng: number };
     adminManual?: boolean;
     adminCustomer?: { id?: string; name: string; phone: string; ci: string; email?: string; nacionalidad?: string; departamento?: string; comoNosConociste?: string };
+    adminCustomerPending?: boolean;
+    adminImmediateWalkIn?: boolean;
     adminNotes?: string;
     adminPaymentStatus?: 'paid' | 'unpaid';
     adminDeliveryService?: boolean;
@@ -121,6 +123,11 @@ export async function reconcileInventoryMaintenanceDiscrepancy(input: ReconcileM
 
 export async function createRentalGroup(input: ReservationGroupInput): Promise<{ reservationCode: string; rentalIds: string[]; total: number; duplicate: boolean }> {
     const result = await httpsCallable<ReservationGroupInput, { reservationCode: string; rentalIds: string[]; total: number; duplicate: boolean }>(functions, 'createRentalGroup')(input);
+    return result.data;
+}
+
+export async function associateManualRentalCustomer(reservationCode: string, customer: { id?: string; name?: string; phone?: string; ci?: string; email?: string; nacionalidad?: string; departamento?: string; comoNosConociste?: string }): Promise<{ ok: boolean; customerId: string; linkedRentals: number }> {
+    const result = await httpsCallable<{ reservationCode: string; customer: typeof customer }, { ok: boolean; customerId: string; linkedRentals: number }>(functions, 'associateManualRentalCustomer')({ reservationCode, customer });
     return result.data;
 }
 
