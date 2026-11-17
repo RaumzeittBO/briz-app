@@ -836,11 +836,31 @@ export const getAdminCustomerFiles = onCall(callable(), async (request) => {
             return { url, state: 'available' };
         } catch (signErr: any) {
             // If the Cloud Functions runtime service account lacks roles/iam.serviceAccountTokenCreator,
-            // fall back to reading authorized file contents directly and returning as a temporary data URL to the admin
+            // fall back to reading authorized file contents directly and returning as a temporary data URL to the admin.
+            // Enforce size (<4MB) and MIME type checks to prevent payload exhaustion or arbitrary binary execution.
             try {
-                const [[contents], [metadata]] = await Promise.all([file.download(), file.getMetadata()]);
+                const [metadata] = await file.getMetadata();
+                const MAX_FALLBACK_FILE_SIZE = 4 * 1024 * 1024; // 4MB
+                const fileSize = Number(metadata.size) || 0;
+                if (fileSize > MAX_FALLBACK_FILE_SIZE) {
+                    return {
+                        url: null,
+                        state: 'technical_error',
+                        error: `El archivo supera el límite de 4MB para descarga directa (${Math.round(fileSize / (1024 * 1024))}MB). Requiere rol IAM Service Account Token Creator para URLs firmadas V4.`,
+                    };
+                }
+                const contentType = String(metadata.contentType || 'image/jpeg');
+                const isAllowedType = contentType.startsWith('image/') || contentType === 'application/pdf';
+                if (!isAllowedType) {
+                    return {
+                        url: null,
+                        state: 'technical_error',
+                        error: 'Tipo de archivo no admitido para visualización privada.',
+                    };
+                }
+                const [contents] = await file.download();
                 return {
-                    url: `data:${metadata.contentType || 'image/jpeg'};base64,${contents.toString('base64')}`,
+                    url: `data:${contentType};base64,${contents.toString('base64')}`,
                     state: 'available',
                     fallbackReason: 'iam_signing_unsupported',
                 };

@@ -253,13 +253,38 @@ export function findComboComponentItem(
     if (exact) return { item: exact, isAliasMatch: false };
 
     // Fallback alias resolution (e.g. 'bike_mamachari' -> item with name 'Mamachari')
-    const norm = componentId.toLowerCase().replace(/^(bike_|acc_|inv_)/, '').replace(/_/g, ' ').trim();
-    if (norm) {
-        const byExactName = inventory.find(i => i.active && i.name.toLowerCase().trim() === norm);
-        if (byExactName) return { item: byExactName, isAliasMatch: true };
+    const lowerId = componentId.toLowerCase();
+    const expectedType: 'bike' | 'accessory' | undefined = lowerId.startsWith('bike_')
+        ? 'bike'
+        : lowerId.startsWith('acc_')
+            ? 'accessory'
+            : undefined;
 
-        const byIncludesName = inventory.find(i => i.active && i.name.toLowerCase().includes(norm));
-        if (byIncludesName) return { item: byIncludesName, isAliasMatch: true };
+    const norm = lowerId.replace(/^(bike_|acc_|inv_)/, '').replace(/_/g, ' ').trim();
+    if (norm && norm.length >= 3) {
+        // 1. Try exact normalized name match (respecting expected type if known)
+        const exactMatches = inventory.filter(i => {
+            if (!i.active) return false;
+            if (expectedType && i.itemType && i.itemType !== expectedType) return false;
+            return i.name.toLowerCase().trim() === norm;
+        });
+        if (exactMatches.length === 1) {
+            return { item: exactMatches[0], isAliasMatch: true };
+        }
+
+        // 2. Try substring match, but strictly reject generic words and ambiguous multiple matches
+        const genericWords = new Set(['bike', 'bici', 'bicicleta', 'acc', 'accesorio', 'combo', 'item']);
+        if (!genericWords.has(norm)) {
+            const partialMatches = inventory.filter(i => {
+                if (!i.active) return false;
+                if (expectedType && i.itemType && i.itemType !== expectedType) return false;
+                return i.name.toLowerCase().includes(norm);
+            });
+            // Strictly require exactly 1 unique match to prevent ambiguous substitutions
+            if (partialMatches.length === 1) {
+                return { item: partialMatches[0], isAliasMatch: true };
+            }
+        }
     }
     return { item: undefined, isAliasMatch: false };
 }
