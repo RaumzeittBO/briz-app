@@ -114,7 +114,7 @@ try {
         authUid: ownerCross.uid, documentoPath: customerBPath,
     });
     const crossFiles = await callFiles(admin.functions, crossCustomerId);
-    assert.equal(crossFiles.files.documento.state, 'missing');
+    assert.equal(crossFiles.files.documento.state, 'needs_review', 'A cross-customer path is rejected without probing whether the foreign object exists.');
     assert.equal(crossFiles.files.documento.url, null);
 
     const foreignBucketId = 'legacy-customer-foreign-bucket';
@@ -123,7 +123,7 @@ try {
         documentoUrl: `https://firebasestorage.googleapis.com/v0/b/other-project.firebasestorage.app/o/${encodeURIComponent(`customers/${foreignBucketId}/id.png`)}?alt=media&token=fake`,
     });
     const foreignBucketFiles = await callFiles(admin.functions, foreignBucketId);
-    assert.equal(foreignBucketFiles.files.documento.state, 'missing');
+    assert.equal(foreignBucketFiles.files.documento.state, 'needs_review');
     assert.equal(foreignBucketFiles.files.documento.url, null);
     pass('Cross-customer references and URLs for another bucket return no file URL');
 
@@ -133,7 +133,7 @@ try {
         documentoPath: `customers/${ambiguousId}/../${customerBId}/identity/front.png`,
     });
     const ambiguousFiles = await callFiles(admin.functions, ambiguousId);
-    assert.equal(ambiguousFiles.files.documento.state, 'missing');
+    assert.equal(ambiguousFiles.files.documento.state, 'needs_review');
     assert.equal(ambiguousFiles.files.documento.url, null);
 
     const encodedId = 'legacy-customer-encoded';
@@ -142,7 +142,7 @@ try {
         documentoPath: `customers%2F${encodedId}%2Fidentity%2Ffront.png`,
     });
     const encodedFiles = await callFiles(admin.functions, encodedId);
-    assert.equal(encodedFiles.files.documento.state, 'missing');
+    assert.equal(encodedFiles.files.documento.state, 'needs_review');
     assert.equal(encodedFiles.files.documento.url, null);
     pass('Ambiguous traversal and encoded paths are rejected without revealing file existence');
 

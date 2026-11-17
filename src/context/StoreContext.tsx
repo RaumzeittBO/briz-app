@@ -187,6 +187,8 @@ export interface Rental {
     id: string;
     reservationCode: string;
     customerName: string;
+    customerId?: string;
+    customerPending?: boolean;
     customerPhone: string;
     customerCI: string;
     customerEmail?: string;

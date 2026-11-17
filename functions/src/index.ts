@@ -900,10 +900,11 @@ export const getAdminCustomerFiles = onCall(callable(), async (request) => {
         ['documento', ['documentoPath', 'documentoUrl', 'documentFrontPath', 'documentFrontUrl']],
         ['documentoReverso', ['documentoReversoPath', 'documentoReversoUrl', 'documentBackPath', 'documentBackUrl']],
     ] as const;
-    const files: Record<string, { url: string | null; state: 'available' | 'missing' | 'needs_review' | 'technical_error'; error?: string; fallbackReason?: string }> = {};
-    for (const [name, pathFields] of fields) {
-        files[name] = await signFile(...pathFields.flatMap((field) => [privateData[field], legacyData[field]]));
-    }
+    const resolvedFiles = await Promise.all(fields.map(async ([name, pathFields]) => [
+        name,
+        await signFile(...pathFields.flatMap((field) => [privateData[field], legacyData[field]])),
+    ] as const));
+    const files = Object.fromEntries(resolvedFiles) as Record<string, { url: string | null; state: 'available' | 'missing' | 'needs_review' | 'technical_error'; error?: string; fallbackReason?: string }>;
     return { files, expiresInSeconds: 300 };
 });
 
@@ -918,7 +919,9 @@ export const createRentalGroup = onCall(callable(), async (request) => {
         throw new HttpsError('permission-denied', 'Solo un administrador o manager puede registrar alquileres manuales.');
     }
     const manualInput = adminManual && exactObject(request.data.adminCustomer) ? request.data.adminCustomer : null;
-    if (adminManual && !manualInput) throw new HttpsError('invalid-argument', 'Selecciona un cliente para el alquiler.');
+    const manualCustomerPending = adminManual && request.data.adminCustomerPending === true;
+    if (adminManual && !manualInput && !manualCustomerPending) throw new HttpsError('invalid-argument', 'Selecciona un cliente o registra el alquiler como cliente pendiente.');
+    if (adminManual && manualInput && manualCustomerPending) throw new HttpsError('invalid-argument', 'La solicitud no puede asociar un cliente y quedar pendiente a la vez.');
     const newManualCustomer = Boolean(manualInput && !cleanString(manualInput.id, 120));
     const manualCustomerRef = manualInput
         ? db.doc(`customers/${newManualCustomer ? db.collection('customers').doc().id : cleanString(manualInput.id, 120)}`)
@@ -934,9 +937,18 @@ export const createRentalGroup = onCall(callable(), async (request) => {
         && /^https:\/\/www\.google\.com\/maps\//.test(request.data.adminMapsLink)
         ? cleanString(request.data.adminMapsLink, 500) : '';
     const input = validateBooking(request.data);
+    const manualImmediateWalkIn = adminManual && request.data.adminImmediateWalkIn === true;
+    if (manualCustomerPending) {
+        const todayInBolivia = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/La_Paz' }).format(new Date());
+        if (!manualImmediateWalkIn || input.date !== todayInBolivia) {
+            throw new HttpsError('failed-precondition', 'Cliente pendiente solo se permite para una atención inmediata de mostrador del día actual.');
+        }
+    }
     const payloadFingerprint = digest(JSON.stringify({
         booking: { ...input, idempotencyKey: undefined },
         adminManual,
+        manualCustomerPending,
+        manualImmediateWalkIn,
         adminCustomerId: newManualCustomer ? '' : manualCustomerRef?.id || '',
         manualProfile,
         manualNotes,
@@ -985,9 +997,10 @@ export const createRentalGroup = onCall(callable(), async (request) => {
             }
             transactionRole = roleSnap.data();
             if (manualCustomerRef) adminCustomerSnap = await tx.get(manualCustomerRef);
-            if (!newManualCustomer && !adminCustomerSnap?.exists) throw new HttpsError('not-found', 'No se encontró el cliente seleccionado.');
+            if (manualCustomerRef && !newManualCustomer && !adminCustomerSnap?.exists) throw new HttpsError('not-found', 'No se encontró el cliente seleccionado.');
             const customerStore = String(adminCustomerSnap?.data()?.store || '');
-            if (roleSnap.data()?.role === 'manager' && roleSnap.data()?.store !== 'all'
+            if (manualCustomerRef && !manualCustomerPending
+                && roleSnap.data()?.role === 'manager' && roleSnap.data()?.store !== 'all'
                 && customerStore !== roleSnap.data()?.store) {
                 throw new HttpsError('permission-denied', 'El cliente pertenece a otra tienda.');
             }
@@ -1202,15 +1215,16 @@ export const createRentalGroup = onCall(callable(), async (request) => {
         const reservationCode = `BRIZ-${currentYear}-${String(seq).padStart(4, '0')}`;
         const now = Timestamp.now();
         const manualCustomerData = adminManual
-            ? (newManualCustomer ? manualProfile : adminCustomerSnap!.data())!
+            ? (newManualCustomer ? manualProfile : adminCustomerSnap?.data()) || {}
             : profileSnap.data()!;
         const customerFields = {
             customerUid: adminManual ? '' : uid,
-            customerId: adminManual ? manualCustomerRef!.id : cleanString((manualCustomerData as Record<string, unknown>).legacyCustomerId, 120) || uid,
-            customerName: cleanString(manualCustomerData.name, 120),
+            customerId: adminManual ? manualCustomerRef?.id || '' : cleanString((manualCustomerData as Record<string, unknown>).legacyCustomerId, 120) || uid,
+            customerName: manualCustomerPending ? 'Cliente pendiente' : cleanString(manualCustomerData.name, 120),
             customerPhone: cleanString(manualCustomerData.phone, 40),
             customerCI: cleanString(manualCustomerData.ci, 40),
             customerEmail: adminManual ? cleanString((manualCustomerData as Record<string, unknown>).email, 200).toLowerCase() : email,
+            ...(manualCustomerPending ? { customerPending: true } : {}),
         };
         const availabilityGroupId = digest(`${uid}:${input.idempotencyKey}`);
         const groupDocs = rentalLines.map((line, index) => {
@@ -1307,6 +1321,77 @@ export const createRentalGroup = onCall(callable(), async (request) => {
         return { reservationCode, total, rentalIds, duplicate: false };
     });
     return result;
+});
+
+export const associateManualRentalCustomer = onCall(callable(), async (request) => {
+    const { uid } = requireAuth(request, true);
+    if (!exactObject(request.data)) throw new HttpsError('invalid-argument', 'Solicitud inválida.');
+    const reservationCode = cleanString(request.data.reservationCode, 80);
+    if (!reservationCode || !/^BRIZ-[0-9]{4}-[0-9]{4,}$/.test(reservationCode)) {
+        throw new HttpsError('invalid-argument', 'Código de operación inválido.');
+    }
+    const customerInput = exactObject(request.data.customer) ? request.data.customer : null;
+    if (!customerInput) throw new HttpsError('invalid-argument', 'Indica el cliente que se asociará.');
+    const customerId = cleanString(customerInput.id, 120);
+    const createCustomer = !customerId;
+    const customerRef = db.doc(`customers/${createCustomer ? db.collection('customers').doc().id : customerId}`);
+    const customerProfile = createCustomer ? { ...validateProfile(customerInput), email: cleanString(customerInput.email, 200).toLowerCase() } : null;
+    const roleRef = db.doc(`adminUsers/${uid}`);
+    const rentalsQuery = db.collection('rentals').where('reservationCode', '==', reservationCode);
+    const auditRef = db.collection('manualRentalCustomerLinks').doc();
+
+    return db.runTransaction(async (tx) => {
+        const [roleSnap, customerSnap, rentalSnap] = await Promise.all([
+            tx.get(roleRef), tx.get(customerRef), tx.get(rentalsQuery),
+        ]);
+        const role = roleSnap.data();
+        if (!roleSnap.exists || role?.active !== true || !['admin', 'manager'].includes(String(role.role))) {
+            throw new HttpsError('permission-denied', 'No tienes permiso para asociar clientes a alquileres.');
+        }
+        if (rentalSnap.empty || rentalSnap.docs.some((rental) => rental.data().customerPending !== true || rental.data().source !== 'manual')) {
+            throw new HttpsError('failed-precondition', 'La operación no existe o ya tiene cliente asociado.');
+        }
+        if (createCustomer) {
+            if (customerSnap.exists) throw new HttpsError('already-exists', 'No se pudo reservar el identificador de cliente. Inténtalo de nuevo.');
+        } else if (!customerSnap.exists) {
+            throw new HttpsError('not-found', 'No se encontró el cliente seleccionado.');
+        }
+        const profile: Record<string, unknown> = createCustomer ? customerProfile! : customerSnap.data()!;
+        const customerStore = createCustomer && role.role === 'manager' && role.store !== 'all'
+            ? String(role.store)
+            : String(profile.store || '');
+        if (role.role === 'manager' && role.store !== 'all'
+            && (customerStore !== role.store || rentalSnap.docs.some((rental) => String(rental.data().store || '') !== role.store))) {
+            throw new HttpsError('permission-denied', 'El cliente o el alquiler pertenece a otra sucursal.');
+        }
+        const now = Timestamp.now();
+        if (createCustomer) {
+            tx.create(customerRef, {
+                id: customerRef.id,
+                ...customerProfile,
+                ...(role.role === 'manager' && role.store !== 'all' ? { store: role.store } : {}),
+                rentalsCount: 1, purchasesCount: 0,
+                firstVisit: now.toDate().toISOString(), lastVisit: now.toDate().toISOString(),
+                notes: 'Registrado desde alquiler administrativo pendiente',
+                createdAt: now, updatedAt: now,
+            });
+        } else {
+            tx.update(customerRef, { rentalsCount: FieldValue.increment(1), lastVisit: now.toDate().toISOString() });
+        }
+        rentalSnap.docs.forEach((rental) => tx.update(rental.ref, {
+            customerId: customerRef.id,
+            customerName: cleanString(profile.name, 120),
+            customerPhone: cleanString(profile.phone, 40),
+            customerCI: cleanString(profile.ci, 40),
+            customerEmail: cleanString(profile.email, 200).toLowerCase(),
+            customerPending: false,
+            customerLinkedBy: uid,
+            customerLinkedAt: now,
+            updatedAt: now.toDate().toISOString(),
+        }));
+        tx.create(auditRef, { reservationCode, customerId: customerRef.id, actorUid: uid, createdAt: now });
+        return { ok: true, customerId: customerRef.id, linkedRentals: rentalSnap.size };
+    });
 });
 
 export const syncRentalAvailabilityProjection = onDocumentWritten('rentals/{rentalId}', async (event) => {

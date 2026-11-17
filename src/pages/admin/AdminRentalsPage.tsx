@@ -36,7 +36,7 @@ import {
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { generateAdminReplyWhatsAppLink } from '@/lib/whatsapp';
-import { runAdminRentalAction, updateRentalGroup } from '@/lib/backend';
+import { associateManualRentalCustomer, runAdminRentalAction, updateRentalGroup } from '@/lib/backend';
 
 // Mappers for Spanish Translation
 const statusLabels: Record<string, string> = {
@@ -83,6 +83,8 @@ export interface GroupedRental {
   id: string;
   reservationCode: string;
   customerName: string;
+  customerId?: string;
+  customerPending?: boolean;
   customerPhone: string;
   customerCI: string;
   paymentMethod: string;
@@ -157,6 +159,8 @@ const getGroupedRentals = (rentalsList: Rental[]): GroupedRental[] => {
         id: code,
         reservationCode: r.reservationCode || '',
         customerName: r.customerName,
+        customerId: r.customerId,
+        customerPending: r.customerPending === true,
         customerPhone: r.customerPhone,
         customerCI: r.customerCI,
         paymentMethod: r.paymentMethod,
@@ -332,6 +336,13 @@ export default function AdminRentalsPage() {
   const [newRentalModalOpen, setNewRentalModalOpen] = useState(false);
   const manualCreateLockRef = useRef(false);
   const [creatingManualRental, setCreatingManualRental] = useState(false);
+  const [pendingCustomerLinkCode, setPendingCustomerLinkCode] = useState('');
+  const [linkCustomerMode, setLinkCustomerMode] = useState<'existing' | 'new'>('existing');
+  const [linkCustomerId, setLinkCustomerId] = useState('');
+  const [linkCustomerQuery, setLinkCustomerQuery] = useState('');
+  const [linkCustomerData, setLinkCustomerData] = useState({ name: '', phone: '', ci: '', email: '' });
+  const [linkCustomerSaving, setLinkCustomerSaving] = useState(false);
+  const [linkCustomerError, setLinkCustomerError] = useState('');
   const [newRentalStep, setNewRentalStep] = useState(1);
   const [newRentalFlow, setNewRentalFlow] = useState<'immediate' | 'future'>('immediate');
   const [newRentalDocumentType, setNewRentalDocumentType] = useState<'fisico' | 'digital' | 'pendiente'>('fisico');
@@ -349,7 +360,7 @@ export default function AdminRentalsPage() {
       paymentStatus: 'unpaid' as 'unpaid' | 'paid',
       status: 'confirmed' as 'confirmed' | 'pending'
   });
-  const [newRentalCustomerMode, setNewRentalCustomerMode] = useState<'existing' | 'new'>('existing');
+  const [newRentalCustomerMode, setNewRentalCustomerMode] = useState<'existing' | 'new' | 'pending'>('existing');
   const [newRentalSelectedCustomerId, setNewRentalSelectedCustomerId] = useState<string | null>(null);
   const [newRentalCustomerSearchQuery, setNewRentalCustomerSearchQuery] = useState('');
   const [newRentalCustomerData, setNewRentalCustomerData] = useState({
@@ -833,11 +844,12 @@ export default function AdminRentalsPage() {
 
   const handleWizardSubmit = async () => {
     if (manualCreateLockRef.current) return;
+    const customerMode = newRentalFlow === 'immediate' ? 'pending' : newRentalCustomerMode;
     let finalCustomer: any = null;
-    if (newRentalCustomerMode === 'existing') {
+    if (customerMode === 'existing') {
       finalCustomer = customers.find(c => c.id === newRentalSelectedCustomerId);
       if (!finalCustomer) { alert('Por favor selecciona un cliente registrado.'); return; }
-    } else {
+    } else if (customerMode === 'new') {
       const customer = newRentalCustomerData;
       if (!customer.name.trim() || !customer.phone.trim() || !customer.ci.trim()) {
         alert('Por favor completa los campos obligatorios del cliente (Nombre, Teléfono, CI).');
@@ -885,8 +897,8 @@ export default function AdminRentalsPage() {
       : [];
     const paymentMethod: 'QR' | 'Transferencia' | 'Efectivo' = newRentalForm.paymentMethod.toLowerCase().includes('qr')
       ? 'QR' : newRentalForm.paymentMethod.toLowerCase().includes('transfer') ? 'Transferencia' : 'Efectivo';
-    const adminCustomer = {
-      ...(newRentalCustomerMode === 'existing' ? { id: finalCustomer.id } : {}),
+    const adminCustomer = customerMode === 'pending' ? undefined : {
+      ...(customerMode === 'existing' ? { id: finalCustomer.id } : {}),
       name: finalCustomer.name, phone: finalCustomer.phone, ci: finalCustomer.ci,
       email: finalCustomer.email || '', nacionalidad: finalCustomer.nacionalidad || '',
       departamento: finalCustomer.departamento || '', comoNosConociste: finalCustomer.comoNosConociste || '',
@@ -900,7 +912,8 @@ export default function AdminRentalsPage() {
 
     const booking = {
       adminManual: true,
-      adminCustomer,
+      adminImmediateWalkIn: newRentalFlow === 'immediate',
+      ...(adminCustomer ? { adminCustomer } : { adminCustomerPending: true }),
       adminNotes: combinedNotes,
       adminPaymentStatus: newRentalForm.paymentStatus,
       adminDeliveryService: newRentalForm.deliveryService,
@@ -929,7 +942,16 @@ export default function AdminRentalsPage() {
         await runAdminRentalAction('confirm', result.rentalIds);
         await runAdminRentalAction('deliver', result.rentalIds);
         sessionStorage.removeItem(storageKey);
-        alert(`¡Alquiler registrado y entregado al cliente con éxito!\nCódigo de reserva: ${result.reservationCode}\nLas unidades quedaron marcadas como entregadas.`);
+        if (customerMode === 'pending') {
+          setPendingCustomerLinkCode(result.reservationCode);
+          setLinkCustomerMode('existing');
+          setLinkCustomerId('');
+          setLinkCustomerQuery('');
+          setLinkCustomerData({ name: '', phone: '', ci: '', email: '' });
+          setLinkCustomerError('');
+        } else {
+          alert(`¡Alquiler registrado y entregado al cliente con éxito!\nCódigo de reserva: ${result.reservationCode}\nLas unidades quedaron marcadas como entregadas.`);
+        }
       } else {
         // Flow B: Future booking -> confirm if requested, but DO NOT deliver
         if (newRentalForm.status === 'confirmed') {
@@ -949,9 +971,9 @@ export default function AdminRentalsPage() {
   };
   const renderStep1 = () => {
     return (
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 font-sans text-white h-[60vh] overflow-hidden">
+      <div className={`grid grid-cols-1 lg:grid-cols-3 gap-6 font-sans text-white ${newRentalFlow === 'immediate' ? 'max-h-[70vh] overflow-y-auto pr-1' : 'h-[60vh] overflow-hidden'}`}>
         {/* Left Side: Product selection grid */}
-        <div className="lg:col-span-2 flex flex-col space-y-4 h-full overflow-hidden">
+        <div className={`lg:col-span-2 flex flex-col space-y-4 ${newRentalFlow === 'immediate' ? 'h-[52vh] min-h-[360px]' : 'h-full'} overflow-hidden`}>
           <div className="flex gap-2 shrink-0">
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30" />
@@ -1091,8 +1113,8 @@ export default function AdminRentalsPage() {
         </div>
 
         {/* Right Side: Cart Summary */}
-        <div className="bg-black/25 border border-white/5 rounded-2xl p-4 flex flex-col justify-between h-full overflow-hidden">
-          <div className="flex flex-col h-full overflow-hidden">
+        <div className={`bg-black/25 border border-white/5 rounded-2xl p-4 flex flex-col ${newRentalFlow === 'immediate' ? 'min-h-[360px] lg:h-[52vh]' : 'h-full'} overflow-hidden`}>
+          <div className="flex flex-col h-full overflow-y-auto">
             <h3 className="text-sm font-black uppercase tracking-wider border-b border-white/10 pb-2 mb-3 text-brand-yellow-vibrant">
               Resumen de Alquiler ({newRentalCart.reduce((s, c) => s + c.quantity, 0)})
             </h3>
@@ -1103,7 +1125,7 @@ export default function AdminRentalsPage() {
                 <p className="text-xs font-black uppercase tracking-wider">Carrito Vacío</p>
               </div>
             ) : (
-              <div className="flex-1 overflow-y-auto space-y-2 pr-1 pb-4">
+              <div className="flex-1 min-h-0 overflow-y-auto space-y-2 pr-1 pb-4">
                 {newRentalCart.map((item, idx) => {
                   const isCombo = item.product.components !== undefined;
                   const price = calculatePrice(
@@ -1183,6 +1205,47 @@ export default function AdminRentalsPage() {
             )}
 
             <div className="border-t border-white/10 pt-3 mt-2 space-y-3 shrink-0">
+              {newRentalFlow === 'immediate' && (
+                <div className="space-y-3 rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-[10px] font-black uppercase text-emerald-300">Atención inmediata</p>
+                      <p className="text-[10px] text-white/50">Hoy · {newRentalForm.date}</p>
+                    </div>
+                    <label className="space-y-1 text-[9px] font-bold uppercase text-white/50">
+                      Hora
+                      <input aria-label="Hora de retiro" type="time" value={newRentalForm.pickupTime} onChange={e => setNewRentalForm(prev => ({ ...prev, pickupTime: e.target.value }))} className="block h-9 rounded-lg border border-white/10 bg-black/35 px-2 text-xs font-bold text-white outline-none focus:border-brand-yellow" />
+                    </label>
+                  </div>
+                  <label className="block space-y-1 text-[9px] font-bold uppercase text-white/50">
+                    Duración
+                    <select aria-label="Duración de alquiler" value={newRentalForm.duration} onChange={e => setNewRentalForm(prev => ({ ...prev, duration: e.target.value }))} className="h-9 w-full rounded-lg border border-white/10 bg-black/35 px-2 text-xs font-bold text-white outline-none focus:border-brand-yellow">
+                      {(newRentalCart.length > 0 && newRentalCart.every(item => item.product.itemType === 'accessory')
+                        ? ['1 hora', '2 horas', '3 horas', '4 horas', '8 horas', '24 horas']
+                        : ['1 hora', '2 horas', '3 horas', '4 horas', '8 horas', '24 horas', '1 semana', '1 mes']
+                      ).map(duration => <option key={duration} value={duration} className="bg-brand-charcoal text-white">{duration}</option>)}
+                    </select>
+                  </label>
+                  <div className="space-y-2">
+                    <p className="text-[9px] font-bold uppercase text-white/50">Custodia del documento</p>
+                    <div className="grid grid-cols-3 gap-1">
+                      {([
+                        ['fisico', 'Físico'],
+                        ['digital', 'Digital'],
+                        ['pendiente', 'Pendiente'],
+                      ] as const).map(([type, label]) => (
+                        <button key={type} type="button" onClick={() => setNewRentalDocumentType(type)} aria-pressed={newRentalDocumentType === type} className={`rounded-lg border px-1 py-2 text-[9px] font-black uppercase ${newRentalDocumentType === type ? 'border-brand-yellow bg-brand-yellow/15 text-brand-yellow' : 'border-white/10 bg-black/20 text-white/60'}`}>
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                    {newRentalDocumentType !== 'digital' && (
+                      <Input aria-label={newRentalDocumentType === 'fisico' ? 'Detalle de custodia física' : 'Observación de documento pendiente'} placeholder={newRentalDocumentType === 'fisico' ? 'Detalle de custodia (opcional)' : 'Observación (opcional)'} value={newRentalDocumentCustody} onChange={e => setNewRentalDocumentCustody(e.target.value)} className="h-9 border-white/10 bg-black/35 text-xs text-white" />
+                    )}
+                  </div>
+                  <p className="text-[10px] text-emerald-200/70">El cliente puede registrarse al finalizar o después de la entrega.</p>
+                </div>
+              )}
               <div className="flex justify-between items-center text-sm font-black">
                 <span>Total Estimado:</span>
                 <span className="text-brand-yellow">Bs. {getCartTotal()}</span>
@@ -1390,6 +1453,7 @@ export default function AdminRentalsPage() {
 
   const renderStep3 = () => {
     const isModeExisting = newRentalCustomerMode === 'existing';
+    const isModePending = newRentalCustomerMode === 'pending';
     const selectedCustomer = customers.find(c => c.id === newRentalSelectedCustomerId);
 
     return (
@@ -1398,7 +1462,7 @@ export default function AdminRentalsPage() {
           Asociar Cliente
         </h3>
 
-        <div className="grid grid-cols-2 p-1 bg-black/35 rounded-xl border border-white/5">
+        <div className={`grid ${newRentalFlow === 'immediate' ? 'grid-cols-3' : 'grid-cols-2'} p-1 bg-black/35 rounded-xl border border-white/5`}>
           <button
             type="button"
             onClick={() => setNewRentalCustomerMode('existing')}
@@ -1421,9 +1485,19 @@ export default function AdminRentalsPage() {
           >
             Nuevo Cliente
           </button>
+          {newRentalFlow === 'immediate' && (
+            <button type="button" onClick={() => setNewRentalCustomerMode('pending')} className={`py-2.5 px-1 text-[10px] font-black uppercase tracking-wider rounded-lg transition-all ${isModePending ? 'bg-brand-yellow text-brand-black shadow-md' : 'text-white/60 hover:text-white hover:bg-white/5'}`}>
+              Cliente pendiente
+            </button>
+          )}
         </div>
 
-        {isModeExisting ? (
+        {isModePending ? (
+          <div className="rounded-2xl border border-amber-400/30 bg-amber-400/10 p-4 text-sm text-amber-100">
+            <p className="font-black">Atención inmediata sin registro previo</p>
+            <p className="mt-1 text-xs text-amber-100/75">No se inventarán datos personales. El alquiler se registrará con su código y podrás asociar un cliente existente o completar uno después. Esta opción entrega las unidades al confirmar.</p>
+          </div>
+        ) : isModeExisting ? (
           <div className="space-y-4">
             <div className="space-y-1">
               <label className="text-[10px] text-white/40 font-bold uppercase">Buscar Cliente</label>
@@ -1718,7 +1792,7 @@ export default function AdminRentalsPage() {
             Atrás
           </Button>
           <Button
-            disabled={isModeExisting ? !selectedCustomer : (!newRentalCustomerData.name.trim() || !newRentalCustomerData.phone.trim() || !newRentalCustomerData.ci.trim())}
+            disabled={isModePending ? false : isModeExisting ? !selectedCustomer : (!newRentalCustomerData.name.trim() || !newRentalCustomerData.phone.trim() || !newRentalCustomerData.ci.trim())}
             onClick={() => setNewRentalStep(4)}
             className="flex-1 h-10 bg-brand-yellow hover:bg-brand-yellow-light text-brand-black font-black rounded-xl text-xs uppercase cursor-pointer"
           >
@@ -1730,16 +1804,16 @@ export default function AdminRentalsPage() {
   };
 
   const renderStep4 = () => {
-    const isModeExisting = newRentalCustomerMode === 'existing';
-    const customerName = isModeExisting 
-      ? customers.find(c => c.id === newRentalSelectedCustomerId)?.name 
-      : newRentalCustomerData.name;
-    const customerPhone = isModeExisting 
+    const isModeExisting = newRentalFlow !== 'immediate' && newRentalCustomerMode === 'existing';
+    const customerName = isModeExisting
+      ? customers.find(c => c.id === newRentalSelectedCustomerId)?.name
+      : newRentalFlow === 'immediate' || newRentalCustomerMode === 'pending' ? 'Cliente pendiente' : newRentalCustomerData.name;
+    const customerPhone = isModeExisting
       ? customers.find(c => c.id === newRentalSelectedCustomerId)?.phone 
-      : newRentalCustomerData.phone;
-    const customerCI = isModeExisting 
+      : newRentalFlow === 'immediate' || newRentalCustomerMode === 'pending' ? 'Pendiente de registrar' : newRentalCustomerData.phone;
+    const customerCI = isModeExisting
       ? customers.find(c => c.id === newRentalSelectedCustomerId)?.ci 
-      : newRentalCustomerData.ci;
+      : newRentalFlow === 'immediate' || newRentalCustomerMode === 'pending' ? 'Pendiente de registrar' : newRentalCustomerData.ci;
 
     const cartTotal = getCartTotal();
 
@@ -1757,7 +1831,7 @@ export default function AdminRentalsPage() {
             <p><strong>Nombre:</strong> {customerName}</p>
             <p><strong>Teléfono:</strong> {customerPhone}</p>
             <p><strong>CI:</strong> {customerCI}</p>
-            <p><strong>Tipo registro:</strong> {isModeExisting ? 'Existente' : 'Nuevo Registro'}</p>
+            <p><strong>Tipo registro:</strong> {newRentalFlow === 'immediate' || newRentalCustomerMode === 'pending' ? 'Opcional al finalizar' : isModeExisting ? 'Existente' : 'Nuevo Registro'}</p>
           </div>
         </div>
 
@@ -1834,7 +1908,7 @@ export default function AdminRentalsPage() {
 
         <div className="flex gap-2 pt-4">
           <Button
-            onClick={() => setNewRentalStep(3)}
+            onClick={() => setNewRentalStep(newRentalFlow === 'immediate' ? 1 : 3)}
             variant="ghost"
             className="flex-1 h-11 border border-white/10 hover:bg-white/5 text-white font-bold rounded-xl text-xs uppercase cursor-pointer"
           >
@@ -2172,7 +2246,7 @@ export default function AdminRentalsPage() {
                     <span className="font-mono text-[10px] font-black text-brand-yellow bg-brand-yellow/5 px-2 py-0.5 rounded border border-brand-yellow/10">
                       {g.reservationCode || `ID: ${g.id.slice(-8)}`}
                     </span>
-                    <p className="text-white font-black text-sm">{g.customerName}</p>
+                    <p className={`font-black text-sm ${g.customerPending ? 'text-amber-200' : 'text-white'}`}>{g.customerPending ? 'Cliente pendiente' : g.customerName}</p>
                     <Badge className={`${statusColors[g.status] || 'bg-white/10 text-white'} rounded-full px-2 py-0.5 text-[9px] font-black uppercase border`}>
                       {statusLabels[g.status] || g.status}
                     </Badge>
@@ -2211,6 +2285,11 @@ export default function AdminRentalsPage() {
 
                 {/* Actions bar */}
                 <div className="flex gap-1.5 shrink-0 w-full sm:w-auto justify-end items-center">
+                  {g.customerPending && (
+                    <Button size="sm" onClick={() => { setPendingCustomerLinkCode(g.reservationCode); setLinkCustomerMode('existing'); setLinkCustomerId(''); setLinkCustomerQuery(''); setLinkCustomerError(''); }} className="h-9 rounded-xl border border-amber-400/30 bg-amber-400/10 px-3 text-[10px] font-black uppercase text-amber-200 hover:bg-amber-400/20">
+                      Completar cliente
+                    </Button>
+                  )}
                   {(g.status === 'confirmed' || g.status === 'Confirmado') && (
                     <Button
                       size="sm"
@@ -3205,6 +3284,7 @@ export default function AdminRentalsPage() {
                   type="button"
                   onClick={() => {
                     setNewRentalFlow('immediate');
+                    setNewRentalCustomerMode('existing');
                     setNewRentalForm(prev => ({
                       ...prev,
                       date: toBoliviaDateString(),
@@ -3225,6 +3305,7 @@ export default function AdminRentalsPage() {
                   type="button"
                   onClick={() => {
                     setNewRentalFlow('future');
+                    if (newRentalCustomerMode === 'pending') setNewRentalCustomerMode('existing');
                     setNewRentalForm(prev => ({
                       ...prev,
                       status: 'confirmed',
@@ -3244,13 +3325,16 @@ export default function AdminRentalsPage() {
           </DialogHeader>
 
           {/* Steps Progress Indicator */}
-          <div className="grid grid-cols-4 gap-2 mb-6">
-            {[
+          <div className={`grid ${newRentalFlow === 'immediate' ? 'grid-cols-2' : 'grid-cols-4'} gap-2 mb-6`}>
+            {(newRentalFlow === 'immediate' ? [
+              { step: 1, label: '1. Productos y datos' },
+              { step: 2, label: '2. Confirmación y entrega' },
+            ] : [
               { step: 1, label: '1. Productos' },
               { step: 2, label: '2. Tiempos' },
               { step: 3, label: '3. Cliente' },
               { step: 4, label: '4. Confirmación' }
-            ].map(s => (
+            ]).map(s => (
               <div
                 key={s.step}
                 className={`py-2 text-center rounded-xl text-[10px] font-black uppercase tracking-wider border transition-all ${
@@ -3268,9 +3352,59 @@ export default function AdminRentalsPage() {
 
           {/* Steps Content */}
           {newRentalStep === 1 && renderStep1()}
-          {newRentalStep === 2 && renderStep2()}
-          {newRentalStep === 3 && renderStep3()}
-          {newRentalStep === 4 && renderStep4()}
+          {newRentalStep === 2 && (newRentalFlow === 'immediate' ? renderStep4() : renderStep2())}
+          {newRentalFlow === 'future' && newRentalStep === 3 && renderStep3()}
+          {newRentalFlow === 'future' && newRentalStep === 4 && renderStep4()}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={Boolean(pendingCustomerLinkCode)} onOpenChange={open => { if (!open && !linkCustomerSaving) setPendingCustomerLinkCode(''); }}>
+        <DialogContent className="max-w-lg border-white/10 bg-brand-charcoal p-5 text-white sm:p-6">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-black">Alquiler creado · {pendingCustomerLinkCode}</DialogTitle>
+            <p className="text-sm text-white/65">La operación ya está registrada y entregada. Asocia una ficha existente o crea una con los datos reales que te proporcione el cliente.</p>
+          </DialogHeader>
+          <div className="grid grid-cols-2 gap-2 rounded-xl border border-white/10 bg-black/20 p-1">
+            <Button type="button" variant={linkCustomerMode === 'existing' ? 'default' : 'ghost'} onClick={() => setLinkCustomerMode('existing')} className={linkCustomerMode === 'existing' ? 'bg-brand-yellow font-black text-brand-black' : 'text-white'}>Cliente existente</Button>
+            <Button type="button" variant={linkCustomerMode === 'new' ? 'default' : 'ghost'} onClick={() => setLinkCustomerMode('new')} className={linkCustomerMode === 'new' ? 'bg-brand-yellow font-black text-brand-black' : 'text-white'}>Crear ficha</Button>
+          </div>
+          {linkCustomerMode === 'existing' ? (
+            <div className="space-y-3">
+              <Input aria-label="Buscar cliente" placeholder="Buscar por nombre, teléfono o CI…" value={linkCustomerQuery} onChange={event => setLinkCustomerQuery(event.target.value)} className="border-white/10 bg-black/30 text-white" />
+              <div className="max-h-48 space-y-1 overflow-y-auto rounded-xl border border-white/10 p-2">
+                {customers.filter(customer => `${customer.name} ${customer.phone} ${customer.ci}`.toLowerCase().includes(linkCustomerQuery.toLowerCase())).slice(0, 30).map(customer => (
+                  <button key={customer.id} type="button" onClick={() => setLinkCustomerId(customer.id)} className={`w-full rounded-lg p-3 text-left text-sm ${linkCustomerId === customer.id ? 'bg-brand-yellow/15 text-brand-yellow' : 'text-white hover:bg-white/5'}`}>
+                    <span className="block font-black">{customer.name}</span><span className="text-xs opacity-60">{customer.phone} · CI {customer.ci}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <Input aria-label="Nombre completo del cliente" placeholder="Nombre completo *" value={linkCustomerData.name} onChange={event => setLinkCustomerData({ ...linkCustomerData, name: event.target.value })} className="border-white/10 bg-black/30 text-white" />
+              <Input aria-label="Teléfono del cliente" placeholder="Teléfono *" value={linkCustomerData.phone} onChange={event => setLinkCustomerData({ ...linkCustomerData, phone: event.target.value })} className="border-white/10 bg-black/30 text-white" />
+              <Input aria-label="CI del cliente" placeholder="CI *" value={linkCustomerData.ci} onChange={event => setLinkCustomerData({ ...linkCustomerData, ci: event.target.value })} className="border-white/10 bg-black/30 text-white" />
+              <Input aria-label="Correo del cliente" type="email" placeholder="Correo (opcional)" value={linkCustomerData.email} onChange={event => setLinkCustomerData({ ...linkCustomerData, email: event.target.value })} className="border-white/10 bg-black/30 text-white" />
+            </div>
+          )}
+          {linkCustomerError && <p role="alert" className="rounded-lg bg-red-500/10 p-3 text-sm text-red-300">{linkCustomerError}</p>}
+          <div className="flex flex-col-reverse gap-2 sm:flex-row">
+            <Button type="button" variant="ghost" disabled={linkCustomerSaving} onClick={() => setPendingCustomerLinkCode('')} className="flex-1 border border-white/10 text-white">Registrar después</Button>
+            <Button type="button" disabled={linkCustomerSaving || (linkCustomerMode === 'existing' ? !linkCustomerId : !linkCustomerData.name.trim() || !linkCustomerData.phone.trim() || !linkCustomerData.ci.trim())} onClick={async () => {
+              setLinkCustomerSaving(true);
+              setLinkCustomerError('');
+              try {
+                const customer = linkCustomerMode === 'existing' ? { id: linkCustomerId } : linkCustomerData;
+                await associateManualRentalCustomer(pendingCustomerLinkCode, customer);
+                alert(`Cliente asociado al alquiler ${pendingCustomerLinkCode}.`);
+                setPendingCustomerLinkCode('');
+              } catch (error) {
+                setLinkCustomerError(error instanceof Error ? error.message : 'No se pudo asociar el cliente.');
+              } finally {
+                setLinkCustomerSaving(false);
+              }
+            }} className="flex-1 bg-brand-yellow font-black text-brand-black hover:bg-white">{linkCustomerSaving ? 'Guardando…' : linkCustomerMode === 'new' ? 'Registrar ahora' : 'Asociar ahora'}</Button>
+          </div>
         </DialogContent>
       </Dialog>
     </div>
