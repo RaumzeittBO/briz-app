@@ -171,4 +171,65 @@ console.log('Testing Mamachari availability, workshop reconciliation & customer 
     assert.equal(totalFleet, 1, 'Physical fleet must equal 1 after reconciliation');
 }
 
+// Test 5: Branch/Store isolation and anti-ambiguity
+{
+    const inventory = [
+        {
+            id: 'item_mama_central',
+            name: 'Bicicleta Mamachari',
+            itemType: 'bike' as const,
+            active: true,
+            store: 'central',
+            stock: 2,
+            hasWheelSizes: false,
+            availableForRental: true,
+            availableForSale: false,
+            pricePerHour: 25, priceFrom5thHour: 25, pricePerDay: 80, pricePerWeek: 250, pricePerMonth: 600,
+            description: '', imageUrl: '',
+        },
+        {
+            id: 'item_silla_norte',
+            name: 'Silla Infantil Mamachari',
+            itemType: 'accessory' as const,
+            active: true,
+            store: 'norte',
+            stock: 3,
+            hasWheelSizes: false,
+            availableForRental: true,
+            availableForSale: false,
+            pricePerHour: 10, priceFrom5thHour: 10, pricePerDay: 20, pricePerWeek: 0, pricePerMonth: 0,
+            description: '', imageUrl: '',
+        },
+    ];
+
+    // Attempting to resolve silla from norte in central combo
+    const resMismatch = findComboComponentItem('acc_silla', inventory as any, 'central');
+    assert.equal(resMismatch.storeMismatch, true);
+    assert.equal(resMismatch.mismatchedStore, 'norte');
+
+    // Diagnostics report flags store mismatch
+    const combo: ComboProduct = {
+        id: 'combo_mamachari_test',
+        name: 'Mamachari con Silla',
+        store: 'central',
+        active: true,
+        availableForRental: true,
+        availableForSale: false,
+        description: '', imageUrl: '',
+        components: [
+            { inventoryItemId: 'item_mama_central', quantity: 1, requiresWheelSize: false },
+            { inventoryItemId: 'acc_silla', quantity: 1, requiresWheelSize: false },
+        ],
+    };
+
+    const report = getComboAvailabilityDiagnostics({
+        inventory: inventory as any,
+        combos: [combo],
+        rentals: [],
+        combo,
+    });
+    assert.equal(report.isAvailable, false);
+    assert.equal(report.bottleneckReason.includes('Stock registrado en otra sucursal'), true);
+}
+
 console.log('All Mamachari availability, workshop reconciliation & customer document tests passed!');

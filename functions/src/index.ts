@@ -789,10 +789,21 @@ export const getAdminCustomerFiles = onCall(callable(), async (request) => {
         if ([...ownedLegacyRoots].some((root) => objectPath.startsWith(root))) return objectPath;
         return '';
     };
-    const signFile = async (...candidates: unknown[]): Promise<{ url: string | null; state: 'available' | 'missing' | 'needs_review' | 'technical_error'; error?: string; fallbackReason?: string }> => {
+        let totalAggregateBytes = 0;
+        const MAX_TOTAL_AGGREGATE_BYTES = 6 * 1024 * 1024; // 6MB total payload ceiling across all 3 customer files
+        const MAX_FALLBACK_FILE_SIZE = 2 * 1024 * 1024;    // 2MB individual file ceiling for emergency fallback
+
+        const signFile = async (...candidates: unknown[]): Promise<{ url: string | null; state: 'available' | 'missing' | 'needs_review' | 'technical_error'; error?: string; fallbackReason?: string }> => {
         // 1. Check if candidate is a legacy inline base64 data URL before length truncations
         for (const candidate of candidates) {
             if (typeof candidate === 'string' && candidate.startsWith('data:image/') && candidate.includes(';base64,')) {
+                if (candidate.length > 2 * 1024 * 1024) {
+                    return { url: null, state: 'technical_error', error: 'Archivo embebido excede el tamaño máximo permitido de 2MB.' };
+                }
+                totalAggregateBytes += candidate.length;
+                if (totalAggregateBytes > MAX_TOTAL_AGGREGATE_BYTES) {
+                    return { url: null, state: 'technical_error', error: 'El tamaño acumulado de documentos supera el límite de seguridad de 6MB.' };
+                }
                 return { url: candidate, state: 'available', fallbackReason: 'legacy_embedded_data_url' };
             }
         }
@@ -835,18 +846,24 @@ export const getAdminCustomerFiles = onCall(callable(), async (request) => {
             const [url] = await file.getSignedUrl({ action: 'read', expires: Date.now() + 5 * 60 * 1000, version: 'v4' });
             return { url, state: 'available' };
         } catch (signErr: any) {
-            // If the Cloud Functions runtime service account lacks roles/iam.serviceAccountTokenCreator,
-            // fall back to reading authorized file contents directly and returning as a temporary data URL to the admin.
-            // Enforce size (<4MB) and MIME type checks to prevent payload exhaustion or arbitrary binary execution.
+            // Emergency fallback: used only if Cloud Functions runtime identity lacks roles/iam.serviceAccountTokenCreator.
+            // Enforce 2MB individual limit and 6MB aggregate limit to prevent Cloud Functions OOM and payload exhaustion.
             try {
                 const [metadata] = await file.getMetadata();
-                const MAX_FALLBACK_FILE_SIZE = 4 * 1024 * 1024; // 4MB
                 const fileSize = Number(metadata.size) || 0;
                 if (fileSize > MAX_FALLBACK_FILE_SIZE) {
                     return {
                         url: null,
                         state: 'technical_error',
-                        error: `El archivo supera el límite de 4MB para descarga directa (${Math.round(fileSize / (1024 * 1024))}MB). Requiere rol IAM Service Account Token Creator para URLs firmadas V4.`,
+                        error: `El archivo supera el límite de 2MB para descarga directa (${Math.round(fileSize / (1024 * 1024))}MB > 2MB). Se requiere configurar el rol IAM 'Service Account Token Creator' en Google Cloud para URLs firmadas V4.`,
+                    };
+                }
+                totalAggregateBytes += fileSize * 1.37;
+                if (totalAggregateBytes > MAX_TOTAL_AGGREGATE_BYTES) {
+                    return {
+                        url: null,
+                        state: 'technical_error',
+                        error: 'El tamaño total acumulado de documentos supera el límite de 6MB para streaming directo. Configure el rol IAM V4.',
                     };
                 }
                 const contentType = String(metadata.contentType || 'image/jpeg');
@@ -1011,14 +1028,20 @@ export const createRentalGroup = onCall(callable(), async (request) => {
                     throw new HttpsError('invalid-argument', 'Las selecciones no coinciden con los componentes del combo.');
                 }
                 for (const component of combo.components) {
-                    const componentItem = inventoryById.get(component.inventoryItemId) || findComboComponentItem(component.inventoryItemId, inventory).item;
+                    const componentItem = inventoryById.get(component.inventoryItemId);
+                    if (!componentItem) {
+                        throw new HttpsError('failed-precondition', `El componente '${component.inventoryItemId}' de la combinada requiere vinculación administrativa explícita en Inventario antes de reservarse.`);
+                    }
+                    if (!componentItem.active) {
+                        throw new HttpsError('failed-precondition', `El componente '${componentItem.name}' del combo ya no está disponible.`);
+                    }
+                    if (combo.store && componentItem.store && combo.store !== 'all' && componentItem.store !== 'all' && combo.store !== componentItem.store) {
+                        throw new HttpsError('failed-precondition', `El componente '${componentItem.name}' está registrado en otra sucursal (${componentItem.store}) y no coincide con la combinada (${combo.store}).`);
+                    }
                     const selectedWheel = selections.find((selection) => selection.inventoryItemId === component.inventoryItemId)?.wheelSize || line.wheelSize;
                     // A combo may use an active component that is not offered for standalone rental.
                     // The combo's own availability flag controls the offer; component inventory is
                     // still reserved below through the shared physical-demand calculation.
-                    if (!componentItem || !componentItem.active) {
-                        throw new HttpsError('failed-precondition', 'Un componente del combo ya no está disponible.');
-                    }
                     if ((component.requiresWheelSize || componentItem.hasWheelSizes)
                         && componentItem.hasWheelSizes
                         && componentItem.wheelSizes && componentItem.wheelSizes.length > 1
@@ -1057,7 +1080,7 @@ export const createRentalGroup = onCall(callable(), async (request) => {
                 : sumLinePrice(product, input.duration, line.quantity);
             const combo = line.productType === 'combo' ? comboById.get(line.productId) : undefined;
             const componentSelections = combo?.components.map((component) => {
-                const componentItem = inventoryById.get(component.inventoryItemId) || findComboComponentItem(component.inventoryItemId, inventory).item;
+                const componentItem = inventoryById.get(component.inventoryItemId);
                 const needsWheel = component.requiresWheelSize || Boolean(componentItem?.hasWheelSizes);
                 const selectedWheel = line.componentSelections?.find((selection) => selection.inventoryItemId === component.inventoryItemId)?.wheelSize || line.wheelSize;
                 return { inventoryItemId: component.inventoryItemId, ...(needsWheel && selectedWheel ? { wheelSize: selectedWheel } : {}) };

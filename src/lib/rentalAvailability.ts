@@ -247,10 +247,16 @@ export function getAvailableStockForInterval(params: {
  */
 export function findComboComponentItem(
     componentId: string,
-    inventory: InventoryItem[]
-): { item?: InventoryItem; isAliasMatch: boolean } {
+    inventory: InventoryItem[],
+    targetStore?: string
+): { item?: InventoryItem; isAliasMatch: boolean; storeMismatch?: boolean; mismatchedStore?: string } {
     const exact = inventory.find(i => i.id === componentId);
-    if (exact) return { item: exact, isAliasMatch: false };
+    if (exact) {
+        if (targetStore && exact.store && targetStore !== 'all' && exact.store !== 'all' && exact.store !== targetStore) {
+            return { item: exact, isAliasMatch: false, storeMismatch: true, mismatchedStore: exact.store };
+        }
+        return { item: exact, isAliasMatch: false };
+    }
 
     // Fallback alias resolution (e.g. 'bike_mamachari' -> item with name 'Mamachari')
     const lowerId = componentId.toLowerCase();
@@ -269,7 +275,11 @@ export function findComboComponentItem(
             return i.name.toLowerCase().trim() === norm;
         });
         if (exactMatches.length === 1) {
-            return { item: exactMatches[0], isAliasMatch: true };
+            const candidate = exactMatches[0];
+            if (targetStore && candidate.store && targetStore !== 'all' && candidate.store !== 'all' && candidate.store !== targetStore) {
+                return { item: candidate, isAliasMatch: true, storeMismatch: true, mismatchedStore: candidate.store };
+            }
+            return { item: candidate, isAliasMatch: true };
         }
 
         // 2. Try substring match, but strictly reject generic words and ambiguous multiple matches
@@ -282,7 +292,11 @@ export function findComboComponentItem(
             });
             // Strictly require exactly 1 unique match to prevent ambiguous substitutions
             if (partialMatches.length === 1) {
-                return { item: partialMatches[0], isAliasMatch: true };
+                const candidate = partialMatches[0];
+                if (targetStore && candidate.store && targetStore !== 'all' && candidate.store !== 'all' && candidate.store !== targetStore) {
+                    return { item: candidate, isAliasMatch: true, storeMismatch: true, mismatchedStore: candidate.store };
+                }
+                return { item: candidate, isAliasMatch: true };
             }
         }
     }
@@ -298,7 +312,7 @@ export interface ComboComponentDiagnostic {
     availableStock: number;
     capacity: number;
     isBottleneck: boolean;
-    reasonCode: 'ok' | 'missing_item' | 'out_of_stock' | 'reserved' | 'in_maintenance' | 'wheel_size_unavailable';
+    reasonCode: 'ok' | 'missing_item' | 'out_of_stock' | 'reserved' | 'in_maintenance' | 'wheel_size_unavailable' | 'store_mismatch';
     reasonMessage: string;
 }
 
@@ -367,8 +381,25 @@ export function getComboAvailabilityDiagnostics(params: {
     let minCapacity = Infinity;
 
     for (const comp of combo.components) {
-        const { item, isAliasMatch } = findComboComponentItem(comp.inventoryItemId, inventory);
+        const { item, isAliasMatch, storeMismatch, mismatchedStore } = findComboComponentItem(comp.inventoryItemId, inventory, combo.store);
         const reqQty = Math.max(1, comp.quantity);
+
+        if (storeMismatch) {
+            componentReports.push({
+                inventoryItemId: comp.inventoryItemId,
+                resolvedItemId: item?.id,
+                isAliasMatch,
+                name: item?.name || comp.inventoryItemId,
+                requiredQuantity: reqQty,
+                availableStock: 0,
+                capacity: 0,
+                isBottleneck: true,
+                reasonCode: 'store_mismatch',
+                reasonMessage: `Stock registrado en otra sucursal (${mismatchedStore || 'diferente'})`,
+            });
+            minCapacity = 0;
+            continue;
+        }
 
         if (!item || !item.active) {
             componentReports.push({
@@ -456,7 +487,9 @@ export function getComboAvailabilityDiagnostics(params: {
     let bottleneckReason = 'Disponible';
     if (effectiveAvailable === 0) {
         if (bottleneck) {
-            if (bottleneck.reasonCode === 'missing_item') {
+            if (bottleneck.reasonCode === 'store_mismatch') {
+                bottleneckReason = `Stock registrado en otra sucursal (${bottleneck.name})`;
+            } else if (bottleneck.reasonCode === 'missing_item') {
                 bottleneckReason = `Componente no registrado (${bottleneck.name})`;
             } else if (bottleneck.reasonCode === 'in_maintenance') {
                 bottleneckReason = `${bottleneck.name} en taller/mantenimiento`;

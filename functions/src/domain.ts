@@ -173,10 +173,16 @@ export function getRentalWindow(rental: RentalLike): RentalWindow {
 
 export function findComboComponentItem(
     componentId: string,
-    inventory: CatalogItem[]
-): { item?: CatalogItem; isAliasMatch: boolean } {
+    inventory: CatalogItem[],
+    targetStore?: string
+): { item?: CatalogItem; isAliasMatch: boolean; storeMismatch?: boolean; mismatchedStore?: string } {
     const exact = inventory.find(i => i.id === componentId);
-    if (exact) return { item: exact, isAliasMatch: false };
+    if (exact) {
+        if (targetStore && exact.store && targetStore !== 'all' && exact.store !== 'all' && exact.store !== targetStore) {
+            return { item: exact, isAliasMatch: false, storeMismatch: true, mismatchedStore: exact.store };
+        }
+        return { item: exact, isAliasMatch: false };
+    }
 
     const lowerId = componentId.toLowerCase();
     const expectedType: 'bike' | 'accessory' | undefined = lowerId.startsWith('bike_')
@@ -194,7 +200,11 @@ export function findComboComponentItem(
             return i.name.toLowerCase().trim() === norm;
         });
         if (exactMatches.length === 1) {
-            return { item: exactMatches[0], isAliasMatch: true };
+            const candidate = exactMatches[0];
+            if (targetStore && candidate.store && targetStore !== 'all' && candidate.store !== 'all' && candidate.store !== targetStore) {
+                return { item: candidate, isAliasMatch: true, storeMismatch: true, mismatchedStore: candidate.store };
+            }
+            return { item: candidate, isAliasMatch: true };
         }
 
         // 2. Try substring match, but strictly reject generic words and ambiguous multiple matches
@@ -207,7 +217,11 @@ export function findComboComponentItem(
             });
             // Strictly require exactly 1 unique match to prevent ambiguous substitutions
             if (partialMatches.length === 1) {
-                return { item: partialMatches[0], isAliasMatch: true };
+                const candidate = partialMatches[0];
+                if (targetStore && candidate.store && targetStore !== 'all' && candidate.store !== 'all' && candidate.store !== targetStore) {
+                    return { item: candidate, isAliasMatch: true, storeMismatch: true, mismatchedStore: candidate.store };
+                }
+                return { item: candidate, isAliasMatch: true };
             }
         }
     }
@@ -227,8 +241,8 @@ export function rentalDemands(rental: Pick<RentalLike, 'productType' | 'productI
         const combo = combos.find(candidate => candidate.id === rental.productId);
         if (!combo) return [];
         for (const component of combo.components) {
-            const { item } = findComboComponentItem(component.inventoryItemId, inventory);
-            if (!item) continue;
+            const { item, storeMismatch } = findComboComponentItem(component.inventoryItemId, inventory, combo.store);
+            if (!item || storeMismatch) continue;
             const selected = rental.componentSelections?.find(candidate => candidate.inventoryItemId === component.inventoryItemId)?.wheelSize;
             const wheelSize = item.hasWheelSizes
                 ? selected || (combo.components.length === 1 ? rental.selectedWheelSize : undefined) || item.wheelSizes?.[0]?.size
