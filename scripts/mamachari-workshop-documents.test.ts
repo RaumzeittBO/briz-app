@@ -6,6 +6,7 @@ import {
     getComboAvailabilityDiagnostics,
 } from '../src/lib/rentalAvailability';
 import { validateComboComponentLink } from '../src/lib/comboComponentLink';
+import { describeComboAvailabilityIssue } from '../src/lib/comboAvailabilityStatus';
 import {
     bucketNamesMatch,
     getPathVariants,
@@ -19,6 +20,8 @@ const inventoryAdminSource = readFileSync(fileURLToPath(new URL('../src/pages/ad
 assert.match(inventoryAdminSource, /Seleccionar producto existente/);
 assert.match(inventoryAdminSource, /Vincular producto existente/);
 assert.match(inventoryAdminSource, /disabled=\{editItem\.components\.length <= 1\}/);
+assert.match(inventoryAdminSource, /getComboAvailabilityReport\(c\.id\)/);
+assert.doesNotMatch(inventoryAdminSource, /getComboAvailability\(c\.id\)/);
 
 // Test 1: findComboComponentItem alias and exact resolution
 {
@@ -87,20 +90,24 @@ assert.match(inventoryAdminSource, /disabled=\{editItem\.components\.length <= 1
     };
     const report = getComboAvailabilityDiagnostics({ inventory: [bike, accessory], combos: [combo], rentals: [], combo, date, pickupTime: '10:00', duration: '1 hora' });
     assert.equal(report.available, 1, 'Three bikes divided by a required quantity of two limits this combo to one.');
+    assert.equal(describeComboAvailabilityIssue(report, [bike, accessory]), '1 disponible');
     assert.equal(report.components.find(component => component.inventoryItemId === bike.id)?.requiredQuantity, 2);
 
     const missingCombo = { ...combo, components: [{ inventoryItemId: 'bike-missing', quantity: 1, requiresWheelSize: false }] };
     const missing = getComboAvailabilityDiagnostics({ inventory: [bike], combos: [missingCombo], rentals: [], combo: missingCombo, date, pickupTime: '10:00', duration: '1 hora' });
     assert.equal(missing.components[0].reasonCode, 'missing_item');
+    assert.equal(describeComboAvailabilityIssue(missing, [bike]), 'Falta vincular bicicleta');
 
     const otherBranch = { ...bike, store: 'north' };
     const mismatch = getComboAvailabilityDiagnostics({ inventory: [otherBranch], combos: [combo], rentals: [], combo, date, pickupTime: '10:00', duration: '1 hora' });
     assert.equal(mismatch.components[0].reasonCode, 'store_mismatch');
+    assert.equal(describeComboAvailabilityIssue(mismatch, [otherBranch]), 'Otra sucursal');
 
     const inWorkshop = item({ stock: 0, maintenanceStock: 2, hasWheelSizes: false });
     const workshopCombo = { ...combo, components: [{ inventoryItemId: inWorkshop.id, quantity: 1, requiresWheelSize: false }] };
     const workshop = getComboAvailabilityDiagnostics({ inventory: [inWorkshop], combos: [workshopCombo], rentals: [], combo: workshopCombo });
     assert.equal(workshop.components[0].reasonCode, 'in_maintenance');
+    assert.equal(describeComboAvailabilityIssue(workshop, [inWorkshop]), 'En taller');
     const workshopForSlot = getComboAvailabilityDiagnostics({ inventory: [inWorkshop], combos: [workshopCombo], rentals: [], combo: workshopCombo, date, pickupTime: '10:00', duration: '1 hora' });
     assert.equal(workshopForSlot.components[0].reasonCode, 'in_maintenance');
     assert.match(workshopForSlot.components[0].reasonMessage, /horario consultado.*2 unidad/);
@@ -114,6 +121,11 @@ assert.match(inventoryAdminSource, /disabled=\{editItem\.components\.length <= 1
     const occupied = getComboAvailabilityDiagnostics({ inventory: [{ ...bike, stock: 0 }, accessory], combos: [combo], rentals: [confirmed as never], combo, date, pickupTime: '10:00', duration: '1 hora' });
     assert.equal(occupied.components[0].reasonCode, 'reserved');
     assert.match(occupied.components[0].reasonMessage, /horario consultado/);
+
+    const noStockAccessory = item({ id: 'acc-no-stock', itemType: 'accessory', name: 'Candado', stock: 0 });
+    const accessoryOnlyCombo = { ...combo, components: [{ inventoryItemId: noStockAccessory.id, quantity: 1, requiresWheelSize: false }] };
+    const noAccessoryStock = getComboAvailabilityDiagnostics({ inventory: [noStockAccessory], combos: [accessoryOnlyCombo], rentals: [], combo: accessoryOnlyCombo });
+    assert.equal(describeComboAvailabilityIssue(noAccessoryStock, [noStockAccessory]), 'Accesorio sin stock');
 }
 
 // Test 2: Combo availability diagnostics & bottleneck identification

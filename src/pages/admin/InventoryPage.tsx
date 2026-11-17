@@ -10,6 +10,7 @@ import { useStore } from '@/context/StoreContext';
 import type { InventoryItem, ComboProduct, WheelSizeEntry, ComboComponent } from '@/context/StoreContext';
 import { getRentalInventoryDemands, findComboComponentItem } from '@/lib/rentalAvailability';
 import { validateComboComponentLink } from '@/lib/comboComponentLink';
+import { describeComboAvailabilityIssue } from '@/lib/comboAvailabilityStatus';
 import { hasConfiguredRentalAddonPrice, isEligibleRentalAddon } from '@/lib/rentalAddonEligibility';
 import { nextWheelSize, SUPPORTED_WHEEL_SIZES, validateUniqueWheelSizes } from '@/lib/inventoryWheelSizes';
 
@@ -249,7 +250,7 @@ export default function InventoryPage() {
   const navigate = useNavigate();
   const { 
     adminStoreScope, inventory, combos, rentals, serviceOrders, addInventoryItem, updateInventoryItem, deleteInventoryItem, releaseUnlinkedMaintenanceUnit, reconcileMaintenanceDiscrepancy,
-    addCombo, updateCombo, deleteCombo, getComboAvailability, getComboAvailabilityReport, adjustInventoryStock,
+    addCombo, updateCombo, deleteCombo, getComboAvailabilityReport, adjustInventoryStock,
     bikeCategories, accessoryCategories, addBikeCategory, addAccessoryCategory, deleteBikeCategory, updateBikeCategory, reorderBikeCategories
   } = useStore();
 
@@ -662,9 +663,11 @@ export default function InventoryPage() {
             <Plus className="w-4 h-4 mr-2"/> Nuevo Combinado
           </Button>
           {filteredCombos.length===0 ? <p className="text-center py-16 text-white/20 font-bold text-sm">No hay productos combinados</p> : filteredCombos.map(c=>{
-            const avail = getComboAvailability(c.id);
+            const comboReport = getComboAvailabilityReport(c.id);
+            const avail = comboReport.available;
+            const availabilityLabel = describeComboAvailabilityIssue(comboReport, inventory);
             return (
-              <div key={c.id} className="flex items-center gap-4 p-4 bg-white/75 backdrop-blur rounded-2xl border border-brand-yellow/20 hover:border-brand-yellow/60 transition-all shadow-sm">
+              <div key={c.id} data-testid={`combo-row-${c.id}`} className="flex items-center gap-4 p-4 bg-white/75 backdrop-blur rounded-2xl border border-brand-yellow/20 hover:border-brand-yellow/60 transition-all shadow-sm">
                 <div className="w-14 h-14 bg-[#FFF9E8] rounded-xl overflow-hidden flex items-center justify-center border border-brand-yellow/20 shrink-0">
                   {c.imageUrl ? <img src={c.imageUrl} alt={c.name} className="w-full h-full object-cover"/> : <Layers className="w-5 h-5 text-brand-charcoal/30"/>}
                 </div>
@@ -687,14 +690,16 @@ export default function InventoryPage() {
                 </div>
                 <div className="text-center shrink-0">
                   <p className="text-brand-charcoal font-black text-lg">{avail}</p>
-                  <p className="text-[9px] text-brand-charcoal/50 font-bold uppercase">disponible</p>
+                  {avail > 0
+                    ? <p className="text-[9px] text-brand-charcoal/60 font-bold uppercase">{availabilityLabel}</p>
+                    : <p role="status" className="max-w-36 text-[9px] text-amber-800 font-black uppercase leading-tight">{availabilityLabel}</p>}
                 </div>
                 <Badge className={`shrink-0 rounded-full px-3 py-1 text-[9px] font-black uppercase ${c.active?'bg-green-500/10 text-green-600 border-green-500/20':'bg-red-500/10 text-red-500 border-red-500/20'}`}>
                   {c.active?'Activo':'Inactivo'}
                 </Badge>
                 <div className="flex gap-1 shrink-0">
                   <Button type="button" size="sm" onClick={()=>{setStockManagerCombo(c);setStockDeltas({});setStockManagerError('');setStockManagerNotice('');}} className="h-9 rounded-xl bg-brand-yellow px-3 text-xs font-black text-brand-black hover:bg-brand-yellow/90">Gestionar stock</Button>
-                  <Button variant="ghost" size="icon" className="w-9 h-9 rounded-xl bg-brand-yellow/15 text-brand-charcoal hover:bg-brand-yellow" onClick={()=>openEdit(c,'combo')}><Edit className="w-4 h-4"/></Button>
+                  <Button type="button" variant="ghost" size="icon" aria-label={`Editar componentes de ${c.name}`} className="w-9 h-9 rounded-xl bg-brand-yellow/15 text-brand-charcoal hover:bg-brand-yellow" onClick={()=>openEdit(c,'combo')}><Edit className="w-4 h-4"/></Button>
                   <Button variant="ghost" size="icon" className="w-9 h-9 rounded-xl bg-white/5 text-red-400/60 hover:bg-red-500 hover:text-white" onClick={()=>setDeleteConfirm({id:c.id, type:'combo', name:c.name})}><Trash2 className="w-4 h-4"/></Button>
                 </div>
               </div>
@@ -1060,21 +1065,21 @@ export default function InventoryPage() {
                           return item.id === comp.inventoryItemId || validateComboComponentLink(comp.inventoryItemId, item, comboStore).valid;
                         });
                         return (
-                          <div key={idx} className="flex items-center gap-3 bg-black/40 p-3 rounded-xl border border-white/5">
+                          <div key={idx} data-testid={`combo-component-row-${idx + 1}`} className="grid grid-cols-[minmax(0,1fr)_5.5rem_auto] items-center gap-2 bg-black/40 p-3 rounded-xl border border-white/5 sm:grid-cols-[minmax(0,1fr)_6rem_auto_auto] sm:gap-3">
                             <select aria-label={`Producto existente para componente ${idx + 1}`} value={comp.inventoryItemId} onChange={e=>{
                               const item = inventory.find(i=>i.id===e.target.value);
                               updateComponent(idx, {inventoryItemId:e.target.value, requiresWheelSize: item?.hasWheelSizes||false});
-                            }} className="flex-1 bg-transparent border-0 border-b border-white/10 text-white font-bold text-sm py-1 focus:outline-none">
+                            }} className="col-span-full w-full min-w-0 bg-transparent border-0 border-b border-white/10 text-white font-bold text-sm py-1 focus:outline-none sm:col-span-1">
                               <option value="" className="bg-brand-charcoal text-white/40">Seleccionar producto existente...</option>
                               {componentCandidates.map(i=><option key={i.id} value={i.id} className="bg-brand-charcoal">{i.name} · {i.itemType==='bike'?'Bicicleta':'Accesorio'} · {i.store || 'Sucursal general'}</option>)}
                             </select>
-                            <div className="relative flex-1 max-w-[80px]">
-                              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[9px] font-black text-white/20 uppercase">Cant.</span>
-                              <Input type="number" min={1} value={toEditableNumber(comp.quantity)} onChange={e=>updateComponent(idx,{quantity:e.target.value === '' ? '' as any : Number(e.target.value)})} className="bg-black/20 border-white/5 h-10 pl-10 pr-2 font-black text-brand-yellow rounded-xl text-right" />
-                            </div>
-                            {selectedItem?.hasWheelSizes && <Badge className="bg-brand-yellow/10 text-brand-yellow text-[8px] font-bold border-0">Requiere aro</Badge>}
-                            <Button type="button" variant="ghost" aria-label={`Quitar ${selectedItem?.name || 'componente'}`} title={editItem.components.length <= 1 ? 'Un combo debe conservar al menos un componente' : 'Quitar componente'} disabled={editItem.components.length <= 1} className="h-9 gap-1.5 rounded-lg px-2 text-red-200 hover:bg-red-500/25 hover:text-white disabled:cursor-not-allowed disabled:opacity-30" onClick={()=>removeComponent(idx)}>
-                              <Trash2 className="h-4 w-4"/><span className="text-[10px] font-black">Quitar</span>
+                            <label className="w-full min-w-0 space-y-1">
+                              <span className="block text-center text-[9px] font-black text-white/55 uppercase">Cantidad</span>
+                              <Input aria-label={`Cantidad componente ${idx + 1}`} type="number" min={1} value={toEditableNumber(comp.quantity)} onChange={e=>updateComponent(idx,{quantity:e.target.value === '' ? '' as any : Number(e.target.value)})} className="h-10 w-full min-w-0 rounded-xl border-white/10 bg-black/20 px-2 text-center font-black text-brand-yellow" />
+                            </label>
+                            {selectedItem?.hasWheelSizes && <Badge className="max-w-full whitespace-nowrap bg-brand-yellow/10 text-brand-yellow text-[8px] font-bold border-0">Requiere aro</Badge>}
+                            <Button type="button" variant="ghost" aria-label={`Quitar ${selectedItem?.name || 'componente'}`} title={editItem.components.length <= 1 ? 'Un combo debe conservar al menos un componente' : 'Quitar componente'} disabled={editItem.components.length <= 1} className="h-9 min-w-9 gap-1.5 whitespace-nowrap rounded-lg px-2 text-red-200 hover:bg-red-500/25 hover:text-white disabled:cursor-not-allowed disabled:opacity-30" onClick={()=>removeComponent(idx)}>
+                              <Trash2 className="h-4 w-4"/><span className="hidden text-[10px] font-black sm:inline">Quitar</span>
                             </Button>
                           </div>
                         );

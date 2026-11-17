@@ -124,7 +124,7 @@ await db.doc('combos/visual-legacy-combo').set({
     id: 'visual-legacy-combo', name: 'Combo legacy · Mamachari', category: 'Combinadas', active: true,
     availableForRental: true, availableForSale: false,
     components: [
-        { inventoryItemId: 'bike_mamachari', quantity: 1, requiresWheelSize: false },
+        { inventoryItemId: 'visual-mamachari', quantity: 1, requiresWheelSize: false },
         { inventoryItemId: 'visual-lock', quantity: 1, requiresWheelSize: false },
     ],
     price1Hour: 30, price24Hours: 85,

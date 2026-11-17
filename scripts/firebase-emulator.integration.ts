@@ -542,9 +542,8 @@ try {
         date: new Intl.DateTimeFormat('en-CA', { timeZone: 'America/La_Paz' }).format(new Date(Date.now() + 20 * 24 * 60 * 60 * 1000)),
         pickupTime: '10:00', duration: '1 hora', paymentMethod: 'Efectivo', idempotencyKey: `manual_pending_future_${crypto.randomUUID()}`,
     }), /atención inmediata|día actual/i, 'Pending customer is limited to a same-day counter walk-in, not a future booking.');
-    const pendingWalkInStart = new Date(Date.now() + 3 * 60 * 60 * 1000);
-    const pendingWalkInDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/La_Paz' }).format(pendingWalkInStart);
-    const pendingWalkInTime = new Intl.DateTimeFormat('en-GB', { timeZone: 'America/La_Paz', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(pendingWalkInStart);
+    const pendingWalkInDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/La_Paz' }).format(new Date());
+    const pendingWalkInTime = '16:00';
     const pendingWalkIn = await call<{ reservationCode: string; rentalIds: string[]; total: number }>(userA.functions, 'createRentalGroup', {
         adminManual: true, adminCustomerPending: true, adminPaymentStatus: 'unpaid',
         adminImmediateWalkIn: true,
@@ -916,6 +915,26 @@ try {
         availableForRental: true, availableAsRentalAddon: true, rentalCatalog: true,
         availableForSale: false, hasWheelSizes: false, stock: 20, addonFlatPrice: 5,
     });
+    await adminDb.doc('inventory/sim-overlap-bike').set({
+        id: 'sim-overlap-bike', itemType: 'bike', name: 'Simulación · Última unidad horaria', store: 'shop-b', active: true,
+        availableForRental: true, availableForSale: false, hasWheelSizes: false, stock: 1, maintenanceStock: 0,
+        price1Hour: 15, price24Hours: 55,
+    });
+    await adminDb.doc('inventory/sim-concurrent-last-unit').set({
+        id: 'sim-concurrent-last-unit', itemType: 'bike', name: 'Simulación · Unidad concurrente', store: 'shop-b', active: true,
+        availableForRental: true, availableForSale: false, hasWheelSizes: false, stock: 1, maintenanceStock: 0,
+        price1Hour: 16, price24Hours: 56,
+    });
+    await adminDb.doc('inventory/sim-pending-customer-bike').set({
+        id: 'sim-pending-customer-bike', itemType: 'bike', name: 'Simulación · Cliente pendiente', store: 'shop-b', active: true,
+        availableForRental: true, availableForSale: false, hasWheelSizes: false, stock: 2, maintenanceStock: 0,
+        price1Hour: 22, price24Hours: 65,
+    });
+    await adminDb.doc('inventory/sim-other-branch-bike').set({
+        id: 'sim-other-branch-bike', itemType: 'bike', name: 'Simulación · Otra sucursal', store: 'shop-a', active: true,
+        availableForRental: true, availableForSale: false, hasWheelSizes: false, stock: 2, maintenanceStock: 0,
+        price1Hour: 20, price24Hours: 60,
+    });
     await adminDb.doc('combos/sim-combo').set({
         id: 'sim-combo', name: 'Simulación · Combo Mamachari', store: 'shop-b', active: true,
         availableForRental: true, availableForSale: false,
@@ -926,6 +945,31 @@ try {
     });
     const simulatedDate = managerDate(35);
     const simulatedSlots = ['08:00', '09:00', '10:00', '11:00', '13:00', '14:00', '15:00', '16:00', '17:00', '18:00'];
+    const simulatedOperations: string[] = [];
+    const simulatedRateLimitId = `reservations_${createHash('sha256').update(userB.uid).digest('hex')}`;
+    const simCall = async <T>(label: string, functionName: string, data: unknown): Promise<T> => {
+        simulatedOperations.push(label);
+        if (functionName === 'createRentalGroup') await adminDb.doc(`_requestLimits/${simulatedRateLimitId}`).delete();
+        return call<T>(userB.functions, functionName, data);
+    };
+    const readSimStock = async (id: string) => {
+        const data = (await adminDb.doc(`inventory/${id}`).get()).data() || {};
+        const wheels = Array.isArray(data.wheelSizes) ? data.wheelSizes as Array<{ size: string; stock: number; maintenanceStock?: number }> : [];
+        return {
+            store: String(data.store || 'sin sucursal'),
+            stock: wheels.length
+                ? wheels.map(wheel => ({ aro: wheel.size, disponible: Number(wheel.stock) || 0, taller: Number(wheel.maintenanceStock) || 0 }))
+                : Number(data.stock) || 0,
+            taller: Number(data.maintenanceStock) || 0,
+        };
+    };
+    const simulatedTrackedIds = [
+        'sim-bike-26', 'sim-bike-27', 'sim-mamachari', 'sim-lock', 'sim-overlap-bike',
+        'sim-concurrent-last-unit', 'sim-pending-customer-bike', 'sim-other-branch-bike',
+    ];
+    const simulatedOpeningStock = Object.fromEntries(await Promise.all(
+        simulatedTrackedIds.map(async id => [id, await readSimStock(id)] as const),
+    ));
     const simulatedLines = [
         [{ productId: 'sim-bike-26', productType: 'single', quantity: 1, wheelSize: '26' }],
         [{ productId: 'sim-combo', productType: 'combo', quantity: 1, wheelSize: '26', componentSelections: [{ inventoryItemId: 'sim-bike-26', wheelSize: '26' }] }],
@@ -939,11 +983,9 @@ try {
         [{ productId: 'sim-mamachari', productType: 'single', quantity: 1 }],
     ];
     const simulatedGroups: Array<{ reservationCode: string; rentalIds: string[]; idempotencyKey: string; total: number }> = [];
-    const simulatedRateLimitId = `reservations_${createHash('sha256').update(userB.uid).digest('hex')}`;
     for (let index = 0; index < simulatedSlots.length; index++) {
         const idempotencyKey = `day_sim_${index}_${crypto.randomUUID()}`;
-        await adminDb.doc(`_requestLimits/${simulatedRateLimitId}`).delete();
-        const bookingResult = await call<{ reservationCode: string; rentalIds: string[]; total: number }>(userB.functions, 'createRentalGroup', {
+        const bookingResult = await simCall<{ reservationCode: string; rentalIds: string[]; total: number }>(`Crear reserva sintética ${index + 1}/10`, 'createRentalGroup', {
             adminManual: true, adminCustomer: { id: userB.uid }, adminPaymentStatus: 'unpaid',
             lines: simulatedLines[index],
             ...(index === 1 ? { accessories: [{ itemId: 'sim-lock', quantity: 1 }] } : {}),
@@ -953,36 +995,142 @@ try {
     }
     assert.equal(simulatedGroups[1].total, 40, 'A combo plus one separately priced flat add-on adds the extra Bs 5.');
     assert.equal(simulatedGroups[4].total, 20, 'An accessory rented alone uses the Bs 20 individual tariff.');
-    await adminDb.doc(`_requestLimits/${simulatedRateLimitId}`).delete();
-    const retriedSimulationBooking = await call<{ reservationCode: string; duplicate: boolean }>(userB.functions, 'createRentalGroup', {
+    const retriedSimulationBooking = await simCall<{ reservationCode: string; duplicate: boolean }>('Reintentar reserva con clave idempotente', 'createRentalGroup', {
         adminManual: true, adminCustomer: { id: userB.uid }, adminPaymentStatus: 'unpaid', lines: simulatedLines[0],
         date: simulatedDate, pickupTime: simulatedSlots[0], duration: '1 hora', paymentMethod: 'Efectivo', idempotencyKey: simulatedGroups[0].idempotencyKey,
     });
     assert.equal(retriedSimulationBooking.duplicate, true);
     assert.equal((await adminDb.collection('rentals').where('reservationCode', '==', simulatedGroups[0].reservationCode).get()).size, 1);
-    await call(userB.functions, 'adminRentalAction', { action: 'cancel', rentalIds: simulatedGroups[8].rentalIds });
-    await call(userB.functions, 'adminRentalAction', { action: 'cancel', rentalIds: simulatedGroups[9].rentalIds });
+    await simCall('Cancelar reserva sintética 9', 'adminRentalAction', { action: 'cancel', rentalIds: simulatedGroups[8].rentalIds });
+    await simCall('Cancelar reserva sintética 10', 'adminRentalAction', { action: 'cancel', rentalIds: simulatedGroups[9].rentalIds });
     for (let index = 0; index < 8; index++) {
-        await call(userB.functions, 'adminRentalAction', { action: 'confirm', rentalIds: simulatedGroups[index].rentalIds });
+        await simCall(`Confirmar reserva sintética ${index + 1}`, 'adminRentalAction', { action: 'confirm', rentalIds: simulatedGroups[index].rentalIds });
     }
-    await call(userB.functions, 'adminRentalAction', { action: 'deliver', rentalIds: simulatedGroups[0].rentalIds });
-    await call(userB.functions, 'adminRentalAction', { action: 'return', rentalIds: simulatedGroups[0].rentalIds, damagedUnits: 1, conditionNotes: 'Ficción: unidad enviada a taller' });
-    await call(userB.functions, 'adminRentalAction', { action: 'deliver', rentalIds: simulatedGroups[1].rentalIds });
-    await call(userB.functions, 'adminRentalAction', { action: 'return', rentalIds: simulatedGroups[1].rentalIds, damagedUnits: 0 });
+    await simCall('Entregar reserva sintética 1', 'adminRentalAction', { action: 'deliver', rentalIds: simulatedGroups[0].rentalIds });
+    await simCall('Devolver con daño reserva sintética 1', 'adminRentalAction', { action: 'return', rentalIds: simulatedGroups[0].rentalIds, damagedUnits: 1, conditionNotes: 'Ficción: unidad enviada a taller' });
+    await simCall('Entregar reserva sintética 2', 'adminRentalAction', { action: 'deliver', rentalIds: simulatedGroups[1].rentalIds });
+    await simCall('Devolver sin daño reserva sintética 2', 'adminRentalAction', { action: 'return', rentalIds: simulatedGroups[1].rentalIds, damagedUnits: 0 });
+
+    const overlapBooking = (pickupTime: string, productId = 'sim-overlap-bike') => ({
+        adminManual: true, adminCustomer: { id: userB.uid }, adminPaymentStatus: 'unpaid',
+        lines: [{ productId, productType: 'single', quantity: 1 }],
+        date: simulatedDate, pickupTime, duration: '1 hora', paymentMethod: 'Efectivo', idempotencyKey: `sim_overlap_${crypto.randomUUID()}`,
+    });
+    const overlapFirst = await simCall<{ reservationCode: string; rentalIds: string[] }>('Reservar la última unidad del intervalo 08:00', 'createRentalGroup', overlapBooking('08:00'));
+    await assert.rejects(
+        () => simCall('Rechazar superposición a las 08:30', 'createRentalGroup', overlapBooking('08:30')),
+        /disponible|stock|reserv|horario/i,
+        'A one-unit product cannot be booked across overlapping one-hour windows.',
+    );
+    await simCall('Cancelar la reserva del intervalo 08:00', 'adminRentalAction', { action: 'cancel', rentalIds: overlapFirst.rentalIds });
+
+    const concurrentBooking = (key: string) => ({
+        adminManual: true, adminCustomer: { id: userB.uid }, adminPaymentStatus: 'unpaid',
+        lines: [{ productId: 'sim-concurrent-last-unit', productType: 'single', quantity: 1 }],
+        date: simulatedDate, pickupTime: '10:00', duration: '1 hora', paymentMethod: 'Efectivo', idempotencyKey: key,
+    });
+    const concurrentLastUnit = await Promise.allSettled([
+        simCall<{ reservationCode: string; rentalIds: string[] }>('Concurrente A reclama la última unidad', 'createRentalGroup', concurrentBooking(`sim_concurrent_a_${crypto.randomUUID()}`)),
+        simCall<{ reservationCode: string; rentalIds: string[] }>('Concurrente B reclama la última unidad', 'createRentalGroup', concurrentBooking(`sim_concurrent_b_${crypto.randomUUID()}`)),
+    ]);
+    assert.equal(concurrentLastUnit.filter(result => result.status === 'fulfilled').length, 1, 'Only one concurrent request may reserve the final physical unit.');
+    assert.equal(concurrentLastUnit.filter(result => result.status === 'rejected').length, 1);
+    const winningLastUnit = concurrentLastUnit.find(result => result.status === 'fulfilled');
+    assert.ok(winningLastUnit && winningLastUnit.status === 'fulfilled');
+    await simCall('Cancelar reserva ganadora de la unidad concurrente', 'adminRentalAction', { action: 'cancel', rentalIds: winningLastUnit.value.rentalIds });
+
+    const pendingCustomerBooking = await simCall<{ reservationCode: string; rentalIds: string[]; total: number }>('Crear alquiler con cliente pendiente', 'createRentalGroup', {
+        adminManual: true, adminCustomerPending: true, adminImmediateWalkIn: true, adminPaymentStatus: 'unpaid',
+        lines: [{ productId: 'sim-pending-customer-bike', productType: 'single', quantity: 1 }],
+        date: pendingWalkInDate, pickupTime: pendingWalkInTime, duration: '1 hora', paymentMethod: 'Efectivo', idempotencyKey: `sim_pending_customer_${crypto.randomUUID()}`,
+    });
+    assert.equal(pendingCustomerBooking.total, 22);
+    await simCall('Confirmar alquiler del cliente pendiente', 'adminRentalAction', { action: 'confirm', rentalIds: pendingCustomerBooking.rentalIds });
+    await simCall('Entregar alquiler del cliente pendiente', 'adminRentalAction', { action: 'deliver', rentalIds: pendingCustomerBooking.rentalIds });
+    const pendingRentalDoc = await adminDb.collection('rentals').doc(pendingCustomerBooking.rentalIds[0]).get();
+    assert.equal(pendingRentalDoc.get('customerName'), 'Cliente pendiente');
+    const simReceipt40 = await simCall<{ movementId: string }>('Registrar primer pago parcial Bs 10', 'recordRentalPaymentMovement', {
+        rentalIds: pendingCustomerBooking.rentalIds, type: 'receipt', amount: 10, method: 'Efectivo', actualAt: new Date().toISOString(),
+        idempotencyKey: `sim_partial_10_${crypto.randomUUID()}`,
+    });
+    assert.ok(simReceipt40.movementId);
+    const partialCustomerPayment = await adminDb.collection('rentals').doc(pendingCustomerBooking.rentalIds[0]).get();
+    assert.equal(partialCustomerPayment.get('paymentStatus'), 'unpaid', 'The summary stays unpaid until partial receipts cover the full contract amount.');
+    const firstPartialMovement = await adminDb.doc(`rentalPaymentMovements/${simReceipt40.movementId}`).get();
+    assert.equal(firstPartialMovement.get('amount'), 10, 'The first partial cash receipt is preserved in the movement ledger.');
+    await simCall('Completar con segundo pago parcial Bs 12', 'recordRentalPaymentMovement', {
+        rentalIds: pendingCustomerBooking.rentalIds, type: 'receipt', amount: 12, method: 'QR', confirmedReceived: true,
+        actualAt: new Date().toISOString(), idempotencyKey: `sim_partial_12_${crypto.randomUUID()}`,
+    });
+    const settledCustomerPayment = await adminDb.collection('rentals').doc(pendingCustomerBooking.rentalIds[0]).get();
+    assert.equal(settledCustomerPayment.get('paymentStatus'), 'paid');
+    const pendingCustomerReceipts = await adminDb.collection('rentalPaymentMovements').where('reservationCode', '==', pendingCustomerBooking.reservationCode).get();
+    assert.equal(pendingCustomerReceipts.docs.filter(doc => doc.get('type') === 'receipt').reduce((sum, doc) => sum + Number(doc.get('amount') || 0), 0), 22);
+    await simCall('Devolver alquiler del cliente pendiente', 'adminRentalAction', { action: 'return', rentalIds: pendingCustomerBooking.rentalIds, damagedUnits: 0 });
+
+    await assert.rejects(
+        () => simCall('Rechazar operación sobre sucursal shop-a', 'createRentalGroup', {
+            adminManual: true, adminCustomer: { id: userB.uid }, adminPaymentStatus: 'unpaid',
+            lines: [{ productId: 'sim-other-branch-bike', productType: 'single', quantity: 1 }],
+            date: simulatedDate, pickupTime: '15:00', duration: '1 hora', paymentMethod: 'Efectivo', idempotencyKey: `sim_wrong_branch_${crypto.randomUUID()}`,
+        }),
+        /sucursal|permiso|denegad|tienda/i,
+        'A manager scoped to shop-b cannot consume inventory owned by shop-a.',
+    );
+
     const simulationInventory = async (id: string) => (await adminDb.doc(`inventory/${id}`).get()).data() || {};
-    assert.equal(((await simulationInventory('sim-bike-26')).wheelSizes as Array<{ size: string; stock: number; maintenanceStock: number }>).find(wheel => wheel.size === '26')?.stock, 4,
+    const simBike26Final = await simulationInventory('sim-bike-26');
+    assert.equal((simBike26Final.wheelSizes as Array<{ size: string; stock: number; maintenanceStock: number }>).find(wheel => wheel.size === '26')?.stock, 4,
         '8 starting bikes - 1 damaged return - 4 combo component units - 1 confirmed rental + 2 returned combo units = 4 available.');
-    assert.equal(((await simulationInventory('sim-bike-26')).wheelSizes as Array<{ size: string; stock: number; maintenanceStock: number }>).find(wheel => wheel.size === '26')?.maintenanceStock, 2,
+    assert.equal((simBike26Final.wheelSizes as Array<{ size: string; stock: number; maintenanceStock: number }>).find(wheel => wheel.size === '26')?.maintenanceStock, 2,
         'The damaged simulated bike is added to the one pre-existing workshop unit.');
     assert.equal(((await simulationInventory('sim-bike-27')).wheelSizes as Array<{ size: string; stock: number }>)[0].stock, 1);
     assert.equal((await simulationInventory('sim-mamachari')).stock, 1);
     assert.equal((await simulationInventory('sim-lock')).stock, 18,
         'Standalone and combo-shared accessories reconcile after the healthy combo return.');
+    assert.equal((await simulationInventory('sim-overlap-bike')).stock, 1, 'Canceling the overlapping booking restores the last unit.');
+    assert.equal((await simulationInventory('sim-concurrent-last-unit')).stock, 1, 'Canceling the winner restores the concurrently contested unit.');
+    assert.equal((await simulationInventory('sim-pending-customer-bike')).stock, 2, 'A healthy return restores the pending-customer bicycle.');
+    assert.equal((await simulationInventory('sim-other-branch-bike')).stock, 2, 'A rejected cross-branch attempt preserves shop-a inventory.');
     const simulatedRentals = await adminDb.collection('rentals').where('date', '==', simulatedDate).get();
     assert.ok(simulatedRentals.docs.some(doc => doc.get('reservationCode') === simulatedGroups[0].reservationCode && doc.get('status') === 'returned'));
     assert.ok(simulatedRentals.docs.filter(doc => doc.get('reservationCode') === simulatedGroups[8].reservationCode).every(doc => doc.get('status') === 'cancelled'));
     assert.ok(simulatedRentals.docs.every(doc => doc.get('paymentStatus') !== 'paid'), 'Lifecycle actions do not invent a payment receipt.');
-    pass('Emulator simulated a 10-slot operating day: 10 bookings, retry, cancellations, 8 confirmations, deliveries, healthy/damaged returns, combo component and shared-accessory stock reconciliation, and unpaid history');
+    assert.ok(simulatedOperations.length >= 20, `Expected at least 20 Emulator operations; observed ${simulatedOperations.length}.`);
+    const movementDescriptions: Record<string, string[]> = {
+        'sim-bike-26': ['2 combo checkouts × 2 bikes plus 2 solo checkouts; one damaged return to workshop; one healthy combo return (+2 bikes)'],
+        'sim-bike-27': ['2 confirmed solo reservations; no return in this scenario'],
+        'sim-mamachari': ['1 confirmed reservation; second reservation cancelled before confirmation'],
+        'sim-lock': ['1 standalone checkout + 2 combo checkouts; one healthy combo return (+1 lock)'],
+        'sim-overlap-bike': ['1 pending reservation; overlapping 08:30 request rejected; 08:00 reservation cancelled'],
+        'sim-concurrent-last-unit': ['2 concurrent attempts for 1 unit; exactly 1 won and was cancelled'],
+        'sim-pending-customer-bike': ['Cliente pendiente booking; confirm/deliver (-1), two receipts Bs 10 + Bs 12, healthy return (+1)'],
+        'sim-other-branch-bike': ['shop-b manager cross-branch request rejected; no stock movement'],
+    };
+    const ledgerRows = await Promise.all(simulatedTrackedIds.map(async id => ({
+        id,
+        inicial: simulatedOpeningStock[id as keyof typeof simulatedOpeningStock],
+        movimientos: movementDescriptions[id],
+        final: await readSimStock(id),
+    })));
+    const simulationStockLedger = ledgerRows.map(row => {
+        const opening = row.inicial;
+        const closing = row.final;
+        const netChange = Array.isArray(opening.stock) && Array.isArray(closing.stock)
+            ? opening.stock.map(openingWheel => {
+                const closingWheel = closing.stock.find(candidate => candidate.aro === openingWheel.aro);
+                return {
+                    aro: openingWheel.aro,
+                    disponible: (closingWheel?.disponible || 0) - openingWheel.disponible,
+                    taller: (closingWheel?.taller || 0) - openingWheel.taller,
+                };
+            })
+            : Number(closing.stock) - Number(opening.stock);
+        return { ...row, variacionNeta: netChange };
+    });
+    console.log(`SIMULACIÓN DÍA — ${simulatedOperations.length} operaciones Emulator; reservas, reintentos, cancelaciones, confirmaciones, entregas, devoluciones, intervalos superpuestos, unidad final concurrente, cliente pendiente, pagos parciales, accesorios y aislamiento de sucursal.`);
+    console.log(`STOCK INICIAL / MOVIMIENTOS / STOCK FINAL ${JSON.stringify(simulationStockLedger)}`);
+    pass(`Simulación ficticia de jornada aprobada: ${simulatedOperations.length} operaciones Emulator; stock, movimientos y stock final registrados por artículo`);
 
     const pendingManagerRental = await call<{ rentalIds: string[] }>(userB.functions, 'createRentalGroup', managerBooking(15));
     await assert.rejects(() => call(userB.functions, 'adminRentalAction', { action: 'return', rentalIds: pendingManagerRental.rentalIds }));

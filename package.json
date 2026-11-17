@@ -27,6 +27,7 @@
     "test:catalog-upload-validation": "npx tsx scripts/catalog-upload-validation.test.ts",
     "test:sales": "firebase emulators:exec --project demo-briz-sales --only firestore \"npx tsx scripts/manual-sales-emulator.test.ts\"",
     "seed:admin-visual": "npx tsx scripts/seed-admin-visual.ts",
+    "test:pr16-visual": "node scripts/briz-pr16-emulator-visual.mjs",
     "reconcile:rentals": "firebase emulators:exec --project demo-briz-security --only firestore \"npx tsx scripts/reconcile-rentals.ts\"",
     "preview": "vite preview"
   },
@@ -60,6 +61,7 @@
     "eslint-plugin-react-hooks": "^7.0.1",
     "eslint-plugin-react-refresh": "^0.4.24",
     "globals": "^16.5.0",
+    "playwright": "^1.65.1",
     "sharp": "^0.35.2",
     "typescript": "~5.9.3",
     "typescript-eslint": "^8.48.0",

@@ -1119,7 +1119,7 @@ export default function AdminRentalsPage() {
               const activeSize = selectedSizes[cardSizeKey] || itemWheelSizes.find(wheel => getWizardSlotStock(item.id, wheel.size) > 0)?.size || '';
 
               return (
-                <div key={item.id} className="bg-black/20 border border-white/5 rounded-2xl p-4 flex flex-col justify-between hover:border-brand-yellow/30 transition-all">
+                <div key={item.id} data-testid={`rental-catalog-card-${item.id}`} className="bg-black/20 border border-white/5 rounded-2xl p-4 flex flex-col justify-between hover:border-brand-yellow/30 transition-all">
                   <div className="space-y-2">
                         <span className="text-[9px] font-black uppercase text-brand-yellow-vibrant tracking-widest">{item.type === 'combo' ? 'Combinada' : item.itemType === 'accessory' ? 'Accesorio de alquiler' : item.category || 'Bicicleta'}</span>
                     <div className="aspect-[4/3] rounded-xl overflow-hidden bg-black/35 relative">
@@ -1238,7 +1238,7 @@ export default function AdminRentalsPage() {
                 {newRentalCart.map((item, idx) => {
                   const price = getCartLineUnitPrice(item);
                   return (
-                    <div key={idx} className="bg-white/5 border border-white/5 rounded-xl p-3 space-y-2">
+                    <div key={idx} data-testid="rental-cart-item" className="bg-white/5 border border-white/5 rounded-xl p-3 space-y-2">
                       <div className="flex justify-between items-start gap-2">
                         <div className="min-w-0 flex-1">
                           <h5 className="text-xs font-black text-white truncate">{item.product.name}</h5>
