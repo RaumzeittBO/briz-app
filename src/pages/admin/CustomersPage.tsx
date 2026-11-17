@@ -25,12 +25,47 @@ export default function CustomersPage() {
     } | null>(null);
     const [filesReload, setFilesReload] = useState(0);
     const [fileContentError, setFileContentError] = useState(false);
+    const [fileDownloadError, setFileDownloadError] = useState('');
+    const [fileDownloading, setFileDownloading] = useState(false);
     const isPdfDocument = (url?: string) => Boolean(url && (url.toLowerCase().includes('.pdf') || url.startsWith('data:application/pdf')));
     const [viewingDocument, setViewingDocument] = useState<{ url: string; title: string; fileName: string } | null>(null);
     const openDocument = (url?: string, title = 'Documento del cliente', fileName = 'documento-cliente') => {
         if (!url) return;
         setFileContentError(false);
+        setFileDownloadError('');
         setViewingDocument({ url, title, fileName });
+    };
+    const downloadPrivateDocument = async () => {
+        if (!viewingDocument || fileDownloading) return;
+        setFileDownloading(true);
+        setFileDownloadError('');
+        try {
+            // Fetch only the already-authorized private URL and download its bytes as a file.
+            // This keeps cross-origin signed URLs and data URLs on the normal browser download path.
+            const response = await fetch(viewingDocument.url);
+            if (!response.ok) throw new Error('No se pudo recuperar el archivo autorizado.');
+            const blob = await response.blob();
+            const extensionByType: Record<string, string> = {
+                'application/pdf': 'pdf',
+                'image/jpeg': 'jpg',
+                'image/png': 'png',
+                'image/webp': 'webp',
+            };
+            const extension = extensionByType[blob.type.toLowerCase()] || 'bin';
+            const objectUrl = URL.createObjectURL(blob);
+            const anchor = document.createElement('a');
+            anchor.href = objectUrl;
+            anchor.download = `${viewingDocument.fileName}.${extension}`;
+            anchor.hidden = true;
+            document.body.appendChild(anchor);
+            anchor.click();
+            anchor.remove();
+            window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
+        } catch {
+            setFileDownloadError('No se pudo descargar este archivo. Vuelve a cargarlo desde la ficha del cliente e inténtalo nuevamente.');
+        } finally {
+            setFileDownloading(false);
+        }
     };
     const currentCustomerFiles = customerFilesResult && detailsCustomer && customerFilesResult.customerId === detailsCustomer.id ? customerFilesResult.files || null : null;
     const customerFilesLoading = Boolean(detailsCustomer && customerFilesResult?.customerId !== detailsCustomer.id);
@@ -209,7 +244,7 @@ export default function CustomersPage() {
                 </div>
             )}
 
-            <Dialog open={Boolean(detailsCustomer)} onOpenChange={(open) => !open && setDetailsCustomer(null)}>
+            <Dialog open={Boolean(detailsCustomer)} onOpenChange={(open) => { if (!open) { setViewingDocument(null); setDetailsCustomer(null); } }}>
                 <DialogContent className="w-[96vw] sm:max-w-[94vw] xl:max-w-[1500px] max-h-[94vh] overflow-hidden border border-brand-yellow/25 bg-[#FFF9E8] p-0 text-brand-charcoal shadow-2xl">
                     {detailsCustomer && (
                         <>
@@ -388,19 +423,20 @@ export default function CustomersPage() {
                 </DialogContent>
             </Dialog>
 
-            {viewingDocument && (
-                <div className="fixed inset-0 z-[220] flex items-center justify-center bg-black/80 p-3 sm:p-6" role="dialog" aria-modal="true" aria-label={viewingDocument.title}>
-                    <section className="flex max-h-[94vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-brand-yellow/30 bg-brand-charcoal shadow-2xl">
-                        <header className="flex items-center justify-between gap-3 border-b border-white/10 px-4 py-3 sm:px-6">
-                            <h2 className="min-w-0 truncate font-black text-white">{viewingDocument.title}</h2>
+            <Dialog open={Boolean(viewingDocument)} onOpenChange={(open) => { if (!open) setViewingDocument(null); }}>
+                {viewingDocument && (
+                    <DialogContent showCloseButton={false} aria-describedby={undefined} className="z-[60] flex max-h-[94dvh] w-[calc(100vw-1.5rem)] max-w-5xl flex-col gap-0 overflow-hidden rounded-2xl border border-brand-yellow/30 bg-brand-charcoal p-0 text-white shadow-2xl">
+                        <DialogHeader className="flex-row items-center justify-between gap-3 border-b border-white/10 px-4 py-3 sm:px-6">
+                            <DialogTitle className="min-w-0 truncate font-black text-white">{viewingDocument.title}</DialogTitle>
                             <div className="flex shrink-0 items-center gap-2">
-                                <a href={viewingDocument.url} download={viewingDocument.fileName} target="_blank" rel="noreferrer" className="inline-flex h-10 items-center gap-2 rounded-full bg-brand-yellow px-4 text-xs font-black text-brand-black hover:bg-white" aria-label="Descargar archivo privado">
-                                    <Download className="h-4 w-4" /> Descargar
-                                </a>
+                                <Button type="button" disabled={fileDownloading} onClick={downloadPrivateDocument} className="h-10 rounded-full bg-brand-yellow px-4 text-xs font-black text-brand-black hover:bg-white" aria-label="Descargar archivo privado">
+                                    <Download className="h-4 w-4" /> {fileDownloading ? 'Preparando…' : 'Descargar'}
+                                </Button>
                                 <Button type="button" variant="ghost" size="icon" aria-label="Cerrar documento" onClick={() => setViewingDocument(null)} className="text-white hover:bg-white/10"><X className="h-5 w-5" /></Button>
                             </div>
-                        </header>
+                        </DialogHeader>
                         <div className="min-h-0 flex-1 overflow-auto bg-white p-2 sm:p-4">
+                            {fileDownloadError && <p role="alert" className="mb-2 rounded-lg bg-red-50 p-3 text-center text-sm font-bold text-red-800">{fileDownloadError}</p>}
                             {fileContentError ? (
                                 <p role="alert" className="p-6 text-center text-sm font-bold text-red-700">No se pudo mostrar el archivo. Puedes volver a intentar la carga desde la ficha del cliente.</p>
                             ) : isPdfDocument(viewingDocument.url) ? (
@@ -409,9 +445,9 @@ export default function CustomersPage() {
                                 <img src={viewingDocument.url} alt={viewingDocument.title} onError={() => setFileContentError(true)} className="mx-auto max-h-[78vh] max-w-full object-contain" />
                             )}
                         </div>
-                    </section>
-                </div>
-            )}
+                    </DialogContent>
+                )}
+            </Dialog>
 
             {/* Modal de Cliente */}
             <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>

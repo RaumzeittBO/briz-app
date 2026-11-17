@@ -447,7 +447,18 @@ export function getComboAvailabilityDiagnostics(params: {
         let reasonMessage = 'Disponible';
 
         if (capacity <= 0) {
-            if ((Number(item.maintenanceStock) || 0) > 0) {
+            if (params.date && itemAvail === 0) {
+                const workshopUnits = Number(item.maintenanceStock) || (item.hasWheelSizes
+                    ? (item.wheelSizes || []).reduce((sum, wheel) => sum + Math.max(0, Number(wheel.maintenanceStock) || 0), 0)
+                    : 0);
+                if (workshopUnits > 0) {
+                    reasonCode = 'in_maintenance';
+                    reasonMessage = `${item.name}: sin disponibilidad para el horario consultado; ${workshopUnits} unidad(es) registrada(s) en taller`;
+                } else {
+                    reasonCode = 'reserved';
+                    reasonMessage = `${item.name}: sin disponibilidad para el horario consultado`;
+                }
+            } else if ((Number(item.maintenanceStock) || 0) > 0) {
                 reasonCode = 'in_maintenance';
                 reasonMessage = `${item.name}: unidades en mantenimiento / taller`;
             } else if (itemAvail === 0) {
@@ -495,6 +506,8 @@ export function getComboAvailabilityDiagnostics(params: {
                 bottleneckReason = `${bottleneck.name} en taller/mantenimiento`;
             } else if (bottleneck.reasonCode === 'wheel_size_unavailable') {
                 bottleneckReason = `Aro no disponible para ${bottleneck.name}`;
+            } else if (bottleneck.reasonCode === 'reserved') {
+                bottleneckReason = `${bottleneck.name}: sin disponibilidad para el horario consultado`;
             } else {
                 bottleneckReason = `${bottleneck.name} sin stock disponible`;
             }

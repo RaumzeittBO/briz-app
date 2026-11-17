@@ -204,6 +204,14 @@ export function accessoryUnitPrice(item: CatalogItem, duration: string, context?
 
     if (typeof item.addonFlatPrice === 'number' && item.addonFlatPrice > 0) return item.addonFlatPrice;
 
+    const hasExplicitTier = [item.price1Hour, item.price2Hours, item.price3Hours, item.price4Hours,
+        item.price8Hours, item.price24Hours, item.price1Week, item.price1Month]
+        .some(value => typeof value === 'number' && value > 0);
+    if (hasExplicitTier) {
+        const configuredPrice = calculatePrice(item, duration, 1);
+        if (configuredPrice > 0) return configuredPrice;
+    }
+
     // Default known supplements
     if (item.id === 'acc_casco_adulto' || item.id === 'acc_casco_nino' || item.id === 'acc_portacelular' || item.id === 'acc_linterna_bocina' || item.id === 'acc_candado_seguridad') {
         return 10;
