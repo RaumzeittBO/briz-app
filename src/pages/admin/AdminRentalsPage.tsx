@@ -310,6 +310,13 @@ export default function AdminRentalsPage() {
   const [returnModalGroup, setReturnModalGroup] = useState<GroupedRental | null>(null);
   const [returnDamagedUnits, setReturnDamagedUnits] = useState(0);
   const [returnNotes, setReturnNotes] = useState('');
+  const [returnActualTime, setReturnActualTime] = useState(new Date().toTimeString().slice(0, 5));
+  const [returnExtraHoursFee, setReturnExtraHoursFee] = useState(0);
+  const [returnDamageFee, setReturnDamageFee] = useState(0);
+  const [returnPhysicalDocReturned, setReturnPhysicalDocReturned] = useState(true);
+  const [returnRegisterPayment, setReturnRegisterPayment] = useState(false);
+  const [returnPaymentMethod, setReturnPaymentMethod] = useState<'Efectivo' | 'QR' | 'Transferencia'>('Efectivo');
+  const [returnPaymentAmount, setReturnPaymentAmount] = useState('');
   const [paymentModalGroup, setPaymentModalGroup] = useState<GroupedRental | null>(null);
   const [paymentType, setPaymentType] = useState<'receipt' | 'refund' | 'correction'>('receipt');
   const [paymentAmount, setPaymentAmount] = useState('');
@@ -326,6 +333,9 @@ export default function AdminRentalsPage() {
   const manualCreateLockRef = useRef(false);
   const [creatingManualRental, setCreatingManualRental] = useState(false);
   const [newRentalStep, setNewRentalStep] = useState(1);
+  const [newRentalFlow, setNewRentalFlow] = useState<'immediate' | 'future'>('immediate');
+  const [newRentalDocumentType, setNewRentalDocumentType] = useState<'fisico' | 'digital' | 'pendiente'>('fisico');
+  const [newRentalDocumentCustody, setNewRentalDocumentCustody] = useState('');
   const [newRentalCart, setNewRentalCart] = useState<any[]>([]);
   const [newRentalForm, setNewRentalForm] = useState({
       date: toBoliviaDateString(),
@@ -336,7 +346,7 @@ export default function AdminRentalsPage() {
       mapsLink: '',
       notes: '',
       paymentMethod: 'efectivo',
-      paymentStatus: 'paid' as 'unpaid' | 'paid',
+      paymentStatus: 'unpaid' as 'unpaid' | 'paid',
       status: 'confirmed' as 'confirmed' | 'pending'
   });
   const [newRentalCustomerMode, setNewRentalCustomerMode] = useState<'existing' | 'new'>('existing');
@@ -513,22 +523,77 @@ export default function AdminRentalsPage() {
     setReturnModalGroup(group);
     setReturnDamagedUnits(0);
     setReturnNotes('');
+    setReturnActualTime(new Date().toTimeString().slice(0, 5));
+    setReturnExtraHoursFee(0);
+    setReturnDamageFee(0);
+    setReturnPhysicalDocReturned(true);
+
+    const totalPaid = group.items.reduce((sum, item) => sum + (item.amountPaid || (item.paymentStatus === 'paid' ? item.total : 0)), 0);
+    const pendingBalance = Math.max(0, group.total - totalPaid);
+    if (pendingBalance > 0) {
+      setReturnRegisterPayment(true);
+      setReturnPaymentAmount(String(pendingBalance));
+    } else {
+      setReturnRegisterPayment(false);
+      setReturnPaymentAmount('0');
+    }
+    setReturnPaymentMethod('Efectivo');
   };
 
   const handleConfirmReturnGroup = async () => {
     if (!returnModalGroup) return;
-    const ids = returnModalGroup.items.map(item => item.id);
+    const group = returnModalGroup;
+    const ids = group.items.map(item => item.id);
+    const amountToCollect = Number(returnPaymentAmount) || 0;
+
+    const conditionNotesParts: string[] = [];
+    if (returnPhysicalDocReturned) {
+      conditionNotesParts.push('[CUSTODIA]: Documento de identidad físico devuelto al cliente conforme.');
+    }
+    if (returnExtraHoursFee > 0) {
+      conditionNotesParts.push(`[AJUSTE TIEMPO]: Recargo por tiempo adicional Bs. ${returnExtraHoursFee}`);
+    }
+    if (returnDamageFee > 0) {
+      conditionNotesParts.push(`[AJUSTE DAÑOS]: Recargo por daños/reparaciones Bs. ${returnDamageFee}`);
+    }
+    if (returnNotes.trim()) {
+      conditionNotesParts.push(returnNotes.trim());
+    }
+    const finalConditionNotes = conditionNotesParts.join(' | ');
+
     try {
-      const completed = await runExclusiveAction(returnModalGroup.id, 'return', async () => { await runAdminRentalAction('return', ids, { damagedUnits: returnDamagedUnits, conditionNotes: returnNotes.trim() || undefined }); });
+      const completed = await runExclusiveAction(group.id, 'return', async () => {
+        // 1. If payment is recorded on return, write it cleanly into the payment ledger
+        if (returnRegisterPayment && amountToCollect > 0) {
+          await recordRentalPaymentMovement({
+            rentalIds: ids,
+            type: 'receipt',
+            amount: amountToCollect,
+            method: returnPaymentMethod,
+            reason: 'Liquidación al cierre y devolución del alquiler',
+            actualAt: new Date().toISOString(),
+            idempotencyKey: crypto.randomUUID().replaceAll('-', ''),
+          });
+        }
+
+        // 2. Perform return and inventory release
+        await runAdminRentalAction('return', ids, {
+          damagedUnits: returnDamagedUnits,
+          conditionNotes: finalConditionNotes || undefined,
+        });
+      });
       if (!completed) return false;
-    } catch (error) { alert(`Error al registrar la devolución:\n${error instanceof Error ? error.message : 'Intenta nuevamente.'}`); return false; }
+    } catch (error) {
+      alert(`Error al registrar la devolución:\n${error instanceof Error ? error.message : 'Intenta nuevamente.'}`);
+      return false;
+    }
 
     setReturnModalGroup(null);
-    if (selected?.id === returnModalGroup.id) setSelected(null);
+    if (selected?.id === group.id) setSelected(null);
     alert(
       returnDamagedUnits > 0
-        ? 'Devolución registrada. Las unidades dañadas quedaron apartadas en Mantenimiento/Taller y los demás accesorios fueron liberados.'
-        : '¡Devolución registrada con éxito! Todas las bicicletas y accesorios volvieron al stock disponible.'
+        ? 'Devolución registrada. Las unidades dañadas quedaron apartadas en Mantenimiento/Taller, los pagos fueron registrados y los demás artículos volvieron al stock disponible.'
+        : '¡Devolución y cierre registrados con éxito! Pagos liquidados y unidades devueltas al stock disponible.'
     );
     return true;
   };
@@ -788,16 +853,27 @@ export default function AdminRentalsPage() {
 
     const rentalCartItems = newRentalCart.filter(item => item.product.itemType !== 'accessory');
     const accessoryCartItems = newRentalCart.filter(item => item.product.itemType === 'accessory');
-    if (rentalCartItems.length === 0) { alert('Agrega al menos una bicicleta o un combo al alquiler.'); return; }
+    if (rentalCartItems.length === 0 && accessoryCartItems.length === 0) {
+      alert('Agrega al menos una bicicleta, un combo o un accesorio al alquiler.');
+      return;
+    }
 
-    const lines = rentalCartItems.map(item => ({
-      productId: item.product.id,
-      productType: (item.product.components !== undefined ? 'combo' : 'single') as 'combo' | 'single',
-      quantity: item.quantity,
-      ...(item.selectedWheelSize ? { wheelSize: item.selectedWheelSize } : {}),
-      ...(item.componentSelections?.length ? { componentSelections: item.componentSelections } : {}),
-    }));
-    const accessories = accessoryCartItems.map(item => ({ itemId: item.product.id, quantity: item.quantity }));
+    const lines = rentalCartItems.length > 0
+      ? rentalCartItems.map(item => ({
+          productId: item.product.id,
+          productType: (item.product.components !== undefined ? 'combo' : 'single') as 'combo' | 'single',
+          quantity: item.quantity,
+          ...(item.selectedWheelSize ? { wheelSize: item.selectedWheelSize } : {}),
+          ...(item.componentSelections?.length ? { componentSelections: item.componentSelections } : {}),
+        }))
+      : accessoryCartItems.map(item => ({
+          productId: item.product.id,
+          productType: 'single' as const,
+          quantity: item.quantity,
+        }));
+    const accessories = rentalCartItems.length > 0
+      ? accessoryCartItems.map(item => ({ itemId: item.product.id, quantity: item.quantity }))
+      : [];
     const paymentMethod: 'QR' | 'Transferencia' | 'Efectivo' = newRentalForm.paymentMethod.toLowerCase().includes('qr')
       ? 'QR' : newRentalForm.paymentMethod.toLowerCase().includes('transfer') ? 'Transferencia' : 'Efectivo';
     const adminCustomer = {
@@ -806,10 +882,17 @@ export default function AdminRentalsPage() {
       email: finalCustomer.email || '', nacionalidad: finalCustomer.nacionalidad || '',
       departamento: finalCustomer.departamento || '', comoNosConociste: finalCustomer.comoNosConociste || '',
     };
+    const docNotes = newRentalDocumentType === 'fisico'
+      ? `[DOCUMENTO EN CUSTODIA]: ${newRentalDocumentCustody.trim() || 'CI/Documento físico retenido en mostrador'}`
+      : newRentalDocumentType === 'digital'
+        ? '[DOCUMENTO DIGITAL]: Verificado en perfil privado'
+        : '[DOCUMENTO PENDIENTE]: Cliente presentará al retirar';
+    const combinedNotes = [docNotes, newRentalForm.notes.trim()].filter(Boolean).join('\n');
+
     const booking = {
       adminManual: true,
       adminCustomer,
-      adminNotes: newRentalForm.notes,
+      adminNotes: combinedNotes,
       adminPaymentStatus: newRentalForm.paymentStatus,
       adminDeliveryService: newRentalForm.deliveryService,
       adminPickupService: newRentalForm.pickupService,
@@ -831,11 +914,21 @@ export default function AdminRentalsPage() {
       const idempotencyKey = saved?.fingerprint === fingerprint && saved.key ? saved.key : `admin_${crypto.randomUUID()}`;
       sessionStorage.setItem(storageKey, JSON.stringify({ fingerprint, key: idempotencyKey }));
       const result = await createRentalGroup({ ...booking, idempotencyKey });
-      if (newRentalForm.status === 'confirmed') {
+      
+      if (newRentalFlow === 'immediate') {
+        // Flow A: Immediate walk-in -> confirm and deliver simultaneously
         await runAdminRentalAction('confirm', result.rentalIds);
+        await runAdminRentalAction('deliver', result.rentalIds);
+        sessionStorage.removeItem(storageKey);
+        alert(`¡Alquiler registrado y entregado al cliente con éxito!\nCódigo de reserva: ${result.reservationCode}\nLas unidades quedaron marcadas como entregadas.`);
+      } else {
+        // Flow B: Future booking -> confirm if requested, but DO NOT deliver
+        if (newRentalForm.status === 'confirmed') {
+          await runAdminRentalAction('confirm', result.rentalIds);
+        }
+        sessionStorage.removeItem(storageKey);
+        alert(`¡Reserva administrativa registrada con éxito!\nCódigo: ${result.reservationCode}\n(La bicicleta permanecerá en tienda hasta su entrega futura).`);
       }
-      sessionStorage.removeItem(storageKey);
-      alert(`Alquiler manual creado con éxito. Código: ${result.reservationCode}`);
       setNewRentalModalOpen(false);
     } catch (error) {
       console.error('Error creating manual rental:', error);
@@ -1109,9 +1202,40 @@ export default function AdminRentalsPage() {
   };
 
   const renderStep2 = () => {
+    const isOnlyAccessories = newRentalCart.length > 0 && newRentalCart.every(item => item.product.itemType === 'accessory');
+    const availableDurations = isOnlyAccessories
+      ? ['1 hora', '2 horas', '3 horas', '4 horas', '8 horas', '24 horas']
+      : ['1 hora', '2 horas', '3 horas', '4 horas', '8 horas', '24 horas', '1 semana', '1 mes'];
+
     return (
       <div className="space-y-4 font-sans text-white max-w-xl mx-auto py-4">
-        <h3 className="text-base font-black uppercase tracking-wider text-brand-yellow-vibrant mb-4 text-center">
+        {newRentalFlow === 'immediate' ? (
+          <div className="p-3.5 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs flex items-center gap-3">
+            <div className="p-2 rounded-xl bg-emerald-500/20 text-emerald-400 shrink-0">
+              <Bike className="w-5 h-5" />
+            </div>
+            <div>
+              <p className="font-black uppercase tracking-wide text-white">Modo Mostrador · Atención Inmediata</p>
+              <p className="text-[11px] text-emerald-200/80 mt-0.5">
+                El cliente está en el local. Al pulsar «Registrar y entregar», la orden se confirmará y marcará como entregada inmediatamente.
+              </p>
+            </div>
+          </div>
+        ) : (
+          <div className="p-3.5 rounded-2xl bg-brand-yellow/10 border border-brand-yellow/30 text-brand-yellow text-xs flex items-center gap-3">
+            <div className="p-2 rounded-xl bg-brand-yellow/20 text-brand-yellow shrink-0">
+              <CalendarClock className="w-5 h-5" />
+            </div>
+            <div>
+              <p className="font-black uppercase tracking-wide text-white">Modo Reserva Administrativa Futura</p>
+              <p className="text-[11px] text-brand-yellow/80 mt-0.5">
+                Reserva para otra fecha u hora. La bicicleta permanecerá en tienda y no se marcará como entregada hasta que el cliente retire físicamente.
+              </p>
+            </div>
+          </div>
+        )}
+
+        <h3 className="text-base font-black uppercase tracking-wider text-brand-yellow-vibrant mb-2 text-center">
           Detalles de Tiempos, Pago y Servicios
         </h3>
 
@@ -1137,13 +1261,20 @@ export default function AdminRentalsPage() {
         </div>
 
         <div className="space-y-1">
-          <label className="text-[10px] text-white/40 font-bold uppercase">Duración de Alquiler</label>
+          <div className="flex justify-between items-center">
+            <label className="text-[10px] text-white/40 font-bold uppercase">Duración de Alquiler</label>
+            {isOnlyAccessories && (
+              <span className="text-[9px] font-bold text-brand-yellow uppercase">
+                Tarifa plana Bs. 20 (máx. 24h)
+              </span>
+            )}
+          </div>
           <select
             value={newRentalForm.duration}
             onChange={e => setNewRentalForm({ ...newRentalForm, duration: e.target.value })}
             className="w-full bg-black/35 border border-white/10 rounded-xl px-3 h-10 text-xs font-bold text-white focus:border-brand-yellow outline-none"
           >
-            {['1 hora', '2 horas', '3 horas', '4 horas', '8 horas', '24 horas', '1 semana', '1 mes'].map(d => (
+            {availableDurations.map(d => (
               <option key={d} value={d} className="bg-brand-charcoal text-white">{d}</option>
             ))}
           </select>
@@ -1202,12 +1333,12 @@ export default function AdminRentalsPage() {
               onChange={e => setNewRentalForm({ ...newRentalForm, paymentStatus: e.target.value as any })}
               className="w-full bg-black/35 border border-white/10 rounded-xl px-3 h-10 text-xs font-bold text-white outline-none focus:border-brand-yellow"
             >
-              <option value="paid" className="bg-brand-charcoal text-white">Pagado</option>
-              <option value="unpaid" className="bg-brand-charcoal text-white">No Pagado</option>
+              <option value="unpaid" className="bg-brand-charcoal text-white">No Pagado (Cobrar al retorno)</option>
+              <option value="paid" className="bg-brand-charcoal text-white">Pagado (Abonado ahora)</option>
             </select>
           </div>
           <div className="space-y-1">
-            <label className="text-[10px] text-white/40 font-bold uppercase">Estado de Alquiler</label>
+            <label className="text-[10px] text-white/40 font-bold uppercase">Estado Operativo</label>
             <select
               value={newRentalForm.status}
               onChange={e => setNewRentalForm({ ...newRentalForm, status: e.target.value as any })}
@@ -1435,7 +1566,9 @@ export default function AdminRentalsPage() {
 
             <div className="grid grid-cols-3 gap-3 pt-2">
               <div className="space-y-1 bg-white/5 p-3 rounded-xl border border-white/5">
-                <label className="text-[9px] text-white/40 font-bold uppercase block text-center mb-1">Foto Rostro</label>
+                <label className="text-[9px] text-white/40 font-bold uppercase block text-center mb-1">
+                  Foto Rostro {newRentalDocumentType === 'fisico' && <span className="text-white/30 font-normal">(Opcional)</span>}
+                </label>
                 <FileUploader
                   onUpload={url => setNewRentalCustomerData(prev => ({...prev, autofotoUrl: url}))}
                   folder="customers"
@@ -1446,7 +1579,9 @@ export default function AdminRentalsPage() {
                 )}
               </div>
               <div className="space-y-1 bg-white/5 p-3 rounded-xl border border-white/5">
-                <label className="text-[9px] text-white/40 font-bold uppercase block text-center mb-1">CI Anverso</label>
+                <label className="text-[9px] text-white/40 font-bold uppercase block text-center mb-1">
+                  CI Anverso {newRentalDocumentType === 'fisico' && <span className="text-white/30 font-normal">(Opcional)</span>}
+                </label>
                 <FileUploader
                   onUpload={url => setNewRentalCustomerData(prev => ({...prev, documentoUrl: url}))}
                   folder="customers"
@@ -1457,7 +1592,9 @@ export default function AdminRentalsPage() {
                 )}
               </div>
               <div className="space-y-1 bg-white/5 p-3 rounded-xl border border-white/5">
-                <label className="text-[9px] text-white/40 font-bold uppercase block text-center mb-1">CI Reverso</label>
+                <label className="text-[9px] text-white/40 font-bold uppercase block text-center mb-1">
+                  CI Reverso {newRentalDocumentType === 'fisico' && <span className="text-white/30 font-normal">(Opcional)</span>}
+                </label>
                 <FileUploader
                   onUpload={url => setNewRentalCustomerData(prev => ({...prev, documentoReversoUrl: url}))}
                   folder="customers"
@@ -1470,6 +1607,98 @@ export default function AdminRentalsPage() {
             </div>
           </div>
         )}
+
+        {/* Documento de Identificación y Custodia */}
+        <div className="bg-black/25 border border-white/10 rounded-2xl p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <label className="text-xs font-black uppercase tracking-wider text-brand-yellow flex items-center gap-1.5">
+              <ShieldCheck className="w-4 h-4" />
+              Documento de Identificación / Garantía
+            </label>
+            <span className="text-[10px] text-white/40 font-bold uppercase">Control de Custodia</span>
+          </div>
+
+          <div className="grid grid-cols-3 gap-2">
+            <button
+              type="button"
+              onClick={() => setNewRentalDocumentType('fisico')}
+              className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
+                newRentalDocumentType === 'fisico'
+                  ? 'bg-brand-yellow/15 border-brand-yellow text-brand-yellow'
+                  : 'bg-black/30 border-white/5 text-white/60 hover:text-white hover:bg-white/5'
+              }`}
+            >
+              <p className="text-[11px] font-black uppercase">🪪 Retenido Físico</p>
+              <p className="text-[9px] text-white/50 mt-0.5">En caja/mostrador</p>
+            </button>
+            <button
+              type="button"
+              onClick={() => setNewRentalDocumentType('digital')}
+              className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
+                newRentalDocumentType === 'digital'
+                  ? 'bg-brand-yellow/15 border-brand-yellow text-brand-yellow'
+                  : 'bg-black/30 border-white/5 text-white/60 hover:text-white hover:bg-white/5'
+              }`}
+            >
+              <p className="text-[11px] font-black uppercase">📱 Digital Verificado</p>
+              <p className="text-[9px] text-white/50 mt-0.5">En sistema seguro</p>
+            </button>
+            <button
+              type="button"
+              onClick={() => setNewRentalDocumentType('pendiente')}
+              className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
+                newRentalDocumentType === 'pendiente'
+                  ? 'bg-brand-yellow/15 border-brand-yellow text-brand-yellow'
+                  : 'bg-black/30 border-white/5 text-white/60 hover:text-white hover:bg-white/5'
+              }`}
+            >
+              <p className="text-[11px] font-black uppercase">⏳ Pendiente</p>
+              <p className="text-[9px] text-white/50 mt-0.5">A presentar luego</p>
+            </button>
+          </div>
+
+          {newRentalDocumentType === 'fisico' && (
+            <div className="space-y-1.5 bg-emerald-500/5 border border-emerald-500/20 rounded-xl p-3">
+              <label className="text-[10px] text-emerald-400 font-bold uppercase">
+                Ubicación / Detalle de Custodia Física
+              </label>
+              <Input
+                placeholder="Ej. Cédula retenida en mostrador / Gaveta 1"
+                value={newRentalDocumentCustody}
+                onChange={e => setNewRentalDocumentCustody(e.target.value)}
+                className="h-9 bg-black/40 border-white/10 text-white text-xs font-bold rounded-lg"
+              />
+              <p className="text-[10px] text-emerald-300/80">
+                ✓ No se exige fotografía cuando el establecimiento custodia el documento físico.
+              </p>
+            </div>
+          )}
+
+          {newRentalDocumentType === 'digital' && (
+            <div className="space-y-1 bg-white/5 border border-white/10 rounded-xl p-3 text-xs text-white/70">
+              <p className="font-bold text-white">Documento Digital Almacenado de Manera Privada</p>
+              <p className="text-[10px] text-white/50">
+                {isModeExisting
+                  ? 'Se utilizarán los documentos digitales verificados en el perfil privado del cliente.'
+                  : 'Adjunte los archivos digitales en el formulario. El acceso está restringido a administradores.'}
+              </p>
+            </div>
+          )}
+
+          {newRentalDocumentType === 'pendiente' && (
+            <div className="space-y-1.5 bg-amber-500/5 border border-amber-500/20 rounded-xl p-3">
+              <label className="text-[10px] text-amber-400 font-bold uppercase">
+                Observación de Entrega Pendiente
+              </label>
+              <Input
+                placeholder="Ej. Cliente presentará documento antes de retirar"
+                value={newRentalDocumentCustody}
+                onChange={e => setNewRentalDocumentCustody(e.target.value)}
+                className="h-9 bg-black/40 border-white/10 text-white text-xs font-bold rounded-lg"
+              />
+            </div>
+          )}
+        </div>
 
         <div className="flex gap-2 pt-4">
           <Button
@@ -1525,15 +1754,31 @@ export default function AdminRentalsPage() {
 
         <div className="bg-black/25 border border-white/5 rounded-2xl p-4 space-y-3">
           <h4 className="text-xs font-black uppercase tracking-wider text-white/50 border-b border-white/5 pb-1">
-            Detalles Operativos
+            Detalles Operativos y Custodia
           </h4>
           <div className="grid grid-cols-2 gap-2 text-xs">
+            <p className="col-span-2">
+              <strong>Modalidad:</strong>{' '}
+              {newRentalFlow === 'immediate' ? (
+                <span className="text-emerald-400 font-bold">⚡ Atención Inmediata en Mostrador (Entrega al registrar)</span>
+              ) : (
+                <span className="text-brand-yellow font-bold">📅 Reserva Administrativa Futura (Sin entrega inmediata)</span>
+              )}
+            </p>
             <p><strong>Fecha:</strong> {newRentalForm.date}</p>
             <p><strong>Hora:</strong> {newRentalForm.pickupTime}</p>
             <p><strong>Duración:</strong> {newRentalForm.duration}</p>
             <p><strong>Método de pago:</strong> {newRentalForm.paymentMethod.toUpperCase()}</p>
             <p><strong>Estado de pago:</strong> {newRentalForm.paymentStatus === 'paid' ? 'PAGADO' : 'PENDIENTE'}</p>
             <p><strong>Estado operativo:</strong> {newRentalForm.status === 'confirmed' ? 'CONFIRMADO' : 'PENDIENTE'}</p>
+            <p className="col-span-2">
+              <strong>Custodia de Documento:</strong>{' '}
+              {newRentalDocumentType === 'fisico'
+                ? `🪪 Retenido físicamente en local${newRentalDocumentCustody ? ` (${newRentalDocumentCustody})` : ''}`
+                : newRentalDocumentType === 'digital'
+                  ? '📱 Verificado digitalmente en sistema'
+                  : `⏳ Pendiente de presentar${newRentalDocumentCustody ? ` (${newRentalDocumentCustody})` : ''}`}
+            </p>
             {newRentalForm.notes && (
               <p className="col-span-2"><strong>Notas:</strong> {newRentalForm.notes}</p>
             )}
@@ -1582,17 +1827,29 @@ export default function AdminRentalsPage() {
           <Button
             onClick={() => setNewRentalStep(3)}
             variant="ghost"
-            className="flex-1 h-10 border border-white/10 hover:bg-white/5 text-white font-bold rounded-xl text-xs uppercase cursor-pointer"
+            className="flex-1 h-11 border border-white/10 hover:bg-white/5 text-white font-bold rounded-xl text-xs uppercase cursor-pointer"
           >
             Atrás
           </Button>
-          <Button
-            onClick={handleWizardSubmit}
-            disabled={creatingManualRental}
-            className="flex-1 h-10 bg-brand-yellow hover:bg-brand-yellow-light text-brand-black font-black rounded-xl text-xs uppercase cursor-pointer"
-          >
-            <CheckCircle2 className="w-4 h-4 mr-1.5" /> {creatingManualRental ? 'Creando alquiler…' : 'Crear Alquiler'}
-          </Button>
+          {newRentalFlow === 'immediate' ? (
+            <Button
+              onClick={handleWizardSubmit}
+              disabled={creatingManualRental}
+              className="flex-1 h-11 bg-emerald-500 hover:bg-emerald-400 text-black font-black rounded-xl text-xs uppercase cursor-pointer shadow-lg shadow-emerald-500/20"
+            >
+              <Bike className="w-4 h-4 mr-1.5" />
+              {creatingManualRental ? 'Registrando y entregando…' : 'Registrar y entregar'}
+            </Button>
+          ) : (
+            <Button
+              onClick={handleWizardSubmit}
+              disabled={creatingManualRental}
+              className="flex-1 h-11 bg-brand-yellow hover:bg-brand-yellow-light text-brand-black font-black rounded-xl text-xs uppercase cursor-pointer shadow-lg shadow-brand-yellow/20"
+            >
+              <CheckCircle2 className="w-4 h-4 mr-1.5" />
+              {creatingManualRental ? 'Creando reserva…' : 'Registrar reserva futura'}
+            </Button>
+          )}
         </div>
       </div>
     );
@@ -1630,6 +1887,9 @@ export default function AdminRentalsPage() {
             onClick={() => {
               setNewRentalCart([]);
               setNewRentalStep(1);
+              setNewRentalFlow('immediate');
+              setNewRentalDocumentType('fisico');
+              setNewRentalDocumentCustody('');
               setNewRentalForm({
                 date: toBoliviaDateString(),
                 pickupTime: new Date().toTimeString().slice(0, 5),
@@ -1639,7 +1899,7 @@ export default function AdminRentalsPage() {
                 mapsLink: '',
                 notes: '',
                 paymentMethod: 'efectivo',
-                paymentStatus: 'paid',
+                paymentStatus: 'unpaid',
                 status: 'confirmed'
               });
               setNewRentalCustomerMode('existing');
@@ -1988,68 +2248,193 @@ export default function AdminRentalsPage() {
         </div>
       </div>
 
-      {/* RETURN MODAL (WITH OPTIONAL DAMAGE / MAINTENANCE / LATE FEE) */}
+      {/* RETURN MODAL (WITH OPTIONAL DAMAGE / MAINTENANCE / LATE FEE / SETTLEMENT) */}
       <Dialog open={!!returnModalGroup} onOpenChange={v => { if (!v && (!returnModalGroup || !busyActionByGroup[returnModalGroup.id])) setReturnModalGroup(null); }}>
-        <DialogContent className="max-w-md bg-brand-charcoal border border-white/10 text-white rounded-3xl p-6 font-sans">
-          {returnModalGroup && (
-            <div className="space-y-4">
-              <DialogHeader>
-                <DialogTitle className="text-lg font-black flex items-center gap-2 text-white">
-                  <RotateCcw className="w-5 h-5 text-brand-yellow" />
-                  Registrar Devolución ({returnModalGroup.reservationCode || returnModalGroup.id.slice(-6)})
-                </DialogTitle>
-              </DialogHeader>
+        <DialogContent className="max-w-lg bg-brand-charcoal border border-white/10 text-white rounded-3xl p-6 font-sans">
+          {returnModalGroup && (() => {
+            const groupMovements = rentalPaymentMovements.filter(m => m.reservationCode === returnModalGroup.reservationCode);
+            const receipts = groupMovements.filter(m => m.type === 'receipt');
+            const refunds = groupMovements.filter(m => m.type === 'refund');
+            const legacyRows = groupMovements.length === 0 ? returnModalGroup.items.filter(item => item.paymentStatus === 'paid') : [];
+            const totalPaid = receipts.reduce((sum, m) => sum + (Number(m.amount) || 0), 0) + legacyRows.reduce((sum, item) => sum + (Number(item.amountPaid) || Number(item.total) || 0), 0) - refunds.reduce((sum, m) => sum + (Number(m.amount) || 0), 0);
+            const pendingBalance = Math.max(0, returnModalGroup.total - totalPaid);
+            const totalAdjustments = (Number(returnExtraHoursFee) || 0) + (Number(returnDamageFee) || 0);
+            const finalTotalToSettle = pendingBalance + totalAdjustments;
 
-              <div className="bg-black/30 p-3.5 rounded-2xl border border-white/5 text-xs space-y-1.5">
-                <p className="text-white/50 font-bold uppercase text-[9px]">Cliente: {returnModalGroup.customerName}</p>
-                {returnModalGroup.items.map((item, idx) => (
-                  <p key={idx} className="text-white font-black">
-                    • {item.quantity}x {item.productName} {item.selectedWheelSize ? `(Aro ${item.selectedWheelSize})` : ''}
-                  </p>
-                ))}
-              </div>
+            return (
+              <div className="space-y-4">
+                <DialogHeader>
+                  <DialogTitle className="text-lg font-black flex items-center gap-2 text-white">
+                    <RotateCcw className="w-5 h-5 text-brand-yellow" />
+                    Cierre y Devolución ({returnModalGroup.reservationCode || returnModalGroup.id.slice(-6)})
+                  </DialogTitle>
+                </DialogHeader>
 
-              <div className="space-y-1 rounded-2xl bg-amber-500/10 border border-amber-500/25 p-3.5">
-                <label className="text-xs font-black text-amber-300 uppercase">Bicicletas dañadas o que requieren mantenimiento</label>
-                <Input
-                  type="number" min={0} step={1} value={returnDamagedUnits}
-                  onChange={e => setReturnDamagedUnits(Math.max(0, Math.floor(Number(e.target.value) || 0)))}
-                  className="mt-2 bg-black/40 border-white/10 h-10 text-sm font-black text-brand-yellow rounded-xl"
-                />
-                <p className="text-[11px] text-amber-200/70 mt-1">Indica la cantidad exacta. Esas unidades irán a mantenimiento y no volverán al stock disponible.</p>
-              </div>
+                <div className="bg-black/30 p-3.5 rounded-2xl border border-white/5 text-xs space-y-1.5">
+                  <p className="text-white/50 font-bold uppercase text-[9px]">Cliente: {returnModalGroup.customerName}</p>
+                  {returnModalGroup.items.map((item, idx) => (
+                    <p key={idx} className="text-white font-black">
+                      • {item.quantity}x {item.productName} {item.selectedWheelSize ? `(Aro ${item.selectedWheelSize})` : ''}
+                    </p>
+                  ))}
+                </div>
 
-              <div className="space-y-1">
-                <label className="text-[10px] text-white/40 font-bold uppercase">Observaciones de recepción / Estado físico</label>
-                <textarea
-                  placeholder="Ej. Todo entregado en buen estado / Freno trasero requiere ajuste..."
-                  value={returnNotes}
-                  onChange={e => setReturnNotes(e.target.value)}
-                  className="w-full bg-black/40 border border-white/10 rounded-xl p-3 h-20 text-xs font-bold text-white outline-none focus:border-brand-yellow resize-none"
-                />
-              </div>
+                {/* Financial Summary */}
+                <div className="bg-black/30 p-3.5 rounded-2xl border border-white/5 space-y-2 text-xs">
+                  <div className="flex justify-between items-center text-white/60">
+                    <span>Importe original acordado:</span>
+                    <span className="font-mono font-bold text-white">Bs. {returnModalGroup.total}</span>
+                  </div>
+                  <div className="flex justify-between items-center text-white/60">
+                    <span>Pagos ya registrados:</span>
+                    <span className="font-mono font-bold text-emerald-400">Bs. {totalPaid}</span>
+                  </div>
+                  <div className="flex justify-between items-center text-white/80 border-t border-white/10 pt-1.5 font-bold">
+                    <span>Saldo pendiente base:</span>
+                    <span className="font-mono text-brand-yellow">Bs. {pendingBalance}</span>
+                  </div>
+                </div>
 
-              <div className="flex gap-2 pt-2">
-                <Button
-                  type="button"
-                  variant="ghost"
-                  disabled={Boolean(busyActionByGroup[returnModalGroup.id])}
-                  onClick={() => setReturnModalGroup(null)}
-                  className="flex-1 h-11 rounded-xl border border-white/10 text-white/60 hover:text-white font-bold text-xs uppercase"
-                >
-                  Cancelar
-                </Button>
-                <Button
-                  type="button"
-                  disabled={Boolean(busyActionByGroup[returnModalGroup.id])}
-                  onClick={handleConfirmReturnGroup}
-                  className="flex-1 h-11 rounded-xl bg-brand-yellow hover:bg-brand-yellow-light text-brand-black font-black text-xs uppercase"
-                >
-                  {busyActionByGroup[returnModalGroup.id] === 'return' ? 'Registrando…' : 'Confirmar Devolución'}
-                </Button>
+                {/* Adjustments: Return time and extra fees */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="text-[10px] text-white/40 font-bold uppercase">Hora real retorno</label>
+                    <Input
+                      type="time"
+                      value={returnActualTime}
+                      onChange={e => setReturnActualTime(e.target.value)}
+                      className="bg-black/35 border-white/10 h-10 text-xs font-bold text-white rounded-xl"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] text-white/40 font-bold uppercase">Recargo tiempo extra (Bs)</label>
+                    <Input
+                      type="number" min={0} step={1}
+                      value={returnExtraHoursFee}
+                      onChange={e => {
+                        const val = Math.max(0, Number(e.target.value) || 0);
+                        setReturnExtraHoursFee(val);
+                        setReturnPaymentAmount(String(pendingBalance + val + returnDamageFee));
+                      }}
+                      className="bg-black/35 border-white/10 h-10 text-xs font-bold text-white rounded-xl"
+                    />
+                  </div>
+                </div>
+
+                {/* Damaged bikes & damage fee */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="text-[10px] text-amber-300 font-bold uppercase">Bicicletas a taller</label>
+                    <Input
+                      type="number" min={0} step={1}
+                      value={returnDamagedUnits}
+                      onChange={e => setReturnDamagedUnits(Math.max(0, Math.floor(Number(e.target.value) || 0)))}
+                      className="bg-black/35 border-amber-500/20 h-10 text-xs font-bold text-amber-200 rounded-xl"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] text-amber-300 font-bold uppercase">Recargo por daños (Bs)</label>
+                    <Input
+                      type="number" min={0} step={1}
+                      value={returnDamageFee}
+                      onChange={e => {
+                        const val = Math.max(0, Number(e.target.value) || 0);
+                        setReturnDamageFee(val);
+                        setReturnPaymentAmount(String(pendingBalance + returnExtraHoursFee + val));
+                      }}
+                      className="bg-black/35 border-amber-500/20 h-10 text-xs font-bold text-amber-200 rounded-xl"
+                    />
+                  </div>
+                </div>
+
+                {/* Settlement payment */}
+                <div className="rounded-2xl bg-black/40 border border-white/10 p-3.5 space-y-2">
+                  <div className="flex items-center justify-between font-black text-sm text-brand-yellow">
+                    <span>Total a liquidar:</span>
+                    <span className="text-lg">Bs. {finalTotalToSettle}</span>
+                  </div>
+
+                  <div className="flex items-center gap-2 pt-1 border-t border-white/10">
+                    <input
+                      type="checkbox"
+                      id="registerPaymentReturn"
+                      checked={returnRegisterPayment}
+                      onChange={e => setReturnRegisterPayment(e.target.checked)}
+                      className="rounded border-white/10 bg-black/40 text-brand-yellow focus:ring-0 cursor-pointer"
+                    />
+                    <label htmlFor="registerPaymentReturn" className="text-xs font-bold text-white cursor-pointer select-none">
+                      Registrar cobro de liquidación en este momento
+                    </label>
+                  </div>
+
+                  {returnRegisterPayment && (
+                    <div className="grid grid-cols-2 gap-2 pt-2">
+                      <select
+                        value={returnPaymentMethod}
+                        onChange={e => setReturnPaymentMethod(e.target.value as any)}
+                        className="bg-black/40 border border-white/10 rounded-xl px-2 h-9 text-xs font-bold text-white"
+                      >
+                        <option value="Efectivo" className="bg-brand-charcoal text-white">Efectivo</option>
+                        <option value="QR" className="bg-brand-charcoal text-white">QR</option>
+                        <option value="Transferencia" className="bg-brand-charcoal text-white">Transferencia</option>
+                      </select>
+                      <Input
+                        type="number"
+                        value={returnPaymentAmount}
+                        onChange={e => setReturnPaymentAmount(e.target.value)}
+                        placeholder="Monto a cobrar..."
+                        className="bg-black/40 border-white/10 h-9 text-xs font-black text-brand-yellow rounded-xl"
+                      />
+                    </div>
+                  )}
+                </div>
+
+                {/* Physical ID document return */}
+                <div className="flex items-center gap-2 p-3 bg-white/5 rounded-xl border border-white/5">
+                  <input
+                    type="checkbox"
+                    id="docReturned"
+                    checked={returnPhysicalDocReturned}
+                    onChange={e => setReturnPhysicalDocReturned(e.target.checked)}
+                    className="rounded border-white/10 bg-black/40 text-brand-yellow focus:ring-0 cursor-pointer"
+                  />
+                  <label htmlFor="docReturned" className="text-xs font-bold text-white/80 cursor-pointer select-none">
+                    🪪 Documento físico (CI / Carnet) devuelto al cliente conforme
+                  </label>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[10px] text-white/40 font-bold uppercase">Observaciones de recepción / Estado físico</label>
+                  <textarea
+                    placeholder="Ej. Todo entregado en buen estado / Freno trasero requiere ajuste..."
+                    value={returnNotes}
+                    onChange={e => setReturnNotes(e.target.value)}
+                    className="w-full bg-black/40 border border-white/10 rounded-xl p-3 h-16 text-xs font-bold text-white outline-none focus:border-brand-yellow resize-none"
+                  />
+                </div>
+
+                <div className="flex gap-2 pt-2">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    disabled={Boolean(busyActionByGroup[returnModalGroup.id])}
+                    onClick={() => setReturnModalGroup(null)}
+                    className="flex-1 h-11 rounded-xl border border-white/10 text-white/60 hover:text-white font-bold text-xs uppercase cursor-pointer"
+                  >
+                    Cancelar
+                  </Button>
+                  <Button
+                    type="button"
+                    disabled={Boolean(busyActionByGroup[returnModalGroup.id])}
+                    onClick={handleConfirmReturnGroup}
+                    className="flex-1 h-11 rounded-xl bg-brand-yellow hover:bg-brand-yellow-light text-brand-black font-black text-xs uppercase cursor-pointer"
+                  >
+                    {busyActionByGroup[returnModalGroup.id] === 'return' ? 'Registrando cierre…' : 'Confirmar Devolución y Cerrar'}
+                  </Button>
+                </div>
               </div>
-            </div>
-          )}
+            );
+          })()}
         </DialogContent>
       </Dialog>
 
@@ -2800,10 +3185,53 @@ export default function AdminRentalsPage() {
       <Dialog open={newRentalModalOpen} onOpenChange={setNewRentalModalOpen}>
         <DialogContent className="max-w-5xl bg-brand-charcoal border-white/10 text-white rounded-3xl p-6 font-sans select-none overflow-y-auto max-h-[90vh]">
           <DialogHeader className="border-b border-white/10 pb-4 mb-4">
-            <DialogTitle className="text-2xl font-black text-white flex items-center gap-2">
-              <CalendarClock className="w-6 h-6 text-brand-yellow" />
-              Nuevo Alquiler Manual
-            </DialogTitle>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <DialogTitle className="text-xl sm:text-2xl font-black text-white flex items-center gap-2">
+                <CalendarClock className="w-6 h-6 text-brand-yellow" />
+                Nuevo Alquiler Directo
+              </DialogTitle>
+              {/* Segmented Flow Toggle */}
+              <div className="grid grid-cols-2 gap-1.5 p-1 bg-black/40 border border-white/10 rounded-2xl sm:w-auto w-full">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setNewRentalFlow('immediate');
+                    setNewRentalForm(prev => ({
+                      ...prev,
+                      date: toBoliviaDateString(),
+                      pickupTime: new Date().toTimeString().slice(0, 5),
+                      status: 'confirmed',
+                    }));
+                  }}
+                  className={`flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl text-[11px] font-black uppercase tracking-wider transition-all cursor-pointer ${
+                    newRentalFlow === 'immediate'
+                      ? 'bg-emerald-500 text-black shadow-lg shadow-emerald-500/20'
+                      : 'text-white/60 hover:text-white hover:bg-white/5'
+                  }`}
+                >
+                  <Bike className="w-4 h-4" />
+                  <span>Atención Inmediata</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setNewRentalFlow('future');
+                    setNewRentalForm(prev => ({
+                      ...prev,
+                      status: 'confirmed',
+                    }));
+                  }}
+                  className={`flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl text-[11px] font-black uppercase tracking-wider transition-all cursor-pointer ${
+                    newRentalFlow === 'future'
+                      ? 'bg-brand-yellow text-brand-black shadow-lg shadow-brand-yellow/20'
+                      : 'text-white/60 hover:text-white hover:bg-white/5'
+                  }`}
+                >
+                  <CalendarClock className="w-4 h-4" />
+                  <span>Reserva Futura</span>
+                </button>
+              </div>
+            </div>
           </DialogHeader>
 
           {/* Steps Progress Indicator */}
