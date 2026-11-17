@@ -189,7 +189,9 @@ function validateBooking(data: unknown): BookingRequest {
         }
         if (end <= start) throw new Error('invalid window');
         const localToday = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/La_Paz' }).format(new Date());
-        if (date < localToday || start < Date.now()) throw new Error('past date');
+        const isToday = date === localToday;
+        const minStart = isToday ? Date.now() - 60 * 60 * 1000 : Date.now();
+        if (date < localToday || start < minStart) throw new Error('past date');
     } catch {
         throw new HttpsError('invalid-argument', 'La fecha o el horario no son válidos.');
     }
@@ -1555,7 +1557,10 @@ export const adminRentalAction = onCall(callable(), async (request) => {
                 let interval: { startMs: number; endMs: number };
                 try { interval = getRentalWindow(rows[0] as unknown as RentalLike); }
                 catch { throw new HttpsError('failed-precondition', 'La fecha u horario del grupo no se pueden validar.'); }
-                if (interval.startMs < Date.now()) throw new HttpsError('failed-precondition', 'No se puede confirmar un alquiler con fecha u hora ya vencida.');
+                const todayBolivia = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/La_Paz' }).format(new Date());
+                const isTodayRental = String(rows[0]?.date || '').trim().slice(0, 10) === todayBolivia;
+                const minAllowedStart = isTodayRental ? Date.now() - 60 * 60 * 1000 : Date.now();
+                if (interval.startMs < minAllowedStart) throw new HttpsError('failed-precondition', 'No se puede confirmar un alquiler con fecha u hora ya vencida.');
                 const todayStart = new Date(new Intl.DateTimeFormat('en-CA', { timeZone: 'America/La_Paz' }).format(new Date()) + 'T00:00:00-04:00').getTime();
                 const overlap = relevant.filter(({ row }) => {
                     try {
