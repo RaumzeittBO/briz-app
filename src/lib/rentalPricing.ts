@@ -157,6 +157,15 @@ export function getAccessoryAddonUnitPrice(
         return customFlat;
     }
 
+    // Explicit duration tiers take precedence over built-in legacy suggestions.
+    const hasExplicitTier = [item.price1Hour, item.price2Hours, item.price3Hours, item.price4Hours,
+        item.price8Hours, item.price24Hours, item.price1Week, item.price1Month]
+        .some(value => typeof value === 'number' && value > 0);
+    if (hasExplicitTier) {
+        const configuredPrice = calculateProductRentalPrice(item, duration, 1, { modality: 'addon', ...context });
+        return configuredPrice > 0 ? configuredPrice : null;
+    }
+
     // Default known add-on supplements when not explicitly configured
     if (item.id === 'acc_casco_adulto' || item.id === 'acc_casco_nino' || item.id === 'acc_portacelular' || item.id === 'acc_linterna_bocina' || item.id === 'acc_candado_seguridad') {
         return 10;

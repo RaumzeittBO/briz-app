@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useStore } from '@/context/StoreContext';
 import { FileUploader } from '@/components/ui/file-uploader';
-import type { Rental } from '@/context/StoreContext';
+import type { ComboComponent, ComboProduct, InventoryItem, Rental } from '@/context/StoreContext';
 import { toBoliviaDateString } from '@/lib/dateUtils';
 import { 
   Trash2, 
@@ -37,6 +37,9 @@ import {
 import { Input } from '@/components/ui/input';
 import { generateAdminReplyWhatsAppLink } from '@/lib/whatsapp';
 import { associateManualRentalCustomer, runAdminRentalAction, updateRentalGroup } from '@/lib/backend';
+import { isEligibleRentalAddon } from '@/lib/rentalAddonEligibility';
+import { getAccessoryAddonUnitPrice } from '@/lib/rentalPricing';
+import { getAvailableStockForInterval, getComboAvailabilityDiagnostics, type ComboAvailabilityReport } from '@/lib/rentalAvailability';
 
 // Mappers for Spanish Translation
 const statusLabels: Record<string, string> = {
@@ -753,35 +756,91 @@ export default function AdminRentalsPage() {
   const [wizardSearch, setWizardSearch] = useState('');
   const [wizardCategory, setWizardCategory] = useState('all');
   const [selectedSizes, setSelectedSizes] = useState<Record<string, string>>({});
+  const [mobileCartOpen, setMobileCartOpen] = useState(false);
 
-  const getCartTotal = () => {
-    return newRentalCart.reduce((total, item) => {
-      const isCombo = item.product.components !== undefined;
-      const price = calculatePrice(
-        isCombo ? 'combo' : 'single',
-        item.product.id,
-        newRentalForm.duration,
-        1
-      );
-      return total + price * item.quantity;
-    }, 0);
+  const getCartLineUnitPrice = (cartItem: typeof newRentalCart[number]): number | null => {
+    if (cartItem.product.itemType === 'accessory') {
+      const hasBaseRental = newRentalCart.some(item => item.product.itemType !== 'accessory');
+      if (!hasBaseRental) return calculatePrice('single', cartItem.product.id, newRentalForm.duration, 1);
+      const isUrbanBike = newRentalCart.some(({ product }) => product.itemType !== 'accessory' && (product.category === 'Urbanas'
+        || product.id.includes('urbana') || product.name.toLowerCase().includes('urbana')));
+      const comboHasBasket = newRentalCart.some(({ product }) => product.components?.some((component: ComboComponent) => {
+        const componentItem = inventory.find(item => item.id === component.inventoryItemId);
+        return componentItem?.id.includes('canasta') || componentItem?.name.toLowerCase().includes('canasta');
+      }));
+      return getAccessoryAddonUnitPrice(cartItem.product, newRentalForm.duration, { isUrbanBike, comboHasBasket });
+    }
+    const isCombo = cartItem.product.components !== undefined;
+    return calculatePrice(isCombo ? 'combo' : 'single', cartItem.product.id, newRentalForm.duration, 1);
+  };
+
+  const getCartTotal = (): number | null => {
+    let total = 0;
+    for (const item of newRentalCart) {
+      const unitPrice = getCartLineUnitPrice(item);
+      if (unitPrice === null) return null;
+      total += unitPrice * item.quantity;
+    }
+    return total;
   };
 
   const wizardBikesAndCombos = useMemo(() => {
-    const bList = inventory.filter(i => (i.itemType === 'bike' || i.itemType === 'accessory') && (!i.availableForSale || i.availableForRental));
-    const cList = combos.filter(c => !c.availableForSale || c.availableForRental);
-    
-    const combined = [
-      ...bList.map(b => ({ ...b, type: 'single' })),
-      ...cList.map(c => ({ ...c, type: 'combo' }))
-    ];
+    const bList = inventory.filter(i => i.active && (i.itemType === 'bike'
+      ? i.availableForRental
+      : isEligibleRentalAddon(i, combos)));
+    const cList = combos.filter(c => c.active && c.availableForRental);
+    const categoryOrder = new Map(bikeCategories.map((category, index) => [category, index]));
+    const combined: Array<(InventoryItem & { type: 'single' }) | (ComboProduct & { type: 'combo' })> = [
+      ...bList.map(b => ({ ...b, type: 'single' as const })),
+      ...cList.map(c => ({ ...c, type: 'combo' as const }))
+    ].sort((a, b) => {
+      const order = (item: typeof a) => item.type === 'combo'
+        ? 2
+        : item.itemType === 'accessory'
+          ? 3
+          : 1;
+      const groupOrder = order(a) - order(b);
+      if (groupOrder !== 0) return groupOrder;
+      if (a.type === 'single' && b.type === 'single' && a.itemType === 'bike' && b.itemType === 'bike') {
+        return (categoryOrder.get(a.category || '') ?? Number.MAX_SAFE_INTEGER) - (categoryOrder.get(b.category || '') ?? Number.MAX_SAFE_INTEGER)
+          || a.name.localeCompare(b.name);
+      }
+      return a.name.localeCompare(b.name);
+    });
 
     return combined.filter(item => {
       const matchesSearch = item.name.toLowerCase().includes(wizardSearch.toLowerCase());
       const matchesCat = wizardCategory === 'all' || item.category === wizardCategory;
       return matchesSearch && matchesCat;
     });
-  }, [inventory, combos, wizardSearch, wizardCategory]);
+  }, [inventory, combos, wizardSearch, wizardCategory, bikeCategories]);
+
+  const wizardAvailability = useMemo(() => {
+    const stockByItemAndSize = new Map<string, number>();
+    for (const item of inventory) {
+      const sizes = item.hasWheelSizes ? item.wheelSizes || [] : [{ size: '' }];
+      for (const wheel of sizes) {
+        stockByItemAndSize.set(`${item.id}::${wheel.size}`, getAvailableStockForInterval({
+          inventory, combos, rentals, itemId: item.id, wheelSize: wheel.size || undefined,
+          date: newRentalForm.date, pickupTime: newRentalForm.pickupTime, duration: newRentalForm.duration,
+          includePendingReservations: true,
+        }));
+      }
+    }
+    const comboReports = new Map(combos.map(combo => [combo.id, getComboAvailabilityDiagnostics({
+      inventory, combos, rentals, combo, date: newRentalForm.date,
+      pickupTime: newRentalForm.pickupTime, duration: newRentalForm.duration,
+      includePendingReservations: true,
+    })]));
+    return { stockByItemAndSize, comboReports };
+  }, [inventory, combos, rentals, newRentalForm.date, newRentalForm.pickupTime, newRentalForm.duration]);
+
+  const getWizardSlotStock = (itemId: string, wheelSize?: string) => {
+    if (wheelSize !== undefined) return wizardAvailability.stockByItemAndSize.get(`${itemId}::${wheelSize}`) || 0;
+    const item = inventory.find(candidate => candidate.id === itemId);
+    if (!item?.hasWheelSizes) return wizardAvailability.stockByItemAndSize.get(`${itemId}::`) || 0;
+    return (item.wheelSizes || []).reduce((sum, wheel) => sum + (wizardAvailability.stockByItemAndSize.get(`${itemId}::${wheel.size}`) || 0), 0);
+  };
 
   const filteredCustomersForWizard = useMemo(() => {
     if (!newRentalCustomerSearchQuery.trim()) return [];
@@ -970,10 +1029,18 @@ export default function AdminRentalsPage() {
     }
   };
   const renderStep1 = () => {
+    const cartCount = newRentalCart.reduce((sum, item) => sum + item.quantity, 0);
+    const cartTotal = getCartTotal();
     return (
-      <div className={`grid grid-cols-1 lg:grid-cols-3 gap-6 font-sans text-white ${newRentalFlow === 'immediate' ? 'max-h-[70vh] overflow-y-auto pr-1' : 'h-[60vh] overflow-hidden'}`}>
+      <div className={`grid min-h-0 grid-cols-1 lg:grid-cols-3 gap-3 sm:gap-4 font-sans text-white ${newRentalFlow === 'immediate' ? 'h-full' : 'h-full'}`}>
+        {newRentalFlow === 'immediate' && (
+          <button type="button" onClick={() => setMobileCartOpen(open => !open)} aria-expanded={mobileCartOpen} className="lg:hidden col-span-full flex items-center justify-between rounded-xl border border-emerald-400/25 bg-emerald-500/10 px-4 py-3 text-left">
+            <span className="text-xs font-black uppercase text-emerald-100">{mobileCartOpen ? 'Volver al catálogo' : `Resumen · ${cartCount} producto(s)`}</span>
+            <span className="text-sm font-black text-brand-yellow">{cartTotal === null ? 'Tarifa pendiente' : `Bs. ${cartTotal}`}</span>
+          </button>
+        )}
         {/* Left Side: Product selection grid */}
-        <div className={`lg:col-span-2 flex flex-col space-y-4 ${newRentalFlow === 'immediate' ? 'h-[52vh] min-h-[360px]' : 'h-full'} overflow-hidden`}>
+        <div className={`lg:col-span-2 flex min-h-0 flex-col space-y-3 overflow-hidden ${newRentalFlow === 'immediate' && mobileCartOpen ? 'hidden lg:flex' : 'flex'}`}>
           <div className="flex gap-2 shrink-0">
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30" />
@@ -996,40 +1063,65 @@ export default function AdminRentalsPage() {
             </select>
           </div>
 
-          <div className="flex-1 overflow-y-auto pr-1 grid grid-cols-1 md:grid-cols-2 gap-4 pb-10">
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain pr-1 grid grid-cols-1 md:grid-cols-2 gap-3 pb-3">
             {wizardBikesAndCombos.map(rawItem => {
-              const item = rawItem as any;
+              const item = rawItem;
               const isCombo = item.type === 'combo';
               const imgUrl = item.imageUrl || '/images/placeholder_bike.png';
 
               let stock = 0;
+              let availabilityReason = '';
+              let comboReport: ComboAvailabilityReport | null = null;
               if (!isCombo) {
                 if (item.hasWheelSizes && item.wheelSizes) {
-                  stock = item.wheelSizes.reduce((s: number, w: any) => s + w.stock, 0);
+                  const selectedSize = selectedSizes[item.id];
+                  stock = selectedSize
+                    ? getWizardSlotStock(item.id, selectedSize)
+                    : item.wheelSizes.reduce((sum: number, wheel) => sum + getWizardSlotStock(item.id, wheel.size), 0);
                 } else {
-                  stock = item.stock ?? 0;
+                  stock = getWizardSlotStock(item.id);
+                }
+                if (stock === 0) {
+                  const shelfStock = item.hasWheelSizes
+                    ? (item.wheelSizes || []).filter((wheel) => !selectedSizes[item.id] || wheel.size === selectedSizes[item.id]).reduce((sum: number, wheel) => sum + Number(wheel.stock || 0), 0)
+                    : Number(item.stock || 0);
+                  availabilityReason = shelfStock > 0
+                    ? 'Sin disponibilidad para el horario consultado'
+                    : Number(item.maintenanceStock || 0) > 0
+                      ? 'Sin stock disponible; unidades registradas en taller'
+                      : 'Sin stock físico disponible';
                 }
               } else {
-                const components = item.components || [];
-                const avails = components.map((comp: any) => {
-                  const invItem = inventory.find(inv => inv.id === comp.inventoryItemId);
-                  if (!invItem) return 0;
-                  if (invItem.hasWheelSizes && invItem.wheelSizes) {
-                    return invItem.wheelSizes.reduce((s, w) => s + w.stock, 0);
-                  }
-                  return invItem.stock ?? 0;
+                comboReport = wizardAvailability.comboReports.get(item.id) || null;
+                if (!comboReport) return null;
+                stock = comboReport.available;
+                availabilityReason = comboReport.bottleneckReason;
+                const selectedCapacities = comboReport.components.map(component => {
+                  const componentInventory = component.resolvedItemId
+                    ? inventory.find(candidate => candidate.id === component.resolvedItemId)
+                    : undefined;
+                  const selectionKey = `${item.id}_${component.inventoryItemId}`;
+                  const selectedWheelSize = selectedSizes[selectionKey];
+                  if (!componentInventory || !componentInventory.hasWheelSizes || !selectedWheelSize) return component.capacity;
+                  const availableAtSelection = getWizardSlotStock(componentInventory.id, selectedWheelSize);
+                  return Math.floor(availableAtSelection / Math.max(1, component.requiredQuantity));
                 });
-                stock = avails.length > 0 ? Math.min(...avails) : 0;
+                if (selectedCapacities.length > 0) stock = Math.min(stock, ...selectedCapacities);
+                if (stock === 0 && comboReport.components.some(component => component.resolvedItemId && selectedSizes[`${item.id}_${component.inventoryItemId}`])) {
+                  availabilityReason = comboReport.components.find(component => component.resolvedItemId && selectedSizes[`${item.id}_${component.inventoryItemId}`]
+                    && selectedCapacities[comboReport!.components.indexOf(component)] === 0)?.reasonMessage
+                    || 'Sin disponibilidad para el horario consultado y la configuración seleccionada';
+                }
               }
 
-              const hasSizes = !isCombo && item.hasWheelSizes && item.wheelSizes;
+              const itemWheelSizes = item.type === 'single' && item.hasWheelSizes ? item.wheelSizes || [] : [];
               const cardSizeKey = item.id;
-              const activeSize = selectedSizes[cardSizeKey] || (hasSizes ? item.wheelSizes.find((w: any) => w.stock > 0)?.size : '');
+              const activeSize = selectedSizes[cardSizeKey] || itemWheelSizes.find(wheel => getWizardSlotStock(item.id, wheel.size) > 0)?.size || '';
 
               return (
                 <div key={item.id} className="bg-black/20 border border-white/5 rounded-2xl p-4 flex flex-col justify-between hover:border-brand-yellow/30 transition-all">
                   <div className="space-y-2">
-                    <span className="text-[9px] font-black uppercase text-brand-yellow-vibrant tracking-widest">{item.category || 'Alquiler'}</span>
+                        <span className="text-[9px] font-black uppercase text-brand-yellow-vibrant tracking-widest">{item.type === 'combo' ? 'Combinada' : item.itemType === 'accessory' ? 'Accesorio de alquiler' : item.category || 'Bicicleta'}</span>
                     <div className="aspect-[4/3] rounded-xl overflow-hidden bg-black/35 relative">
                       <img src={imgUrl} alt={item.name} className="w-full h-full object-cover" />
                       {stock === 0 && (
@@ -1040,17 +1132,32 @@ export default function AdminRentalsPage() {
                     </div>
                     <div>
                       <h4 className="text-sm font-black text-white">{item.name}</h4>
-                      <p className="text-[10px] text-white/40 mt-0.5 line-clamp-2">{item.description}</p>
+                    <p className="text-[10px] text-white/60 mt-0.5 line-clamp-2">{item.description || item.details || (isCombo ? 'Conjunto de productos configurado para alquiler.' : 'Producto disponible para alquiler.')}</p>
+                    {item.type === 'combo' && item.components.length > 0 && (
+                      <p className="text-[10px] text-white/60 mt-1 line-clamp-2">
+                        Incluye: {item.components.map((component) => {
+                          const componentItem = inventory.find(candidate => candidate.id === component.inventoryItemId);
+                          return `${componentItem?.name || `Componente sin vincular (${component.inventoryItemId})`} × ${component.quantity}`;
+                        }).join(' · ')}
+                      </p>
+                    )}
                     </div>
                   </div>
 
                   <div className="mt-4 pt-3 border-t border-white/5 space-y-3">
                     <div className="flex justify-between items-center text-[10px] font-bold text-white/50">
                       <span>Stock disponible:</span>
-                      <span className={stock > 0 ? 'text-green-400' : 'text-red-400'}>{stock} uds.</span>
+                      <span className={stock > 0 ? 'text-green-300' : 'text-red-300'}>{stock} uds.</span>
                     </div>
+                    {stock === 0 && <p role="status" className="text-[10px] font-semibold text-amber-200">{availabilityReason || 'Sin disponibilidad para el horario consultado'}</p>}
+                    {stock > 0 && item.type === 'single' && item.itemType === 'accessory' ? (
+                      <div className="text-right text-[10px] font-bold text-brand-yellow">
+                        <p>Solo: Bs. {calculatePrice('single', item.id, newRentalForm.duration, 1)}</p>
+                        <p className="text-white/60">Como adicional: {getAccessoryAddonUnitPrice(item, newRentalForm.duration) === null ? 'tarifa pendiente' : `Bs. ${getAccessoryAddonUnitPrice(item, newRentalForm.duration)}`}</p>
+                      </div>
+                    ) : stock > 0 ? <p className="text-right text-[10px] font-bold text-brand-yellow">Desde Bs. {calculatePrice(isCombo ? 'combo' : 'single', item.id, newRentalForm.duration, 1)}</p> : null}
 
-                    {hasSizes && (
+                    {itemWheelSizes.length > 0 && (
                       <div className="space-y-1">
                         <label className="text-[9px] text-white/30 font-bold uppercase tracking-wider">Seleccionar Aro</label>
                         <select
@@ -1058,16 +1165,17 @@ export default function AdminRentalsPage() {
                           onChange={e => setSelectedSizes({ ...selectedSizes, [cardSizeKey]: e.target.value })}
                           className="w-full bg-black/35 border border-white/10 rounded-lg px-2.5 py-1.5 text-xs font-bold text-white outline-none focus:border-brand-yellow"
                         >
-                          {item.wheelSizes.map((w: any) => (
-                            <option key={w.size} value={w.size} disabled={w.stock <= 0} className="bg-brand-charcoal text-white">
-                              Aro {w.size} ({w.stock} disponibles)
+                          {itemWheelSizes.map((w) => {
+                            const wheelAvailable = getWizardSlotStock(item.id, w.size);
+                            return <option key={w.size} value={w.size} disabled={wheelAvailable <= 0} className="bg-brand-charcoal text-white">
+                              Aro {w.size} ({wheelAvailable} disponibles)
                             </option>
-                          ))}
+                          })}
                         </select>
                       </div>
                     )}
 
-                    {isCombo && item.components && (
+                    {item.type === 'combo' && item.components.length > 0 && (
                       <div className="space-y-1">
                         <label className="text-[9px] text-white/30 font-bold uppercase tracking-wider">Configurar Componentes</label>
                         <div className="space-y-1">
@@ -1075,7 +1183,7 @@ export default function AdminRentalsPage() {
                             const invItem = inventory.find(i => i.id === comp.inventoryItemId);
                             if (!invItem?.hasWheelSizes || !invItem.wheelSizes) return null;
                             const comboCompKey = `${item.id}_${comp.inventoryItemId}`;
-                            const compSize = selectedSizes[comboCompKey] || invItem.wheelSizes.find(w => w.stock > 0)?.size || '';
+                            const compSize = selectedSizes[comboCompKey] || invItem.wheelSizes.find(w => getWizardSlotStock(invItem.id, w.size) > 0)?.size || '';
                             return (
                               <div key={comp.inventoryItemId} className="flex items-center justify-between gap-2 text-[10px]">
                                 <span className="text-white/60 truncate max-w-[120px]">{invItem.name}:</span>
@@ -1084,11 +1192,12 @@ export default function AdminRentalsPage() {
                                   onChange={e => setSelectedSizes({ ...selectedSizes, [comboCompKey]: e.target.value })}
                                   className="bg-black/35 border border-white/10 rounded px-1.5 py-1 text-[10px] font-bold text-white outline-none"
                                 >
-                                  {invItem.wheelSizes.map((w: any) => (
-                                    <option key={w.size} value={w.size} disabled={w.stock <= 0} className="bg-brand-charcoal text-white">
-                                      Aro {w.size}
+                                  {invItem.wheelSizes.map((w) => {
+                                    const wheelAvailable = getWizardSlotStock(invItem.id, w.size);
+                                    return <option key={w.size} value={w.size} disabled={wheelAvailable <= 0} className="bg-brand-charcoal text-white">
+                                      Aro {w.size} · {wheelAvailable} disponibles
                                     </option>
-                                  ))}
+                                  })}
                                 </select>
                               </div>
                             );
@@ -1113,8 +1222,8 @@ export default function AdminRentalsPage() {
         </div>
 
         {/* Right Side: Cart Summary */}
-        <div className={`bg-black/25 border border-white/5 rounded-2xl p-4 flex flex-col ${newRentalFlow === 'immediate' ? 'min-h-[360px] lg:h-[52vh]' : 'h-full'} overflow-hidden`}>
-          <div className="flex flex-col h-full overflow-y-auto">
+        <div className={`min-h-0 bg-black/25 border border-white/5 rounded-2xl p-3 sm:p-4 flex flex-col overflow-hidden ${newRentalFlow === 'immediate' && !mobileCartOpen ? 'hidden lg:flex' : 'flex'} ${mobileCartOpen ? 'col-span-full h-full' : ''}`}>
+          <div className="flex min-h-0 flex-1 flex-col">
             <h3 className="text-sm font-black uppercase tracking-wider border-b border-white/10 pb-2 mb-3 text-brand-yellow-vibrant">
               Resumen de Alquiler ({newRentalCart.reduce((s, c) => s + c.quantity, 0)})
             </h3>
@@ -1127,13 +1236,7 @@ export default function AdminRentalsPage() {
             ) : (
               <div className="flex-1 min-h-0 overflow-y-auto space-y-2 pr-1 pb-4">
                 {newRentalCart.map((item, idx) => {
-                  const isCombo = item.product.components !== undefined;
-                  const price = calculatePrice(
-                    isCombo ? 'combo' : 'single',
-                    item.product.id,
-                    newRentalForm.duration,
-                    1
-                  );
+                  const price = getCartLineUnitPrice(item);
                   return (
                     <div key={idx} className="bg-white/5 border border-white/5 rounded-xl p-3 space-y-2">
                       <div className="flex justify-between items-start gap-2">
@@ -1158,6 +1261,7 @@ export default function AdminRentalsPage() {
                           )}
                         </div>
                         <button
+                          aria-label={`Quitar ${item.product.name} del alquiler`}
                           onClick={() => {
                             const cartCopy = [...newRentalCart];
                             cartCopy.splice(idx, 1);
@@ -1171,6 +1275,8 @@ export default function AdminRentalsPage() {
                       <div className="flex justify-between items-center pt-1.5 border-t border-white/5">
                         <div className="flex items-center gap-2">
                           <button
+                            type="button"
+                            aria-label={`Reducir cantidad de ${item.product.name}`}
                             onClick={() => {
                               const cartCopy = [...newRentalCart];
                               if (cartCopy[idx].quantity > 1) {
@@ -1184,6 +1290,8 @@ export default function AdminRentalsPage() {
                           </button>
                           <span className="text-xs font-black text-white w-4 text-center">{item.quantity}</span>
                           <button
+                            type="button"
+                            aria-label={`Aumentar cantidad de ${item.product.name}`}
                             onClick={() => {
                               const cartCopy = [...newRentalCart];
                               cartCopy[idx].quantity += 1;
@@ -1194,8 +1302,8 @@ export default function AdminRentalsPage() {
                             <Plus className="w-3 h-3" />
                           </button>
                         </div>
-                        <span className="text-xs font-black text-brand-yellow">
-                          Bs. {price * item.quantity}
+                        <span className="text-right text-xs font-black text-brand-yellow">
+                          {price === null ? 'Tarifa pendiente' : `Bs. ${price * item.quantity}`}
                         </span>
                       </div>
                     </div>
@@ -1248,10 +1356,11 @@ export default function AdminRentalsPage() {
               )}
               <div className="flex justify-between items-center text-sm font-black">
                 <span>Total Estimado:</span>
-                <span className="text-brand-yellow">Bs. {getCartTotal()}</span>
+                <span className="text-brand-yellow">{cartTotal === null ? 'Tarifa pendiente' : `Bs. ${cartTotal}`}</span>
               </div>
               <div className="flex gap-2">
                 <Button
+                  type="button"
                   onClick={() => setNewRentalModalOpen(false)}
                   variant="ghost"
                   className="flex-1 h-10 border border-white/10 hover:bg-white/5 text-white font-bold rounded-xl text-xs uppercase cursor-pointer"
@@ -1259,8 +1368,9 @@ export default function AdminRentalsPage() {
                   Cancelar
                 </Button>
                 <Button
-                  disabled={newRentalCart.length === 0}
-                  onClick={() => setNewRentalStep(2)}
+                  disabled={newRentalCart.length === 0 || cartTotal === null}
+                  type="button"
+                  onClick={() => { setMobileCartOpen(false); setNewRentalStep(2); }}
                   className="flex-1 h-10 bg-brand-yellow hover:bg-brand-yellow-light text-brand-black font-black rounded-xl text-xs uppercase cursor-pointer"
                 >
                   Siguiente
@@ -3270,17 +3380,18 @@ export default function AdminRentalsPage() {
       </Dialog>
 
       {/* Manual Rental Creation Dialog */}
-      <Dialog open={newRentalModalOpen} onOpenChange={setNewRentalModalOpen}>
-        <DialogContent className="max-w-5xl bg-brand-charcoal border-white/10 text-white rounded-3xl p-6 font-sans select-none overflow-y-auto max-h-[90vh]">
-          <DialogHeader className="border-b border-white/10 pb-4 mb-4">
+      <Dialog open={newRentalModalOpen} onOpenChange={open => { setNewRentalModalOpen(open); if (!open) setMobileCartOpen(false); }}>
+        <DialogContent showCloseButton={false} className="flex h-[calc(100dvh-1rem)] max-h-[94dvh] w-[calc(100vw-1rem)] flex-col gap-0 overflow-hidden rounded-2xl border-white/10 bg-brand-charcoal p-3 font-sans text-white select-none sm:h-[92dvh] sm:w-[96vw] sm:max-w-[1600px] sm:rounded-3xl sm:p-5 lg:p-6">
+          <DialogHeader className="mb-3 shrink-0 border-b border-white/10 pb-3 sm:mb-4 sm:pb-4">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <DialogTitle className="text-xl sm:text-2xl font-black text-white flex items-center gap-2">
                 <CalendarClock className="w-6 h-6 text-brand-yellow" />
                 Nuevo Alquiler Directo
               </DialogTitle>
               {/* Segmented Flow Toggle */}
-              <div className="grid grid-cols-2 gap-1.5 p-1 bg-black/40 border border-white/10 rounded-2xl sm:w-auto w-full">
-                <button
+              <div className="flex min-w-0 items-center gap-2 sm:w-auto w-full">
+                <div className="grid min-w-0 flex-1 grid-cols-2 gap-1.5 rounded-2xl border border-white/10 bg-black/40 p-1">
+                  <button
                   type="button"
                   onClick={() => {
                     setNewRentalFlow('immediate');
@@ -3300,8 +3411,8 @@ export default function AdminRentalsPage() {
                 >
                   <Bike className="w-4 h-4" />
                   <span>Atención Inmediata</span>
-                </button>
-                <button
+                  </button>
+                  <button
                   type="button"
                   onClick={() => {
                     setNewRentalFlow('future');
@@ -3319,13 +3430,15 @@ export default function AdminRentalsPage() {
                 >
                   <CalendarClock className="w-4 h-4" />
                   <span>Reserva Futura</span>
-                </button>
+                  </button>
+                </div>
+                <Button type="button" variant="ghost" onClick={() => setNewRentalModalOpen(false)} className="h-10 shrink-0 px-3 text-xs font-bold text-white/70 hover:bg-white/10 hover:text-white">Cerrar</Button>
               </div>
             </div>
           </DialogHeader>
 
           {/* Steps Progress Indicator */}
-          <div className={`grid ${newRentalFlow === 'immediate' ? 'grid-cols-2' : 'grid-cols-4'} gap-2 mb-6`}>
+          <div className={`mb-3 grid shrink-0 ${newRentalFlow === 'immediate' ? 'grid-cols-2' : 'grid-cols-4'} gap-2 sm:mb-4`}>
             {(newRentalFlow === 'immediate' ? [
               { step: 1, label: '1. Productos y datos' },
               { step: 2, label: '2. Confirmación y entrega' },
@@ -3351,10 +3464,12 @@ export default function AdminRentalsPage() {
           </div>
 
           {/* Steps Content */}
-          {newRentalStep === 1 && renderStep1()}
-          {newRentalStep === 2 && (newRentalFlow === 'immediate' ? renderStep4() : renderStep2())}
-          {newRentalFlow === 'future' && newRentalStep === 3 && renderStep3()}
-          {newRentalFlow === 'future' && newRentalStep === 4 && renderStep4()}
+          <div className={`min-h-0 flex-1 ${newRentalStep === 1 ? 'overflow-hidden' : 'overflow-y-auto overscroll-contain'}`}>
+            {newRentalStep === 1 && renderStep1()}
+            {newRentalStep === 2 && (newRentalFlow === 'immediate' ? renderStep4() : renderStep2())}
+            {newRentalFlow === 'future' && newRentalStep === 3 && renderStep3()}
+            {newRentalFlow === 'future' && newRentalStep === 4 && renderStep4()}
+          </div>
         </DialogContent>
       </Dialog>
 

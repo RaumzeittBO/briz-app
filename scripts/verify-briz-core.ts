@@ -102,12 +102,12 @@ async function runTests() {
     await test('Tarifas explícitas de accesorios, sin regalos implícitos', () => {
         const casco = RENTAL_SEED_ACCESSORIES.find(a => a.id === 'acc_casco_adulto')!;
         const linterna = RENTAL_SEED_ACCESSORIES.find(a => a.id === 'acc_linterna_bocina')!;
-        assert.equal(getAccessoryAddonUnitPrice(casco, '2 horas'), null);
-        assert.equal(getAccessoryAddonUnitPrice(linterna, '2 horas'), null);
+        assert.equal(getAccessoryAddonUnitPrice(casco, '2 horas'), 10, 'El casco tiene una tarifa de complemento conocida explícita.');
+        assert.equal(getAccessoryAddonUnitPrice(linterna, '2 horas'), 10, 'La linterna tiene una tarifa de complemento conocida explícita.');
         assert.equal(getAccessoryAddonUnitPrice({ ...casco, rentalAddonFree: true }, '2 horas'), 0);
         const customAcc = { ...casco, addonFlatPrice: 12 };
         assert.equal(getAccessoryAddonUnitPrice(customAcc, '2 horas'), 12);
-        assert.equal(calculateProductRentalPrice(customAcc, '2 horas'), 12, 'El precio fijo debe coincidir en la ficha y en el extra');
+        assert.equal(calculateProductRentalPrice(customAcc, '2 horas', 1, { modality: 'addon' }), 12, 'El precio fijo debe coincidir en la ficha y en el extra cuando se calcula como complemento.');
         assert.equal(getAccessoryAddonUnitPrice({ ...linterna, addonFlatPrice: 0, price2Hours: 8 }, '2 horas'), 8, 'Cero fijo usa la tarifa explícita por duración');
     });
 

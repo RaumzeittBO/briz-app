@@ -81,7 +81,24 @@ const fixtures = [
         stock: 6, addonFlatPrice: 5,
     },
 ];
-for (const item of fixtures) await db.doc(`inventory/${item.id}`).set(item);
+const visualBikeCategories = ['Urbanas', 'Montaña', 'Infantil', 'Mamachari', 'Paseo', 'Ruta', 'Gravel', 'Plegables'];
+const visualGridBikes = visualBikeCategories.map((category, index) => ({
+    id: `visual-grid-bike-${index + 1}`,
+    itemType: 'bike',
+    name: `Bicicleta visual ${category}`,
+    category,
+    description: `Fixture sintético para validar el orden de catálogo (${category}).`,
+    imageUrl: '',
+    active: true,
+    availableForRental: true,
+    availableForSale: false,
+    hasWheelSizes: true,
+    wheelSizes: [{ size: index % 2 === 0 ? '26' : '27', stock: 2, maintenanceStock: 0 }],
+    price1Hour: 18 + index,
+    price24Hours: 60 + index,
+}));
+for (const item of [...fixtures, ...visualGridBikes]) await db.doc(`inventory/${item.id}`).set(item);
+await db.doc('settings/bike_categories').set({ categories: visualBikeCategories });
 await db.doc('inventory/visual-shop-bike').set({
     id: 'visual-shop-bike', itemType: 'bike', name: 'Bicicleta demo para tienda', category: 'Bicicletas',
     description: 'Producto sintético para validar filtros de tienda en Emulator.', imageUrl: '', active: true,
@@ -96,6 +113,27 @@ await db.doc('combos/visual-combo').set({
         { inventoryItemId: 'visual-lock', quantity: 1, requiresWheelSize: false },
     ],
     price1Hour: 25, price24Hours: 80, pricePerHour: 25, pricePerDay: 80,
+});
+await db.doc('inventory/visual-mamachari').set({
+    id: 'visual-mamachari', itemType: 'bike', name: 'Mamachari visual', category: 'Mamachari',
+    description: 'Fixture sintético para revisión manual de componentes.', imageUrl: '', active: true,
+    availableForRental: true, availableForSale: false, hasWheelSizes: false, stock: 2, maintenanceStock: 0,
+    price1Hour: 25, price24Hours: 80,
+});
+await db.doc('combos/visual-legacy-combo').set({
+    id: 'visual-legacy-combo', name: 'Combo legacy · Mamachari', category: 'Combinadas', active: true,
+    availableForRental: true, availableForSale: false,
+    components: [
+        { inventoryItemId: 'bike_mamachari', quantity: 1, requiresWheelSize: false },
+        { inventoryItemId: 'visual-lock', quantity: 1, requiresWheelSize: false },
+    ],
+    price1Hour: 30, price24Hours: 85,
+});
+await db.doc('combos/visual-missing-combo').set({
+    id: 'visual-missing-combo', name: 'Combo visual con referencia faltante', category: 'Combinadas', active: true,
+    availableForRental: true, availableForSale: false,
+    components: [{ inventoryItemId: 'bike-missing-visual', quantity: 1, requiresWheelSize: false }],
+    price1Hour: 28, price24Hours: 80,
 });
 await db.doc('settings/public_business').set({
     businessName: 'BRIZ Demo',

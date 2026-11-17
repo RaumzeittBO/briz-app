@@ -892,6 +892,98 @@ try {
         lines: [{ productId: 'bike-emulator', productType: 'single', quantity: 1, wheelSize: '26' }],
         date: managerDate(days), pickupTime: '15:00', duration: '1 hora', paymentMethod: 'Efectivo', idempotencyKey: `manager_${crypto.randomUUID()}`,
     });
+
+    // A synthetic operating day exercises the full callable flow against Emulator records.
+    // All product, customer, booking, payment, and stock rows here are disposable fixtures.
+    await adminDb.doc('inventory/sim-bike-26').set({
+        id: 'sim-bike-26', itemType: 'bike', name: 'Simulación · Bicicleta 26', store: 'shop-b', active: true,
+        availableForRental: true, availableForSale: false, hasWheelSizes: true,
+        wheelSizes: [{ size: '26', stock: 8, maintenanceStock: 1 }, { size: '27', stock: 0, maintenanceStock: 0 }],
+        maintenanceStock: 1, price1Hour: 20, price24Hours: 70,
+    });
+    await adminDb.doc('inventory/sim-bike-27').set({
+        id: 'sim-bike-27', itemType: 'bike', name: 'Simulación · Bicicleta 27', store: 'shop-b', active: true,
+        availableForRental: true, availableForSale: false, hasWheelSizes: true,
+        wheelSizes: [{ size: '27', stock: 3, maintenanceStock: 0 }], price1Hour: 22, price24Hours: 75,
+    });
+    await adminDb.doc('inventory/sim-mamachari').set({
+        id: 'sim-mamachari', itemType: 'bike', name: 'Simulación · Mamachari', store: 'shop-b', active: true,
+        availableForRental: true, availableForSale: false, hasWheelSizes: false, stock: 2, maintenanceStock: 0,
+        price1Hour: 25, price24Hours: 80,
+    });
+    await adminDb.doc('inventory/sim-lock').set({
+        id: 'sim-lock', itemType: 'accessory', name: 'Simulación · Candado', store: 'shop-b', active: true,
+        availableForRental: true, availableAsRentalAddon: true, rentalCatalog: true,
+        availableForSale: false, hasWheelSizes: false, stock: 20, addonFlatPrice: 5,
+    });
+    await adminDb.doc('combos/sim-combo').set({
+        id: 'sim-combo', name: 'Simulación · Combo Mamachari', store: 'shop-b', active: true,
+        availableForRental: true, availableForSale: false,
+        components: [
+            { inventoryItemId: 'sim-bike-26', quantity: 2, requiresWheelSize: true },
+            { inventoryItemId: 'sim-lock', quantity: 1, requiresWheelSize: false },
+        ], price1Hour: 35, price24Hours: 100,
+    });
+    const simulatedDate = managerDate(35);
+    const simulatedSlots = ['08:00', '09:00', '10:00', '11:00', '13:00', '14:00', '15:00', '16:00', '17:00', '18:00'];
+    const simulatedLines = [
+        [{ productId: 'sim-bike-26', productType: 'single', quantity: 1, wheelSize: '26' }],
+        [{ productId: 'sim-combo', productType: 'combo', quantity: 1, wheelSize: '26', componentSelections: [{ inventoryItemId: 'sim-bike-26', wheelSize: '26' }] }],
+        [{ productId: 'sim-bike-27', productType: 'single', quantity: 1, wheelSize: '27' }],
+        [{ productId: 'sim-mamachari', productType: 'single', quantity: 1 }],
+        [{ productId: 'sim-lock', productType: 'single', quantity: 1 }],
+        [{ productId: 'sim-combo', productType: 'combo', quantity: 1, wheelSize: '26', componentSelections: [{ inventoryItemId: 'sim-bike-26', wheelSize: '26' }] }],
+        [{ productId: 'sim-bike-26', productType: 'single', quantity: 1, wheelSize: '26' }],
+        [{ productId: 'sim-bike-27', productType: 'single', quantity: 1, wheelSize: '27' }],
+        [{ productId: 'sim-bike-26', productType: 'single', quantity: 1, wheelSize: '26' }],
+        [{ productId: 'sim-mamachari', productType: 'single', quantity: 1 }],
+    ];
+    const simulatedGroups: Array<{ reservationCode: string; rentalIds: string[]; idempotencyKey: string; total: number }> = [];
+    const simulatedRateLimitId = `reservations_${createHash('sha256').update(userB.uid).digest('hex')}`;
+    for (let index = 0; index < simulatedSlots.length; index++) {
+        const idempotencyKey = `day_sim_${index}_${crypto.randomUUID()}`;
+        await adminDb.doc(`_requestLimits/${simulatedRateLimitId}`).delete();
+        const bookingResult = await call<{ reservationCode: string; rentalIds: string[]; total: number }>(userB.functions, 'createRentalGroup', {
+            adminManual: true, adminCustomer: { id: userB.uid }, adminPaymentStatus: 'unpaid',
+            lines: simulatedLines[index],
+            ...(index === 1 ? { accessories: [{ itemId: 'sim-lock', quantity: 1 }] } : {}),
+            date: simulatedDate, pickupTime: simulatedSlots[index], duration: '1 hora', paymentMethod: 'Efectivo', idempotencyKey,
+        });
+        simulatedGroups.push({ ...bookingResult, idempotencyKey });
+    }
+    assert.equal(simulatedGroups[1].total, 40, 'A combo plus one separately priced flat add-on adds the extra Bs 5.');
+    assert.equal(simulatedGroups[4].total, 20, 'An accessory rented alone uses the Bs 20 individual tariff.');
+    await adminDb.doc(`_requestLimits/${simulatedRateLimitId}`).delete();
+    const retriedSimulationBooking = await call<{ reservationCode: string; duplicate: boolean }>(userB.functions, 'createRentalGroup', {
+        adminManual: true, adminCustomer: { id: userB.uid }, adminPaymentStatus: 'unpaid', lines: simulatedLines[0],
+        date: simulatedDate, pickupTime: simulatedSlots[0], duration: '1 hora', paymentMethod: 'Efectivo', idempotencyKey: simulatedGroups[0].idempotencyKey,
+    });
+    assert.equal(retriedSimulationBooking.duplicate, true);
+    assert.equal((await adminDb.collection('rentals').where('reservationCode', '==', simulatedGroups[0].reservationCode).get()).size, 1);
+    await call(userB.functions, 'adminRentalAction', { action: 'cancel', rentalIds: simulatedGroups[8].rentalIds });
+    await call(userB.functions, 'adminRentalAction', { action: 'cancel', rentalIds: simulatedGroups[9].rentalIds });
+    for (let index = 0; index < 8; index++) {
+        await call(userB.functions, 'adminRentalAction', { action: 'confirm', rentalIds: simulatedGroups[index].rentalIds });
+    }
+    await call(userB.functions, 'adminRentalAction', { action: 'deliver', rentalIds: simulatedGroups[0].rentalIds });
+    await call(userB.functions, 'adminRentalAction', { action: 'return', rentalIds: simulatedGroups[0].rentalIds, damagedUnits: 1, conditionNotes: 'Ficción: unidad enviada a taller' });
+    await call(userB.functions, 'adminRentalAction', { action: 'deliver', rentalIds: simulatedGroups[1].rentalIds });
+    await call(userB.functions, 'adminRentalAction', { action: 'return', rentalIds: simulatedGroups[1].rentalIds, damagedUnits: 0 });
+    const simulationInventory = async (id: string) => (await adminDb.doc(`inventory/${id}`).get()).data() || {};
+    assert.equal(((await simulationInventory('sim-bike-26')).wheelSizes as Array<{ size: string; stock: number; maintenanceStock: number }>).find(wheel => wheel.size === '26')?.stock, 4,
+        '8 starting bikes - 1 damaged return - 4 combo component units - 1 confirmed rental + 2 returned combo units = 4 available.');
+    assert.equal(((await simulationInventory('sim-bike-26')).wheelSizes as Array<{ size: string; stock: number; maintenanceStock: number }>).find(wheel => wheel.size === '26')?.maintenanceStock, 2,
+        'The damaged simulated bike is added to the one pre-existing workshop unit.');
+    assert.equal(((await simulationInventory('sim-bike-27')).wheelSizes as Array<{ size: string; stock: number }>)[0].stock, 1);
+    assert.equal((await simulationInventory('sim-mamachari')).stock, 1);
+    assert.equal((await simulationInventory('sim-lock')).stock, 18,
+        'Standalone and combo-shared accessories reconcile after the healthy combo return.');
+    const simulatedRentals = await adminDb.collection('rentals').where('date', '==', simulatedDate).get();
+    assert.ok(simulatedRentals.docs.some(doc => doc.get('reservationCode') === simulatedGroups[0].reservationCode && doc.get('status') === 'returned'));
+    assert.ok(simulatedRentals.docs.filter(doc => doc.get('reservationCode') === simulatedGroups[8].reservationCode).every(doc => doc.get('status') === 'cancelled'));
+    assert.ok(simulatedRentals.docs.every(doc => doc.get('paymentStatus') !== 'paid'), 'Lifecycle actions do not invent a payment receipt.');
+    pass('Emulator simulated a 10-slot operating day: 10 bookings, retry, cancellations, 8 confirmations, deliveries, healthy/damaged returns, combo component and shared-accessory stock reconciliation, and unpaid history');
+
     const pendingManagerRental = await call<{ rentalIds: string[] }>(userB.functions, 'createRentalGroup', managerBooking(15));
     await assert.rejects(() => call(userB.functions, 'adminRentalAction', { action: 'return', rentalIds: pendingManagerRental.rentalIds }));
     const beforePendingCancel = (await adminDb.collection('inventory').doc('bike-emulator').get()).get('wheelSizes')[0].stock;
