@@ -1112,9 +1112,14 @@ export default function InventoryPage() {
 
                   if (!item) {
                     return (
-                      <div key={component.inventoryItemId} role="alert" className="rounded-xl bg-red-500/10 p-4 text-sm text-red-200 border border-red-500/20">
-                        <p className="font-bold">Falta inventario para el componente: {component.inventoryItemId}</p>
-                        <p className="text-xs text-red-300 mt-1">No existe ningún artículo en el inventario con este identificador ni con un nombre equivalente.</p>
+                      <div key={component.inventoryItemId} role="alert" className="rounded-xl bg-red-500/10 p-4 text-sm text-red-200 border border-red-500/20 space-y-3">
+                        <div>
+                          <p className="font-bold">Falta inventario para el componente: {component.inventoryItemId}</p>
+                          <p className="text-xs text-red-300 mt-1">No existe ningún artículo en el inventario con este identificador ni con un nombre equivalente. Puedes vincular el artículo físico ya registrado desde el editor del combinado.</p>
+                        </div>
+                        <Button type="button" size="sm" onClick={() => { setStockManagerCombo(null); openEdit(stockManagerCombo, 'combo'); }} className="bg-brand-yellow font-black text-brand-black hover:bg-white">
+                          Editar combinado y vincular componente
+                        </Button>
                       </div>
                     );
                   }

@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import {
     findComboComponentItem,
     getComboAvailabilityDiagnostics,
@@ -11,6 +13,10 @@ import {
 import type { InventoryItem, ComboProduct } from '../src/context/StoreContext';
 
 console.log('Testing Mamachari availability, workshop reconciliation & customer documents...');
+
+const inventoryAdminSource = readFileSync(fileURLToPath(new URL('../src/pages/admin/InventoryPage.tsx', import.meta.url)), 'utf8');
+assert.match(inventoryAdminSource, /Editar combinado y vincular componente/);
+assert.match(inventoryAdminSource, /disabled=\{editItem\.components\.length <= 1\}/);
 
 // Test 1: findComboComponentItem alias and exact resolution
 {
