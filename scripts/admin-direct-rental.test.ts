@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 
 console.log('Testing Admin Direct Rental (Counter Walk-in, Future Booking, Document Custody & Closing)...');
 
@@ -120,6 +121,20 @@ console.log('Testing Admin Direct Rental (Counter Walk-in, Future Booking, Docum
     const key1 = generateIdempotencyKey('return', 'rental_123');
     const key2 = generateIdempotencyKey('return', 'rental_123');
     assert.notEqual(key1, key2);
+}
+
+// Test 4: The immediate flow is a two-screen counter workflow, independent of customer registration.
+{
+    const page = readFileSync('src/pages/admin/AdminRentalsPage.tsx', 'utf8');
+    assert.ok(page.includes("const customerMode = newRentalFlow === 'immediate' ? 'pending' : newRentalCustomerMode;"));
+    assert.ok(page.includes("{ step: 1, label: '1. Productos y datos' }"));
+    assert.ok(page.includes("{ step: 2, label: '2. Confirmación y entrega' }"));
+    assert.ok(page.includes("newRentalFlow === 'immediate' ? renderStep4() : renderStep2()"));
+    assert.ok(page.includes('aria-label="Hora de retiro"'));
+    assert.ok(page.includes('aria-label="Duración de alquiler"'));
+    assert.ok(page.includes('Custodia del documento'));
+    assert.ok(page.includes("linkCustomerMode === 'new' ? 'Registrar ahora' : 'Asociar ahora'"));
+    assert.ok(page.includes('Registrar después'));
 }
 
 console.log('All Admin Direct Rental tests passed!');

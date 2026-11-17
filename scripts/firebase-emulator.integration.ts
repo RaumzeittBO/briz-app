@@ -542,13 +542,16 @@ try {
         date: new Intl.DateTimeFormat('en-CA', { timeZone: 'America/La_Paz' }).format(new Date(Date.now() + 20 * 24 * 60 * 60 * 1000)),
         pickupTime: '10:00', duration: '1 hora', paymentMethod: 'Efectivo', idempotencyKey: `manual_pending_future_${crypto.randomUUID()}`,
     }), /atención inmediata|día actual/i, 'Pending customer is limited to a same-day counter walk-in, not a future booking.');
+    const pendingWalkInStart = new Date(Date.now() + 3 * 60 * 60 * 1000);
+    const pendingWalkInDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/La_Paz' }).format(pendingWalkInStart);
+    const pendingWalkInTime = new Intl.DateTimeFormat('en-GB', { timeZone: 'America/La_Paz', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(pendingWalkInStart);
     const pendingWalkIn = await call<{ reservationCode: string; rentalIds: string[]; total: number }>(userA.functions, 'createRentalGroup', {
         adminManual: true, adminCustomerPending: true, adminPaymentStatus: 'unpaid',
         adminImmediateWalkIn: true,
         adminNotes: '[DOCUMENTO EN CUSTODIA]: CI de prueba en mostrador',
         lines: [{ productId: 'bike-emulator', productType: 'single', quantity: 1, wheelSize: '26' }],
-        date: new Intl.DateTimeFormat('en-CA', { timeZone: 'America/La_Paz' }).format(new Date()),
-        pickupTime: '09:00', duration: '1 hora', paymentMethod: 'Efectivo', idempotencyKey: `manual_pending_${crypto.randomUUID()}`,
+        date: pendingWalkInDate,
+        pickupTime: pendingWalkInTime, duration: '1 hora', paymentMethod: 'Efectivo', idempotencyKey: `manual_pending_${crypto.randomUUID()}`,
     });
     const pendingWalkInRow = adminDb.doc(`rentals/${pendingWalkIn.rentalIds[0]}`);
     const pendingBeforeLink = await pendingWalkInRow.get();
@@ -584,8 +587,8 @@ try {
         adminManual: true, adminCustomerPending: true,
         adminImmediateWalkIn: true,
         lines: [{ productId: 'bike-emulator', productType: 'single', quantity: 1, wheelSize: '26' }],
-        date: new Intl.DateTimeFormat('en-CA', { timeZone: 'America/La_Paz' }).format(new Date()),
-        pickupTime: '09:00', duration: '1 hora', paymentMethod: 'Efectivo', idempotencyKey: `manual_pending_new_${crypto.randomUUID()}`,
+        date: pendingWalkInDate,
+        pickupTime: pendingWalkInTime, duration: '1 hora', paymentMethod: 'Efectivo', idempotencyKey: `manual_pending_new_${crypto.randomUUID()}`,
     });
     const newlyLinked = await call<{ ok: boolean; customerId: string; linkedRentals: number }>(userA.functions, 'associateManualRentalCustomer', {
         reservationCode: pendingNewProfile.reservationCode,
@@ -604,8 +607,8 @@ try {
     const managerPending = await call<{ reservationCode: string; rentalIds: string[] }>(branchManager.functions, 'createRentalGroup', {
         adminManual: true, adminCustomerPending: true, adminImmediateWalkIn: true,
         lines: [{ productId: 'manager-pending-fixture', productType: 'single', quantity: 1, wheelSize: '26' }],
-        date: new Intl.DateTimeFormat('en-CA', { timeZone: 'America/La_Paz' }).format(new Date()),
-        pickupTime: '09:00', duration: '1 hora', paymentMethod: 'Efectivo', idempotencyKey: `manager_pending_${crypto.randomUUID()}`,
+        date: pendingWalkInDate,
+        pickupTime: pendingWalkInTime, duration: '1 hora', paymentMethod: 'Efectivo', idempotencyKey: `manager_pending_${crypto.randomUUID()}`,
     });
     const managerLinked = await call<{ customerId: string }>(branchManager.functions, 'associateManualRentalCustomer', {
         reservationCode: managerPending.reservationCode,

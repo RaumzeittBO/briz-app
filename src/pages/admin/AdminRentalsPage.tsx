@@ -844,15 +844,12 @@ export default function AdminRentalsPage() {
 
   const handleWizardSubmit = async () => {
     if (manualCreateLockRef.current) return;
+    const customerMode = newRentalFlow === 'immediate' ? 'pending' : newRentalCustomerMode;
     let finalCustomer: any = null;
-    if (newRentalCustomerMode === 'pending' && newRentalFlow !== 'immediate') {
-      alert('La opción Cliente pendiente solo está disponible para atención inmediata en mostrador.');
-      return;
-    }
-    if (newRentalCustomerMode === 'existing') {
+    if (customerMode === 'existing') {
       finalCustomer = customers.find(c => c.id === newRentalSelectedCustomerId);
       if (!finalCustomer) { alert('Por favor selecciona un cliente registrado.'); return; }
-    } else if (newRentalCustomerMode === 'new') {
+    } else if (customerMode === 'new') {
       const customer = newRentalCustomerData;
       if (!customer.name.trim() || !customer.phone.trim() || !customer.ci.trim()) {
         alert('Por favor completa los campos obligatorios del cliente (Nombre, Teléfono, CI).');
@@ -900,8 +897,8 @@ export default function AdminRentalsPage() {
       : [];
     const paymentMethod: 'QR' | 'Transferencia' | 'Efectivo' = newRentalForm.paymentMethod.toLowerCase().includes('qr')
       ? 'QR' : newRentalForm.paymentMethod.toLowerCase().includes('transfer') ? 'Transferencia' : 'Efectivo';
-    const adminCustomer = newRentalCustomerMode === 'pending' ? undefined : {
-      ...(newRentalCustomerMode === 'existing' ? { id: finalCustomer.id } : {}),
+    const adminCustomer = customerMode === 'pending' ? undefined : {
+      ...(customerMode === 'existing' ? { id: finalCustomer.id } : {}),
       name: finalCustomer.name, phone: finalCustomer.phone, ci: finalCustomer.ci,
       email: finalCustomer.email || '', nacionalidad: finalCustomer.nacionalidad || '',
       departamento: finalCustomer.departamento || '', comoNosConociste: finalCustomer.comoNosConociste || '',
@@ -945,7 +942,7 @@ export default function AdminRentalsPage() {
         await runAdminRentalAction('confirm', result.rentalIds);
         await runAdminRentalAction('deliver', result.rentalIds);
         sessionStorage.removeItem(storageKey);
-        if (newRentalCustomerMode === 'pending') {
+        if (customerMode === 'pending') {
           setPendingCustomerLinkCode(result.reservationCode);
           setLinkCustomerMode('existing');
           setLinkCustomerId('');
@@ -974,9 +971,9 @@ export default function AdminRentalsPage() {
   };
   const renderStep1 = () => {
     return (
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 font-sans text-white h-[60vh] overflow-hidden">
+      <div className={`grid grid-cols-1 lg:grid-cols-3 gap-6 font-sans text-white ${newRentalFlow === 'immediate' ? 'max-h-[70vh] overflow-y-auto pr-1' : 'h-[60vh] overflow-hidden'}`}>
         {/* Left Side: Product selection grid */}
-        <div className="lg:col-span-2 flex flex-col space-y-4 h-full overflow-hidden">
+        <div className={`lg:col-span-2 flex flex-col space-y-4 ${newRentalFlow === 'immediate' ? 'h-[52vh] min-h-[360px]' : 'h-full'} overflow-hidden`}>
           <div className="flex gap-2 shrink-0">
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30" />
@@ -1116,8 +1113,8 @@ export default function AdminRentalsPage() {
         </div>
 
         {/* Right Side: Cart Summary */}
-        <div className="bg-black/25 border border-white/5 rounded-2xl p-4 flex flex-col justify-between h-full overflow-hidden">
-          <div className="flex flex-col h-full overflow-hidden">
+        <div className={`bg-black/25 border border-white/5 rounded-2xl p-4 flex flex-col ${newRentalFlow === 'immediate' ? 'min-h-[360px] lg:h-[52vh]' : 'h-full'} overflow-hidden`}>
+          <div className="flex flex-col h-full overflow-y-auto">
             <h3 className="text-sm font-black uppercase tracking-wider border-b border-white/10 pb-2 mb-3 text-brand-yellow-vibrant">
               Resumen de Alquiler ({newRentalCart.reduce((s, c) => s + c.quantity, 0)})
             </h3>
@@ -1128,7 +1125,7 @@ export default function AdminRentalsPage() {
                 <p className="text-xs font-black uppercase tracking-wider">Carrito Vacío</p>
               </div>
             ) : (
-              <div className="flex-1 overflow-y-auto space-y-2 pr-1 pb-4">
+              <div className="flex-1 min-h-0 overflow-y-auto space-y-2 pr-1 pb-4">
                 {newRentalCart.map((item, idx) => {
                   const isCombo = item.product.components !== undefined;
                   const price = calculatePrice(
@@ -1208,6 +1205,47 @@ export default function AdminRentalsPage() {
             )}
 
             <div className="border-t border-white/10 pt-3 mt-2 space-y-3 shrink-0">
+              {newRentalFlow === 'immediate' && (
+                <div className="space-y-3 rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-[10px] font-black uppercase text-emerald-300">Atención inmediata</p>
+                      <p className="text-[10px] text-white/50">Hoy · {newRentalForm.date}</p>
+                    </div>
+                    <label className="space-y-1 text-[9px] font-bold uppercase text-white/50">
+                      Hora
+                      <input aria-label="Hora de retiro" type="time" value={newRentalForm.pickupTime} onChange={e => setNewRentalForm(prev => ({ ...prev, pickupTime: e.target.value }))} className="block h-9 rounded-lg border border-white/10 bg-black/35 px-2 text-xs font-bold text-white outline-none focus:border-brand-yellow" />
+                    </label>
+                  </div>
+                  <label className="block space-y-1 text-[9px] font-bold uppercase text-white/50">
+                    Duración
+                    <select aria-label="Duración de alquiler" value={newRentalForm.duration} onChange={e => setNewRentalForm(prev => ({ ...prev, duration: e.target.value }))} className="h-9 w-full rounded-lg border border-white/10 bg-black/35 px-2 text-xs font-bold text-white outline-none focus:border-brand-yellow">
+                      {(newRentalCart.length > 0 && newRentalCart.every(item => item.product.itemType === 'accessory')
+                        ? ['1 hora', '2 horas', '3 horas', '4 horas', '8 horas', '24 horas']
+                        : ['1 hora', '2 horas', '3 horas', '4 horas', '8 horas', '24 horas', '1 semana', '1 mes']
+                      ).map(duration => <option key={duration} value={duration} className="bg-brand-charcoal text-white">{duration}</option>)}
+                    </select>
+                  </label>
+                  <div className="space-y-2">
+                    <p className="text-[9px] font-bold uppercase text-white/50">Custodia del documento</p>
+                    <div className="grid grid-cols-3 gap-1">
+                      {([
+                        ['fisico', 'Físico'],
+                        ['digital', 'Digital'],
+                        ['pendiente', 'Pendiente'],
+                      ] as const).map(([type, label]) => (
+                        <button key={type} type="button" onClick={() => setNewRentalDocumentType(type)} aria-pressed={newRentalDocumentType === type} className={`rounded-lg border px-1 py-2 text-[9px] font-black uppercase ${newRentalDocumentType === type ? 'border-brand-yellow bg-brand-yellow/15 text-brand-yellow' : 'border-white/10 bg-black/20 text-white/60'}`}>
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                    {newRentalDocumentType !== 'digital' && (
+                      <Input aria-label={newRentalDocumentType === 'fisico' ? 'Detalle de custodia física' : 'Observación de documento pendiente'} placeholder={newRentalDocumentType === 'fisico' ? 'Detalle de custodia (opcional)' : 'Observación (opcional)'} value={newRentalDocumentCustody} onChange={e => setNewRentalDocumentCustody(e.target.value)} className="h-9 border-white/10 bg-black/35 text-xs text-white" />
+                    )}
+                  </div>
+                  <p className="text-[10px] text-emerald-200/70">El cliente puede registrarse al finalizar o después de la entrega.</p>
+                </div>
+              )}
               <div className="flex justify-between items-center text-sm font-black">
                 <span>Total Estimado:</span>
                 <span className="text-brand-yellow">Bs. {getCartTotal()}</span>
@@ -1766,16 +1804,16 @@ export default function AdminRentalsPage() {
   };
 
   const renderStep4 = () => {
-    const isModeExisting = newRentalCustomerMode === 'existing';
+    const isModeExisting = newRentalFlow !== 'immediate' && newRentalCustomerMode === 'existing';
     const customerName = isModeExisting
       ? customers.find(c => c.id === newRentalSelectedCustomerId)?.name
-      : newRentalCustomerMode === 'pending' ? 'Cliente pendiente' : newRentalCustomerData.name;
+      : newRentalFlow === 'immediate' || newRentalCustomerMode === 'pending' ? 'Cliente pendiente' : newRentalCustomerData.name;
     const customerPhone = isModeExisting
       ? customers.find(c => c.id === newRentalSelectedCustomerId)?.phone 
-      : newRentalCustomerMode === 'pending' ? 'Pendiente de registrar' : newRentalCustomerData.phone;
+      : newRentalFlow === 'immediate' || newRentalCustomerMode === 'pending' ? 'Pendiente de registrar' : newRentalCustomerData.phone;
     const customerCI = isModeExisting
       ? customers.find(c => c.id === newRentalSelectedCustomerId)?.ci 
-      : newRentalCustomerMode === 'pending' ? 'Pendiente de registrar' : newRentalCustomerData.ci;
+      : newRentalFlow === 'immediate' || newRentalCustomerMode === 'pending' ? 'Pendiente de registrar' : newRentalCustomerData.ci;
 
     const cartTotal = getCartTotal();
 
@@ -1793,7 +1831,7 @@ export default function AdminRentalsPage() {
             <p><strong>Nombre:</strong> {customerName}</p>
             <p><strong>Teléfono:</strong> {customerPhone}</p>
             <p><strong>CI:</strong> {customerCI}</p>
-            <p><strong>Tipo registro:</strong> {newRentalCustomerMode === 'pending' ? 'Asociar después' : isModeExisting ? 'Existente' : 'Nuevo Registro'}</p>
+            <p><strong>Tipo registro:</strong> {newRentalFlow === 'immediate' || newRentalCustomerMode === 'pending' ? 'Opcional al finalizar' : isModeExisting ? 'Existente' : 'Nuevo Registro'}</p>
           </div>
         </div>
 
@@ -1870,7 +1908,7 @@ export default function AdminRentalsPage() {
 
         <div className="flex gap-2 pt-4">
           <Button
-            onClick={() => setNewRentalStep(3)}
+            onClick={() => setNewRentalStep(newRentalFlow === 'immediate' ? 1 : 3)}
             variant="ghost"
             className="flex-1 h-11 border border-white/10 hover:bg-white/5 text-white font-bold rounded-xl text-xs uppercase cursor-pointer"
           >
@@ -3287,13 +3325,16 @@ export default function AdminRentalsPage() {
           </DialogHeader>
 
           {/* Steps Progress Indicator */}
-          <div className="grid grid-cols-4 gap-2 mb-6">
-            {[
+          <div className={`grid ${newRentalFlow === 'immediate' ? 'grid-cols-2' : 'grid-cols-4'} gap-2 mb-6`}>
+            {(newRentalFlow === 'immediate' ? [
+              { step: 1, label: '1. Productos y datos' },
+              { step: 2, label: '2. Confirmación y entrega' },
+            ] : [
               { step: 1, label: '1. Productos' },
               { step: 2, label: '2. Tiempos' },
               { step: 3, label: '3. Cliente' },
               { step: 4, label: '4. Confirmación' }
-            ].map(s => (
+            ]).map(s => (
               <div
                 key={s.step}
                 className={`py-2 text-center rounded-xl text-[10px] font-black uppercase tracking-wider border transition-all ${
@@ -3311,9 +3352,9 @@ export default function AdminRentalsPage() {
 
           {/* Steps Content */}
           {newRentalStep === 1 && renderStep1()}
-          {newRentalStep === 2 && renderStep2()}
-          {newRentalStep === 3 && renderStep3()}
-          {newRentalStep === 4 && renderStep4()}
+          {newRentalStep === 2 && (newRentalFlow === 'immediate' ? renderStep4() : renderStep2())}
+          {newRentalFlow === 'future' && newRentalStep === 3 && renderStep3()}
+          {newRentalFlow === 'future' && newRentalStep === 4 && renderStep4()}
         </DialogContent>
       </Dialog>
 
@@ -3362,7 +3403,7 @@ export default function AdminRentalsPage() {
               } finally {
                 setLinkCustomerSaving(false);
               }
-            }} className="flex-1 bg-brand-yellow font-black text-brand-black hover:bg-white">{linkCustomerSaving ? 'Asociando…' : 'Asociar ahora'}</Button>
+            }} className="flex-1 bg-brand-yellow font-black text-brand-black hover:bg-white">{linkCustomerSaving ? 'Guardando…' : linkCustomerMode === 'new' ? 'Registrar ahora' : 'Asociar ahora'}</Button>
           </div>
         </DialogContent>
       </Dialog>
