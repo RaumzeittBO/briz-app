@@ -21,6 +21,8 @@
     "test:customer-files": "npm run build --prefix functions && node scripts/run-customer-files-emulator.cjs",
     "test:reconcile": "npx tsx scripts/reconcile-rentals.test.ts",
     "test:reports": "npx tsx scripts/rental-report-money.test.ts",
+    "test:payment-reports": "firebase emulators:exec --project demo-briz-payment-reports --only firestore \"npx tsx scripts/payment-report-emulator.test.ts\" && npm run test:reports",
+    "test:manual-payment-ledger": "node scripts/run-manual-payment-ledger-emulator.cjs",
     "test:reservation-receipt": "npx tsx scripts/reservation-receipt-copy.test.ts",
     "test:public-shop-checkout": "npx tsx scripts/public-shop-checkout.test.ts",
     "test:public-business-config": "npx tsx scripts/public-business-config.test.ts",

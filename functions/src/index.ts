@@ -1249,8 +1249,11 @@ export const createRentalGroup = onCall(callable(), async (request) => {
                 quantity: Number(line.quantity),
                 total: Number(line.total),
                 paymentMethod: input.paymentMethod,
-                paymentStatus: manualPaymentStatus || (input.paymentMethod === 'QR' || input.paymentMethod === 'Transferencia' ? 'pending_review' : 'unpaid'),
-                ...(manualPaymentStatus === 'paid' ? { paidAt: now.toDate().toISOString(), amountPaid: Number(line.total) } : {}),
+                // A manual status selection is only persisted as paid after the UI
+                // records a confirmed receipt through the idempotent payment ledger.
+                paymentStatus: manualPaymentStatus === 'paid'
+                    ? input.paymentMethod === 'QR' || input.paymentMethod === 'Transferencia' ? 'pending_review' : 'unpaid'
+                    : manualPaymentStatus || (input.paymentMethod === 'QR' || input.paymentMethod === 'Transferencia' ? 'pending_review' : 'unpaid'),
                 status: 'pending',
                 source: adminManual ? 'manual' : 'web',
                 ...(adminManual ? { createdBy: uid, deliveryService: manualDelivery, pickupService: manualPickup, ...(manualMapsLink ? { mapsLink: manualMapsLink } : {}) } : {}),
@@ -1734,7 +1737,7 @@ export const adminRentalAction = onCall(callable(), async (request) => {
 });
 
 type RentalPaymentMovementType = 'receipt' | 'refund' | 'correction';
-type RentalPaymentMethod = 'Efectivo' | 'QR' | 'Transferencia';
+type RentalPaymentMethod = 'Efectivo' | 'QR' | 'Transferencia' | 'Sin especificar';
 
 export const recordRentalPaymentMovement = onCall(callable(), async (request) => {
     const { uid } = requireAuth(request);
@@ -1803,7 +1806,7 @@ export const recordRentalPaymentMovement = onCall(callable(), async (request) =>
             if (legacyAmount <= 0) return;
             const legacyData: DocumentData = {
                 reservationCode, rentalIds: [String(row.id)], store: String(row.store || store), type: 'receipt',
-                amount: legacyAmount, method: ['QR', 'Transferencia', 'Efectivo'].includes(String(row.paymentMethod)) ? row.paymentMethod : 'Efectivo',
+                amount: legacyAmount, method: ['QR', 'Transferencia', 'Efectivo'].includes(String(row.paymentMethod)) ? row.paymentMethod : 'Sin especificar',
                 actualAt: typeof row.paidAt === 'string' ? row.paidAt : null, actorUid: null,
                 recordedAt: row.updatedAt || row.createdAt || new Date().toISOString(), legacy: true,
             };

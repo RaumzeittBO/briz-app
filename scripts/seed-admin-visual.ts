@@ -168,6 +168,39 @@ await db.doc(`customerPrivate/${visualCustomerId}`).set({
     documentoReversoPath: `data:image/png;base64,${pngFixture.toString('base64')}`,
 });
 
+// ISO day in Bolivia, independent of the host locale used by Node on Windows.
+const reportFixtureDate = new Date(Date.now() - 4 * 60 * 60 * 1000).toISOString().slice(0, 10);
+const reportFixtureAt = new Date().toISOString();
+const reportRentals = [
+    ['visual-report-cash', 120, 'Efectivo', 'paid'],
+    ['visual-report-qr', 80, 'QR', 'paid'],
+    ['visual-report-transfer', 50, 'Transferencia', 'paid'],
+    ['visual-report-pending', 60, 'Efectivo', 'unpaid'],
+] as const;
+for (const [id, total, method, paymentStatus] of reportRentals) {
+    const reservationCode = `TEST-${id}`;
+    await db.doc(`rentals/${id}`).set({
+        id, reservationCode, store: 'Cochabamba', customerName: 'Prueba de reporte', customerId: visualCustomerId,
+        customerPhone: 'TEST', customerCI: 'TEST', productType: 'single', productId: 'visual-bike-26',
+        productName: 'Bicicleta visual aro 26', quantity: 1, duration: '1 hora', date: reportFixtureDate, pickupTime: '10:00',
+        total, amountPaid: paymentStatus === 'paid' ? total : 0, paymentMethod: method, paymentStatus,
+        status: paymentStatus === 'paid' ? 'delivered' : 'confirmed', notes: '', createdAt: reportFixtureAt, createdDate: reportFixtureAt,
+        updatedAt: reportFixtureAt, ...(paymentStatus === 'paid' ? { paidAt: reportFixtureAt } : {}),
+    });
+    if (paymentStatus === 'paid') {
+        await db.doc(`rentalPaymentMovements/${id}-receipt`).set({
+            id: `${id}-receipt`, reservationCode, rentalIds: [id], store: 'Cochabamba', type: 'receipt',
+            amount: total, method, actualAt: reportFixtureAt, recordedAt: reportFixtureAt,
+        });
+    }
+}
+for (const [id, total, method] of [['visual-report-sale-cash', 30, 'efectivo'], ['visual-report-sale-qr', 20, 'qr']] as const) {
+    await db.doc(`sales/${id}`).set({ id, customerName: 'Prueba de reporte', customerPhone: 'TEST', customerCI: 'TEST', items: [], total, status: 'Completado', paymentMethod: method, store: 'Cochabamba', date: reportFixtureDate });
+}
+for (const [id, status, costEstimate] of [['visual-report-service-received', 'Recibido', 0], ['visual-report-service-progress', 'En reparación', 55], ['visual-report-service-finished', 'Entregado', 90]] as const) {
+    await db.doc(`serviceOrders/${id}`).set({ id, customer: 'Prueba de reporte', phone: 'TEST', bikeType: 'Bicicleta visual', issue: 'Fixture ficticio', status, estimatedDelivery: reportFixtureDate, costEstimate, notes: '', date: reportFixtureAt, store: 'Cochabamba' });
+}
+
 console.log(`Emulator-only admin fixture ready in ${projectId}.`);
 console.log(`Sign in: ${email} / ${password}`);
 console.log('Catalog: two bike sizes, one real accessory, one combo. All records are synthetic.');

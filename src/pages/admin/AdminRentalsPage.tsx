@@ -991,10 +991,24 @@ export default function AdminRentalsPage() {
     try {
       const fingerprint = JSON.stringify(booking);
       const storageKey = 'briz_admin_checkout_idempotency';
-      const saved = JSON.parse(sessionStorage.getItem(storageKey) || 'null') as { fingerprint?: string; key?: string } | null;
+      const saved = JSON.parse(sessionStorage.getItem(storageKey) || 'null') as { fingerprint?: string; key?: string; paymentActualAt?: string } | null;
       const idempotencyKey = saved?.fingerprint === fingerprint && saved.key ? saved.key : `admin_${crypto.randomUUID()}`;
-      sessionStorage.setItem(storageKey, JSON.stringify({ fingerprint, key: idempotencyKey }));
+      const paymentActualAt = saved?.fingerprint === fingerprint && saved.paymentActualAt ? saved.paymentActualAt : new Date().toISOString();
+      sessionStorage.setItem(storageKey, JSON.stringify({ fingerprint, key: idempotencyKey, paymentActualAt }));
       const result = await createRentalGroup({ ...booking, idempotencyKey });
+
+      if (newRentalForm.paymentStatus === 'paid') {
+        await recordRentalPaymentMovement({
+          rentalIds: result.rentalIds,
+          type: 'receipt',
+          amount: result.total,
+          method: paymentMethod,
+          actualAt: paymentActualAt,
+          idempotencyKey: `initial_${idempotencyKey}`,
+          ...(paymentMethod !== 'Efectivo' ? { confirmedReceived: true } : {}),
+          reason: 'Pago recibido al registrar el alquiler',
+        });
+      }
       
       if (newRentalFlow === 'immediate') {
         // Flow A: Immediate walk-in -> confirm and deliver simultaneously
@@ -1933,6 +1947,44 @@ export default function AdminRentalsPage() {
           Resumen de Confirmación
         </h3>
 
+        {newRentalFlow === 'immediate' && (
+          <div className="bg-emerald-500/5 border border-emerald-400/20 rounded-2xl p-4 space-y-3">
+            <h4 className="text-xs font-black uppercase tracking-wider text-emerald-200">Pago de este alquiler</h4>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <label className="space-y-1 text-[10px] font-bold uppercase text-white/50">
+                Método de pago
+                <select
+                  aria-label="Método de pago del alquiler"
+                  value={newRentalForm.paymentMethod}
+                  onChange={e => setNewRentalForm(prev => ({ ...prev, paymentMethod: e.target.value }))}
+                  className="block h-10 w-full rounded-xl border border-white/10 bg-black/35 px-3 text-xs font-bold text-white outline-none focus:border-brand-yellow"
+                >
+                  <option value="efectivo" className="bg-brand-charcoal">Efectivo</option>
+                  <option value="qr" className="bg-brand-charcoal">QR</option>
+                  <option value="transferencia" className="bg-brand-charcoal">Transferencia</option>
+                </select>
+              </label>
+              <label className="space-y-1 text-[10px] font-bold uppercase text-white/50">
+                Estado del pago
+                <select
+                  aria-label="Estado del pago del alquiler"
+                  value={newRentalForm.paymentStatus}
+                  onChange={e => setNewRentalForm(prev => ({ ...prev, paymentStatus: e.target.value as 'unpaid' | 'paid' }))}
+                  className="block h-10 w-full rounded-xl border border-white/10 bg-black/35 px-3 text-xs font-bold text-white outline-none focus:border-brand-yellow"
+                >
+                  <option value="unpaid" className="bg-brand-charcoal">Pendiente de cobro</option>
+                  <option value="paid" className="bg-brand-charcoal">Pago recibido</option>
+                </select>
+              </label>
+            </div>
+            <p className="text-[10px] text-white/45">
+              {newRentalForm.paymentMethod === 'qr' || newRentalForm.paymentMethod === 'transferencia'
+                ? 'Elegir QR o transferencia no confirma el pago. Marca “Pago recibido” solo después de verificar el abono.'
+                : 'El cobro se registra en el historial solo si confirmas “Pago recibido”.'}
+            </p>
+          </div>
+        )}
+
         <div className="bg-black/25 border border-white/5 rounded-2xl p-4 space-y-3">
           <h4 className="text-xs font-black uppercase tracking-wider text-white/50 border-b border-white/5 pb-1">
             Datos del Cliente
@@ -1961,8 +2013,8 @@ export default function AdminRentalsPage() {
             <p><strong>Fecha:</strong> {newRentalForm.date}</p>
             <p><strong>Hora:</strong> {newRentalForm.pickupTime}</p>
             <p><strong>Duración:</strong> {newRentalForm.duration}</p>
-            <p><strong>Método de pago:</strong> {newRentalForm.paymentMethod.toUpperCase()}</p>
-            <p><strong>Estado de pago:</strong> {newRentalForm.paymentStatus === 'paid' ? 'PAGADO' : 'PENDIENTE'}</p>
+            <p><strong>Método de pago:</strong> {newRentalForm.paymentMethod === 'qr' ? 'QR' : newRentalForm.paymentMethod === 'transferencia' ? 'Transferencia' : 'Efectivo'}</p>
+            <p><strong>Estado de pago:</strong> {newRentalForm.paymentStatus === 'paid' ? 'PAGO RECIBIDO' : 'PENDIENTE DE COBRO'}</p>
             <p><strong>Estado operativo:</strong> {newRentalForm.status === 'confirmed' ? 'CONFIRMADO' : 'PENDIENTE'}</p>
             <p className="col-span-2">
               <strong>Custodia de Documento:</strong>{' '}

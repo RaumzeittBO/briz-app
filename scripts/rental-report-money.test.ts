@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { filterRentalMoneyByStore, summarizeRentalMoney } from '../src/lib/rentalReportMoney';
+import { filterRentalMoneyByStore, summarizeRentalMoney, summarizeRentalReceiptsByMethod, summarizeSalesByMethod } from '../src/lib/rentalReportMoney';
 
 const rows = [
   { id: 'future-paid', reservationCode: 'future', date: '2026-10-22', createdAt: '2026-10-21T10:00:00.000Z', paidAt: '2026-10-21T14:00:00.000Z', total: 120, amountPaid: 120, paymentStatus: 'paid', status: 'confirmed' },
@@ -35,11 +35,11 @@ const ledgerRows = [
   { id: 'lpz', reservationCode: 'ledger-lpz', store: 'La Paz', date: '2026-10-22', total: 80, status: 'returned', paymentStatus: 'paid' },
 ];
 const movements = [
-  { id: 'cbba-1', reservationCode: 'ledger-cbba', store: 'Cochabamba', type: 'receipt' as const, amount: 40, actualAt: '2026-10-21T12:00:00-04:00' },
-  { id: 'cbba-2', reservationCode: 'ledger-cbba', store: 'Cochabamba', type: 'receipt' as const, amount: 60, actualAt: '2026-10-22T12:00:00-04:00' },
+  { id: 'cbba-1', reservationCode: 'ledger-cbba', store: 'Cochabamba', type: 'receipt' as const, amount: 40, method: 'Efectivo', actualAt: '2026-10-21T12:00:00-04:00' },
+  { id: 'cbba-2', reservationCode: 'ledger-cbba', store: 'Cochabamba', type: 'receipt' as const, amount: 60, method: 'QR', actualAt: '2026-10-22T12:00:00-04:00' },
   { id: 'cbba-refund', reservationCode: 'ledger-cbba', store: 'Cochabamba', type: 'refund' as const, amount: 25, actualAt: '2026-10-22T15:00:00-04:00', referenceMovementId: 'cbba-1' },
   { id: 'cbba-correction', reservationCode: 'ledger-cbba', store: 'Cochabamba', type: 'correction' as const, amount: 5, actualAt: '2026-10-22T16:00:00-04:00', referenceMovementId: 'cbba-2' },
-  { id: 'lpz-1', reservationCode: 'ledger-lpz', store: 'La Paz', type: 'receipt' as const, amount: 80, actualAt: '2026-10-21T13:00:00-04:00' },
+  { id: 'lpz-1', reservationCode: 'ledger-lpz', store: 'La Paz', type: 'receipt' as const, amount: 80, method: 'Transferencia', actualAt: '2026-10-21T13:00:00-04:00' },
 ];
 const cbbaLedgerDay = summarizeRentalMoney(filterRentalMoneyByStore(ledgerRows, 'Cochabamba'), '2026-10-22', '2026-10-22', false, filterRentalMoneyByStore(movements, 'Cochabamba'));
 assert.deepEqual(cbbaLedgerDay, { contracted: 100, collected: 60, refunded: 25, corrected: 5, netCash: 35, netRecognized: 30, pending: 0, collectedDateUnknown: 0 });
@@ -49,5 +49,37 @@ assert.deepEqual(lpzLedgerDay, { contracted: 80, collected: 0, refunded: 0, corr
 const cbbaAdvanceDay = summarizeRentalMoney(filterRentalMoneyByStore(ledgerRows, 'Cochabamba'), '2026-10-21', '2026-10-21', false, filterRentalMoneyByStore(movements, 'Cochabamba'));
 assert.equal(cbbaAdvanceDay.contracted, 0, 'A future rental is not contracted in the payment period.');
 assert.equal(cbbaAdvanceDay.collected, 40, 'An advance receipt is recognized on its actual payment date.');
+assert.deepEqual(
+  summarizeRentalReceiptsByMethod(ledgerRows, movements, '2026-10-22', '2026-10-22').byMethod,
+  { Efectivo: 0, QR: 60, Transferencia: 0, 'Sin especificar': 0 },
+  'Partial receipts are assigned by their method and actual payment date.'
+);
+assert.equal(summarizeRentalReceiptsByMethod(ledgerRows, movements, '2026-10-22', '2026-10-22').total, 60);
+assert.equal(summarizeRentalReceiptsByMethod(ledgerRows, movements, '2026-10-21', '2026-10-21').byMethod.Efectivo, 40);
+assert.equal(summarizeRentalReceiptsByMethod(ledgerRows, filterRentalMoneyByStore(movements, 'Cochabamba'), '2026-10-21', '2026-10-21').total, 40);
+
+const unknownLegacy = summarizeRentalReceiptsByMethod(
+  [{ id: 'legacy-unknown', reservationCode: 'legacy-unknown', paymentStatus: 'paid', total: 25, paidAt: '2026-10-22T12:00:00Z' }],
+  [], '2026-10-22', '2026-10-22'
+);
+assert.equal(unknownLegacy.byMethod['Sin especificar'], 25, 'An old payment without a verifiable method is never assigned to cash.');
+const seededLegacy = summarizeRentalReceiptsByMethod(
+  [{ id: 'legacy-cash', reservationCode: 'legacy-cash', paymentStatus: 'paid', total: 25, paymentMethod: 'efectivo', paidAt: '2026-10-22T12:00:00Z' }],
+  [{ id: 'legacy_movement', reservationCode: 'legacy-cash', rentalIds: ['legacy-cash'], type: 'receipt', amount: 25, method: 'Efectivo', actualAt: '2026-10-22T12:00:00Z', legacy: true }],
+  '2026-10-22', '2026-10-22'
+);
+assert.equal(seededLegacy.byMethod.Efectivo, 25, 'A legacy ledger projection is counted once and only if its rental source verifies the method.');
+const unverifiedLegacyProjection = summarizeRentalReceiptsByMethod(
+  [{ id: 'legacy-no-method', reservationCode: 'legacy-no-method', paymentStatus: 'paid', total: 25, paidAt: '2026-10-22T12:00:00Z' }],
+  [{ id: 'legacy_no_method', reservationCode: 'legacy-no-method', rentalIds: ['legacy-no-method'], type: 'receipt', amount: 25, method: 'Efectivo', actualAt: '2026-10-22T12:00:00Z', legacy: true }],
+  '2026-10-22', '2026-10-22'
+);
+assert.equal(unverifiedLegacyProjection.byMethod['Sin especificar'], 25);
+assert.equal(unverifiedLegacyProjection.total, 25, 'The historical row is not counted in addition to its ledger projection.');
+assert.deepEqual(summarizeSalesByMethod([
+  { status: 'Completado', total: 30, paymentMethod: 'efectivo' },
+  { status: 'Completado', total: 20, paymentMethod: 'QR' },
+  { status: 'Completado', total: 10, paymentMethod: 'método anterior' },
+]), { byMethod: { Efectivo: 30, QR: 20, Transferencia: 0, 'Sin especificar': 10 }, total: 60 });
 
 console.log('Rental report money regression passed: store-scoped contracts and cash dates, advance receipts, refunds, legacy unknown date, and combo accessory lines.');

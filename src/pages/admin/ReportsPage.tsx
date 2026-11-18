@@ -6,7 +6,6 @@ import { Input } from '@/components/ui/input';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import {
   TrendingUp,
-  DollarSign,
   Bike,
   ShoppingBag,
   Wrench,
@@ -23,7 +22,7 @@ import { useStore } from '@/context/StoreContext';
 import type { Rental, Sale, ServiceOrder } from '@/context/StoreContext';
 import { toBoliviaDateString, addDaysToDateString, parseBoliviaDateTime } from '@/lib/dateUtils';
 import { parseDurationToHours } from '@/lib/rentalPricing';
-import { filterRentalMoneyByStore, summarizeRentalMoney } from '@/lib/rentalReportMoney';
+import { filterRentalMoneyByStore, summarizeRentalMoney, summarizeRentalReceiptsByMethod, summarizeSalesByMethod, type RentalReceiptMethod } from '@/lib/rentalReportMoney';
 import { filterCompletedSales, filterCompletedServiceOrders, serviceOrderRevenue, sumServiceOrderRevenue } from '@/lib/adminReportScope';
 
 type DateRangePreset = 'today' | 'yesterday' | 'last7' | 'thisMonth' | 'lastMonth' | 'custom' | 'all';
@@ -101,11 +100,9 @@ export default function ReportsPage() {
   // Available stores/branches
   const availableStores = useMemo(() => {
     const set = new Set<string>(['Cochabamba']);
-    rentals.forEach(r => {
-      if (r.store) set.add(r.store);
-    });
+    [...rentals, ...sales, ...(serviceOrders || [])].forEach(row => { if (row.store) set.add(row.store); });
     return Array.from(set);
-  }, [rentals]);
+  }, [rentals, sales, serviceOrders]);
 
   // Filtered datasets by date and store
   const periodRentals = useMemo(() => {
@@ -143,6 +140,12 @@ export default function ReportsPage() {
     return filterCompletedServiceOrders(serviceOrders || [], dateBounds, selectedStore, getServiceDateStr);
   }, [serviceOrders, dateBounds, selectedStore]);
 
+  const periodServiceOrders = useMemo(() => (serviceOrders || []).filter(order => {
+    const date = getServiceDateStr(order);
+    if (date < dateBounds.start || date > dateBounds.end) return false;
+    return selectedStore === 'all' || (order.store || 'Cochabamba') === selectedStore;
+  }), [serviceOrders, dateBounds, selectedStore]);
+
   // 1, 2, 3, 4: Financial metrics (Alquileres, Tienda, Taller, Cobrado vs Pendiente)
   const rentalMoney = useMemo(
     () => summarizeRentalMoney(storeRentals, dateBounds.start, dateBounds.end, preset === 'all', storePaymentMovements),
@@ -151,6 +154,10 @@ export default function ReportsPage() {
   const rentalGrossIncome = rentalMoney.contracted;
   const rentalPaidIncome = rentalMoney.collected;
   const rentalPendingPaymentIncome = rentalMoney.pending;
+  const rentalReceiptsByMethod = useMemo(
+    () => summarizeRentalReceiptsByMethod(storeRentals, storePaymentMovements, dateBounds.start, dateBounds.end, preset === 'all'),
+    [storeRentals, storePaymentMovements, dateBounds, preset]
+  );
 
   const salesIncome = useMemo(
     () => periodSales.reduce((sum, s) => sum + (Number(s.total) || 0), 0),
@@ -160,7 +167,24 @@ export default function ReportsPage() {
     () => sumServiceOrderRevenue(periodServices),
     [periodServices]
   );
-  const totalConsolidatedIncome = rentalMoney.netRecognized + rentalMoney.collectedDateUnknown + salesIncome + serviceIncome;
+  const salesPaymentTotals = useMemo(() => summarizeSalesByMethod(periodSales), [periodSales]);
+  const combinedReceiptMethods = useMemo(() => {
+    const methods: RentalReceiptMethod[] = ['Efectivo', 'QR', 'Transferencia', 'Sin especificar'];
+    return Object.fromEntries(methods.map(method => [method, rentalReceiptsByMethod.byMethod[method] + salesPaymentTotals.byMethod[method]])) as Record<RentalReceiptMethod, number>;
+  }, [rentalReceiptsByMethod, salesPaymentTotals]);
+  const confirmedCollections = Object.values(combinedReceiptMethods).reduce((sum, amount) => sum + amount, 0);
+  const uniqueRentalOperations = new Set(effectivePeriodRentals.filter(r => !r.productId.startsWith('srv_')).map(r => r.reservationCode || r.id)).size;
+  const returnedRentalOperations = new Set(effectivePeriodRentals.filter(r => r.status === 'returned' || r.status === 'Devuelto').map(r => r.reservationCode || r.id)).size;
+  const workshopCounts = useMemo(() => {
+    const normalize = (status: string) => status.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+    const statuses = periodServiceOrders.map(order => normalize(String(order.status || '')));
+    return {
+      received: statuses.filter(status => status === 'recibido').length,
+      inProgress: statuses.filter(status => status === 'en revision' || status === 'en reparacion').length,
+      finished: statuses.filter(status => status === 'listo' || status === 'entregado' || status === 'terminado').length,
+    };
+  }, [periodServiceOrders]);
+  const totalOperations = uniqueRentalOperations + periodSales.length + periodServiceOrders.length;
 
   // 5, 6, 7, 8: Bike rankings (most rented, least/zero rented, revenue per bike, hours/days rented)
   const bikePerformance = useMemo(() => {
@@ -371,17 +395,26 @@ export default function ReportsPage() {
     lines.push('');
     lines.push([esc('RESUMEN FINANCIERO'), esc('Monto (Bs.)')].join(','));
     lines.push([esc('Alquileres contratados por fecha de alquiler'), esc(rentalGrossIncome)].join(','));
-    lines.push([esc('Ingreso neto reconocido integral (alquileres + tienda + taller)'), esc(totalConsolidatedIncome)].join(','));
-    lines.push([esc('Cobrado con fecha de pago verificable'), esc(rentalPaidIncome)].join(','));
+    lines.push([esc('Cobros confirmados registrados (alquileres + ventas completadas)'), esc(confirmedCollections)].join(','));
+    lines.push([esc('Cobros por Efectivo'), esc(combinedReceiptMethods.Efectivo)].join(','));
+    lines.push([esc('Cobros por QR'), esc(combinedReceiptMethods.QR)].join(','));
+    lines.push([esc('Cobros por Transferencia'), esc(combinedReceiptMethods.Transferencia)].join(','));
+    lines.push([esc('Cobros sin método especificado'), esc(combinedReceiptMethods['Sin especificar'])].join(','));
+    lines.push([esc('Total de operaciones'), esc(totalOperations)].join(','));
+    lines.push([esc('Cobrado en alquileres por fecha real de pago'), esc(rentalPaidIncome)].join(','));
     lines.push([esc('Reembolsos registrados'), esc(rentalMoney.refunded)].join(','));
     lines.push([esc('Correcciones contables (sin salida de caja)'), esc(rentalMoney.corrected)].join(','));
-    lines.push([esc('Efectivo neto de alquileres (cobros - reembolsos)'), esc(rentalMoney.netCash)].join(','));
+    lines.push([esc('Neto de alquileres después de reembolsos (todos los métodos)'), esc(rentalMoney.netCash)].join(','));
     lines.push([esc('Ingreso neto reconocido de alquileres (efectivo neto - correcciones)'), esc(rentalMoney.netRecognized)].join(','));
     lines.push([esc('Cobros históricos sin fecha verificable'), esc(rentalMoney.collectedDateUnknown)].join(','));
     lines.push([esc('Alquileres Pendientes de Cobro'), esc(rentalPendingPaymentIncome)].join(','));
-    lines.push([esc('Ventas y servicios del período'), esc(salesIncome + serviceIncome)].join(','));
-    lines.push([esc('Ventas Tienda (Completadas)'), esc(salesIncome)].join(','));
-    lines.push([esc('Servicios Taller (Terminados)'), esc(serviceIncome)].join(','));
+    lines.push([esc('Alquileres: cobros por Efectivo / QR / Transferencia / Sin especificar'), esc(rentalReceiptsByMethod.byMethod.Efectivo), esc(rentalReceiptsByMethod.byMethod.QR), esc(rentalReceiptsByMethod.byMethod.Transferencia), esc(rentalReceiptsByMethod.byMethod['Sin especificar'])].join(','));
+    lines.push([esc('Alquileres: cancelaciones / devoluciones'), esc(operationalMetrics.cancelledOrdersCount), esc(returnedRentalOperations)].join(','));
+    lines.push([esc('Ventas Tienda completadas'), esc(periodSales.length), esc(salesIncome)].join(','));
+    lines.push([esc('Ventas por Efectivo / QR / Transferencia / Sin especificar'), esc(salesPaymentTotals.byMethod.Efectivo), esc(salesPaymentTotals.byMethod.QR), esc(salesPaymentTotals.byMethod.Transferencia), esc(salesPaymentTotals.byMethod['Sin especificar'])].join(','));
+    lines.push([esc('Taller: recibidas / en proceso / terminadas'), esc(workshopCounts.received), esc(workshopCounts.inProgress), esc(workshopCounts.finished)].join(','));
+    lines.push([esc('Importe registrado de servicios terminados (no es cobro confirmado)'), esc(serviceIncome)].join(','));
+    lines.push([esc('Cobros confirmados de taller'), esc('No existe registro de pagos')].join(','));
     lines.push('');
 
     lines.push([esc('RANKING DE BICICLETAS'), esc('Categoría'), esc('Alq. Directo (uds)'), esc('En Combos (uds)'), esc('Total Unidades Usadas'), esc('Horas Acumuladas'), esc('Días Eq.'), esc('Ingreso Directo (Bs.)')].join(','));
@@ -523,64 +556,92 @@ export default function ReportsPage() {
         </div>
       </Card>
 
-      {/* Primary Financial KPIs */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card className="bg-[#1A1A1A] border-white/5 rounded-2xl p-5">
-          <div className="flex items-center justify-between mb-2">
-            <p className="text-[10px] font-black uppercase text-white/40 tracking-widest">Ingreso neto reconocido integral</p>
-            <DollarSign className="w-4 h-4 text-brand-yellow" />
-          </div>
-          <p className="text-3xl font-black text-brand-yellow">Bs. {totalConsolidatedIncome}</p>
-          <p className="text-[11px] text-white/40 font-bold mt-1">
-            Ingreso neto reconocido (alquileres − correcciones contables) + ventas y servicios
-          </p>
-        </Card>
+      <section className="space-y-3" aria-labelledby="report-summary-title">
+        <div>
+          <h2 id="report-summary-title" className="text-lg font-black text-white">Resumen general</h2>
+          <p className="text-xs text-white/45">Cobros registrados en el periodo; no incluye presupuestos ni servicios de taller como dinero recibido.</p>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          <Card className="bg-[#1A1A1A] border-white/5 rounded-2xl p-4 sm:col-span-2 lg:col-span-1">
+            <p className="text-[10px] font-black uppercase text-white/45 tracking-widest">Cobros confirmados registrados</p>
+            <p className="mt-1 text-3xl font-black text-brand-yellow">Bs. {confirmedCollections.toFixed(2)}</p>
+            <p className="text-[10px] text-white/45">Alquileres y ventas completadas</p>
+          </Card>
+          {(['Efectivo', 'QR', 'Transferencia', 'Sin especificar'] as const).map(method => (
+            <Card key={method} className="bg-[#1A1A1A] border-white/5 rounded-2xl p-4">
+              <p className="text-[10px] font-black uppercase text-white/45 tracking-widest">{method === 'Sin especificar' ? 'Sin método verificable' : method}</p>
+              <p className="mt-1 text-2xl font-black text-white">Bs. {combinedReceiptMethods[method].toFixed(2)}</p>
+            </Card>
+          ))}
+          <Card className="bg-[#1A1A1A] border-white/5 rounded-2xl p-4">
+            <p className="text-[10px] font-black uppercase text-white/45 tracking-widest">Pendiente de cobro</p>
+            <p className="mt-1 text-2xl font-black text-amber-300">Bs. {rentalPendingPaymentIncome.toFixed(2)}</p>
+            <p className="text-[10px] text-white/45">Contratos efectivos del periodo</p>
+          </Card>
+          <Card className="bg-[#1A1A1A] border-white/5 rounded-2xl p-4">
+            <p className="text-[10px] font-black uppercase text-white/45 tracking-widest">Total de operaciones</p>
+            <p className="mt-1 text-2xl font-black text-white">{totalOperations}</p>
+            <p className="text-[10px] text-white/45">Alquileres, ventas completadas y órdenes de taller</p>
+          </Card>
+        </div>
+      </section>
 
-        <Card className="bg-[#1A1A1A] border-white/5 rounded-2xl p-5">
-          <div className="flex items-center justify-between mb-2">
-            <p className="text-[10px] font-black uppercase text-white/40 tracking-widest">Alquileres contratados</p>
-            <Bike className="w-4 h-4 text-green-400" />
-          </div>
-          <p className="text-3xl font-black text-white">Bs. {rentalGrossIncome}</p>
-          <p className="text-[10px] text-white/40">Por fecha programada del alquiler</p>
-          <div className="flex items-center gap-2 mt-1 text-[10px] font-bold">
-            <span className="text-emerald-400">Cobrado por fecha de pago: Bs. {rentalPaidIncome}</span>
-            <span className="text-white/20">•</span>
-            <span className="text-amber-400">Por cobrar: Bs. {rentalPendingPaymentIncome}</span>
-          </div>
-          <div className="mt-1 flex flex-wrap gap-x-2 text-[10px] font-bold text-white/55">
-            <span>Reembolsado: Bs. {rentalMoney.refunded}</span>
-            <span>Corrección: Bs. {rentalMoney.corrected}</span>
-            <span className="text-white">Efectivo neto: Bs. {rentalMoney.netCash}</span>
-            <span className="text-white">Ingreso reconocido: Bs. {rentalMoney.netRecognized}</span>
-          </div>
-          {rentalMoney.collectedDateUnknown > 0 && (
-            <p className="mt-2 text-xs text-amber-300">Bs. {rentalMoney.collectedDateUnknown} figuran pagados en registros históricos sin fecha de cobro verificable; se muestran solo en “Todo el historial”.</p>
-          )}
-        </Card>
+      <section className="space-y-3" aria-labelledby="report-rentals-title">
+        <h2 id="report-rentals-title" className="text-lg font-black text-white">Alquileres</h2>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
+          <Card className="bg-[#1A1A1A] border-white/5 rounded-2xl p-4">
+            <div className="flex items-center gap-2"><Bike className="w-4 h-4 text-brand-yellow"/><h3 className="text-xs font-black uppercase text-white/70">Actividad y contrato</h3></div>
+            <p className="mt-3 text-2xl font-black text-white">{uniqueRentalOperations} alquiler(es)</p>
+            <p className="mt-1 text-sm text-white/65">Monto contratado: <strong>Bs. {rentalGrossIncome.toFixed(2)}</strong></p>
+            <p className="mt-1 text-sm text-emerald-300">Cobrado: <strong>Bs. {rentalPaidIncome.toFixed(2)}</strong></p>
+            <p className="mt-1 text-sm text-amber-300">Pendiente: <strong>Bs. {rentalPendingPaymentIncome.toFixed(2)}</strong></p>
+            <p className="mt-3 text-[10px] text-white/40">Contrato según fecha del alquiler; cobro según fecha real del movimiento.</p>
+          </Card>
+          <Card className="bg-[#1A1A1A] border-white/5 rounded-2xl p-4">
+            <h3 className="text-xs font-black uppercase text-white/70">Cobros por método</h3>
+            <div className="mt-3 space-y-2 text-sm">
+              {(['Efectivo', 'QR', 'Transferencia', 'Sin especificar'] as const).map(method => (
+                <div key={method} className="flex justify-between gap-3 text-white/75"><span>{method}</span><strong>Bs. {rentalReceiptsByMethod.byMethod[method].toFixed(2)}</strong></div>
+              ))}
+            </div>
+            <div className="mt-3 border-t border-white/10 pt-2 space-y-1 text-xs text-white/55">
+              <p>Reembolsos registrados: Bs. {rentalMoney.refunded.toFixed(2)}</p>
+              <p>Correcciones contables: Bs. {rentalMoney.corrected.toFixed(2)}</p>
+              <p>Neto tras reembolsos, todos los métodos: Bs. {rentalMoney.netCash.toFixed(2)}</p>
+            </div>
+            {rentalMoney.collectedDateUnknown > 0 && <p className="mt-2 text-[10px] text-amber-300">Bs. {rentalMoney.collectedDateUnknown.toFixed(2)} tienen método heredado pero fecha de cobro no verificable; se incluyen solo en “Todo el historial”.</p>}
+          </Card>
+          <Card className="bg-[#1A1A1A] border-white/5 rounded-2xl p-4">
+            <h3 className="text-xs font-black uppercase text-white/70">Datos operativos</h3>
+            <div className="mt-3 space-y-2 text-sm text-white/75">
+              <p>Cancelaciones / expiraciones: <strong>{operationalMetrics.cancelledOrdersCount}</strong></p>
+              <p>Devoluciones: <strong>{returnedRentalOperations}</strong></p>
+            </div>
+          </Card>
+        </div>
+      </section>
 
-        <Card className="bg-[#1A1A1A] border-white/5 rounded-2xl p-5">
-          <div className="flex items-center justify-between mb-2">
-            <p className="text-[10px] font-black uppercase text-white/40 tracking-widest">Ventas Tienda</p>
-            <ShoppingBag className="w-4 h-4 text-blue-400" />
+      <section className="grid grid-cols-1 lg:grid-cols-2 gap-3" aria-label="Ventas y taller">
+        <Card className="bg-[#1A1A1A] border-white/5 rounded-2xl p-4">
+          <div className="flex items-center gap-2"><ShoppingBag className="w-4 h-4 text-blue-400"/><h2 className="text-sm font-black text-white">Ventas de tienda</h2></div>
+          <p className="mt-3 text-2xl font-black text-white">{periodSales.length} venta(s) completadas</p>
+          <p className="text-sm text-white/65">Importe registrado: <strong>Bs. {salesIncome.toFixed(2)}</strong></p>
+          <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-white/70">
+            {(['Efectivo', 'QR', 'Transferencia', 'Sin especificar'] as const).map(method => <p key={method}>{method}: <strong>Bs. {salesPaymentTotals.byMethod[method].toFixed(2)}</strong></p>)}
           </div>
-          <p className="text-3xl font-black text-white">Bs. {salesIncome}</p>
-          <p className="text-[11px] text-white/40 font-bold mt-1">
-            {periodSales.length} venta(s) completadas
-          </p>
+          <p className="mt-2 text-[10px] text-white/40">Las ventas canceladas quedan excluidas.</p>
         </Card>
-
-        <Card className="bg-[#1A1A1A] border-white/5 rounded-2xl p-5">
-          <div className="flex items-center justify-between mb-2">
-            <p className="text-[10px] font-black uppercase text-white/40 tracking-widest">Servicios Taller</p>
-            <Wrench className="w-4 h-4 text-purple-400" />
+        <Card className="bg-[#1A1A1A] border-white/5 rounded-2xl p-4">
+          <div className="flex items-center gap-2"><Wrench className="w-4 h-4 text-purple-400"/><h2 className="text-sm font-black text-white">Taller</h2></div>
+          <div className="mt-3 grid grid-cols-3 gap-2 text-center">
+            <div><p className="text-xl font-black text-white">{workshopCounts.received}</p><p className="text-[10px] text-white/45">Recibidas</p></div>
+            <div><p className="text-xl font-black text-white">{workshopCounts.inProgress}</p><p className="text-[10px] text-white/45">En proceso</p></div>
+            <div><p className="text-xl font-black text-white">{workshopCounts.finished}</p><p className="text-[10px] text-white/45">Terminadas</p></div>
           </div>
-          <p className="text-3xl font-black text-white">Bs. {serviceIncome}</p>
-          <p className="text-[11px] text-white/40 font-bold mt-1">
-            {periodServices.length} orden(es) terminadas
-          </p>
+          <p className="mt-3 text-sm text-white/65">Importe registrado de servicios terminados: <strong>Bs. {serviceIncome.toFixed(2)}</strong></p>
+          <p className="mt-2 text-[10px] text-amber-200/70">Es importe de servicio, no cobro confirmado. BRIZ aún no registra pagos del taller por separado.</p>
         </Card>
-      </div>
+      </section>
 
       {/* Operational KPIs (Orders, Duration, Overdue, Cancelled) */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -623,7 +684,7 @@ export default function ReportsPage() {
       <div className="grid lg:grid-cols-2 gap-6">
         <Card className="bg-[#1A1A1A] border-white/5 rounded-2xl overflow-hidden">
           <CardHeader className="border-b border-white/5 pb-3">
-            <CardTitle className="text-white text-sm font-bold">Cobros de alquiler y ventas/servicios completados (Bs.)</CardTitle>
+            <CardTitle className="text-white text-sm font-bold">Alquileres, ventas y servicios terminados (Bs.)</CardTitle>
           </CardHeader>
           <CardContent className="pt-4 px-2">
             {timelineChartData.length > 0 ? (
@@ -635,8 +696,8 @@ export default function ReportsPage() {
                   <Bar dataKey="alquileres" fill="#F5B800" radius={[4,4,0,0]} name="Abonos de alquiler (fecha real)"/>
                   <Bar dataKey="reembolsos" fill="#F87171" radius={[4,4,0,0]} name="Reembolsos registrados"/>
                   <Bar dataKey="correcciones" fill="#A78BFA" radius={[4,4,0,0]} name="Correcciones contables"/>
-                  <Bar dataKey="ventas" fill="#60A5FA" radius={[4,4,0,0]} name="Tienda (Bs.)"/>
-                  <Bar dataKey="taller" fill="#C084FC" radius={[4,4,0,0]} name="Taller (Bs.)"/>
+                  <Bar dataKey="ventas" fill="#60A5FA" radius={[4,4,0,0]} name="Tienda completada (importe registrado)"/>
+                  <Bar dataKey="taller" fill="#C084FC" radius={[4,4,0,0]} name="Taller terminado (importe; cobro no registrado)"/>
                 </BarChart>
               </ResponsiveContainer>
             ) : (
