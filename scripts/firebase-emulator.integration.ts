@@ -519,16 +519,58 @@ try {
     const manualRental = await adminDb.collection('rentals').doc(manualResult.rentalIds[0]).get();
     assert.equal(manualRental.get('source'), 'manual');
     assert.equal(manualRental.get('customerName'), 'Counter Customer');
-    assert.equal(manualRental.get('paymentStatus'), 'paid');
-    assert.ok(manualRental.get('paidAt'), 'A manually paid future rental records the actual receipt time.');
-    assert.equal(manualRental.get('date') > manualRental.get('paidAt').slice(0, 10), true, 'Future rental date remains separate from payment date.');
+    assert.equal(manualRental.get('paymentStatus'), 'unpaid', 'Creating a manually paid reservation must not directly set the paid projection.');
+    assert.equal(manualRental.get('paidAt'), undefined, 'The paid timestamp is only added by a ledger receipt.');
+    assert.equal(manualRental.get('amountPaid'), undefined, 'An amount is not counted before its ledger receipt exists.');
+    const manualReceiptAt = new Date().toISOString();
+    const manualReceiptKey = `${manualBooking.idempotencyKey}_initial_payment`;
+    const manualReceiptInput = {
+        rentalIds: manualResult.rentalIds, type: 'receipt', amount: manualResult.total,
+        method: 'Efectivo', actualAt: manualReceiptAt, idempotencyKey: manualReceiptKey,
+        reason: 'Pago recibido al registrar el alquiler',
+    };
+    const manualReceipt = await call<{ movementId: string; duplicate: boolean }>(userA.functions, 'recordRentalPaymentMovement', manualReceiptInput);
+    const manualReceiptRetry = await call<{ movementId: string; duplicate: boolean }>(userA.functions, 'recordRentalPaymentMovement', manualReceiptInput);
+    assert.equal(manualReceiptRetry.duplicate, true, 'Retrying the initial receipt with the same stable idempotency key must not double-count it.');
+    assert.equal(manualReceiptRetry.movementId, manualReceipt.movementId);
+    const manualReceiptDocument = await adminDb.collection('rentalPaymentMovements').doc(manualReceipt.movementId).get();
+    assert.equal(manualReceiptDocument.get('actualAt'), manualReceiptAt, 'The receipt ledger keeps the real payment date.');
+    const paidManualRental = await adminDb.collection('rentals').doc(manualResult.rentalIds[0]).get();
+    assert.equal(paidManualRental.get('paymentStatus'), 'paid');
+    assert.equal(paidManualRental.get('paidAt'), undefined, 'Ledger-backed payment date stays in the receipt instead of being duplicated into the rental row.');
+    assert.equal(paidManualRental.get('date') > manualReceiptDocument.get('actualAt').slice(0, 10), true, 'Future rental date remains separate from payment date.');
     assert.equal((await adminDb.collection('customers').where('ci', '==', 'TEST-1009').get()).size, 1);
     const manualRetry = await call<{ reservationCode: string; rentalIds: string[]; duplicate: boolean }>(userA.functions, 'createRentalGroup', manualBooking);
     assert.equal(manualRetry.duplicate, true);
     assert.equal(manualRetry.rentalIds[0], manualResult.rentalIds[0]);
     assert.equal((await adminDb.collection('rentals').where('reservationCode', '==', manualResult.reservationCode).get()).size, 1,
         'A retried manual create with the same idempotency key must persist exactly one rental line.');
-    pass('Administrative manual booking validates role, creates customer and rental atomically, and retries idempotently');
+    assert.equal((await adminDb.collection('rentalPaymentMovements').where('reservationCode', '==', manualResult.reservationCode).get()).size, 1,
+        'A paid manual creation plus its retried ledger call must create one receipt, never two.');
+    pass('Administrative manual booking records initial payment through the idempotent ledger without duplicating a receipt');
+
+    await adminDb.doc(`_requestLimits/reservations_${createHash('sha256').update(userA.uid).digest('hex')}`).delete();
+    const qrManualBooking = {
+        adminManual: true,
+        adminCustomer: { name: 'QR Counter Customer', phone: '+59170000010', ci: 'TEST-1010', email: 'qr-counter@example.test' },
+        adminPaymentStatus: 'paid',
+        lines: [{ productId: 'bike-emulator', productType: 'single', quantity: 1, wheelSize: '26' }],
+        date: new Intl.DateTimeFormat('en-CA', { timeZone: 'America/La_Paz' }).format(new Date(Date.now() + 8 * 24 * 60 * 60 * 1000)),
+        pickupTime: '15:00', duration: '1 hora', paymentMethod: 'QR', idempotencyKey: `manual_qr_${crypto.randomUUID()}`,
+    };
+    const qrManualResult = await call<{ reservationCode: string; rentalIds: string[]; total: number }>(userA.functions, 'createRentalGroup', qrManualBooking);
+    const qrPendingRental = await adminDb.collection('rentals').doc(qrManualResult.rentalIds[0]).get();
+    assert.equal(qrPendingRental.get('paymentStatus'), 'pending_review', 'Choosing QR cannot create a paid rental without a verified receipt.');
+    assert.equal(qrPendingRental.get('amountPaid'), undefined);
+    assert.equal((await adminDb.collection('rentalPaymentMovements').where('reservationCode', '==', qrManualResult.reservationCode).get()).size, 0);
+    const qrReceiptAt = new Date().toISOString();
+    const qrReceipt = await call<{ movementId: string }>(userA.functions, 'recordRentalPaymentMovement', {
+        rentalIds: qrManualResult.rentalIds, type: 'receipt', amount: qrManualResult.total, method: 'QR', confirmedReceived: true,
+        actualAt: qrReceiptAt, idempotencyKey: `${qrManualBooking.idempotencyKey}_initial_payment`, reason: 'QR verificado como recibido',
+    });
+    assert.ok(qrReceipt.movementId);
+    assert.equal((await adminDb.collection('rentals').doc(qrManualResult.rentalIds[0]).get()).get('paymentStatus'), 'paid');
+    pass('Manual QR selection stays pending until explicit receipt confirmation is recorded');
 
     await adminDb.doc(`_requestLimits/reservations_${createHash('sha256').update(userA.uid).digest('hex')}`).delete();
     const existingCounterCustomerId = 'counter-customer-existing-fixture';
