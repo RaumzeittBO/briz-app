@@ -35,8 +35,6 @@ import { ref as storageRef, uploadBytes, getDownloadURL, deleteObject } from 'fi
 import { cyclingRoutes as DEFAULT_ROUTES, type CyclingRoute } from '../data/mockData';
 import {
     RENTAL_SEED_CATEGORIES,
-    RENTAL_SEED_COMBOS,
-    RENTAL_SEED_INVENTORY,
 } from '../data/rentalSeedData';
 import { SHOP_SEED_CATEGORIES } from '../data/shopSeedData';
 import { DEFAULT_PUBLIC_BUSINESS_CONFIG, mergePublicBusinessConfig, type PublicBusinessConfig, type PublicBusinessConfigUpdate } from '../lib/businessConfig';
@@ -44,6 +42,7 @@ import { savePublicBusinessConfig } from '../lib/publicBusinessSettings';
 import { addInventoryCategory } from '../lib/inventoryCategories';
 import { beginCustomerRegistration, sendCustomerVerificationEmail as sendCustomerVerificationEmailBackend, createCustomerProfile as createCustomerProfileBackend, completeCustomerProfile as completeCustomerProfileBackend, getMyRentals as getMyRentalsBackend, getAdminCustomers as getAdminCustomersBackend, createRentalGroup as createRentalGroupBackend, createServiceOrder as createServiceOrderBackend, createBrizMaintenanceOrder, updateBrizMaintenanceOrder, releaseBrizMaintenanceOrder, releaseUnlinkedMaintenanceStock as releaseUnlinkedMaintenanceStockBackend, reconcileInventoryMaintenanceDiscrepancy as reconcileInventoryMaintenanceDiscrepancyBackend, adjustInventoryStock as adjustInventoryStockBackend, type CustomerRecoveryFiles, type PublicCustomerProfile, type ReservationGroupInput } from '../lib/backend';
 import { calculateProductRentalPrice } from '../lib/rentalPricing';
+import { findInventoryDraftConflicts } from '../lib/inventoryDraft';
 
 const CUSTOMER_VERIFICATION_EMAIL_KEY = 'briz_customer_verification_email';
 
@@ -410,13 +409,13 @@ interface StoreContextType {
 
     // Inventory CRUD
     addInventoryItem: (item: InventoryItem) => Promise<void>;
-    updateInventoryItem: (id: string, item: Partial<InventoryItem>) => Promise<void>;
+    updateInventoryItem: (id: string, item: Partial<InventoryItem>, expected?: Partial<InventoryItem>) => Promise<void>;
     adjustInventoryStock: (id: string, delta: number, wheelSize?: string) => Promise<void>;
     deleteInventoryItem: (id: string) => Promise<void>;
 
     // Combo CRUD
     addCombo: (combo: ComboProduct) => Promise<void>;
-    updateCombo: (id: string, combo: Partial<ComboProduct>) => Promise<void>;
+    updateCombo: (id: string, combo: Partial<ComboProduct>, expected?: Partial<ComboProduct>) => Promise<void>;
     deleteCombo: (id: string) => Promise<void>;
 
     // Rental CRUD & Group Atomic Operations
@@ -545,9 +544,6 @@ export const useStore = () => {
 // DEFAULT SEED DATA
 // ===========================
 
-const DEFAULT_INVENTORY: InventoryItem[] = RENTAL_SEED_INVENTORY;
-const DEFAULT_COMBOS: ComboProduct[] = RENTAL_SEED_COMBOS;
-
 // eslint-disable-next-line react-refresh/only-export-components
 export const DEFAULT_ADMIN_LINKS: AdminNavigationLink[] = [
     { key: 'dashboard', label: 'Dashboard', href: '/admin', icon: 'LayoutDashboard' },
@@ -667,44 +663,13 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
         };
     }, []);
 
-    // Seeding methods
-    const seedDefaultInventory = async () => {
-        try {
-            const batch = writeBatch(db);
-            DEFAULT_INVENTORY.forEach(item => {
-                batch.set(doc(db, 'inventory', item.id), item);
-            });
-            await batch.commit();
-        } catch (e) {
-            console.error('Failed to seed default inventory:', e);
-        }
-    };
-
-    const seedDefaultCombos = async () => {
-        try {
-            const batch = writeBatch(db);
-            DEFAULT_COMBOS.forEach(combo => {
-                batch.set(doc(db, 'combos', combo.id), combo);
-            });
-            await batch.commit();
-        } catch (e) {
-            console.error('Failed to seed default combos:', e);
-        }
-    };
-
     // ---- Real-time Sync (Public Catalog & Settings) ----
     useEffect(() => {
         const unsubInv = onSnapshot(query(collection(db, 'inventory')), (snap) => {
             setInventory(snap.docs.map(d => ({ ...d.data() } as InventoryItem)));
-            if (snap.empty) {
-                seedDefaultInventory();
-            }
         });
         const unsubCombos = onSnapshot(query(collection(db, 'combos')), (snap) => {
             setCombos(snap.docs.map(d => ({ ...d.data() } as ComboProduct)));
-            if (snap.empty) {
-                seedDefaultCombos();
-            }
         });
         const unsubSettings = onSnapshot(doc(db, 'settings', 'rental_settings'), { includeMetadataChanges: true }, (snap) => {
             setRentalSettingsLoaded(!snap.metadata.fromCache);
@@ -1191,7 +1156,7 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
     const addInventoryItem = async (item: InventoryItem) => {
         await setDoc(doc(db, 'inventory', item.id), item);
     };
-    const updateInventoryItem = async (id: string, updates: Partial<InventoryItem>) => {
+    const updateInventoryItem = async (id: string, updates: Partial<InventoryItem>, expected?: Partial<InventoryItem>) => {
         const itemRef = doc(db, 'inventory', id);
         const auditRef = doc(collection(db, 'inventoryStockAudits'));
         await runTransaction(db, async (transaction) => {
@@ -1199,6 +1164,12 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
             if (!snapshot.exists()) throw new Error('El producto ya no existe en el inventario.');
             const current = snapshot.data() as InventoryItem;
             const patch: Partial<InventoryItem> = { ...updates };
+            if (expected) {
+                const conflicts = findInventoryDraftConflicts(expected, current, patch);
+                if (conflicts.length > 0) {
+                    throw new Error(`Este producto cambió mientras lo editabas (${conflicts.join(', ')}). Cierra el editor, vuelve a abrir el producto y revisa los cambios.`);
+                }
+            }
             // Maintenance counts can only move through the workshop callables.
             delete patch.maintenanceStock;
             if (updates.wheelSizes && current.wheelSizes) {
@@ -1210,6 +1181,7 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
                     return { ...wheel, ...(existing?.maintenanceStock !== undefined ? { maintenanceStock: existing.maintenanceStock } : {}) };
                 });
             }
+            const nextItem = { ...current, ...patch };
             const nextWheels = (patch.wheelSizes || []).map(({ size, stock }) => ({ size, stock })).sort((a, b) => a.size.localeCompare(b.size));
             const currentWheels = (current.wheelSizes || []).map(({ size, stock }) => ({ size, stock })).sort((a, b) => a.size.localeCompare(b.size));
             const stockChanged = (updates.stock !== undefined && Number(updates.stock) !== Number(current.stock))
@@ -1217,11 +1189,11 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
             transaction.update(itemRef, patch);
             if (stockChanged) transaction.set(auditRef, {
                 itemId: id,
-                store: updates.store || current.store || (adminStoreScope === 'all' ? 'principal' : adminStoreScope),
+                store: patch.store || current.store || (adminStoreScope === 'all' ? 'principal' : adminStoreScope),
                 actorUid: auth.currentUser?.uid || '',
                 action: 'stock_adjustment',
                 before: current.hasWheelSizes ? (current.wheelSizes || []).map(({ size, stock, maintenanceStock }) => ({ size, stock, maintenanceStock: Number(maintenanceStock) || 0 })) : { stock: Number(current.stock) || 0, maintenanceStock: Number(current.maintenanceStock) || 0 },
-                after: updates.hasWheelSizes ? (patch.wheelSizes || []).map(({ size, stock, maintenanceStock }) => ({ size, stock, maintenanceStock: Number(maintenanceStock) || 0 })) : { stock: Number(updates.stock ?? current.stock) || 0, maintenanceStock: Number(current.maintenanceStock) || 0 },
+                after: nextItem.hasWheelSizes ? (nextItem.wheelSizes || []).map(({ size, stock, maintenanceStock }) => ({ size, stock, maintenanceStock: Number(maintenanceStock) || 0 })) : { stock: Number(nextItem.stock) || 0, maintenanceStock: Number(current.maintenanceStock) || 0 },
                 createdAt: serverTimestamp(),
             });
         });
@@ -1354,8 +1326,19 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
     const addCombo = async (combo: ComboProduct) => {
         await setDoc(doc(db, 'combos', combo.id), combo);
     };
-    const updateCombo = async (id: string, updates: Partial<ComboProduct>) => {
-        await updateDoc(doc(db, 'combos', id), updates);
+    const updateCombo = async (id: string, updates: Partial<ComboProduct>, expected?: Partial<ComboProduct>) => {
+        const comboRef = doc(db, 'combos', id);
+        await runTransaction(db, async transaction => {
+            const snapshot = await transaction.get(comboRef);
+            if (!snapshot.exists()) throw new Error('El combinado ya no existe.');
+            if (expected) {
+                const conflicts = findInventoryDraftConflicts(expected, snapshot.data() as ComboProduct, updates);
+                if (conflicts.length > 0) {
+                    throw new Error(`Este combinado cambió mientras lo editabas (${conflicts.join(', ')}). Cierra el editor, vuelve a abrirlo y revisa los cambios.`);
+                }
+            }
+            transaction.update(comboRef, updates);
+        });
     };
     const deleteCombo = async (id: string) => {
         await deleteDoc(doc(db, 'combos', id));
