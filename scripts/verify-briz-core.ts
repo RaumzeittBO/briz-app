@@ -466,10 +466,11 @@ async function runTests() {
 
     await test('Registro de artes (artworkRegistry) aplica fallback seguro cuando la versión en inglés no está verificada o falta en disco', () => {
         assert.equal(Object.keys(ARTWORK_REGISTRY).length >= 25, true, 'El registro debe incluir todos los artes públicos inventariados');
-        // Bento 3: web en inglés verificada (/menu-principal-web/Ingles/3.png), móvil en inglés NO verificada (debe hacer fallback a /menu-principal-celular/3.webp)
+        // Bento 3: ambas variantes en inglés fueron verificadas y existen en disco.
         const bento3En = getLocalizedArtwork('home_bento_3_shop', 'en');
         assert.equal(bento3En.webSrc, '/menu-principal-web/Ingles/3.png');
-        assert.equal(bento3En.mobileSrc, '/menu-principal-celular/3.webp');
+        assert.equal(bento3En.mobileSrc, '/menu-principal-celular/Ingles/3.png');
+        assert.equal(bento3En.isTranslatedMobile, true);
 
         // Bento 1: los artes ingleses aún no existen; debe utilizar el fallback español sin producir 404.
         const bento1En = getLocalizedArtwork('home_bento_1_rentals', 'en');
