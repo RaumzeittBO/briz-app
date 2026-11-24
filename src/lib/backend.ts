@@ -153,6 +153,44 @@ export async function updateRentalGroup(input: UpdateRentalGroupInput): Promise<
     await httpsCallable<UpdateRentalGroupInput, { ok: boolean }>(functions, 'updateRentalGroup')(input);
 }
 
+export interface FreeTimeSessionView {
+    id: string;
+    reservationCode: string;
+    status: string;
+    freeTimeState: 'active' | 'closed';
+    itemId: string;
+    productName: string;
+    store: string;
+    wheelSize: string | null;
+    customerName: string;
+    customerId: string | null;
+    startedAt: string;
+    startedAtMs: number;
+    closedAt: string | null;
+    elapsedMilliseconds: number | null;
+    elapsedSeconds: number | null;
+    damagedOnReturn: boolean;
+    returnConditionNotes: string;
+    createdAt: string;
+    total: 0;
+    paymentStatus: 'unpaid';
+}
+
+export async function startFreeTimeRental(input: { idempotencyKey: string; itemId: string; store: string; wheelSize?: string; customerId?: string }): Promise<{ sessionId: string; reservationCode: string; duplicate: boolean }> {
+    const result = await httpsCallable<typeof input, { sessionId: string; reservationCode: string; duplicate: boolean }>(functions, 'startFreeTimeRental')(input);
+    return result.data;
+}
+
+export async function listFreeTimeRentals(): Promise<{ sessions: FreeTimeSessionView[]; serverNowMs: number }> {
+    const result = await httpsCallable<void, { sessions: FreeTimeSessionView[]; serverNowMs: number }>(functions, 'listFreeTimeRentals')();
+    return result.data;
+}
+
+export async function finishFreeTimeRental(input: { sessionId: string; idempotencyKey: string; damaged: boolean; conditionNotes?: string }): Promise<{ duplicate: boolean; elapsedMilliseconds: number; elapsedSeconds?: number; closedAt?: string }> {
+    const result = await httpsCallable<typeof input, { duplicate: boolean; elapsedMilliseconds: number; elapsedSeconds?: number; closedAt?: string }>(functions, 'finishFreeTimeRental')(input);
+    return result.data;
+}
+
 export type RecordRentalPaymentMovementInput = {
     rentalIds: string[];
     type: 'receipt' | 'refund' | 'correction';

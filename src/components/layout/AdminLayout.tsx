@@ -11,6 +11,15 @@ import { Badge } from '@/components/ui/badge';
 import { useAuth } from '@/context/AuthContext';
 import { useStore, DEFAULT_ADMIN_LINKS, type AdminNavigationLink } from '@/context/StoreContext';
 import { useCommunity } from '@/context/CommunityContext';
+import { firebaseConfig, isFirebaseEmulatorEnabled } from '@/lib/firebase';
+import { isFreeTimeEmulatorUiEnabled } from '@/lib/freeTimeFeature';
+
+const freeTimeEmulatorUiEnabled = isFreeTimeEmulatorUiEnabled({
+    development: import.meta.env.DEV,
+    emulatorEnabled: isFirebaseEmulatorEnabled,
+    projectId: firebaseConfig.projectId,
+    explicitFlag: import.meta.env.VITE_ENABLE_FREE_TIME_EMULATOR,
+});
 
 const iconMap: Record<string, LucideIcon> = {
     LayoutDashboard,
@@ -42,11 +51,14 @@ export default function AdminLayout() {
     const canManageArtworks = adminProfile?.role === 'admin';
     const configuredLinks = adminNavigationLinks.length > 0 ? adminNavigationLinks : DEFAULT_ADMIN_LINKS;
     const artworkLink = DEFAULT_ADMIN_LINKS.find((link) => link.key === 'artworks')!;
-    const visibleLinks = canManageArtworks
+    const permissionLinks = canManageArtworks
         ? configuredLinks.some((link) => link.key === 'artworks')
             ? configuredLinks.map((link) => link.key === 'artworks' ? { ...link, href: artworkLink.href, icon: artworkLink.icon } : link)
             : [...configuredLinks, artworkLink]
         : configuredLinks.filter((link) => link.key !== 'artworks');
+    const visibleLinks = freeTimeEmulatorUiEnabled && !permissionLinks.some((link) => link.key === 'free-time')
+        ? [...permissionLinks, { key: 'free-time', label: 'Tiempo Libre (Emulator)', href: '/admin/free-time', icon: 'Bike' }]
+        : permissionLinks;
 
     const [isEditingMenu, setIsEditingMenu] = useState(false);
     const [tempLinks, setTempLinks] = useState<AdminNavigationLink[]>([]);

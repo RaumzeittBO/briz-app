@@ -11,6 +11,7 @@
     "test:artwork": "npm run test:rules && npx tsx scripts/artwork-registry.test.ts",
     "test:admin-auth": "firebase emulators:exec --project demo-briz-auth-flow --only auth \"npx tsx scripts/admin-auth-flow.test.ts\"",
     "test:firebase-config": "npx tsx scripts/firebase-config.test.ts",
+    "test:free-time": "npm run build --prefix functions && npx tsx scripts/free-time-gating.test.ts && node scripts/run-free-time-emulator.cjs",
     "test:rental-addons": "npx tsx scripts/rental-addon-eligibility.test.ts",
     "test:accessory-modalities": "npx tsx scripts/accessory-pricing-modalities.test.ts",
     "test:mamachari-workshop": "npx tsx scripts/mamachari-workshop-documents.test.ts",

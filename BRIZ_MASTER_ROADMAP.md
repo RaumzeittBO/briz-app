@@ -1,5 +1,71 @@
 # BRIZ (`briz.com.bo`) — MASTER ROADMAP & ENGINEERING LOG
 
+## Tiempo Libre — implementación Fase 1 (2026-11-24)
+
+**Estado: FASE 1 IMPLEMENTADA Y PROBADA SOLO EN EMULATOR; SIN COBROS Y SIN PUBLICAR.** Auditoría y diseño iniciales están completados; la Fase 1 agrega operaciones de inicio, seguimiento y devolución en una rama local. Reglas comerciales siguen pendientes de Ale. No hay tarifas, mínimos, redondeos ni límites aprobados para esta modalidad. No se modificaron datos reales, IAM ni Production.
+
+### Resultado técnico Fase 1
+
+- Functions `startFreeTimeRental`, `listFreeTimeRentals` y `finishFreeTimeRental` crean/leen/cierran registros usando Admin SDK y permisos Admin/Manager por sucursal. Los tres handlers rechazan toda llamada salvo que el runtime sea Firebase Functions Emulator con proyecto `demo-briz-security`; frontend exige además `import.meta.env.DEV`, Firebase Emulator y `VITE_ENABLE_FREE_TIME_EMULATOR=true`, y la ruta se oculta/redirige fuera de esa combinación.
+- Inicio y descuento de una unidad se escriben en una transacción con clave idempotente y el mismo `_availabilityLocks` del inventario. La sesión queda como rental `delivered` con `freeTimeMode`, timestamps de servidor y un intervalo técnicamente abierto (`Number.MAX_SAFE_INTEGER`), sin tarifa ni fin comercial inventado. Las reservas pendientes sin stock materializado que puedan quedar comprometidas hacen que el inicio se rechace. El documento y su `rentals_busy_slots` sanitizado participan en la disponibilidad fija y bloquean sobreasignación.
+- El cierre fija hora del servidor, duración transcurrida en milisegundos/segundos/minutos, auditoría y reposición de stock; bicicleta dañada permanece fuera del stock y entra a `maintenanceStock`. Cierre repetido idempotente no vuelve a tocar el stock. Se bloquean las funciones de devolución/edición/pago genéricas para registros Tiempo Libre. Total permanece Bs. 0, estado `unpaid`, y no se crea movimiento de ledger.
+- Pantalla Administración para sesión activa, contador restaurable, cliente opcional, devolución sana/dañada e historial. A 390×844 y 1280×900 pasó Playwright sin desbordamiento horizontal; inicio y cierre reales de Emulator pasaron desde el navegador.
+- **Limitación del inventario existente:** el catálogo almacena cantidades por producto/aro/sucursal, no identificadores o números de cuadro por bicicleta. La transacción impide asignar más unidades que el stock agregado y cada sesión tiene su propio ID, pero no puede identificar físicamente un cuadro concreto ni impedir que alguien escoja manualmente el mismo cuadro etiquetado en otra unidad del mismo producto. Antes de exigir garantía por bicicleta individual, Ale debe facilitar/autorizar el identificador físico y el modelo de serialización; no se inventaron etiquetas de activos.
+- Build web y Functions, tipo de datos, suite dirigida Emulator (12 categorías) y Rules se ejecutaron; el resultado de lint y suites está en la rama PR de esta fase. No se probó Production ni se desplegó nada.
+
+### Estado actual y reutilización
+
+- Las reservas existentes se crean con fecha, hora y duración fija mediante `createRentalGroup`; Functions vuelve a validar sede, catálogo, tarifas, horario y disponibilidad. La reserva empieza como `pending`; al confirmar se descuenta stock y se crea/actualiza la proyección sanitizada `rentals_busy_slots`. El alquiler inmediato de mostrador actual confirma y entrega en dos llamadas consecutivas; `adminRentalAction` registra `deliveredAt` usando hora del servidor.
+- `adminRentalAction` ya centraliza permisos por sede, transiciones de estado, auditoría y devolución. Una devolución puede apartar bicicletas dañadas en `maintenanceStock` y devolver las unidades sanas/accesorios al stock. El modal actual recoge condición/notas y daños.
+- `rentalPricing.ts` y `functions/src/domain.ts` contienen el precio fijo por hora, tramos y días; esa función expresa reglas de duración ya existente, no una tarifa por minuto de Tiempo Libre. No reutilizarla para liquidar minutos sin reglas explícitas.
+- `recordRentalPaymentMovement` ya ofrece recibos parciales, QR/transferencia con confirmación, referencias e idempotencia. `ReportsPage` y `rentalReportMoney.ts` agrupan cobros por pedido, fecha real de movimiento y sucursal; el libro de movimientos es la fuente para grupos con ledger.
+- Disponibilidad actual compara intervalos finitos y considera los alquileres vencidos que siguen entregados como bloqueantes para solicitudes del día. Un uso sin fin planificado necesita una representación abierta y una política explícita para reservas futuras. No se puede representar de forma segura como una duración inventada.
+
+### Diseño propuesto (sujeto a aprobación)
+
+1. En Administración, un flujo dedicado: **Iniciar Tiempo Libre → seleccionar productos/cliente opcional y sede → confirmar entrega → sesión activa con contador → Finalizar uso → resumen de tiempo e importe → registrar pago opcional → cerrar y devolver stock**. En móvil, botones grandes, datos esenciales y contador; en escritorio, lista de sesiones activas y detalle lateral. La sesión sobrevive recargas leyendo el registro del backend; el contador es presentación calculada desde `startedAt`, nunca autoridad de cobro.
+2. Añadir una modalidad explícita en los alquileres y un ciclo de sesión (`active`, `closed`), con `startedAt`/`closedAt` UTC generados por Functions, actor/sede, `pricingConfigVersion`, minutos computados y snapshot de liquidación. No inferir inicio/fin del reloj del navegador. El servidor calcula duración exacta en minutos desde timestamps; la regla de redondeo y tarifa solo se incorpora tras decisión comercial.
+3. Usar una callable autorizada e idempotente de inicio que valide rol/sucursal, stock/componentes/combos y conflicto de disponibilidad y, en una transacción, cree sesión/filas, descuente stock y registre auditoría. No reutilizar la secuencia actual de crear→confirmar→entregar para comenzar una sesión: está dividida en llamadas.
+4. Usar una callable idempotente de finalización que en una transacción fija `closedAt`, calcula/sella la liquidación con versión de reglas, aplica daños y cambios de stock/mantenimiento, agrega el cobro opcional al ledger y cierra el ciclo. Si hay saldo pendiente, permite devolver y cerrar dejando el saldo pendiente; posteriores abonos usan el ledger actual. El cliente solo muestra el resultado del servidor. Proteger concurrencia con estado/versionado y una clave de idempotencia por acción; reintentar devuelve el resultado existente, no crea otro cobro ni libera stock dos veces.
+5. Los ajustes posteriores al cierre requieren permiso y motivo; deben ser movimientos auditables (corrección/reembolso según corresponda), sin editar silenciosamente la liquidación original. Mantener `rentals_busy_slots` sin datos personales y ampliar el modelo de intervalo/consulta para sesiones abiertas.
+6. Configuración comercial futura versionada y por sede/modo, con campos para tarifa elegida, mínimo, unidad/redondeo, máximo, recargos y excepciones. Sin defaults monetarios implícitos; impedir iniciar/finalizar cobro si falta una regla requerida. Conservación de modalidades fijas y rutas antiguas mediante campos/adaptadores explícitos y pruebas de regresión.
+
+### Decisiones de Ale necesarias antes de habilitar cobros
+
+- Qué producto/tarifa aplica a Tiempo Libre y si difiere por bicicleta, accesorio, combo o sucursal.
+- Si existe cobro mínimo; unidad de liquidación y regla exacta de redondeo en bordes de minuto.
+- Duración máxima, tratamiento al acercarse/superarla y recargos autorizados (incluidos daños/horario especial).
+- Qué hacer si una sesión activa coincide con una reserva futura: bloquear inicio, reservar capacidad hasta un máximo definido u otra regla operativa. Hasta definirlo, comportamiento recomendado: bloquear cualquier inicio que pueda comprometer una reserva futura y explicar el conflicto.
+- Si se admite extensión/pausa, quién puede ajustar hora o importe, y qué evidencia/motivo se exige.
+- Si se permite cerrar con saldo pendiente (propuesta: sí, manteniendo deuda visible y cobrable), qué métodos se aceptan y quién confirma recepción de QR/transferencia.
+- Qué significa “sesiones simultáneas”: varias bicicletas/sesiones por pedido o una sola sesión por cliente; cómo manejar cambio de sucursal y devolución fuera de la sede de salida.
+
+### Riesgos y plan por etapas
+
+- **Riesgos principales:** carreras al asignar la última unidad; sesión abierta que oculte una reserva futura; doble inicio/cierre o recibo tras timeout; discrepancia entre reloj de navegador y servidor; devolución parcial/dañada que reponga stock indebidamente; división entre actualizar total, pago y devolver; reportes que confundan tarifa estimada con ingreso cobrado; administrador operando otra sucursal. Mitigaciones: transacciones server-side, idempotencia, estado versionado, snapshot inmutable, capacidades abiertas bloqueantes y ledger existente.
+- **Etapa A — contrato de datos y decisiones:** confirmar reglas de Ale, permisos, campos/sede, estados y política de conflictos; sin cobro activo hasta completar esta etapa.
+- **Etapa B — disponibilidad/backend:** callables de inicio/finalización, locks, proyección abierta, pagos y daños transaccionales; pruebas de seguridad y carreras. Mantener el flujo fijo sin cambios de comportamiento.
+- **Etapa C — interfaz:** pantalla administrativa responsive para alta, sesiones activas, contador restaurable, finalizar, pago parcial/pendiente, daño y auditoría; errores recuperables sin doble envío.
+- **Etapa D — reportes/regresión:** separar sesiones Tiempo Libre de contratos fijos y mostrar tiempo real, importe liquidado, cobrado y saldo, con filtros de fecha/sucursal y compatibilidad histórica.
+- **Etapa E — publicación controlada:** Emulator/builds y revisión de permisos/checks, PR separada, despliegue compatible Functions→frontend, smoke no destructivo. No publicar ni habilitar cobros antes de reglas comerciales aprobadas.
+
+### Matriz de Emulator (fixtures ficticios; ejecutada)
+
+1. Dos operadores comienzan a la vez con la última bicicleta: solo una sesión gana; inventario se descuenta una vez.
+2. Repetición del mismo inicio con la misma clave y timeout de respuesta: devuelve la misma sesión; clave reutilizada con solicitud distinta falla.
+3. Dos operadores finalizan la misma sesión concurrentemente: una liquidación, una devolución de stock y como máximo un recibo.
+4. Fallo/reintento entre pantalla, callable y recarga: sesión activa reaparece con hora backend y contador reconstruido.
+5. Nueva reserva fija que solapa una sesión abierta, sesión que amenaza reserva futura y reserva en otra sede: decisiones según la política aprobada; sin sobreasignación.
+6. Varios componentes compartidos/combo, última unidad y stock por aro/sucursal: delta consistente al iniciar y devolver.
+7. Cierre sin pago, pago parcial y pagos posteriores por efectivo/QR/transferencia; error ambiguo del ledger, reintento idempotente, no exceso del total liquidado.
+8. Tiempo en límites de minuto y máximo, cruzando medianoche/cambio de fecha Bolivia: timestamps UTC coherentes y cálculo igual en backend/UI.
+9. Devolución íntegra, parcial, con unidades dañadas/notas: stock sano vuelve una vez; dañados pasan a mantenimiento; auditoría identifica actor/sede.
+10. Ajuste/reembolso autorizado después del cierre: referencia, motivo, límites, actor y reportes correctos; historial original preservado.
+11. Admin global vs manager de otra sede/no autorizado: acceso permitido/denegado correctamente.
+12. Modalidad fija actual (reserva futura e inmediata), confirmación, entrega, devolución, pagos parciales, ledger y filtros de Reports: sin regresión.
+
+La suite automatizada `scripts/free-time-emulator.test.ts` y el smoke Playwright recorren estos casos con datos ficticios; la política aplicada bloquea sesiones que no pueden garantizarse frente a reservas y no usa duración límite ficticia. Próximo bloqueo comercial: recibir las decisiones de Ale. Próximo bloqueo de identidad física: definir IDs de cuadro si la operación debe asignar una bicicleta específica, no solo una unidad de stock del modelo.
+
 ## Continuidad — galerías y contenido bilingüe de catálogo (2026-11-24)
 
 - La implementación de PR #19 agrega galerías públicas para fotos principales y adicionales, filtra referencias vacías/duplicadas/no HTTPS y conserva el caso histórico de una sola foto. Rentals y Tienda presentan el contenido en inglés disponible y usan el texto español como fallback.
