@@ -348,3 +348,10 @@ El estado y la matriz completos están en `BRIZ_CIERRE_SOLICITUDES_2026-11-24.md
 PR #22 continúa Draft sobre #21. El proveedor está deshabilitado; el contador de cuota no libera reserva si el proveedor falla, pendiente de corrección antes de activar. API/secret/IAM/cuotas/costo no pudieron verificarse con herramientas locales disponibles. No hubo despliegues ni escrituras en Firebase Production.
 
 PR #20 sigue Draft y aislada. La Fase 1 Emulator no se publicó; no hay cobro activo. Mínimo, redondeo y límites requieren decisión de Ale.
+
+### Estado verificado actualizado — 2026-11-24
+
+- #21 permanece Open/Draft en `0ae48bb9c889c3dfd483e5e9e4d375399aa5b2c5`; validaciones locales pasan, pero faltan artes ingleses. Vercel Preview está FAILURE y su causa de build sigue sin verificar: `pachax.bo@gmail.com` recibe 403 al scope `gfabrigtrf-7085s-projects`. Mantener protección; no fusionar ni declarar publicación.
+- #22 permanece Open/Draft en `352338670537611cd078f2628300b37c2470751e`, apilada sobre #21 y marcada CONFLICTING. Provider deshabilitado. Corregir la reserva de cuota ante fallo del proveedor; no activar servicio ni rebasear antes de que #21 llegue a main.
+- #20 permanece Open/Draft, separada, actualizada a `befe0f584727fedb06ddc74d47533bf25efd3eb9`. Emulator, prorrateo puro sin reglas comerciales, build de Functions/web y Playwright 390×844/1280×900 pasan. No fusionar ni publicar antes de reglas de Ale.
+- La matriz recoge pruebas y requisitos aún pendientes. Contrato original no disponible en el checkout; aceptación formal no confirmada. No se modificó Firebase Production ni sus datos.
