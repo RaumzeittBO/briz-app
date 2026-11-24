@@ -7,14 +7,15 @@ const originalSecretFile = existsSync(secretFile) ? readFileSync(secretFile) : n
 const originalMode = originalSecretFile ? statSync(secretFile).mode : undefined;
 const existingSecretText = originalSecretFile?.toString('utf8') || '';
 const emulatorSecretText = existingSecretText.split(/\r?\n/)
-    .filter(line => !line.startsWith('RESEND_API_KEY='))
+    .filter(line => !/^(RESEND_API_KEY|TELEGRAM_BOT_TOKEN|TELEGRAM_CHAT_ID)=/.test(line))
     .filter(Boolean)
     .join('\n');
-writeFileSync(secretFile, `${emulatorSecretText ? `${emulatorSecretText}\n` : ''}RESEND_API_KEY=re_emulator_only_not_valid\n`, { mode: originalMode || 0o600 });
+writeFileSync(secretFile, `${emulatorSecretText ? `${emulatorSecretText}\n` : ''}RESEND_API_KEY=re_emulator_only_not_valid\nTELEGRAM_BOT_TOKEN=emulator-disabled\nTELEGRAM_CHAT_ID=emulator-disabled\n`, { mode: originalMode || 0o600 });
 
 try {
+    const config = process.env.BRIZ_FIREBASE_CONFIG ? `--config "${process.env.BRIZ_FIREBASE_CONFIG}" ` : '';
     const result = spawnSync(
-        'firebase emulators:exec --project demo-briz-manual-payments --only "auth,firestore,functions" "npx tsx scripts/manual-payment-ledger-emulator.test.ts"',
+        `firebase emulators:exec ${config}--project demo-briz-manual-payments --only "auth,firestore,functions" "npx tsx scripts/manual-payment-ledger-emulator.test.ts"`,
         [],
         { env: process.env, stdio: 'inherit', shell: true },
     );
