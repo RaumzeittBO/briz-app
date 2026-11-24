@@ -95,6 +95,8 @@ try {
   assert.equal(firstRecord.status, 'delivered');
   assert.equal(firstRecord.total, 0);
   assert.equal(firstRecord.paymentStatus, 'unpaid');
+  assert.equal(firstRecord.freeTimePricing.status, 'awaiting_return');
+  assert.equal(firstRecord.freeTimePricing.hourlyRateSnapshot, 35);
   assert.equal(typeof firstRecord.startTimestamp, 'number');
   assert.equal((await adminDb.doc('inventory/ft-basic-bike').get()).get('stock'), 2);
   const retryStart = await call<typeof started>('startFreeTimeRental', baseInput);
@@ -111,7 +113,7 @@ try {
   report('6 recarga/consulta recupera la sesión activa y su hora de servidor');
 
   const finishKey = `ft_${unique()}`;
-  const finished = await call<{ duplicate: boolean; elapsedMilliseconds: number; elapsedSeconds: number }>('finishFreeTimeRental', {
+  const finished = await call<{ duplicate: boolean; elapsedMilliseconds: number; elapsedSeconds: number; pricing: Record<string, unknown> }>('finishFreeTimeRental', {
     sessionId: started.sessionId, idempotencyKey: finishKey, damaged: false,
   });
   assert.equal(finished.duplicate, false);
@@ -120,6 +122,18 @@ try {
   assert.equal(closedDoc.get('freeTimeState'), 'closed');
   assert.equal(closedDoc.get('paymentStatus'), 'unpaid');
   assert.equal(closedDoc.get('total'), 0);
+  const quote = closedDoc.get('freeTimePricing');
+  assert.equal(quote.status, 'awaiting_commercial_policy');
+  assert.equal(quote.hourlyRateSnapshot, 35);
+  assert.equal(quote.elapsedMilliseconds, finished.elapsedMilliseconds);
+  assert.equal(quote.unroundedAmount, 35 * finished.elapsedMilliseconds / 3_600_000);
+  assert.equal(closedDoc.get('freeTimePayment.status'), 'unpaid');
+  assert.equal(closedDoc.get('freeTimePayment.confirmedAmount'), 0);
+  assert.equal(closedDoc.get('freeTimePayment.unroundedBalanceQuote'), quote.unroundedAmount);
+  assert.equal((await adminDb.collection('rentalPaymentMovements').where('reservationCode', '==', started.reservationCode).get()).size, 0);
+  await assert.rejects(() => call('recordRentalPaymentMovement', {
+    rentalIds: [started.sessionId], type: 'receipt', amount: 1, method: 'Efectivo', idempotencyKey: `ft_${unique()}`,
+  }), /Tiempo Libre no admite movimientos monetarios/i);
   assert.equal((await adminDb.collection('rentalPaymentMovements').where('reservationCode', '==', started.reservationCode).get()).size, 0);
   assert.equal((await adminDb.doc('inventory/ft-basic-bike').get()).get('stock'), 3);
   const repeatedFinish = await call<typeof finished>('finishFreeTimeRental', { sessionId: started.sessionId, idempotencyKey: finishKey, damaged: false });
@@ -129,8 +143,22 @@ try {
   assert.equal((await adminDb.collection('freeTimeEvents').where('sessionId', '==', started.sessionId).get()).size, 2);
   const closedHistory = await call<{ sessions: Array<Record<string, unknown>> }>('listFreeTimeRentals');
   assert.equal(closedHistory.sessions.find((session) => session.id === started.sessionId)?.freeTimeState, 'closed');
-  report('7 finalización registra duración del backend, cierra la sesión, restaura stock y conserva unpaid');
+  report('7 cierre transaccional registra prorrateo bruto de tarifa snapshot, conserva unpaid y restaura stock; el ledger rechaza cobros hasta definir políticas');
   report('8 doble finalización idempotente no repone stock ni agrega otra auditoría');
+
+  await seedBike('ft-concurrent-close-bike', 1);
+  const closeRaceStart = await call<{ sessionId: string }>('startFreeTimeRental', {
+    idempotencyKey: `ft_${unique()}`, itemId: 'ft-concurrent-close-bike', store: 'Cochabamba',
+  });
+  const closeRace = await Promise.allSettled([
+    call('finishFreeTimeRental', { sessionId: closeRaceStart.sessionId, idempotencyKey: `ft_${unique()}`, damaged: false }),
+    call('finishFreeTimeRental', { sessionId: closeRaceStart.sessionId, idempotencyKey: `ft_${unique()}`, damaged: false }),
+  ]);
+  assert.equal(closeRace.filter((entry) => entry.status === 'fulfilled').length, 1);
+  assert.equal(closeRace.filter((entry) => entry.status === 'rejected').length, 1);
+  assert.equal((await adminDb.doc('inventory/ft-concurrent-close-bike').get()).get('stock'), 1);
+  assert.equal((await adminDb.collection('freeTimeEvents').where('sessionId', '==', closeRaceStart.sessionId).where('action', '==', 'finish').get()).size, 1);
+  report('13 cierre concurrente con claves distintas acepta un único ganador, restaura stock una vez y escribe una auditoría');
 
   await seedBike('ft-last-bike', 1);
   const race = await Promise.allSettled([

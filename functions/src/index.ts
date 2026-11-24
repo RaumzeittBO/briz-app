@@ -34,7 +34,7 @@ import {
 import { DEFAULT_RENTAL_HOURS, validateRentalBusinessHours } from './businessHours';
 import { CUSTOMER_PRIVATE_FILE_SPECS, bucketNamesMatch, getPathVariants, ownedCustomerStoragePath, resolveCustomerPrivateFiles } from './customerPrivateFiles';
 import { Resend } from 'resend';
-import { elapsedFreeTimeMilliseconds, isFreeTimeEmulatorRuntime } from './freeTime';
+import { calculateFreeTimeProration, elapsedFreeTimeMilliseconds, isFreeTimeEmulatorRuntime } from './freeTime';
 import { buildBrizVerificationUrl, createVerificationEmail, deliverVerificationEmail, nextVerificationRateState, rollbackDefinitiveVerificationAttempt, VerificationDeliveryError, type EmailLanguage, type VerificationRateState } from './customerVerificationEmail';
 
 if (getApps().length === 0) initializeApp();
@@ -1729,6 +1729,8 @@ export const startFreeTimeRental = onCall(callable(), async (request) => {
         const demand = { itemId: input.itemId, wheelSize: input.wheelSize, quantity: 1 };
         const slotRef = db.doc(`rentals_busy_slots/${availabilityGroupId}_${resourceKey(demand)}`);
         const actorLabel = cleanString(role?.name, 120) || uid;
+        const configuredHourlyRate = Number(item.pricePerHour);
+        const hourlyRateSnapshot = Number.isFinite(configuredHourlyRate) && configuredHourlyRate > 0 ? configuredHourlyRate : undefined;
         const rental: DocumentData = {
             reservationCode, availabilityGroupId, freeTimeMode: true, freeTimeState: 'active',
             productType: 'single', productId: input.itemId, productName: item.name, productNameSnapshot: item.name,
@@ -1738,6 +1740,10 @@ export const startFreeTimeRental = onCall(callable(), async (request) => {
             customerId: input.customerId || '', customerName: input.customerId ? cleanString(customer.name, 120) : 'Cliente pendiente',
             customerPhone: input.customerId ? cleanString(customer.phone, 40) : '', customerCI: input.customerId ? cleanString(customer.ci, 40) : '',
             customerPending: !input.customerId, status: 'delivered', deliveredAt: startedAt, stockDeducted: true,
+            freeTimePricing: {
+                status: hourlyRateSnapshot ? 'awaiting_return' : 'rate_unavailable', currency: 'BOB',
+                ...(hourlyRateSnapshot ? { hourlyRateSnapshot } : {}),
+            },
             store: input.store, total: 0, amountPaid: 0, paymentStatus: 'unpaid', paymentMethod: 'Sin especificar',
             notes: 'Tiempo Libre — sesión operativa sin liquidación monetaria en esta fase.',
             createdAt: startedAt, updatedAt: startedAt, lastUpdatedBy: uid,
@@ -1794,7 +1800,11 @@ export const finishFreeTimeRental = onCall(callable(), async (request) => {
         if (role?.role === 'manager' && role.store !== 'all' && rental.store !== role.store) throw new HttpsError('permission-denied', 'La sesión pertenece a otra sucursal.');
         if (requestSnap.exists) {
             if (requestSnap.get('requestFingerprint') !== requestFingerprint) throw new HttpsError('already-exists', 'La clave de devolución ya se usó con otra operación.');
-            return { duplicate: true, elapsedMilliseconds: Number(requestSnap.get('elapsedMilliseconds')) || 0 };
+            return {
+                duplicate: true,
+                elapsedMilliseconds: Number(requestSnap.get('elapsedMilliseconds')) || 0,
+                pricing: requestSnap.get('pricing') || null,
+            };
         }
         if (rental.freeTimeState !== 'active' || !['delivered', 'Entregado'].includes(String(rental.status))) {
             if (rental.freeTimeState === 'closed') throw new HttpsError('already-exists', 'Esta sesión ya fue finalizada. No se repuso stock otra vez.');
@@ -1816,6 +1826,20 @@ export const finishFreeTimeRental = onCall(callable(), async (request) => {
         const closedAt = Timestamp.now();
         const elapsedMilliseconds = elapsedFreeTimeMilliseconds(startedAtMs, closedAt.toMillis());
         const elapsedSeconds = Math.floor(elapsedMilliseconds / 1000);
+        const pricing = rental.freeTimePricing && typeof rental.freeTimePricing === 'object'
+            ? rental.freeTimePricing as DocumentData
+            : {};
+        const hourlyRateSnapshot = Number(pricing.hourlyRateSnapshot);
+        const quote = Number.isFinite(hourlyRateSnapshot) && hourlyRateSnapshot > 0
+            ? calculateFreeTimeProration(hourlyRateSnapshot, startedAtMs, closedAt.toMillis())
+            : null;
+        const finalPricing: DocumentData = quote
+            ? {
+                status: 'awaiting_commercial_policy', currency: 'BOB', hourlyRateSnapshot,
+                elapsedMilliseconds: quote.elapsedMilliseconds, elapsedMinutes: quote.elapsedMinutes,
+                unroundedAmount: quote.unroundedAmount,
+            }
+            : { status: 'rate_unavailable', currency: 'BOB', elapsedMilliseconds, elapsedMinutes: elapsedMilliseconds / 60_000 };
         let nextItem: CatalogItem;
         if (damaged) {
             if (item.itemType !== 'bike') throw new HttpsError('failed-precondition', 'Solo las bicicletas pueden marcarse dañadas en esta operación.');
@@ -1840,6 +1864,11 @@ export const finishFreeTimeRental = onCall(callable(), async (request) => {
             updatedAt: closedAtIso, lastUpdatedBy: uid,
             ...(conditionNotes ? { returnConditionNotes: conditionNotes } : {}),
             auditLog: [...auditLog, { action: 'free_time_finish', actorUid: uid, actorLabel, store: rental.store, at: closedAtIso, damaged, elapsedMilliseconds }],
+            freeTimePricing: finalPricing,
+            freeTimePayment: {
+                status: 'unpaid', confirmedAmount: 0,
+                ...(quote ? { unroundedBalanceQuote: quote.unroundedAmount } : {}),
+            },
             total: 0, amountPaid: 0, paymentStatus: 'unpaid',
         };
         tx.update(itemRef, item.hasWheelSizes
@@ -1848,9 +1877,9 @@ export const finishFreeTimeRental = onCall(callable(), async (request) => {
         tx.update(rentalRef, patch);
         if (slotSnap.exists) tx.update(slotRef, { endMs: closedAt.toMillis(), openEnded: false, status: 'returned', updatedAt: closedAt });
         tx.set(lockRef, { revision: (Number(lockSnap.data()?.revision) || 0) + 1, updatedAt: closedAt });
-        tx.create(eventRef, { sessionId, action: 'finish', actorUid: uid, store: rental.store, at: closedAt, itemId, wheelSize: wheelSize || null, damaged, elapsedMilliseconds, elapsedSeconds, conditionNotes });
-        tx.create(requestRef, { sessionId, requestFingerprint, actorUid: uid, createdAt: closedAt, elapsedMilliseconds });
-        return { duplicate: false, elapsedMilliseconds, elapsedSeconds, closedAt: closedAtIso };
+        tx.create(eventRef, { sessionId, action: 'finish', actorUid: uid, store: rental.store, at: closedAt, itemId, wheelSize: wheelSize || null, damaged, elapsedMilliseconds, elapsedSeconds, conditionNotes, pricing: finalPricing });
+        tx.create(requestRef, { sessionId, requestFingerprint, actorUid: uid, createdAt: closedAt, elapsedMilliseconds, pricing: finalPricing });
+        return { duplicate: false, elapsedMilliseconds, elapsedSeconds, closedAt: closedAtIso, pricing: finalPricing };
     });
 });
 
