@@ -45,6 +45,11 @@ try {
     'the same field changed remotely must be reported as a conflict',
   );
   assert.deepEqual(getInventoryContentFieldsToClear(original, { ...original, imageUrl: '', description: '' }), ['imageUrl', 'description']);
+  assert.deepEqual(
+    getInventoryContentFieldsToClear({ ...original, nameEn: 'Fictional bike' }, { ...original, nameEn: '' }),
+    ['nameEn'],
+    'clearing an existing English name requires explicit confirmation too',
+  );
 
   const shopOriginal = {
     id: 'fictional-shop-bike',
@@ -80,6 +85,16 @@ try {
   });
   const afterShopEdit = (await shopItemRef.get()).data();
   assert.deepEqual(afterShopEdit, { ...inventoryEdit, salePrice: 135 }, 'price save must preserve the newer photo, description, gallery, details, stock, and other prices');
+
+  const translationEdit = { ...afterShopEdit, nameEn: 'Fictional bicycle' };
+  const translationPatch = createInventoryDraftPatch(afterShopEdit || {}, translationEdit || {});
+  assert.deepEqual(Object.keys(translationPatch), ['nameEn'], 'English translation edit only updates its own field');
+  await shopItemRef.update(translationPatch);
+  const afterTranslation = (await shopItemRef.get()).data();
+  assert.equal(afterTranslation?.nameEn, 'Fictional bicycle');
+  assert.equal(afterTranslation?.description, 'Descripción actualizada desde Inventario', 'saving English must preserve the Spanish source description');
+  assert.equal(afterTranslation?.descriptionEn, undefined, 'editing a name translation must not invent or overwrite another translation');
+  assert.equal(afterTranslation?.imageUrl, 'inventory/new-fictitious-photo.jpg');
 
   console.log('PASS stale inventory drafts only update explicitly changed fields');
 } finally {

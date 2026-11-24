@@ -961,6 +961,11 @@ export default function InventoryPage() {
                     <Label className="text-[10px] text-white/40 font-bold uppercase tracking-wider">Nombre</Label>
                     <Input value={editItem.name} onChange={e=>setEditItem({...editItem,name:e.target.value})} className="bg-black/40 border-white/10 h-12 font-black text-lg rounded-xl mt-1 text-white" placeholder={modal.type==='bike'?'Ej: Urbana':'Ej: Canasta metálica'} required/>
                   </div>
+                  <div>
+                    <Label htmlFor="inventory-product-name-en" className="text-[10px] text-white/40 font-bold uppercase tracking-wider">Product name (English)</Label>
+                    <Input id="inventory-product-name-en" value={editItem.nameEn || ''} onChange={e=>setEditItem((current: typeof editItem)=>current ? {...current,nameEn:e.target.value} : current)} className="bg-black/40 border-white/10 h-10 rounded-xl mt-1 text-white" placeholder="Optional English translation" />
+                    <p className="mt-1 text-[10px] text-white/40">If empty, the Spanish name remains the fallback.</p>
+                  </div>
 
                   {/* Category Selection */}
                   {editItem && (
@@ -1005,6 +1010,18 @@ export default function InventoryPage() {
                   <div>
                     <Label className="text-[10px] text-white/40 font-bold uppercase tracking-wider">Descripción</Label>
                     <Textarea value={editItem.description} onChange={e=>setEditItem({...editItem,description:e.target.value})} className="bg-black/40 border-white/10 rounded-xl resize-none text-sm mt-1 text-white" rows={3}/>
+                  </div>
+                  <div>
+                    <Label htmlFor="inventory-description-en" className="text-[10px] text-white/40 font-bold uppercase tracking-wider">Description (English)</Label>
+                    <Textarea id="inventory-description-en" value={editItem.descriptionEn || ''} onChange={e=>setEditItem((current: typeof editItem)=>current ? {...current,descriptionEn:e.target.value} : current)} className="bg-black/40 border-white/10 rounded-xl resize-none text-sm mt-1 text-white" rows={3} placeholder="Optional English translation" />
+                  </div>
+                  <div>
+                    <Label htmlFor="inventory-details-es" className="text-[10px] text-white/40 font-bold uppercase tracking-wider">Detalles adicionales</Label>
+                    <Textarea id="inventory-details-es" value={editItem.details || ''} onChange={e=>setEditItem((current: typeof editItem)=>current ? {...current,details:e.target.value} : current)} className="bg-black/40 border-white/10 rounded-xl resize-none text-sm mt-1 text-white" rows={2}/>
+                  </div>
+                  <div>
+                    <Label htmlFor="inventory-details-en" className="text-[10px] text-white/40 font-bold uppercase tracking-wider">Additional details (English)</Label>
+                    <Textarea id="inventory-details-en" value={editItem.detailsEn || ''} onChange={e=>setEditItem((current: typeof editItem)=>current ? {...current,detailsEn:e.target.value} : current)} className="bg-black/40 border-white/10 rounded-xl resize-none text-sm mt-1 text-white" rows={2} placeholder="Optional English translation" />
                   </div>
 
                   {/* Toggles */}

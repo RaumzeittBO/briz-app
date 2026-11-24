@@ -459,6 +459,11 @@ export default function AdminShopPage() {
                   <Label className="text-[10px] text-white/40 font-bold uppercase tracking-wider">Nombre del Producto</Label>
                   <Input value={editItem.name} onChange={e=>updateDraft({ name: e.target.value })} className="bg-black/40 border-white/10 h-12 font-black text-lg rounded-xl mt-1 text-white" placeholder={modal.type==='bike'?'Ej: Urbana Aro 26 Bridgestone':'Ej: Inflador bombín de pie'} required/>
                 </div>
+                <div>
+                  <Label htmlFor="shop-product-name-en" className="text-[10px] text-white/40 font-bold uppercase tracking-wider">Product name (English)</Label>
+                  <Input id="shop-product-name-en" value={editItem.nameEn || ''} onChange={e=>updateDraft({ nameEn: e.target.value })} className="bg-black/40 border-white/10 h-10 rounded-xl mt-1 text-white" placeholder="Optional English translation" />
+                  <p className="mt-1 text-[10px] text-white/40">If empty, the Spanish name remains the fallback.</p>
+                </div>
 
                 {/* Category Selection */}
                 {editItem && (
@@ -502,10 +507,18 @@ export default function AdminShopPage() {
                   <Label className="text-[10px] text-white/40 font-bold uppercase tracking-wider">Descripción</Label>
                   <Textarea value={editItem.description} onChange={e=>updateDraft({ description: e.target.value })} className="bg-black/40 border-white/10 rounded-xl resize-none text-sm mt-1 text-white" rows={3}/>
                 </div>
+                <div>
+                  <Label htmlFor="shop-description-en" className="text-[10px] text-white/40 font-bold uppercase tracking-wider">Description (English)</Label>
+                  <Textarea id="shop-description-en" value={editItem.descriptionEn || ''} onChange={e=>updateDraft({ descriptionEn: e.target.value })} className="bg-black/40 border-white/10 rounded-xl resize-none text-sm mt-1 text-white" rows={3} placeholder="Optional English translation" />
+                </div>
 
                 <div>
                   <Label className="text-[10px] text-white/40 font-bold uppercase tracking-wider">Detalles adicionales (Especificaciones)</Label>
                   <Textarea value={editItem.details} onChange={e=>updateDraft({ details: e.target.value })} className="bg-black/40 border-white/10 rounded-xl resize-none text-sm mt-1 text-white" rows={2}/>
+                </div>
+                <div>
+                  <Label htmlFor="shop-details-en" className="text-[10px] text-white/40 font-bold uppercase tracking-wider">Additional details (English)</Label>
+                  <Textarea id="shop-details-en" value={editItem.detailsEn || ''} onChange={e=>updateDraft({ detailsEn: e.target.value })} className="bg-black/40 border-white/10 rounded-xl resize-none text-sm mt-1 text-white" rows={2} placeholder="Optional English translation" />
                 </div>
 
                 {/* Toggles */}

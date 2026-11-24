@@ -99,9 +99,12 @@ const visualGridBikes = visualBikeCategories.map((category, index) => ({
 }));
 for (const item of [...fixtures, ...visualGridBikes]) await db.doc(`inventory/${item.id}`).set(item);
 await db.doc('settings/bike_categories').set({ categories: visualBikeCategories });
+await db.doc('settings/shop_categories').set({ categories: ['Bicicletas', 'Indumentaria', 'Categoría ficticia PR19'] });
 await db.doc('inventory/visual-shop-bike').set({
-    id: 'visual-shop-bike', itemType: 'bike', name: 'Bicicleta demo para tienda', category: 'Bicicletas',
-    description: 'Producto sintético para validar filtros de tienda en Emulator.', imageUrl: '', active: true,
+    id: 'visual-shop-bike', itemType: 'bike', name: 'Bicicleta demo para tienda', nameEn: 'Fictional Bike Gallery', category: 'Bicicletas',
+    description: 'Producto sintético para validar filtros de tienda en Emulator.', descriptionEn: 'Fictional English description.',
+    details: 'Detalles ficticios para pruebas.', detailsEn: 'Fictional specifications.',
+    imageUrl: '/test-fixtures/gallery-main.svg', additionalImageUrls: ['/test-fixtures/gallery-side.svg', '/test-fixtures/gallery-third.svg'], active: true,
     availableForRental: false, availableForSale: true, hasWheelSizes: true,
     wheelSizes: [{ size: '26', stock: 4 }], salePrice: 1234,
 });

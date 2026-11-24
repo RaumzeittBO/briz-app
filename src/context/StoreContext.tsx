@@ -713,14 +713,8 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
 
         const unsubShopCats = onSnapshot(doc(db, 'settings', 'shop_categories'), (snap) => {
             if (snap.exists()) {
-                const cats = snap.data().categories || [];
-                if (cats.includes('Bicicletas') && cats.includes('Indumentaria') && !cats.includes('Bicicletas plegables')) {
-                    const defaults = SHOP_SEED_CATEGORIES;
-                    setDoc(doc(db, 'settings', 'shop_categories'), { categories: defaults }, { merge: true }).catch(() => undefined);
-                    setShopCategories(defaults);
-                } else {
-                    setShopCategories(cats);
-                }
+                const cats = snap.data().categories;
+                setShopCategories(Array.isArray(cats) ? cats : []);
             } else {
                 const defaults = SHOP_SEED_CATEGORIES;
                 setDoc(doc(db, 'settings', 'shop_categories'), { categories: defaults }, { merge: true }).catch(() => undefined);

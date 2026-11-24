@@ -1,5 +1,17 @@
 # BRIZ (`briz.com.bo`) — DOCUMENTO DE HANDOFF TÉCNICO PARA CODEX
 
+## Continuidad vigente — galerías y traducciones de catálogo (2026-11-24)
+
+- PR #19 trabaja sobre la rama `codex/briz-public-galleries-translations` y debe permanecer separada de futuras funcionalidades. Este handoff registra implementación/pruebas; el estado final se confirma con el estado live de la PR, SHA de `main` y deployment Production.
+- Tienda muestra una galería sin duplicados ni URLs inseguras, con navegación responsive; productos con una sola imagen siguen operando. Rentals también muestra sus fotos adicionales. Los campos dinámicos ingleses y categorías usan fallback español cuando no hay traducción.
+- Los editores de Inventario y Tienda permiten traducir nombre, descripción y detalles; las traducciones se guardan como campos separados. La traducción de categorías no sustituye el texto español.
+- Al cargar las categorías de Tienda ya existentes no se vuelven a sembrar defaults sobre ellas. Se preservan categorías custom, y el default se crea solo cuando falta el documento.
+- Protección conservada de PR #18: actualizaciones parciales, comprobación transaccional de conflictos, confirmación al borrar contenido, formulario abierto ante error y bloqueo mientras suben imágenes. Los tests verifican edición de precio de Tienda concurrente con cambios de foto/descripcion desde Inventario, preservación de galería, traducciones inglesas aisladas y subida pendiente/fallida.
+- Pruebas locales: build web y Functions; test de borradores con Firestore Emulator; reglas Firestore/Storage con Emulator; helper de galería; Playwright con Emulator a 390×844 y 1440×900, navegación/recarga de fotos, cambio de idioma sin recargar y guardado admin de traducciones. ESLint dirigido no aumenta deuda frente a `origin/main`. Sin cambios a Functions, IAM, Rules ni datos reales.
+- Snapshot productivo de solo lectura anterior al release: `inventory` 173 y `combos` 14; hash local para cada ID y los campos de fotos, descripciones/detalles, categorías, stock y precios. La captura y comparación están fuera de Git y no contienen documentos personales.
+- Vercel Preview reporta fallo, pero los logs no pudieron consultarse desde la sesión conectada: el scope `gfabrigtrf-7085s-projects` devolvió 403; la autorización de lectura de ese scope devolvió 404. No quitar la guarda Firebase Preview, no usar Production desde Preview ni cambiar equipo propietario. Production debe verificarse por el check GitHub del SHA final y el dominio público.
+- Pendientes futuros: Tiempo Libre requiere reglas comerciales de Ale; auditoría permanente del inventario; validación integral de Administración, Caja, Reportes y Taller; traducciones/arte inglés restante; limpieza técnica y optimización.
+
 ## Estado vigente — preservación y continuidad (2026-10-21)
 
 - Copia local verificada: `G:\ProjectBriz\BRIZ_RELEASE_PRESERVATION_2026-10-21`. Incluye 173 inventarios, 14 combos, 2 rutas, 2 eventos, tres documentos comerciales de `settings`, el doc Admin existente y 43 objetos de Storage de `inventory/` + `events/` (9,409,348 bytes). Conserva IDs, estructura REST tipada, referencias, rutas, metadatos y checksums; excluye clientes, alquileres, cobros, uploads de clientes y credenciales Auth.

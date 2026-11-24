@@ -36,6 +36,7 @@ export function getInventoryContentFieldsToClear(
   const protectedFields = [
     'imageUrl',
     'additionalImageUrls',
+    'nameEn',
     'description',
     'details',
     'descriptionEn',
