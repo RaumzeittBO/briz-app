@@ -12,7 +12,7 @@ import CustomerAuthModal from '@/components/layout/CustomerAuthModal';
 import RentalCheckoutWizard from '@/components/rentals/RentalCheckoutWizard';
 import type { RentalCartItem } from '@/components/rentals/RentalCheckoutWizard';
 import { useLanguage } from '@/context/LanguageContext';
-import { t, getLocalizedField, type Language } from '@/lib/translations';
+import { t, getLocalizedCategory, getLocalizedField, type Language } from '@/lib/translations';
 import { businessWhatsAppUrl } from '@/lib/businessConfig';
 
 const RENTAL_CART_STORAGE_KEY = 'briz_rental_cart_v1';
@@ -26,6 +26,7 @@ type DisplayProduct = {
   details?: string;
   detailsEn?: string;
   imageUrl: string;
+  additionalImageUrls?: string[];
   type: 'single' | 'combo';
   itemType?: 'bike' | 'accessory';
   category?: string;
@@ -60,8 +61,8 @@ function getRentalPriceTiers(product: DisplayProduct, lang: Language) {
   ].filter(tier => Number(tier.value) > 0);
 }
 
-const translateCategory = (cat: string, lang: Language) => {
-  return t(cat, lang);
+const translateCategory = (cat: string, lang: Language, translations: Record<string, string>) => {
+  return getLocalizedCategory(cat, translations, lang);
 };
 
 const translateProductName = (product: Pick<DisplayProduct, 'name' | 'nameEn'>, lang: Language) => {
@@ -70,7 +71,7 @@ const translateProductName = (product: Pick<DisplayProduct, 'name' | 'nameEn'>, 
 
 export default function RentalsPage() {
   const { language } = useLanguage();
-  const { inventory, combos, getComboAvailability, getComboAvailabilityReport, currentCustomer, events, bikeCategories, publicBusinessConfig } = useStore();
+  const { inventory, combos, getComboAvailability, getComboAvailabilityReport, currentCustomer, events, bikeCategories, categoryTranslations, publicBusinessConfig } = useStore();
 
   const sortCategories = (a: string, b: string) => {
     const indexA = bikeCategories.indexOf(a);
@@ -165,6 +166,7 @@ export default function RentalsPage() {
         details: i.details,
         detailsEn: i.detailsEn,
         imageUrl: i.imageUrl,
+        additionalImageUrls: i.additionalImageUrls,
         type: 'single', itemType: i.itemType,
         category: i.category,
         hasWheelSizes: i.hasWheelSizes,
@@ -231,6 +233,7 @@ export default function RentalsPage() {
         details: c.details,
         detailsEn: c.detailsEn,
         imageUrl: c.imageUrl,
+        additionalImageUrls: c.additionalImageUrls,
         type: 'combo', hasWheelSizes: hasWS, wheelSizes: ws,
         category: c.category || 'Bicicletas',
         secondaryCategories: c.secondaryCategories,
@@ -350,7 +353,7 @@ export default function RentalsPage() {
             <h2 
               className="font-tan text-[0.77rem] xs:text-[0.875rem] sm:text-[1.85rem] sm:leading-[1.22] lg:text-[2.2rem] uppercase tracking-normal text-brand-yellow [-webkit-text-stroke:1px_#000] drop-shadow-[1.2px_1.2px_0_rgba(0,0,0,1)] whitespace-nowrap sm:whitespace-normal"
             >
-              <span translate="no">{translateCategory(title, language)}</span>
+              <span translate="no">{translateCategory(title, language, categoryTranslations)}</span>
             </h2>
             <p className="text-[10px] sm:text-xs font-black uppercase text-gray-400 tracking-widest font-maiandra">
               {language === 'es' ? `Desde Bs. ${displayMinPrice} / Hora` : `From Bs. ${displayMinPrice} / Hour`}
@@ -560,7 +563,7 @@ export default function RentalsPage() {
                       window.scrollTo({ top: 0, behavior: 'smooth' });
                     }}
                   >
-                    <span translate="no">{translateCategory(c, language)}</span>
+                    <span translate="no">{translateCategory(c, language, categoryTranslations)}</span>
                   </Button>
                 ))}
               </div>
@@ -728,7 +731,7 @@ export default function RentalsPage() {
                   <h1 
                     className="font-tan text-[1.5rem] xs:text-[1.8rem] sm:text-[2.2rem] sm:leading-[1.18] lg:text-[2.6rem] uppercase tracking-normal text-brand-yellow [-webkit-text-stroke:1.1px_#000] drop-shadow-[1.5px_1.5px_0_rgba(0,0,0,1)] whitespace-normal break-words"
                   >
-                    <span translate="no">{translateCategory(expandedCategory, language)}</span>
+                    <span translate="no">{translateCategory(expandedCategory, language, categoryTranslations)}</span>
                   </h1>
                   <p className="mt-3.5 sm:mt-2 text-[10px] sm:text-xs font-black uppercase text-gray-400 tracking-widest font-maiandra">
                     {expandedProducts.length}{' '}

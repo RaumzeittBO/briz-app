@@ -330,3 +330,14 @@ export function getLocalizedField(
     }
     return esValue || '';
 }
+
+export function getLocalizedCategory(
+    category: string | undefined | null,
+    translations: Record<string, string>,
+    lang: Language,
+): string {
+    if (!category) return '';
+    if (lang === 'es') return category;
+    const explicit = translations[category]?.trim();
+    return explicit || t(category, 'en');
+}

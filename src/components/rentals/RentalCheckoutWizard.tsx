@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
     ArrowLeft, Minus, Plus, X, Calendar, Clock, Heart,
@@ -13,6 +13,7 @@ import { useStore, type InventoryItem } from '@/context/StoreContext';
 import { useLanguage } from '@/context/LanguageContext';
 import { t, getLocalizedField } from '@/lib/translations';
 import { getReservationReceiptCopy } from '@/lib/reservationReceiptCopy';
+import { getValidProductImages } from '@/lib/productGallery';
 import DeliveryMapPicker from './DeliveryMapPicker';
 import { addDaysToDateString, toBoliviaDateString } from '@/lib/dateUtils';
 import { getAccessoryAddonUnitPrice, parseDurationToHours } from '@/lib/rentalPricing';
@@ -101,6 +102,7 @@ export default function RentalCheckoutWizard({
     const [detailQty, setDetailQty] = useState<number>(1);
     const [favoriteIds, setFavoriteIds] = useState<string[]>([]);
     const [activeImageIndex, setActiveImageIndex] = useState<number>(0);
+    const galleryTouchStartX = useRef<number | null>(null);
 
     useEffect(() => {
         setActiveImageIndex(0);
@@ -752,14 +754,25 @@ export default function RentalCheckoutWizard({
 
                         {/* Product Image Gallery Carousel */}
                         {(() => {
-                            const productImages = [
-                                selectedProduct.imageUrl,
-                                ...(selectedProduct.additionalImageUrls || [])
-                            ].filter(Boolean);
+                            const productImages = getValidProductImages(selectedProduct.imageUrl, selectedProduct.additionalImageUrls);
                             const hasMultipleImages = productImages.length > 1;
 
                             return (
-                                <div className="relative aspect-[4/3] bg-white border border-gray-100 rounded-[2.2rem] overflow-hidden shadow-md flex flex-col items-center justify-center group/carousel">
+                                <div className="space-y-2">
+                                  <div
+                                      className="relative aspect-[4/3] bg-white border border-gray-100 rounded-[2.2rem] overflow-hidden shadow-md flex flex-col items-center justify-center group/carousel"
+                                      onTouchStart={event => { galleryTouchStartX.current = event.touches[0]?.clientX ?? null; }}
+                                      onTouchEnd={event => {
+                                          if (galleryTouchStartX.current === null || productImages.length < 2) return;
+                                          const endX = event.changedTouches[0]?.clientX;
+                                          if (typeof endX === 'number') {
+                                              const delta = endX - galleryTouchStartX.current;
+                                              if (delta > 40) setActiveImageIndex(index => index === 0 ? productImages.length - 1 : index - 1);
+                                              else if (delta < -40) setActiveImageIndex(index => (index + 1) % productImages.length);
+                                          }
+                                          galleryTouchStartX.current = null;
+                                      }}
+                                  >
                                     <img
                                         src={productImages[activeImageIndex] || '/placeholder_bike.png'}
                                         alt={selectedProduct.name}
@@ -818,6 +831,16 @@ export default function RentalCheckoutWizard({
                                             <Share2 className="w-5 h-5 text-gray-700" />
                                         </button>
                                     </div>
+                                  </div>
+                                  {hasMultipleImages && (
+                                    <div className="mt-2 flex gap-2 overflow-x-auto pb-1">
+                                        {productImages.map((image: string, idx: number) => (
+                                            <button key={`${image}-${idx}`} type="button" aria-label={language === 'es' ? `Mostrar imagen ${idx + 1}` : `Show image ${idx + 1}`} aria-pressed={idx === activeImageIndex} onClick={() => setActiveImageIndex(idx)} className={`h-12 w-14 shrink-0 overflow-hidden rounded-lg border-2 ${idx === activeImageIndex ? 'border-brand-yellow' : 'border-gray-200'}`}>
+                                                <img src={image} alt="" className="h-full w-full object-cover" loading="lazy" />
+                                            </button>
+                                        ))}
+                                    </div>
+                                  )}
                                 </div>
                             );
                         })()}
@@ -826,6 +849,11 @@ export default function RentalCheckoutWizard({
                         <p className="text-xs sm:text-sm font-medium text-brand-black leading-relaxed text-justify font-sans bg-white/50 p-5 rounded-2xl border border-black/5">
                             {getLocalizedField(selectedProduct.description, selectedProduct.descriptionEn, language) || t('Alquila tu bicicleta ideal para pasear o entrenar por la ciudad con total comodidad y estilo.', language as any)}
                         </p>
+                        {getLocalizedField(selectedProduct.details, selectedProduct.detailsEn, language) && (
+                            <p className="rounded-2xl border border-black/5 bg-white/50 p-5 text-xs leading-relaxed text-brand-black">
+                                {getLocalizedField(selectedProduct.details, selectedProduct.detailsEn, language)}
+                            </p>
+                        )}
 
                         <div className="bg-white border border-gray-100 rounded-2xl p-4 shadow-sm">
                             <div className="grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-4">

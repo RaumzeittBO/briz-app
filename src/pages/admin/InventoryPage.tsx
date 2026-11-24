@@ -251,7 +251,8 @@ export default function InventoryPage() {
   const { 
     adminStoreScope, inventory, combos, rentals, serviceOrders, addInventoryItem, updateInventoryItem, deleteInventoryItem, releaseUnlinkedMaintenanceUnit, reconcileMaintenanceDiscrepancy,
     addCombo, updateCombo, deleteCombo, getComboAvailabilityReport, adjustInventoryStock,
-    bikeCategories, accessoryCategories, addBikeCategory, addAccessoryCategory, deleteBikeCategory, updateBikeCategory, reorderBikeCategories
+    bikeCategories, accessoryCategories, addBikeCategory, addAccessoryCategory, deleteBikeCategory, updateBikeCategory, reorderBikeCategories,
+    categoryTranslations, updateCategoryTranslation
   } = useStore();
 
   const [tab, setTab] = useState('bikes');
@@ -276,6 +277,8 @@ export default function InventoryPage() {
   const [categoryManagerOpen, setCategoryManagerOpen] = useState(false);
   const [editingCat, setEditingCat] = useState<string | null>(null);
   const [editingVal, setEditingVal] = useState("");
+  const [editingEnglishCategory, setEditingEnglishCategory] = useState<string | null>(null);
+  const [englishCategoryVal, setEnglishCategoryVal] = useState("");
   const [newCategoryName, setNewCategoryName] = useState("");
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
 
@@ -1427,7 +1430,7 @@ export default function InventoryPage() {
                       setDraggedIndex(null);
                     }}
                     onDragEnd={() => setDraggedIndex(null)}
-                    className={`flex items-center justify-between bg-white/5 border rounded-xl p-2.5 transition-all ${
+                    className={`flex flex-wrap items-center justify-between bg-white/5 border rounded-xl p-2.5 transition-all ${
                       isDragging 
                         ? 'border-brand-yellow border-dashed bg-brand-yellow/5 opacity-50' 
                         : 'border-white/5 hover:bg-white/10'
@@ -1485,6 +1488,17 @@ export default function InventoryPage() {
                         </div>
                         <div className="flex gap-1 shrink-0">
                           <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              setEditingEnglishCategory(editingEnglishCategory === cat ? null : cat);
+                              setEnglishCategoryVal(categoryTranslations[cat] || '');
+                            }}
+                            className="h-7 rounded-lg px-2 text-[10px] font-black text-blue-300 hover:bg-blue-400/10"
+                            aria-label={`Editar traducción inglesa de ${cat}`}
+                          >EN</Button>
+                          <Button
                             variant="ghost"
                             size="icon"
                             onClick={() => {
@@ -1515,6 +1529,15 @@ export default function InventoryPage() {
                           </Button>
                         </div>
                       </>
+                    )}
+                    {editingEnglishCategory === cat && !isEditing && (
+                      <div className="mt-2 flex w-full gap-2 border-t border-white/5 pt-2">
+                        <Input value={englishCategoryVal} onChange={event => setEnglishCategoryVal(event.target.value)} placeholder="English category name" className="h-8 flex-1 rounded-lg border-white/10 bg-black/40 text-xs text-white" />
+                        <Button type="button" size="sm" className="h-8 rounded-lg bg-emerald-600 px-3 text-xs text-white" onClick={async () => {
+                          try { await updateCategoryTranslation(cat, englishCategoryVal); setEditingEnglishCategory(null); }
+                          catch (error) { alert(error instanceof Error ? error.message : 'No se pudo guardar la traducción.'); }
+                        }}>Guardar EN</Button>
+                      </div>
                     )}
                   </div>
                 );

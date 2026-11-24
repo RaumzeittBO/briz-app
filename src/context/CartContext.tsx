@@ -3,6 +3,7 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 interface CartItem {
     id: string;
     name: string;
+    nameEn?: string;
     price: number;
     quantity: number;
     itemType?: string;
@@ -48,7 +49,7 @@ export const CartProvider = ({ children }: { children: React.ReactNode }) => {
         setItems(prev => {
             const existing = prev.find(i => i.id === newItem.id);
             if (existing) {
-                return prev.map(i => i.id === newItem.id ? { ...i, quantity: i.quantity + (newItem.quantity || 1) } : i);
+                return prev.map(i => i.id === newItem.id ? { ...i, ...newItem, quantity: i.quantity + (newItem.quantity || 1) } : i);
             }
             return [...prev, { ...newItem, quantity: newItem.quantity || 1 }];
         });
