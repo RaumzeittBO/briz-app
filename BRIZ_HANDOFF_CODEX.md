@@ -342,7 +342,7 @@ Próximo paso ejecutable: el propietario rota token y agrega token/chat ID direc
 - Siguiente: iniciar ventana única para que el propietario rote y guarde secretos directamente, otorgar Secret Accessor solo a esos recursos, desplegar los componentes compatibles y verificar el trigger/outbox; sin esperar la copia diaria.
 # Continuidad — bilingüismo / traducción de contenido (2026-11-24)
 
-- Trabajo local en `codex/briz-translation-functions`, base `8ec37d91429d9a22b5f1ee4fdf272c0065fe15b5`.
+- PR #21 (`codex/briz-bilingual-ui`) está en Draft sobre `main`; PR #22 (`codex/briz-translation-functions`) está en Draft y apilada sobre #21. Base `main`: `8ec37d91429d9a22b5f1ee4fdf272c0065fe15b5`.
 - Nav público utiliza claves semánticas ES/EN; corregidos textos EN que antes cambiaban el sentido o datos comerciales. La localización de todas las cadenas públicas aún no se certificó de punta a punta.
 - `functions/src/catalogTranslation.ts` define campos traducibles, hashing, límites de texto/uso, preservación comercial, caché/proveedor y protección manual. Triggers cubren productos, combinados, categorías, highlights de rutas y subcategorías de eventos; revalidan el original antes de guardar.
 - Habilitación real apagada por defecto. Antes de desplegar: confirmar si el secreto existe, crear `GOOGLE_TRANSLATE_API_KEY` restringida a API si hace falta, otorgar acceso mínimo al runtime, habilitar facturación/API si corresponde y fijar cuotas; no activar en Preview. No se pudo consultar listado de Secret Manager: el subcomando de Firebase no existe y `gcloud` no está instalado; ningún valor secreto fue consultado.

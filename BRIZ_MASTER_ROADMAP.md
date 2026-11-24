@@ -9,7 +9,7 @@
 - La traducción automática no está activa en Production: falta aprobar/habilitar Google Cloud Translation, configurar `GOOGLE_TRANSLATE_API_KEY` con acceso de secreto limitado y decidir cuotas/billing. No se pudo listar Secret Manager: Firebase CLI no reconoce el subcomando `functions:secrets:list` y `gcloud` no está instalado; no se leyeron valores. No ejecutar backfill de registros existentes aún; requiere dry-run/costo y autorización separados.
 - Emulator de Functions/Firestore aprobó crear/traducir contenido ficticio, reutilizar caché, regenerar tras editar español, preservar inglés manual, no tocar fotos/stock/precio y traducir categoría. Playwright + Firebase Emulator aprobó galería pública/admin y cambio ES→EN→ES sin recargar en 390×844 y 1440×900.
 - El registro de artes contiene variantes inglesas pendientes y fallbacks seguros; `BRIZ_ARTES_EN_INGLES.md` fue actualizado. El comentario “cuadro amarillo grande” no tiene referencia visual o textual identificable en el checkout; se necesita captura o ubicación concreta.
-- Próximo gate: revisar PR UI de forma independiente y PR Functions en Draft. No fusionar ni desplegar Functions hasta aprobar proveedor/secreto/cuotas y el alcance de traducción completo.
+- PR #21 (interfaz) está en Draft hacia `main`; PR #22 (traducción persistente) está en Draft sobre #21. Siguiente paso: revisar primero #21 y luego #22. No fusionar ni desplegar Functions hasta aprobar proveedor/secreto/cuotas y el alcance de traducción completo.
 
 ## Continuidad — galerías y contenido bilingüe de catálogo (2026-11-24)
 
