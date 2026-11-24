@@ -4,7 +4,7 @@
 
 | PR | Estado actual | Evidencia / bloqueo |
 |---|---|---|
-| #21 bilingüismo y artes | Open, Draft, branch `codex/briz-bilingual-ui`; cambios locales de esta sesión pendientes de commit/push al registrar este informe | Build Production local y smoke Emulator+Playwright pasan. No se fusiona: aún hay gráficos con español incrustado. Vercel Preview failure no tiene causa verificada; el scope correcto deniega acceso. |
+| #21 bilingüismo y artes | Open, Draft, branch `codex/briz-bilingual-ui`; head actualizado a 23e7cf60dfc72ba44830b407f6f4533fbf | Build Production local y smoke Emulator+Playwright pasan. No se fusiona: aún hay gráficos con español incrustado. Vercel Preview failure no tiene causa verificada; el scope correcto deniega acceso. |
 | #22 traducción automática | Open, Draft, apilada sobre #21, head `352338670537611cd078f2628300b37c2470751e` | Código habilita solo provider explícito; tests mock ya existentes. Detectado contador de cuota que no se libera ante fallo. Secret/API/roles/cuotas/costo no verificados. |
 | #20 Tiempo Libre | Open, Draft, separado, head `b2ebac07f80e331a753aab6a5393ac73c3423e2c` | Fase 1 Emulator no comercial; sin cobro. No se fusionó ni se modificó. |
 
