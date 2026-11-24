@@ -11,6 +11,7 @@ import type { InventoryItem, ComboProduct, WheelSizeEntry, ComboComponent } from
 import { getRentalInventoryDemands, findComboComponentItem } from '@/lib/rentalAvailability';
 import { validateComboComponentLink } from '@/lib/comboComponentLink';
 import { describeComboAvailabilityIssue } from '@/lib/comboAvailabilityStatus';
+import { createInventoryDraftPatch, getInventoryContentFieldsToClear } from '@/lib/inventoryDraft';
 import { hasConfiguredRentalAddonPrice, isEligibleRentalAddon } from '@/lib/rentalAddonEligibility';
 import { nextWheelSize, SUPPORTED_WHEEL_SIZES, validateUniqueWheelSizes } from '@/lib/inventoryWheelSizes';
 
@@ -259,6 +260,9 @@ export default function InventoryPage() {
   const [search, setSearch] = useState('');
   const [modal, setModal] = useState<{open:boolean; mode:'add'|'edit'; type:'bike'|'accessory'|'combo'}>({open:false,mode:'add',type:'bike'});
   const [editItem, setEditItem] = useState<any>(null);
+  const [editBaseline, setEditBaseline] = useState<any>(null);
+  const [pendingImageUploads, setPendingImageUploads] = useState(0);
+  const [savingDraft, setSavingDraft] = useState(false);
   const [releasingMaintenanceKey, setReleasingMaintenanceKey] = useState('');
   const [deleteConfirm, setDeleteConfirm] = useState<{id:string; type:string; name:string} | null>(null);
   const [stockManagerCombo, setStockManagerCombo] = useState<ComboProduct | null>(null);
@@ -393,15 +397,20 @@ export default function InventoryPage() {
 
   const openAdd = (type: 'bike'|'accessory'|'combo') => {
     setEditItem(type==='bike'?defaultBike():type==='accessory'?defaultAccessory():defaultCombo());
+    setEditBaseline(null);
+    setPendingImageUploads(0);
     setModal({open:true,mode:'add',type});
   };
   const openEdit = (item: any, type: 'bike'|'accessory'|'combo') => {
-    setEditItem(JSON.parse(JSON.stringify(item)));
+    const snapshot = JSON.parse(JSON.stringify(item));
+    setEditItem(snapshot);
+    setEditBaseline(snapshot);
+    setPendingImageUploads(0);
     setModal({open:true,mode:'edit',type});
   };
 
-  const handleSave = () => {
-    if (!editItem) return;
+  const handleSave = async () => {
+    if (!editItem || pendingImageUploads > 0 || savingDraft) return;
     if (modal.type === 'bike' && editItem.hasWheelSizes) {
       try {
         validateUniqueWheelSizes(editItem.wheelSizes || []);
@@ -436,12 +445,34 @@ export default function InventoryPage() {
       }
     }
     const draft = normalizeInventoryDraft(editItem);
-    if (modal.type === 'combo') {
-      modal.mode === 'add' ? addCombo(draft) : updateCombo(draft.id, draft);
-    } else {
-      modal.mode === 'add' ? addInventoryItem(draft) : updateInventoryItem(draft.id, draft);
+    const fieldsToClear = modal.mode === 'edit'
+      ? getInventoryContentFieldsToClear(editBaseline || {}, draft)
+      : [];
+    if (fieldsToClear.length > 0 && !window.confirm(
+      `Vas a eliminar contenido existente (${fieldsToClear.join(', ')}). ¿Confirmas que deseas borrar estos campos?`,
+    )) return;
+    setSavingDraft(true);
+    try {
+      if (modal.mode === 'add') {
+        if (modal.type === 'combo') await addCombo(draft);
+        else await addInventoryItem(draft);
+      } else {
+        const patch = createInventoryDraftPatch(editBaseline || {}, draft);
+        if (Object.keys(patch).length > 0) {
+          if (modal.type === 'combo') await updateCombo(draft.id, patch, editBaseline);
+          else await updateInventoryItem(draft.id, patch, editBaseline);
+        }
+      }
+      setModal(current => ({ ...current, open: false }));
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'No se pudo guardar el producto.');
+    } finally {
+      setSavingDraft(false);
     }
-    setModal({...modal, open:false});
+  };
+
+  const trackImageUpload = (uploading: boolean) => {
+    setPendingImageUploads(current => Math.max(0, current + (uploading ? 1 : -1)));
   };
 
   const handleDelete = () => {
@@ -829,7 +860,7 @@ export default function InventoryPage() {
       {modal.open && editItem && (
         <div className="fixed inset-0 z-50 flex items-stretch">
           {/* Backdrop */}
-          <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={()=>setModal({...modal,open:false})} />
+          <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={()=>{if (pendingImageUploads === 0 && !savingDraft) setModal({...modal,open:false});}} />
 
           {/* Panel */}
           <div className="relative mx-auto my-4 w-full max-w-5xl bg-brand-charcoal border border-white/10 rounded-2xl flex flex-col z-10 shadow-2xl overflow-hidden" style={{maxHeight:'calc(100vh - 32px)'}}>
@@ -843,7 +874,7 @@ export default function InventoryPage() {
                   {modal.mode==='add'?'Crear':'Editar'} {modal.type==='bike'?'Bicicleta':modal.type==='accessory'?'Accesorio':'Combinado'}
                 </h2>
               </div>
-              <Button variant="ghost" size="icon" onClick={()=>setModal({...modal,open:false})} className="w-9 h-9 rounded-xl text-white/40 hover:text-white hover:bg-white/10">
+              <Button variant="ghost" size="icon" disabled={pendingImageUploads > 0 || savingDraft} onClick={()=>setModal({...modal,open:false})} className="w-9 h-9 rounded-xl text-white/40 hover:text-white hover:bg-white/10">
                 <X className="w-5 h-5"/>
               </Button>
             </div>
@@ -861,7 +892,7 @@ export default function InventoryPage() {
                     </div>
                     <div className="flex gap-2 mt-2">
                       <Input placeholder="URL de imagen..." value={editItem.imageUrl||''} onChange={e=>setEditItem({...editItem,imageUrl:e.target.value})} className="bg-black/40 border-white/10 h-10 text-sm rounded-xl text-white flex-1"/>
-                      <FileUploader onUpload={(url)=>setEditItem({...editItem,imageUrl:url})} folder="inventory" />
+                      <FileUploader onUploadingChange={trackImageUpload} onUpload={(url)=>setEditItem((current: typeof editItem)=>current ? {...current,imageUrl:url} : current)} folder="inventory" />
                     </div>
                   </div>
 
@@ -886,15 +917,19 @@ export default function InventoryPage() {
                                 }}
                                 className="bg-black/40 border-white/10 h-10 text-xs rounded-xl text-white flex-1"
                               />
-                              <FileUploader onUpload={(newUrl)=>{
-                                const updatedUrls = [...urls];
-                                updatedUrls[index] = newUrl;
-                                setEditItem({ ...editItem, additionalImageUrls: updatedUrls });
+                              <FileUploader onUploadingChange={trackImageUpload} onUpload={(newUrl)=>{
+                                setEditItem((current: typeof editItem) => {
+                                  if (!current) return current;
+                                  const updatedUrls = [...(current.additionalImageUrls || [])];
+                                  if (index < updatedUrls.length) updatedUrls[index] = newUrl;
+                                  return { ...current, additionalImageUrls: updatedUrls };
+                                });
                               }} folder="inventory" />
                               <Button
                                 type="button"
                                 variant="ghost"
                                 size="icon"
+                                disabled={pendingImageUploads > 0}
                                 onClick={() => {
                                   const updatedUrls = urls.filter((_: any, idx: number) => idx !== index);
                                   setEditItem({ ...editItem, additionalImageUrls: updatedUrls });
@@ -908,6 +943,7 @@ export default function InventoryPage() {
                           <Button
                             type="button"
                             variant="outline"
+                            disabled={pendingImageUploads > 0}
                             className="w-full h-9 rounded-xl border border-white/10 hover:border-brand-yellow hover:bg-brand-yellow/5 text-xs font-black uppercase text-white transition-colors cursor-pointer"
                             onClick={() => {
                               setEditItem({ ...editItem, additionalImageUrls: [...urls, ''] });
@@ -1098,8 +1134,8 @@ export default function InventoryPage() {
 
             {/* Footer — always visible */}
             <div className="flex gap-3 px-6 py-4 border-t border-white/5 shrink-0 bg-black/20">
-              <Button type="button" variant="ghost" onClick={()=>setModal({...modal,open:false})} className="flex-1 h-12 text-white/40 font-bold rounded-xl hover:bg-white/5 border border-white/5">Cancelar</Button>
-              <Button type="button" onClick={handleSave} className="flex-1 h-12 bg-brand-yellow text-brand-black font-black rounded-xl hover:bg-brand-yellow/90 text-base">Guardar</Button>
+              <Button type="button" variant="ghost" disabled={pendingImageUploads > 0 || savingDraft} onClick={()=>setModal({...modal,open:false})} className="flex-1 h-12 text-white/40 font-bold rounded-xl hover:bg-white/5 border border-white/5">Cancelar</Button>
+              <Button type="button" disabled={pendingImageUploads > 0 || savingDraft} onClick={handleSave} className="flex-1 h-12 bg-brand-yellow text-brand-black font-black rounded-xl hover:bg-brand-yellow/90 disabled:opacity-50 text-base">{savingDraft ? 'Guardando...' : pendingImageUploads > 0 ? 'Esperando imágenes...' : 'Guardar'}</Button>
             </div>
           </div>
         </div>
