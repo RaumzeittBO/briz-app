@@ -349,7 +349,7 @@ export default function Navbar() {
                             className="group flex items-center shrink-0" 
                             aria-label={language === 'es' ? 'BRIZ Centro de la Bicicleta' : 'BRIZ Bicycle Center'}
                         >
-                            <ArtworkPicture slotId="home_bike_logo" language={language} alt="Bicicleta BRIZ" className="shrink-0 transition-transform duration-200 group-hover:scale-[1.02]" imageClassName="w-auto shrink-0 object-contain brightness-0 invert" style={{ height: 80 }} />
+                            <ArtworkPicture slotId="home_bike_logo" language={language} alt={language === 'es' ? 'Bicicleta BRIZ' : 'BRIZ bicycle'} className="shrink-0 transition-transform duration-200 group-hover:scale-[1.02]" imageClassName="w-auto shrink-0 object-contain brightness-0 invert" style={{ height: 80 }} />
                             <ArtworkPicture slotId="site_brand_logo" language={language} alt="BRIZ" className="shrink-0" imageClassName="w-auto shrink-0 object-contain brightness-0 invert" style={{ height: 56, marginLeft: -6 }} />
                         </Link>
 
@@ -546,7 +546,7 @@ export default function Navbar() {
                             className="group flex items-center shrink-0" 
                             aria-label={language === 'es' ? 'BRIZ Centro de la Bicicleta' : 'BRIZ Bicycle Center'}
                         >
-                            <ArtworkPicture slotId="home_bike_logo" language={language} alt="Bicicleta BRIZ" className="shrink-0" imageClassName="w-auto shrink-0 object-contain brightness-0 invert" style={{ height: 58 }} />
+                            <ArtworkPicture slotId="home_bike_logo" language={language} alt={language === 'es' ? 'Bicicleta BRIZ' : 'BRIZ bicycle'} className="shrink-0" imageClassName="w-auto shrink-0 object-contain brightness-0 invert" style={{ height: 58 }} />
                             <ArtworkPicture slotId="site_brand_logo" language={language} alt="BRIZ" className="shrink-0" imageClassName="w-auto shrink-0 object-contain brightness-0 invert" style={{ height: 34, marginLeft: -4 }} />
                         </Link>
 

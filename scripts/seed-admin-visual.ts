@@ -5,9 +5,10 @@
 import { createRequire } from 'node:module';
 
 const projectId = 'demo-briz-security';
-const authHost = '127.0.0.1:9099';
-const firestoreHost = '127.0.0.1:8080';
-const storageHost = '127.0.0.1:9199';
+const emulatorHost = process.env.BRIZ_EMULATOR_HOST || '127.0.0.1';
+const authHost = `${emulatorHost}:${process.env.BRIZ_AUTH_EMULATOR_PORT || '9099'}`;
+const firestoreHost = `${emulatorHost}:${process.env.BRIZ_FIRESTORE_EMULATOR_PORT || '8080'}`;
+const storageHost = `${emulatorHost}:${process.env.BRIZ_STORAGE_EMULATOR_PORT || '9199'}`;
 const email = 'admin-visual@example.test';
 const password = 'BrizEmulator#123';
 

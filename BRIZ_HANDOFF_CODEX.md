@@ -340,3 +340,11 @@ Próximo paso ejecutable: el propietario rota token y agrega token/chat ID direc
 - Firestore backup sigue diario/7 días, PITR desactivado; tras refrescar la pantalla la tabla sigue vacía. En esa revisión faltaba una copia automática; esa ausencia no bloquea publicación. La copia puntual ya se restauró en Emulator, nunca en producción.
 - No se desplegó ni fusionó nada, no se modificaron datos/secretos y `briz-staging` no se utilizó. La Function separa identidades en código; build de Functions pasó en el commit local `77ce36b`. El commit está local y sin push para evitar Preview bloqueado por no haber staging.
 - Siguiente: iniciar ventana única para que el propietario rote y guarde secretos directamente, otorgar Secret Accessor solo a esos recursos, desplegar los componentes compatibles y verificar el trigger/outbox; sin esperar la copia diaria.
+
+## Cierre del trabajo BRIZ — 2026-11-24
+
+El estado y la matriz completos están en `BRIZ_CIERRE_SOLICITUDES_2026-11-24.md`. La #21 tiene pruebas visuales/Emulator ampliadas y un arreglo real del fallback de las variantes inglesas móviles de “Why Choose BRIZ” y “The Brand”. Se corrigieron textos del modal de acceso y recuperación al inglés. Se conserva como Draft y no se fusiona: faltan artes reales en inglés para hero “Vive”, collage “Una bicicleta”, portada del taller y láminas About; el fallo Vercel Preview sigue sin log verificable por falta de acceso al scope `gfabrigtrf-7085s-projects`.
+
+PR #22 continúa Draft sobre #21. El proveedor está deshabilitado; el contador de cuota no libera reserva si el proveedor falla, pendiente de corrección antes de activar. API/secret/IAM/cuotas/costo no pudieron verificarse con herramientas locales disponibles. No hubo despliegues ni escrituras en Firebase Production.
+
+PR #20 sigue Draft y aislada. La Fase 1 Emulator no se publicó; no hay cobro activo. Mínimo, redondeo y límites requieren decisión de Ale.

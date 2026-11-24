@@ -41,10 +41,15 @@ export const storage = getStorage(app);
 export const functions = getFunctions(app);
 
 if (useFirebaseEmulator) {
-  connectAuthEmulator(auth, "http://127.0.0.1:9099", { disableWarnings: true });
-  connectFirestoreEmulator(db, "127.0.0.1", 8080);
-  connectStorageEmulator(storage, "127.0.0.1", 9199);
-  connectFunctionsEmulator(functions, "127.0.0.1", 5001);
+  const emulatorHost = import.meta.env.VITE_FIREBASE_EMULATOR_HOST || "127.0.0.1";
+  const emulatorPort = (key: string, defaultPort: number) => {
+    const value = Number(import.meta.env[key]);
+    return Number.isInteger(value) && value > 0 && value <= 65535 ? value : defaultPort;
+  };
+  connectAuthEmulator(auth, `http://${emulatorHost}:${emulatorPort('VITE_FIREBASE_EMULATOR_AUTH_PORT', 9099)}`, { disableWarnings: true });
+  connectFirestoreEmulator(db, emulatorHost, emulatorPort('VITE_FIREBASE_EMULATOR_FIRESTORE_PORT', 8080));
+  connectStorageEmulator(storage, emulatorHost, emulatorPort('VITE_FIREBASE_EMULATOR_STORAGE_PORT', 9199));
+  connectFunctionsEmulator(functions, emulatorHost, emulatorPort('VITE_FIREBASE_EMULATOR_FUNCTIONS_PORT', 5001));
 }
 
 export default app;

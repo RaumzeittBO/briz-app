@@ -60,6 +60,17 @@ const translationDict: Record<string, string> = {
     'Accesorios para ciclistas': 'Accessories for Cyclists',
     'Repuestos': 'Spare Parts',
     'Herramientas': 'Tools',
+    'Montañeras nuevas': 'New Mountain Bikes',
+    'Bicicletas para niños': "Kids' Bikes",
+    'Accesorios complementarios': 'Complementary Accessories',
+    'Timbres y campanas': 'Bells',
+    'Canastas': 'Baskets',
+    'Candados': 'Locks',
+    'Bocinas y confort': 'Horns & Comfort',
+    'Guardabarros': 'Fenders',
+    'Luces': 'Lights',
+    'Llantas auxiliares': 'Training Wheels',
+    'Parrillas y parqueos': 'Racks & Bike Stands',
 
     // Bike Names
     'Urbana': 'Urban Bike',

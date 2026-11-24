@@ -407,3 +407,13 @@ Para permitir que el administrador cambie banners y artes en español/inglés (W
 - `www.briz.com.bo` está autorizado en Firebase Auth. Apex omitido porque redirige a www y los flujos actuales usan el manejador predeterminado de Firebase.
 - Backup Firestore diario con retención de siete días continúa sin copia listada tras recarga. Histórico: la copia aún no se había materializado en esa revisión. Estado vigente: la copia puntual de catálogo/configuración está restaurada y verificada en Emulator; el primer backup diario no es gate.
 - Estado en esa revisión, ya supersedido: los secretos vacíos ya existen con acceso limitado al runtime Telegram. La intervención de rotación no depende del backup diario. No desplegar, fusionar ni escribir datos operativos como parte de esta preparación.
+
+## Cierre de solicitudes BRIZ — 2026-11-24
+
+- PR #21 sigue Draft y no se publicó. El smoke del build Production + Emulator + Playwright pasó en 390×844 y 1440×900 para diez rutas públicas, incluidos menú, formulario de taller, acceso y recuperación. Las capturas detectaron español incrustado que el DOM no puede escanear: `vive.webp`, la lámina “UNA bicicleta…” y el letrero de la foto del taller. Los PNG “WHY CHOOSE BRIZ” y el cuadro amarillo “THE BRAND” existen en inglés web/móvil; sus variantes móviles estaban deshabilitadas en el registro y se corrigieron. Ver `BRIZ_ARTES_EN_INGLES.md`.
+- Galería pública/admin Emulator pasó en 390×844 y 1440×900 con fixtures; también pasó `inventory-draft-protection`. No se escribió Production. ESLint dirigido reporta cuatro errores ya presentes en líneas no modificadas de `Navbar.tsx` y `HomePage.tsx`.
+- Vercel sigue inaccesible bajo el scope de BRIZ para consultar logs; la causa del fallo Preview continúa sin verificar. Build Production local reproducible; guard intacto.
+- PR #22 sigue Draft y apilada sobre #21. `translationUsage.charactersReserved` no se libera tras error del proveedor y puede bloquear nuevas traducciones ese día. Corregir antes de activar. Proveedor deshabilitado por defecto; API, secreto, IAM, cuotas y costo sin confirmar porque `gcloud` no está instalado. No activar/desplegar.
+- PR #20 permanece Draft y separada, sin cobro. Faltan reglas comerciales de mínimo, redondeo y duración máxima.
+- Contrato de desarrollo/entrega no encontrado en el checkout; tampoco hay constancia de aceptación formal del cliente.
+- Matriz de cierre: `BRIZ_CIERRE_SOLICITUDES_2026-11-24.md`.

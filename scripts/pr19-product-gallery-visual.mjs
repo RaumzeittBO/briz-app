@@ -6,6 +6,7 @@ import { chromium } from 'playwright';
 
 const port = 5189;
 const baseUrl = `http://127.0.0.1:${port}`;
+const storageOrigin = `http://${process.env.VITE_FIREBASE_EMULATOR_HOST || '127.0.0.1'}:${process.env.VITE_FIREBASE_EMULATOR_STORAGE_PORT || '9199'}`;
 const server = spawn(process.execPath, ['node_modules/vite/bin/vite.js', '--host', '127.0.0.1', '--port', String(port), '--strictPort'], {
   cwd: process.cwd(),
   env: { ...process.env, VITE_USE_FIREBASE_EMULATOR: 'true' },
@@ -125,7 +126,7 @@ try {
   let notifyUpload;
   const uploadReached = new Promise(resolve => { notifyUpload = resolve; });
   const uploadGate = new Promise(resolve => { releaseUpload = resolve; });
-  await page.route('http://127.0.0.1:9199/**', async route => {
+  await page.route(`${storageOrigin}/**`, async route => {
     if (route.request().method() === 'POST') {
       notifyUpload();
       await uploadGate;
@@ -145,8 +146,8 @@ try {
   await page.getByText('Editar Producto de Tienda', { exact: true }).waitFor({ state: 'hidden' });
 
   await page.getByRole('row').filter({ hasText: 'Bicicleta demo para tienda' }).getByRole('button').first().click();
-  await page.unroute('http://127.0.0.1:9199/**');
-  await page.route('http://127.0.0.1:9199/**', async route => {
+  await page.unroute(`${storageOrigin}/**`);
+  await page.route(`${storageOrigin}/**`, async route => {
     if (route.request().method() === 'POST') {
       return route.fulfill({ status: 403, contentType: 'application/json', body: JSON.stringify({ error: { code: 403, message: 'Permission denied' } }) });
     }
