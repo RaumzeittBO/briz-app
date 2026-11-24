@@ -351,7 +351,7 @@ PR #20 sigue Draft y aislada. La Fase 1 Emulator no se publicó; no hay cobro ac
 
 ### Estado verificado actualizado — 2026-11-24
 
-- #21 permanece Open/Draft en `d35ac2f9682f8ffc41c2c3a6973afe2d4e25cc1d`; validaciones locales pasan, pero faltan artes ingleses. El check Vercel del SHA actual está PENDING; el SHA anterior falló y la causa del build sigue sin verificar: `pachax.bo@gmail.com` recibe 403 al scope `gfabrigtrf-7085s-projects`. Mantener protección; no fusionar ni declarar publicación.
+- #21 tiene validación funcional en `0ae48bb9c889c3dfd483e5e9e4d375399aa5b2c5`; los commits posteriores son solo documentación. Sigue Open/Draft y faltan artes ingleses. El último check Vercel consultado estaba PENDING; un SHA anterior falló y su causa sigue sin verificar: `pachax.bo@gmail.com` recibe 403 al scope `gfabrigtrf-7085s-projects`. Mantener protección; no fusionar ni declarar publicación.
 - #22 permanece Open/Draft en `352338670537611cd078f2628300b37c2470751e`, apilada sobre #21 y marcada CONFLICTING; Preview FAILURE. Provider deshabilitado. Corregir la reserva de cuota ante fallo del proveedor; no activar servicio ni rebasear antes de que #21 llegue a main.
 - #20 permanece Open/Draft, separada, actualizada a `befe0f584727fedb06ddc74d47533bf25efd3eb9`; Preview FAILURE. Emulator, prorrateo puro sin reglas comerciales, build de Functions/web y Playwright 390×844/1280×900 pasan. No fusionar ni publicar antes de reglas de Ale.
 - La matriz recoge pruebas y requisitos aún pendientes. Contrato original no disponible en el checkout; aceptación formal no confirmada. No se modificó Firebase Production ni sus datos.
