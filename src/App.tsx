@@ -30,7 +30,6 @@ import CustomersPage from '@/pages/admin/CustomersPage';
 import ReportsPage from '@/pages/admin/ReportsPage';
 import SettingsPage from '@/pages/admin/SettingsPage';
 import AdminRoutesPage from '@/pages/admin/AdminRoutesPage';
-import AdminSeedPage from '@/pages/admin/AdminSeedPage';
 import AdminCommunityPage from '@/pages/admin/AdminCommunityPage';
 import AdminEventsPage from '@/pages/admin/AdminEventsPage';
 import AdminArtworksPage from '@/pages/admin/AdminArtworksPage';
@@ -85,7 +84,6 @@ function AppRoutes() {
         <Route path="routes" element={<AdminRoutesPage />} />
         <Route path="reports" element={<ReportsPage />} />
         <Route path="settings" element={<SettingsPage />} />
-        <Route path="seed" element={<AdminSeedPage />} />
         <Route path="artes" element={<AdminRoleRoute><AdminArtworksPage /></AdminRoleRoute>} />
       </Route>
 

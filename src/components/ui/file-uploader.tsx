@@ -21,6 +21,7 @@ interface FileUploaderProps {
     className?: string;
     wrapperClassName?: string;
     multiple?: boolean;
+    onUploadingChange?: (uploading: boolean) => void;
 }
 
 export function FileUploader({
@@ -30,6 +31,7 @@ export function FileUploader({
     className = '',
     wrapperClassName = '',
     multiple = false,
+    onUploadingChange,
 }: FileUploaderProps) {
     const [entries, setEntries] = useState<FileEntry[]>([]);
     const [isRunning, setIsRunning] = useState(false);
@@ -68,6 +70,7 @@ export function FileUploader({
         }));
         setEntries(initialEntries);
         setIsRunning(true);
+        onUploadingChange?.(true);
 
         const successUrls: string[] = [];
 
@@ -85,6 +88,7 @@ export function FileUploader({
         }
 
         setIsRunning(false);
+        onUploadingChange?.(false);
 
         // Deliver results to parent
         if (successUrls.length > 0) {
