@@ -18,7 +18,7 @@ import {
     type LucideIcon,
 } from 'lucide-react';
 import { useLanguage } from '@/context/LanguageContext';
-import { t } from '@/lib/translations';
+import { getLocalizedCategory } from '@/lib/translations';
 import ArtworkPicture from '@/components/ArtworkPicture';
 
 type NavLinkItem = {
@@ -119,7 +119,7 @@ export default function Navbar() {
     const location = useLocation();
     const navigate = useNavigate();
     
-    const { currentCustomer, logoutCustomer, routes, inventory, combos, events, bikeCategories, shopCategories } = useStore();
+    const { currentCustomer, logoutCustomer, routes, inventory, combos, events, bikeCategories, shopCategories, categoryTranslations } = useStore();
     const { language, setLanguage } = useLanguage();
     const [authModalOpen, setAuthModalOpen] = useState(false);
     const [langDropdownOpen, setLangDropdownOpen] = useState(false);
@@ -174,17 +174,17 @@ export default function Navbar() {
         };
 
         return Array.from(productCategorySet).sort(sortCategories).map((cat: string) => ({
-            label: t(cat, language as any),
+            label: getLocalizedCategory(cat, categoryTranslations, language),
             href: `/rentals?category=${encodeURIComponent(cat)}`
         }));
-    }, [inventory, combos, events, bikeCategories, language]);
+    }, [inventory, combos, events, bikeCategories, language, categoryTranslations]);
 
     const shopCategoriesLinks = useMemo(() => {
         return (shopCategories || []).map((cat: string) => ({
-            label: t(cat, language as any),
+            label: getLocalizedCategory(cat, categoryTranslations, language),
             href: `/shop?category=${encodeURIComponent(cat)}`
         }));
-    }, [shopCategories, language]);
+    }, [shopCategories, language, categoryTranslations]);
 
     const ciclotoursCategories = useMemo(() => {
         return (routes || []).map((r: any) => ({

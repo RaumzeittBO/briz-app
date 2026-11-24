@@ -1,5 +1,15 @@
 # BRIZ (`briz.com.bo`) — MASTER ROADMAP & ENGINEERING LOG
 
+## Continuidad — galerías y contenido bilingüe de catálogo (2026-11-24)
+
+- La implementación de PR #19 agrega galerías públicas para fotos principales y adicionales, filtra referencias vacías/duplicadas/no HTTPS y conserva el caso histórico de una sola foto. Rentals y Tienda presentan el contenido en inglés disponible y usan el texto español como fallback.
+- Administración permite guardar `nameEn`, `descriptionEn`, `detailsEn` y traducciones explícitas de categorías. Las ediciones de traducción cambian solo sus campos; los originales en español permanecen intactos.
+- Se eliminó la sustitución automática de categorías de Tienda existentes al cargar StoreContext. Los valores existentes se conservan; los defaults solo se crean si el documento de configuración no existe.
+- Las protecciones de PR #18 continúan en los editores: patch de campos modificados, conflicto si cambió el mismo campo, confirmación al borrar contenido y bloqueo de guardado/cierre durante una subida. No se ejecutan seeds ni reemplazos de catálogos.
+- Regresión y verificación en Emulator/Playwright: borradores concurrentes; las traducciones inglesas no alteran los campos españoles; categorías existentes no se reemplazan; galería recargada en 390×844 y 1440×900; build web, Functions, reglas Firestore/Storage y test de galería. No requiere despliegues de Functions, reglas ni migraciones. El estado de integración y Production se obtiene de PR #19, `main` y el deployment Vercel asociados, no de este apunte de código.
+- Referencia de solo lectura para `inventory`/`combos` anterior a la publicación: 173 inventarios y 14 combinados; IDs, categorías, referencias de fotos, descripciones/detalles, stock y precios quedaron registrados con hashes locales fuera de Git. Sin lecturas de Storage ni escrituras en Production.
+- Siguientes desarrollos: definir con Ale las reglas comerciales de Tiempo Libre; auditoría permanente del inventario; validación integral de Administración/Caja/Reportes/Taller; completar traducciones y artes en inglés; limpieza técnica y optimización.
+
 ## Estado vigente — preservación de datos y release (2026-10-21)
 
 - Se creó una copia local de solo lectura en `G:\ProjectBriz\BRIZ_RELEASE_PRESERVATION_2026-10-21`. Incluye Firestore `inventory` (173 docs), `combos` (14), `routes` (2), `events` (2), `settings/rental_settings`, `settings/bike_categories`, `settings/shop_categories` y `adminUsers/C8MUz2wZrPOyaNySZc44YShLHoJ3`. Conserva los nombres/IDs, recursos REST con tipos y referencias, más 43 objetos de Storage de `inventory/` y `events/` (9,409,348 bytes) con metadatos y checksum. Excluye clientes, alquileres, pagos, community, customer uploads y credenciales Auth.

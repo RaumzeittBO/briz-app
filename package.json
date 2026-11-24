@@ -15,6 +15,8 @@
     "test:accessory-modalities": "npx tsx scripts/accessory-pricing-modalities.test.ts",
     "test:mamachari-workshop": "npx tsx scripts/mamachari-workshop-documents.test.ts",
     "test:rental-schedule": "npx tsx scripts/rental-schedule.test.ts",
+    "test:product-gallery": "npx tsx scripts/product-gallery.test.ts",
+    "test:pr19-gallery-visual": "firebase emulators:exec --project demo-briz-security --only auth,firestore,storage \"npx tsx scripts/seed-admin-visual.ts && node scripts/pr19-product-gallery-visual.mjs\"",
     "test:customer-private-files": "npx tsx scripts/customer-private-files.test.ts",
     "test:customer-profile-completion": "npx tsx scripts/customer-profile-completion.test.ts",
     "test:inventory-draft-protection": "firebase emulators:exec --project demo-briz-inventory-protection --only firestore \"npx tsx scripts/inventory-draft-protection.test.ts\"",

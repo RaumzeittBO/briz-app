@@ -86,7 +86,8 @@ function normalizeInventoryDraft(draft: any) {
 export default function AdminShopPage() {
   const { 
     inventory, addInventoryItem, updateInventoryItem, deleteInventoryItem, 
-    shopCategories, addShopCategory, deleteShopCategory, updateShopCategory, reorderShopCategories
+    shopCategories, addShopCategory, deleteShopCategory, updateShopCategory, reorderShopCategories,
+    categoryTranslations, updateCategoryTranslation
   } = useStore();
 
   const [tab, setTab] = useState('bikes');
@@ -102,6 +103,8 @@ export default function AdminShopPage() {
   const [categoryManagerOpen, setCategoryManagerOpen] = useState(false);
   const [editingCat, setEditingCat] = useState<string | null>(null);
   const [editingVal, setEditingVal] = useState("");
+  const [editingEnglishCategory, setEditingEnglishCategory] = useState<string | null>(null);
+  const [englishCategoryVal, setEnglishCategoryVal] = useState("");
   const [newCategoryName, setNewCategoryName] = useState("");
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
 
@@ -456,6 +459,11 @@ export default function AdminShopPage() {
                   <Label className="text-[10px] text-white/40 font-bold uppercase tracking-wider">Nombre del Producto</Label>
                   <Input value={editItem.name} onChange={e=>updateDraft({ name: e.target.value })} className="bg-black/40 border-white/10 h-12 font-black text-lg rounded-xl mt-1 text-white" placeholder={modal.type==='bike'?'Ej: Urbana Aro 26 Bridgestone':'Ej: Inflador bombín de pie'} required/>
                 </div>
+                <div>
+                  <Label htmlFor="shop-product-name-en" className="text-[10px] text-white/40 font-bold uppercase tracking-wider">Product name (English)</Label>
+                  <Input id="shop-product-name-en" value={editItem.nameEn || ''} onChange={e=>updateDraft({ nameEn: e.target.value })} className="bg-black/40 border-white/10 h-10 rounded-xl mt-1 text-white" placeholder="Optional English translation" />
+                  <p className="mt-1 text-[10px] text-white/40">If empty, the Spanish name remains the fallback.</p>
+                </div>
 
                 {/* Category Selection */}
                 {editItem && (
@@ -499,10 +507,18 @@ export default function AdminShopPage() {
                   <Label className="text-[10px] text-white/40 font-bold uppercase tracking-wider">Descripción</Label>
                   <Textarea value={editItem.description} onChange={e=>updateDraft({ description: e.target.value })} className="bg-black/40 border-white/10 rounded-xl resize-none text-sm mt-1 text-white" rows={3}/>
                 </div>
+                <div>
+                  <Label htmlFor="shop-description-en" className="text-[10px] text-white/40 font-bold uppercase tracking-wider">Description (English)</Label>
+                  <Textarea id="shop-description-en" value={editItem.descriptionEn || ''} onChange={e=>updateDraft({ descriptionEn: e.target.value })} className="bg-black/40 border-white/10 rounded-xl resize-none text-sm mt-1 text-white" rows={3} placeholder="Optional English translation" />
+                </div>
 
                 <div>
                   <Label className="text-[10px] text-white/40 font-bold uppercase tracking-wider">Detalles adicionales (Especificaciones)</Label>
                   <Textarea value={editItem.details} onChange={e=>updateDraft({ details: e.target.value })} className="bg-black/40 border-white/10 rounded-xl resize-none text-sm mt-1 text-white" rows={2}/>
+                </div>
+                <div>
+                  <Label htmlFor="shop-details-en" className="text-[10px] text-white/40 font-bold uppercase tracking-wider">Additional details (English)</Label>
+                  <Textarea id="shop-details-en" value={editItem.detailsEn || ''} onChange={e=>updateDraft({ detailsEn: e.target.value })} className="bg-black/40 border-white/10 rounded-xl resize-none text-sm mt-1 text-white" rows={2} placeholder="Optional English translation" />
                 </div>
 
                 {/* Toggles */}
@@ -783,7 +799,7 @@ export default function AdminShopPage() {
                       setDraggedIndex(null);
                     }}
                     onDragEnd={() => setDraggedIndex(null)}
-                    className={`flex items-center justify-between bg-white/5 border rounded-xl p-2.5 transition-all ${
+                    className={`flex flex-wrap items-center justify-between bg-white/5 border rounded-xl p-2.5 transition-all ${
                       isDragging 
                         ? 'border-brand-yellow border-dashed bg-brand-yellow/5 opacity-50' 
                         : 'border-white/5 hover:bg-white/10'
@@ -841,6 +857,17 @@ export default function AdminShopPage() {
                         </div>
                         <div className="flex gap-1 shrink-0">
                           <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              setEditingEnglishCategory(editingEnglishCategory === cat ? null : cat);
+                              setEnglishCategoryVal(categoryTranslations[cat] || '');
+                            }}
+                            className="h-7 rounded-lg px-2 text-[10px] font-black text-blue-300 hover:bg-blue-400/10"
+                            aria-label={`Edit English translation for ${cat}`}
+                          >EN</Button>
+                          <Button
                             variant="ghost"
                             size="icon"
                             onClick={() => {
@@ -871,6 +898,15 @@ export default function AdminShopPage() {
                           </Button>
                         </div>
                       </>
+                    )}
+                    {editingEnglishCategory === cat && !isEditing && (
+                      <div className="mt-2 flex w-full gap-2 border-t border-white/5 pt-2">
+                        <Input value={englishCategoryVal} onChange={event => setEnglishCategoryVal(event.target.value)} placeholder="English category name" className="h-8 flex-1 rounded-lg border-white/10 bg-black/40 text-xs text-white" />
+                        <Button type="button" size="sm" className="h-8 rounded-lg bg-emerald-600 px-3 text-xs text-white" onClick={async () => {
+                          try { await updateCategoryTranslation(cat, englishCategoryVal); setEditingEnglishCategory(null); }
+                          catch (error) { alert(error instanceof Error ? error.message : 'Could not save translation.'); }
+                        }}>Save EN</Button>
+                      </div>
                     )}
                   </div>
                 );

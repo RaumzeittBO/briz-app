@@ -14,7 +14,9 @@ import { useStore } from '@/context/StoreContext';
 import type { ComboProduct } from '@/context/StoreContext';
 import { useCart } from '@/context/CartContext';
 import { useLanguage } from '@/context/LanguageContext';
-import { t, getLocalizedField } from '@/lib/translations';
+import { t, getLocalizedCategory, getLocalizedField } from '@/lib/translations';
+import { ProductImageGallery } from '@/components/ui/product-image-gallery';
+import { getValidProductImages } from '@/lib/productGallery';
 
 import { generateShopWhatsAppLink } from '@/lib/whatsapp';
 import { businessWhatsAppUrl } from '@/lib/businessConfig';
@@ -30,10 +32,15 @@ type ShopItem = {
     id: string;
     itemType: 'bike' | 'product' | 'accessory';
     name: string;
+    nameEn?: string;
     category: string;
     price: number;
     description: string;
+    descriptionEn?: string;
+    details?: string;
+    detailsEn?: string;
     image: string;
+    additionalImageUrls?: string[];
 };
 
 function sortShopCategories(a: string, b: string, categories: string[]): number {
@@ -47,7 +54,7 @@ function sortShopCategories(a: string, b: string, categories: string[]): number 
 
 
 export default function ShopPage() {
-    const { inventory, combos, shopCategories, publicBusinessConfig } = useStore();
+    const { inventory, combos, shopCategories, categoryTranslations, publicBusinessConfig } = useStore();
     const { language } = useLanguage();
 
     const { items: cartItems, addToCart, removeFromCart, updateQuantity, clearCart, totalItems, totalPrice } = useCart();
@@ -72,6 +79,7 @@ export default function ShopPage() {
     const setShowCart = (open: boolean) => setCartSelection({ source: cartQuery, open });
     const [search, setSearch] = useState('');
     const [checkoutStep, setCheckoutStep] = useState<'cart' | 'checkout'>('cart');
+    const [selectedProduct, setSelectedProduct] = useState<ShopItem | null>(null);
 
     // Dynamic Scroll Container Refs
     const scrollRefs = useRef<Record<string, HTMLDivElement | null>>({});
@@ -95,24 +103,34 @@ export default function ShopPage() {
         .map(i => ({
             id: i.id,
             itemType: i.itemType,
-            name: getLocalizedField(i.name, i.nameEn, language),
+            name: i.name,
+            nameEn: i.nameEn,
             category: i.category || (i.itemType === 'bike' ? 'Bicicletas' : 'Accesorios'),
             price: i.salePrice ?? 0,
-            description: getLocalizedField(i.description, i.descriptionEn, language),
+            description: i.description,
+            descriptionEn: i.descriptionEn,
+            details: i.details,
+            detailsEn: i.detailsEn,
             image: i.imageUrl,
-        })), [inventory, language]);
+            additionalImageUrls: i.additionalImageUrls,
+        })), [inventory]);
 
     const comboItems = useMemo<ShopItem[]>(() => combos
         .filter((c: ComboProduct) => c.availableForSale && c.active)
         .map((c: ComboProduct) => ({
             id: c.id,
             itemType: 'product',
-            name: getLocalizedField(c.name, c.nameEn, language),
+            name: c.name,
+            nameEn: c.nameEn,
             category: c.category || 'Bicicletas',
             price: c.salePrice ?? 0,
-            description: getLocalizedField(c.description, c.descriptionEn, language),
+            description: c.description,
+            descriptionEn: c.descriptionEn,
+            details: c.details,
+            detailsEn: c.detailsEn,
             image: c.imageUrl,
-        })), [combos, language]);
+            additionalImageUrls: c.additionalImageUrls,
+        })), [combos]);
 
     const allItems = useMemo(() => [...productItems, ...comboItems], [productItems, comboItems]);
 
@@ -127,7 +145,8 @@ export default function ShopPage() {
     const filtered = useMemo(() => {
         return allItems.filter(item => {
             const q = search.toLowerCase();
-            const matchSearch = item.name.toLowerCase().includes(q) || item.description.toLowerCase().includes(q);
+            const searchableText = [item.name, item.nameEn, item.description, item.descriptionEn, item.details, item.detailsEn].filter(Boolean).join(' ').toLowerCase();
+            const matchSearch = searchableText.includes(q);
             if (category === 'Todas') return matchSearch;
             return item.category === category && matchSearch;
         });
@@ -157,7 +176,7 @@ export default function ShopPage() {
         return allItems.filter(item => {
             if (item.category !== expandedCategory) return false;
             const q = search.toLowerCase();
-            return item.name.toLowerCase().includes(q) || item.description.toLowerCase().includes(q);
+            return [item.name, item.nameEn, item.description, item.descriptionEn, item.details, item.detailsEn].filter(Boolean).join(' ').toLowerCase().includes(q);
         });
     }, [allItems, expandedCategory, search]);
 
@@ -180,7 +199,7 @@ export default function ShopPage() {
             customerName: customerFullName,
             customerPhone: phone,
             customerCI: ci,
-            items: cartItems.map(item => ({ name: item.name, price: item.price, quantity: item.quantity })),
+            items: cartItems.map(item => ({ name: getLocalizedField(item.name, item.nameEn, language), price: item.price, quantity: item.quantity })),
             total: totalPrice,
             notes,
             language,
@@ -211,9 +230,9 @@ export default function ShopPage() {
                 <div className="flex justify-between items-end mb-6">
                     <div className="space-y-3 sm:space-y-1">
                         <h2 
-                            className="font-tan text-[0.77rem] xs:text-[0.875rem] sm:text-[1.85rem] sm:leading-[1.22] lg:text-[2.2rem] uppercase tracking-normal text-brand-yellow [-webkit-text-stroke:1px_#000] drop-shadow-[1.2px_1.2px_0_rgba(0,0,0,1)] whitespace-nowrap sm:whitespace-normal"
+                            className="font-tan max-w-[70vw] sm:max-w-none text-[0.77rem] xs:text-[0.875rem] sm:text-[1.85rem] sm:leading-[1.22] lg:text-[2.2rem] uppercase tracking-normal text-brand-yellow [-webkit-text-stroke:1px_#000] drop-shadow-[1.2px_1.2px_0_rgba(0,0,0,1)] whitespace-normal break-words"
                         >
-                            {t(title, language)}
+                            {getLocalizedCategory(title, categoryTranslations, language)}
                         </h2>
                         <p className="text-[10px] sm:text-xs font-black uppercase text-gray-400 tracking-widest font-maiandra">
                             {productsList.length} {language === 'es' ? (productsList.length === 1 ? 'Producto' : 'Productos') : (productsList.length === 1 ? 'Product' : 'Products')}
@@ -270,11 +289,14 @@ export default function ShopPage() {
                                     <CardContent className="p-5 flex-1 flex flex-col justify-between bg-white">
                                         <div>
                                             <h3 className="font-tangkiwood text-lg sm:text-xl text-brand-black leading-tight truncate">
-                                                {t(item.name, language)}
+                                                {getLocalizedField(item.name, item.nameEn, language)}
                                             </h3>
                                             <p className="text-xs font-sans text-gray-400 mt-1 line-clamp-2 leading-relaxed">
-                                                {t(item.description, language) || t('Disponible para compra', language)}
+                                                {getLocalizedField(item.description, item.descriptionEn, language) || t('Disponible para compra', language)}
                                             </p>
+                                            <button type="button" onClick={() => setSelectedProduct(item)} className="mt-2 text-xs font-bold text-brand-charcoal underline underline-offset-2 hover:text-brand-yellow">
+                                                {language === 'es' ? 'Ver detalles' : 'View details'}
+                                            </button>
                                         </div>
 
                                         {/* Pricing and Buttons */}
@@ -289,7 +311,7 @@ export default function ShopPage() {
                                             <div className="grid grid-cols-2 gap-2">
                                                 <Button 
                                                     className="h-10 bg-brand-yellow text-brand-black hover:bg-brand-yellow-light shadow-md hover:-translate-y-0.5 transition-all rounded-full border-0 font-black text-xs flex items-center justify-center gap-1"
-                                                    onClick={() => addToCart({ id: item.id, name: item.name, price: item.price, itemType: item.itemType, image: item.image })}
+                                                    onClick={() => addToCart({ id: item.id, name: item.name, nameEn: item.nameEn, price: item.price, itemType: item.itemType, image: item.image })}
                                                 >
                                                     <ShoppingCart className="w-3.5 h-3.5" strokeWidth={2} /> {language === 'es' ? 'Añadir' : 'Add'}
                                                 </Button>
@@ -344,11 +366,14 @@ export default function ShopPage() {
             <CardContent className="p-5 flex-1 flex flex-col justify-between bg-white">
                 <div>
                     <h3 className="font-tangkiwood text-lg sm:text-xl text-brand-black leading-tight">
-                        {t(item.name, language)}
+                        {getLocalizedField(item.name, item.nameEn, language)}
                     </h3>
                     <p className="text-xs font-sans text-gray-400 mt-1 line-clamp-2 leading-relaxed">
-                        {t(item.description, language) || t('Disponible para compra', language)}
+                        {getLocalizedField(item.description, item.descriptionEn, language) || t('Disponible para compra', language)}
                     </p>
+                    <button type="button" onClick={() => setSelectedProduct(item)} className="mt-2 text-xs font-bold text-brand-charcoal underline underline-offset-2 hover:text-brand-yellow">
+                        {language === 'es' ? 'Ver detalles' : 'View details'}
+                    </button>
                 </div>
                 <div className="pt-4 border-t border-gray-50 mt-4">
                     <div className="flex items-baseline gap-1 mb-4">
@@ -358,7 +383,7 @@ export default function ShopPage() {
                     <div className="grid grid-cols-2 gap-2">
                         <Button
                             className="h-10 bg-brand-yellow text-brand-black hover:bg-brand-yellow-light shadow-md hover:-translate-y-0.5 transition-all rounded-full border-0 font-black text-xs flex items-center justify-center gap-1"
-                            onClick={() => addToCart({ id: item.id, name: item.name, price: item.price, itemType: item.itemType, image: item.image })}
+                            onClick={() => addToCart({ id: item.id, name: item.name, nameEn: item.nameEn, price: item.price, itemType: item.itemType, image: item.image })}
                         >
                             <ShoppingCart className="w-3.5 h-3.5" strokeWidth={2} /> {t('Añadir', language)}
                         </Button>
@@ -405,7 +430,7 @@ export default function ShopPage() {
                                     onClick={() => {
                                         setExpandedCategory(null);
                                         setCategory(c);
-                                    }}>{t(c, language)}</Button>
+                                    }}>{getLocalizedCategory(c, categoryTranslations, language)}</Button>
                             ))}
                         </motion.div>
                     </div>
@@ -427,9 +452,9 @@ export default function ShopPage() {
                                         {language === 'es' ? '← Volver a categorías' : '← Back to categories'}
                                     </button>
                                     <h1 
-                                        className="font-tan text-[0.875rem] xs:text-[1rem] sm:text-[2.2rem] sm:leading-[1.18] lg:text-[2.6rem] uppercase tracking-normal text-brand-yellow [-webkit-text-stroke:1.1px_#000] drop-shadow-[1.5px_1.5px_0_rgba(0,0,0,1)] whitespace-nowrap sm:whitespace-normal"
+                                        className="font-tan max-w-full text-[0.875rem] xs:text-[1rem] sm:text-[2.2rem] sm:leading-[1.18] lg:text-[2.6rem] uppercase tracking-normal text-brand-yellow [-webkit-text-stroke:1.1px_#000] drop-shadow-[1.5px_1.5px_0_rgba(0,0,0,1)] whitespace-normal break-words"
                                     >
-                                        {t(expandedCategory, language)}
+                                        {getLocalizedCategory(expandedCategory, categoryTranslations, language)}
                                     </h1>
                                     <p className="mt-3.5 sm:mt-2 text-[10px] sm:text-xs font-black uppercase text-gray-400 tracking-widest font-maiandra">
                                         {expandedProducts.length} {language === 'es' ? (expandedProducts.length === 1 ? 'producto' : 'productos') : (expandedProducts.length === 1 ? 'product' : 'products')}
@@ -461,6 +486,51 @@ export default function ShopPage() {
                     )}
                 </div>
             </section>
+
+            {/* Product details and image gallery */}
+            <Dialog open={Boolean(selectedProduct)} onOpenChange={open => { if (!open) setSelectedProduct(null); }}>
+                <DialogContent className="max-h-[92vh] max-w-4xl overflow-y-auto rounded-3xl border-0 p-0">
+                    {selectedProduct && (
+                        <div className="grid gap-5 p-5 sm:p-7 md:grid-cols-2">
+                            <ProductImageGallery
+                                key={`${selectedProduct.id}:${selectedProduct.image}:${(selectedProduct.additionalImageUrls || []).join('|')}`}
+                                images={getValidProductImages(selectedProduct.image, selectedProduct.additionalImageUrls)}
+                                productName={getLocalizedField(selectedProduct.name, selectedProduct.nameEn, language)}
+                                emptyLabel={language === 'es' ? 'Sin fotografías disponibles' : 'No photos available'}
+                                previousLabel={language === 'es' ? 'Imagen anterior' : 'Previous image'}
+                                nextLabel={language === 'es' ? 'Imagen siguiente' : 'Next image'}
+                                showImageLabel={index => language === 'es' ? `Mostrar imagen ${index}` : `Show image ${index}`}
+                                thumbnailsLabel={language === 'es' ? 'Miniaturas del producto' : 'Product image thumbnails'}
+                            />
+                            <div className="flex min-w-0 flex-col gap-4">
+                                <DialogHeader>
+                                    <DialogTitle className="text-2xl font-black text-brand-black">
+                                        {getLocalizedField(selectedProduct.name, selectedProduct.nameEn, language)}
+                                    </DialogTitle>
+                                </DialogHeader>
+                                <p className="text-sm leading-relaxed text-stone-600">
+                                    {getLocalizedField(selectedProduct.description, selectedProduct.descriptionEn, language) || t('Disponible para compra', language)}
+                                </p>
+                                {getLocalizedField(selectedProduct.details, selectedProduct.detailsEn, language) && (
+                                    <p className="whitespace-pre-line rounded-xl bg-stone-50 p-4 text-sm leading-relaxed text-stone-700">
+                                        {getLocalizedField(selectedProduct.details, selectedProduct.detailsEn, language)}
+                                    </p>
+                                )}
+                                <p className="text-xs font-bold uppercase tracking-wide text-stone-500">
+                                    {getLocalizedCategory(selectedProduct.category, categoryTranslations, language)}
+                                </p>
+                                <p className="text-2xl font-black text-brand-black">Bs. {selectedProduct.price}</p>
+                                <Button className="mt-auto rounded-full bg-brand-yellow font-black text-brand-black hover:bg-brand-yellow-light" onClick={() => {
+                                    addToCart({ id: selectedProduct.id, name: selectedProduct.name, nameEn: selectedProduct.nameEn, price: selectedProduct.price, itemType: selectedProduct.itemType, image: selectedProduct.image });
+                                    setSelectedProduct(null);
+                                }}>
+                                    {language === 'es' ? 'Añadir al carrito' : 'Add to cart'}
+                                </Button>
+                            </div>
+                        </div>
+                    )}
+                </DialogContent>
+            </Dialog>
 
             {/* Cart Modal */}
             <Dialog open={showCart} onOpenChange={(val) => { setShowCart(val); if (!val) setCheckoutStep('cart'); }}>
@@ -501,7 +571,7 @@ export default function ShopPage() {
                                                 <div className="flex-1 flex flex-col justify-between">
                                                     <div className="flex justify-between items-start">
                                                         <div>
-                                                            <h4 className="font-extrabold text-brand-charcoal leading-tight">{t(item.name, language)}</h4>
+                                                            <h4 className="font-extrabold text-brand-charcoal leading-tight">{getLocalizedField(item.name, item.nameEn, language)}</h4>
                                                             <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mt-1">{t(item.itemType, language)}</p>
                                                         </div>
                                                         <button onClick={() => removeFromCart(item.id)} className="w-8 h-8 rounded-full flex items-center justify-center bg-gray-100 text-gray-400 hover:bg-red-50 hover:text-red-500 transition-colors">
@@ -556,7 +626,7 @@ export default function ShopPage() {
                                     </div>
                                     <div className="space-y-2">
                                         <Label className="font-bold text-xs uppercase tracking-widest text-gray-400 ml-1">{language === 'es' ? 'Notas (Opcional)' : 'Notes (Optional)'}</Label>
-                                        <Textarea className="rounded-2xl border-gray-200 bg-gray-50/50 resize-none" value={notes} onChange={e => setNotes(e.target.value)} rows={3} placeholder="Alguna instrucción especial..." />
+                                        <Textarea className="rounded-2xl border-gray-200 bg-gray-50/50 resize-none" value={notes} onChange={e => setNotes(e.target.value)} rows={3} placeholder={language === 'es' ? 'Alguna instrucción especial...' : 'Any special instructions...'} />
                                     </div>
 
                                     <div className="flex gap-4 pt-4 border-t border-gray-50">

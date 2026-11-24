@@ -11,7 +11,7 @@ export async function addInventoryCategory(db: Firestore, collectionId: string, 
             : [];
         const existing = current.find((value: string) => value.trim().replace(/\s+/g, ' ').toLocaleLowerCase() === name.toLocaleLowerCase());
         if (existing) return existing.trim().replace(/\s+/g, ' ');
-        transaction.set(ref, { categories: [...current, name] });
+        transaction.set(ref, { categories: [...current, name] }, { merge: true });
         return name;
     });
 }

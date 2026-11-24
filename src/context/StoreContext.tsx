@@ -376,6 +376,8 @@ interface StoreContextType {
     bikeCategories: string[];
     accessoryCategories: string[];
     shopCategories: string[];
+    categoryTranslations: Record<string, string>;
+    updateCategoryTranslation: (category: string, englishTranslation: string) => Promise<void>;
     isLoaded: boolean;
     rentalSettings: RentalSettings;
     rentalSettingsLoaded: boolean;
@@ -575,6 +577,7 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
     const [bikeCategories, setBikeCategories] = useState<string[]>([]);
     const [accessoryCategories, setAccessoryCategories] = useState<string[]>([]);
     const [shopCategories, setShopCategories] = useState<string[]>([]);
+    const [categoryTranslations, setCategoryTranslations] = useState<Record<string, string>>({});
     const [adminNavigationLinks, setAdminNavigationLinks] = useState<AdminNavigationLink[]>([]);
     const [isLoaded, setIsLoaded] = useState(false);
     const [isAdminSession, setIsAdminSession] = useState(false);
@@ -697,9 +700,11 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
         const unsubBikeCats = onSnapshot(doc(db, 'settings', 'bike_categories'), (snap) => {
             if (snap.exists()) {
                 setBikeCategories(snap.data().categories || []);
+                const savedTranslations = snap.data().translations;
+                setCategoryTranslations(savedTranslations && typeof savedTranslations === 'object' && !Array.isArray(savedTranslations) ? savedTranslations : {});
             } else {
                 const defaults = RENTAL_SEED_CATEGORIES;
-                setDoc(doc(db, 'settings', 'bike_categories'), { categories: defaults }).catch(() => undefined);
+                setDoc(doc(db, 'settings', 'bike_categories'), { categories: defaults }, { merge: true }).catch(() => undefined);
                 setBikeCategories(defaults);
             }
         }, (error) => {
@@ -708,17 +713,11 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
 
         const unsubShopCats = onSnapshot(doc(db, 'settings', 'shop_categories'), (snap) => {
             if (snap.exists()) {
-                const cats = snap.data().categories || [];
-                if (cats.includes('Bicicletas') && cats.includes('Indumentaria') && !cats.includes('Bicicletas plegables')) {
-                    const defaults = SHOP_SEED_CATEGORIES;
-                    setDoc(doc(db, 'settings', 'shop_categories'), { categories: defaults }).catch(() => undefined);
-                    setShopCategories(defaults);
-                } else {
-                    setShopCategories(cats);
-                }
+                const cats = snap.data().categories;
+                setShopCategories(Array.isArray(cats) ? cats : []);
             } else {
                 const defaults = SHOP_SEED_CATEGORIES;
-                setDoc(doc(db, 'settings', 'shop_categories'), { categories: defaults }).catch(() => undefined);
+                setDoc(doc(db, 'settings', 'shop_categories'), { categories: defaults }, { merge: true }).catch(() => undefined);
                 setShopCategories(defaults);
             }
         }, (error) => {
@@ -1263,9 +1262,23 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
         const trimmed = await addInventoryCategory(db, 'accessory_categories', cat);
         setAccessoryCategories(current => current.some(value => value.trim().toLocaleLowerCase() === trimmed.toLocaleLowerCase()) ? current : [...current, trimmed]);
     };
+    const renameCategoryTranslation = async (oldCategory: string, newCategory: string) => {
+        const ref = doc(db, 'settings', 'bike_categories');
+        let next: Record<string, string> = {};
+        await runTransaction(db, async transaction => {
+            const snapshot = await transaction.get(ref);
+            const saved = snapshot.exists() ? snapshot.data().translations : {};
+            const translations = saved && typeof saved === 'object' && !Array.isArray(saved) ? { ...saved } as Record<string, string> : {};
+            if (translations[oldCategory] && !translations[newCategory]) translations[newCategory] = translations[oldCategory];
+            delete translations[oldCategory];
+            next = translations;
+            transaction.set(ref, { translations }, { merge: true });
+        });
+        setCategoryTranslations(next);
+    };
     const deleteBikeCategory = async (cat: string) => {
         const updated = bikeCategories.filter(c => c !== cat);
-        await setDoc(doc(db, 'settings', 'bike_categories'), { categories: updated });
+        await setDoc(doc(db, 'settings', 'bike_categories'), { categories: updated }, { merge: true });
     };
     const updateBikeCategory = async (oldCat: string, newCat: string) => {
         const trimmedOld = oldCat.trim();
@@ -1273,7 +1286,8 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
         if (!trimmedNew || trimmedOld === trimmedNew) return;
 
         const updated = bikeCategories.map(c => c === trimmedOld ? trimmedNew : c);
-        await setDoc(doc(db, 'settings', 'bike_categories'), { categories: updated });
+        await setDoc(doc(db, 'settings', 'bike_categories'), { categories: updated }, { merge: true });
+        await renameCategoryTranslation(trimmedOld, trimmedNew);
 
         const itemsToUpdate = inventory.filter(i => i.category === trimmedOld);
         for (const item of itemsToUpdate) {
@@ -1286,7 +1300,7 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
         }
     };
     const reorderBikeCategories = async (nextCategories: string[]) => {
-        await setDoc(doc(db, 'settings', 'bike_categories'), { categories: nextCategories });
+        await setDoc(doc(db, 'settings', 'bike_categories'), { categories: nextCategories }, { merge: true });
         setBikeCategories(nextCategories);
     };
 
@@ -1296,7 +1310,7 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
     };
     const deleteShopCategory = async (cat: string) => {
         const updated = shopCategories.filter(c => c !== cat);
-        await setDoc(doc(db, 'settings', 'shop_categories'), { categories: updated });
+        await setDoc(doc(db, 'settings', 'shop_categories'), { categories: updated }, { merge: true });
         setShopCategories(updated);
     };
     const updateShopCategory = async (oldCat: string, newCat: string) => {
@@ -1305,7 +1319,8 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
         if (!trimmedNew || trimmedOld === trimmedNew) return;
 
         const updated = shopCategories.map(c => c === trimmedOld ? trimmedNew : c);
-        await setDoc(doc(db, 'settings', 'shop_categories'), { categories: updated });
+        await setDoc(doc(db, 'settings', 'shop_categories'), { categories: updated }, { merge: true });
+        await renameCategoryTranslation(trimmedOld, trimmedNew);
         setShopCategories(updated);
 
         const itemsToUpdate = inventory.filter(i => i.category === trimmedOld);
@@ -1319,8 +1334,26 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
         }
     };
     const reorderShopCategories = async (nextCategories: string[]) => {
-        await setDoc(doc(db, 'settings', 'shop_categories'), { categories: nextCategories });
+        await setDoc(doc(db, 'settings', 'shop_categories'), { categories: nextCategories }, { merge: true });
         setShopCategories(nextCategories);
+    };
+
+    const updateCategoryTranslation = async (category: string, englishTranslation: string) => {
+        const key = category.trim();
+        if (!key) return;
+        const value = englishTranslation.trim();
+        const translationRef = doc(db, 'settings', 'bike_categories');
+        await runTransaction(db, async transaction => {
+            const snapshot = await transaction.get(translationRef);
+            const saved = snapshot.exists() ? snapshot.data().translations : {};
+            const categories = saved && typeof saved === 'object' && !Array.isArray(saved) ? { ...saved } : {};
+            if (value) categories[key] = value;
+            else delete categories[key];
+            transaction.set(translationRef, { translations: categories }, { merge: true });
+        });
+        setCategoryTranslations(current => value
+            ? { ...current, [key]: value }
+            : Object.fromEntries(Object.entries(current).filter(([name]) => name !== key)));
     };
 
     const addCombo = async (combo: ComboProduct) => {
@@ -1588,6 +1621,7 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
         events, addEvent, updateEvent, deleteEvent,
         bikeCategories, addBikeCategory, accessoryCategories, addAccessoryCategory, deleteBikeCategory, updateBikeCategory, reorderBikeCategories,
         shopCategories, addShopCategory, deleteShopCategory, updateShopCategory, reorderShopCategories,
+        categoryTranslations, updateCategoryTranslation,
         adminNavigationLinks, updateAdminNavigationLinks
     };
 
