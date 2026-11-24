@@ -5,12 +5,11 @@ const path = require('node:path');
 const secretFile = path.join(__dirname, '..', 'functions', '.secret.local');
 const originalSecretFile = existsSync(secretFile) ? readFileSync(secretFile) : null;
 const originalMode = originalSecretFile ? statSync(secretFile).mode : undefined;
-const existingSecretText = originalSecretFile?.toString('utf8') || '';
-const emulatorSecretText = existingSecretText.split(/\r?\n/)
-    .filter(line => !/^(RESEND_API_KEY|TELEGRAM_BOT_TOKEN|TELEGRAM_CHAT_ID)=/.test(line))
-    .filter(Boolean)
-    .join('\n');
-writeFileSync(secretFile, `${emulatorSecretText ? `${emulatorSecretText}\n` : ''}RESEND_API_KEY=re_emulator_only_not_valid\nTELEGRAM_BOT_TOKEN=emulator-disabled\nTELEGRAM_CHAT_ID=emulator-disabled\n`, { mode: originalMode || 0o600 });
+writeFileSync(secretFile, [
+    'RESEND_API_KEY=re_emulator_only_not_valid',
+    'TELEGRAM_BOT_TOKEN=emulator-disabled',
+    'TELEGRAM_CHAT_ID=emulator-disabled',
+].join('\n') + '\n', { mode: originalMode || 0o600 });
 
 try {
     const config = process.env.BRIZ_FIREBASE_CONFIG ? `--config "${process.env.BRIZ_FIREBASE_CONFIG}" ` : '';

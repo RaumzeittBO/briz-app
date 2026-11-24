@@ -5,17 +5,12 @@ const path = require('node:path');
 const secretFile = path.join(__dirname, '..', 'functions', '.secret.local');
 const originalSecretFile = existsSync(secretFile) ? readFileSync(secretFile) : null;
 const originalMode = originalSecretFile ? statSync(secretFile).mode : undefined;
-const existingSecretText = originalSecretFile?.toString('utf8') || '';
-const emulatorSecretText = existingSecretText.split(/\r?\n/)
-    .filter((line) => !/^(RESEND_API_KEY|TELEGRAM_BOT_TOKEN|TELEGRAM_CHAT_ID)=/.test(line))
-    .filter(Boolean)
-    .join('\n');
 const emulatorSecrets = [
     'RESEND_API_KEY=re_emulator_only_not_valid',
-    'TELEGRAM_BOT_TOKEN=telegram_emulator_only_not_valid',
-    'TELEGRAM_CHAT_ID=0',
+    'TELEGRAM_BOT_TOKEN=emulator-disabled',
+    'TELEGRAM_CHAT_ID=emulator-disabled',
 ].join('\n');
-writeFileSync(secretFile, `${emulatorSecretText ? `${emulatorSecretText}\n` : ''}${emulatorSecrets}\n`, { mode: originalMode || 0o600 });
+writeFileSync(secretFile, `${emulatorSecrets}\n`, { mode: originalMode || 0o600 });
 
 try {
     const result = spawnSync(
