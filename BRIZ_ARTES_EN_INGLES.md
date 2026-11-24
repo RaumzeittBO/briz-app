@@ -17,7 +17,7 @@
 | `home_pedalea_art` | Inicio, cierre inspiracional | Pendiente de arte EN |
 | `home_experience_tours`, `home_experience_family`, `home_experience_urban`, `home_experience_accessible` | Inicio, tarjetas de experiencias | Fuentes originales no están en este checkout; localizar y diseñar variante EN |
 
-También hay 14 slots cuyo original gráfico ni siquiera existe en este checkout (`home_texture`, `home_why_tape`, `home_splash_red`, `home_splash_yellow`, `home_purpose_bike`, `home_hands_heart`, `home_brand_sticker`, cuatro `home_experience_*`, `about_texture`, `service_texture`, `routes_texture`). El arte de color amarillo `home_splash_yellow` es solo una posible coincidencia por nombre: el reporte “cuadro amarillo grande” no aparece en texto/documentación del repositorio, por lo que no debe asignarse a ese slot sin captura o ubicación. 
+También hay 14 slots cuyo original gráfico ni siquiera existe en este checkout (`home_texture`, `home_why_tape`, `home_splash_red`, `home_splash_yellow`, `home_purpose_bike`, `home_hands_heart`, `home_brand_sticker`, cuatro `home_experience_*`, `about_texture`, `service_texture`, `routes_texture`). El arte de color amarillo `home_splash_yellow` es solo una posible coincidencia por nombre: el reporte “cuadro amarillo grande” no aparece en texto/documentación del repositorio, por lo que no debe asignarse a ese slot sin captura o ubicación.
 
 > **Propósito:** Documentar todas las piezas gráficas con texto incrustado en el sitio web público de BRIZ (`HomePage.tsx` y `AboutPage.tsx`), distinguir cuáles ya tienen versión real en inglés, cuáles siguen en español dentro de las carpetas `/Ingles/` o no existen, y especificar las dimensiones y textos exactos en inglés natural para el equipo de diseño.
 
