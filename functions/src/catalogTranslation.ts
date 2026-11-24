@@ -8,6 +8,15 @@ export type TranslationProvider = {
     translateMany: (texts: string[]) => Promise<string[]>;
 };
 
+export type TranslationFailureDisposition = 'definitive' | 'ambiguous';
+
+export class TranslationProviderFailure extends Error {
+    constructor(message: string, readonly disposition: TranslationFailureDisposition) {
+        super(message);
+        this.name = 'TranslationProviderFailure';
+    }
+}
+
 export type TranslationPair = { source: string; target: string };
 
 export const CATALOG_TRANSLATION_FIELDS: Record<string, TranslationPair[]> = {
@@ -215,7 +224,10 @@ export function createGoogleTranslationProvider(apiKey: string, fetcher: typeof 
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ q: guarded.map(item => item.masked), source: 'es', target: 'en', format: 'text' }),
             });
-            if (!response.ok) throw new Error(`Translation provider rejected the request (HTTP ${response.status}).`);
+            if (!response.ok) {
+                const definitive = response.status >= 400 && response.status < 500 && response.status !== 408;
+                throw new TranslationProviderFailure(`Translation provider rejected the request (HTTP ${response.status}).`, definitive ? 'definitive' : 'ambiguous');
+            }
             const payload = await response.json() as { data?: { translations?: Array<{ translatedText?: string }> } };
             const rows = payload.data?.translations;
             if (!Array.isArray(rows) || rows.length !== texts.length || rows.some(row => typeof row.translatedText !== 'string')) {

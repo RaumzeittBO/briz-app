@@ -14,12 +14,15 @@ writeFileSync(secretFile, [
 
 try {
     const result = spawnSync(
-        'firebase emulators:exec --project demo-briz-translations --only "firestore,functions" "node scripts/catalog-translation-emulator.test.mjs"',
+        'firebase emulators:exec --config firebase.translation-emulator.json --project demo-briz-translations --only "firestore,functions" "node scripts/catalog-translation-emulator.test.mjs"',
         [],
         {
             env: {
                 ...process.env,
                 BRIZ_TRANSLATION_PROVIDER: 'mock',
+                BRIZ_FIRESTORE_EMULATOR_PORT: '20080',
+                BRIZ_FUNCTIONS_EMULATOR_PORT: '25002',
+                FIRESTORE_EMULATOR_HOST: '127.0.0.1:20080',
                 FUNCTIONS_DISCOVERY_TIMEOUT: process.env.FUNCTIONS_DISCOVERY_TIMEOUT || '30000',
             },
             stdio: 'inherit',

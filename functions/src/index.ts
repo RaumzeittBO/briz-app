@@ -35,7 +35,8 @@ import { DEFAULT_RENTAL_HOURS, validateRentalBusinessHours } from './businessHou
 import { CUSTOMER_PRIVATE_FILE_SPECS, bucketNamesMatch, getPathVariants, ownedCustomerStoragePath, resolveCustomerPrivateFiles } from './customerPrivateFiles';
 import { Resend } from 'resend';
 import { buildBrizVerificationUrl, createVerificationEmail, deliverVerificationEmail, nextVerificationRateState, rollbackDefinitiveVerificationAttempt, VerificationDeliveryError, type EmailLanguage, type VerificationRateState } from './customerVerificationEmail';
-import { buildCategoryTranslationPatch, buildTranslationPatch, cacheKeyFor, catalogSourceHash, catalogSourceValue, createGoogleTranslationProvider, MAX_TRANSLATION_CHARS_PER_DAY, planCategoryTranslations, planCatalogTranslations, sourceTextHash } from './catalogTranslation';
+import { buildCategoryTranslationPatch, buildTranslationPatch, catalogSourceHash, catalogSourceValue, createGoogleTranslationProvider, planCategoryTranslations, planCatalogTranslations, sourceTextHash } from './catalogTranslation';
+import { translateWithQuota } from './translationQuota';
 
 if (getApps().length === 0) initializeApp();
 const db = getFirestore();
@@ -2641,61 +2642,7 @@ async function translateWithCache(texts: string[], mode: 'mock' | 'google'): Pro
         ? { translateMany: async (sourceTexts: string[]) => sourceTexts.map(text => MOCK_PUBLIC_TRANSLATIONS[text] || `Mock EN: ${text}`) }
         : createGoogleTranslationProvider(GOOGLE_TRANSLATE_API_KEY.value());
     const providerKey = mode === 'mock' ? 'emulator-mock' : 'google-cloud-translation';
-    const results = new Array<string>(texts.length);
-    const pending: Array<{ index: number; ref: DocumentReference; text: string }> = [];
-    for (const [index, text] of texts.entries()) {
-        const ref = db.doc(`translationCache/${cacheKeyFor(text, providerKey)}`);
-        const claim = await db.runTransaction(async (transaction) => {
-            const cached = await transaction.get(ref);
-            const value = cached.data()?.translatedText;
-            if (typeof value === 'string' && value.trim()) return { status: 'cached' as const, value };
-            const leaseAt = Number(cached.data()?.leaseAt) || 0;
-            if (cached.data()?.status === 'pending' && Date.now() - leaseAt < 120_000) return { status: 'busy' as const };
-            transaction.set(ref, { status: 'pending', leaseAt: Date.now(), sourceHash: sourceTextHash(text), provider: 'google-cloud-translation', version: 1 }, { merge: true });
-            return { status: 'claimed' as const };
-        });
-        if (claim.status === 'cached') {
-            results[index] = claim.value;
-        } else if (claim.status === 'claimed') {
-            pending.push({ index, ref, text });
-        } else {
-            let available: string | undefined;
-            for (let attempt = 0; attempt < 20; attempt += 1) {
-                await new Promise(resolve => setTimeout(resolve, 250));
-                const cached = (await ref.get()).data()?.translatedText;
-                if (typeof cached === 'string' && cached.trim()) { available = cached; break; }
-            }
-            if (!available) throw new Error('TranslationCacheBusy');
-            results[index] = available;
-        }
-    }
-    if (pending.length) {
-        const charsToReserve = pending.reduce((sum, item) => sum + item.text.length, 0);
-        const dateKey = new Date().toISOString().slice(0, 10);
-        const usageRef = db.doc(`translationUsage/${dateKey}`);
-        try {
-            await db.runTransaction(async (transaction) => {
-                const usageSnapshot = await transaction.get(usageRef);
-                const reserved = Number(usageSnapshot.data()?.charactersReserved) || 0;
-                if (reserved + charsToReserve > MAX_TRANSLATION_CHARS_PER_DAY) throw new Error('TranslationDailyLimitExceeded');
-                transaction.set(usageRef, {
-                    charactersReserved: reserved + charsToReserve,
-                    dailyLimit: MAX_TRANSLATION_CHARS_PER_DAY,
-                    updatedAt: FieldValue.serverTimestamp(),
-                }, { merge: true });
-            });
-            const outputs = await provider.translateMany(pending.map(item => item.text));
-            for (const [outputIndex, item] of pending.entries()) {
-                const output = outputs[outputIndex];
-                results[item.index] = output;
-                await item.ref.set({ status: 'completed', translatedText: output, provider: providerKey, createdAt: FieldValue.serverTimestamp(), leaseAt: FieldValue.delete() }, { merge: true });
-            }
-        } catch (error) {
-            await Promise.all(pending.map(item => item.ref.set({ status: 'failed', errorCode: error instanceof Error ? error.name : 'TranslationError', leaseAt: FieldValue.delete(), updatedAt: FieldValue.serverTimestamp() }, { merge: true })));
-            throw error;
-        }
-    }
-    return results;
+    return translateWithQuota(db, texts, provider, providerKey);
 }
 
 async function translateCategorySettings(snapshot: DocumentSnapshot, before?: DocumentData): Promise<void> {

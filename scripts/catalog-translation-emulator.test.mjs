@@ -6,6 +6,8 @@ const require = createRequire(new URL('../functions/package.json', import.meta.u
 const { initializeApp } = require('firebase-admin/app');
 const { getFirestore } = require('firebase-admin/firestore');
 const { cacheKeyFor } = require('../functions/lib/catalogTranslation.js');
+const { TranslationProviderFailure } = require('../functions/lib/catalogTranslation.js');
+const { translateWithQuota } = require('../functions/lib/translationQuota.js');
 const app = initializeApp({ projectId: 'demo-briz-translations' }, 'catalog-translation-emulator');
 const db = getFirestore(app);
 
@@ -19,6 +21,104 @@ async function waitFor(read, predicate, label) {
 }
 
 try {
+    const providerKey = 'emulator-quota-test';
+    const quotaCacheRefs = [];
+    const quotaUsageRefs = [];
+    const makeProvider = (translateMany) => ({ translateMany });
+    const cacheRefFor = (text) => db.doc(`translationCache/${cacheKeyFor(text, providerKey)}`);
+    const usageRefFor = (key) => db.doc(`translationUsage/${key}`);
+
+    const successText = 'Quota success fixture';
+    quotaCacheRefs.push(cacheRefFor(successText));
+    const successUsage = usageRefFor('emulator-success');
+    quotaUsageRefs.push(successUsage);
+    const successResult = await translateWithQuota(db, [successText], makeProvider(async ([text]) => [`EN ${text}`]), providerKey, {
+        dateKey: 'emulator-success', attemptId: 'quota-success-1',
+    });
+    assert.deepEqual(successResult, [`EN ${successText}`]);
+    assert.equal((await successUsage.get()).get('charactersReserved'), 0);
+    assert.equal((await successUsage.get()).get('charactersConsumed'), successText.length);
+    const cachedSuccess = await translateWithQuota(db, [successText], makeProvider(async () => { throw new Error('cache should avoid provider'); }), providerKey, {
+        dateKey: 'emulator-success', attemptId: 'quota-success-2',
+    });
+    assert.deepEqual(cachedSuccess, successResult);
+    assert.equal((await successUsage.get()).get('charactersConsumed'), successText.length, 'cached retries do not reserve or consume quota again');
+
+    const definiteText = 'Quota definitive fixture';
+    quotaCacheRefs.push(cacheRefFor(definiteText));
+    const definiteUsage = usageRefFor('emulator-definitive');
+    quotaUsageRefs.push(definiteUsage);
+    await assert.rejects(translateWithQuota(db, [definiteText], makeProvider(async () => {
+        throw new TranslationProviderFailure('Provider rejected request', 'definitive');
+    }), providerKey, { dateKey: 'emulator-definitive', attemptId: 'quota-definitive-1' }), /Provider rejected request/);
+    assert.equal((await definiteUsage.get()).get('charactersReserved'), 0);
+    assert.equal((await definiteUsage.get()).get('charactersConsumed'), 0);
+    assert.equal((await definiteUsage.get()).get('charactersReleased'), definiteText.length);
+    await translateWithQuota(db, [definiteText], makeProvider(async ([text]) => [`EN ${text}`]), providerKey, {
+        dateKey: 'emulator-definitive', attemptId: 'quota-definitive-2',
+    });
+    assert.equal((await definiteUsage.get()).get('charactersConsumed'), definiteText.length, 'a definitive rejection can be safely retried once');
+
+    const ambiguousText = 'Quota ambiguous fixture';
+    quotaCacheRefs.push(cacheRefFor(ambiguousText));
+    const ambiguousUsage = usageRefFor('emulator-ambiguous');
+    quotaUsageRefs.push(ambiguousUsage);
+    let ambiguousProviderCalls = 0;
+    await assert.rejects(translateWithQuota(db, [ambiguousText], makeProvider(async () => {
+        ambiguousProviderCalls += 1;
+        throw new Error('simulated network timeout after request');
+    }), providerKey, { dateKey: 'emulator-ambiguous', attemptId: 'quota-ambiguous-1' }), /simulated network timeout/);
+    assert.equal((await ambiguousUsage.get()).get('charactersReserved'), 0);
+    assert.equal((await ambiguousUsage.get()).get('charactersConsumed'), 0);
+    assert.equal((await ambiguousUsage.get()).get('charactersAmbiguous'), ambiguousText.length);
+    await assert.rejects(translateWithQuota(db, [ambiguousText], makeProvider(async () => {
+        ambiguousProviderCalls += 1;
+        return ['must not be requested twice'];
+    }), providerKey, { dateKey: 'emulator-ambiguous', attemptId: 'quota-ambiguous-2' }), /TranslationResultAmbiguousNeedsReview/);
+    assert.equal(ambiguousProviderCalls, 1, 'ambiguous results require review and cannot trigger duplicate billable calls');
+
+    const raceUsage = usageRefFor('emulator-concurrent-limit');
+    quotaUsageRefs.push(raceUsage);
+    const raceTexts = ['123456', 'abcdef'];
+    quotaCacheRefs.push(...raceTexts.map(cacheRefFor));
+    let raceProviderCalls = 0;
+    const raceResults = await Promise.allSettled(raceTexts.map((text, index) => translateWithQuota(
+        db, [text], makeProvider(async ([value]) => {
+            raceProviderCalls += 1;
+            await delay(150);
+            return [`EN ${value}`];
+        }), providerKey, { dateKey: 'emulator-concurrent-limit', attemptId: `quota-race-${index}`, dailyLimit: 10 },
+    )));
+    assert.equal(raceResults.filter(result => result.status === 'fulfilled').length, 1);
+    assert.equal(raceResults.filter(result => result.status === 'rejected').length, 1);
+    assert.equal(raceProviderCalls, 1, 'concurrent reservations cannot exceed the daily character cap');
+    assert.equal((await raceUsage.get()).get('charactersConsumed'), 6);
+    assert.equal((await raceUsage.get()).get('charactersReserved'), 0);
+
+    const identicalText = 'same concurrent cache key';
+    quotaCacheRefs.push(cacheRefFor(identicalText));
+    const identicalUsage = usageRefFor('emulator-identical-concurrent');
+    quotaUsageRefs.push(identicalUsage);
+    let identicalCalls = 0;
+    const identicalResults = await Promise.all([0, 1].map(index => translateWithQuota(
+        db, [identicalText], makeProvider(async ([text]) => {
+            identicalCalls += 1;
+            await delay(500);
+            return [`EN ${text}`];
+        }), providerKey, { dateKey: 'emulator-identical-concurrent', attemptId: `quota-identical-${index}` },
+    )));
+    assert.deepEqual(identicalResults[0], identicalResults[1]);
+    assert.equal(identicalCalls, 1, 'simultaneous retries share the leased cache result');
+    assert.equal((await identicalUsage.get()).get('charactersConsumed'), identicalText.length);
+
+    for (const ref of quotaCacheRefs) await ref.delete();
+    for (const usageRef of quotaUsageRefs) {
+        const reservations = await usageRef.collection('reservations').get();
+        for (const reservation of reservations.docs) await reservation.ref.delete();
+        await usageRef.delete();
+    }
+    console.log('PASS quota Emulator: consumed/released/ambiguous accounting, idempotent cache, safe retries, and concurrent limits');
+
     const itemRef = db.doc('inventory/emulator-translation-bike');
     await itemRef.set({
         id: 'emulator-translation-bike',
