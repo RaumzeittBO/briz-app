@@ -35,12 +35,14 @@ import { DEFAULT_RENTAL_HOURS, validateRentalBusinessHours } from './businessHou
 import { CUSTOMER_PRIVATE_FILE_SPECS, bucketNamesMatch, getPathVariants, ownedCustomerStoragePath, resolveCustomerPrivateFiles } from './customerPrivateFiles';
 import { Resend } from 'resend';
 import { buildBrizVerificationUrl, createVerificationEmail, deliverVerificationEmail, nextVerificationRateState, rollbackDefinitiveVerificationAttempt, VerificationDeliveryError, type EmailLanguage, type VerificationRateState } from './customerVerificationEmail';
+import { buildCategoryTranslationPatch, buildTranslationPatch, cacheKeyFor, catalogSourceHash, catalogSourceValue, createGoogleTranslationProvider, MAX_TRANSLATION_CHARS_PER_DAY, planCategoryTranslations, planCatalogTranslations, sourceTextHash } from './catalogTranslation';
 
 if (getApps().length === 0) initializeApp();
 const db = getFirestore();
 const TELEGRAM_BOT_TOKEN = defineSecret('TELEGRAM_BOT_TOKEN');
 const TELEGRAM_CHAT_ID = defineSecret('TELEGRAM_CHAT_ID');
 const RESEND_API_KEY = defineSecret('RESEND_API_KEY');
+const GOOGLE_TRANSLATE_API_KEY = defineSecret('GOOGLE_TRANSLATE_API_KEY');
 
 // Runtime identity is provisioned with least-privilege Firestore/Auth access.
 // Function secrets are bound only to the function that needs each secret.
@@ -2554,4 +2556,219 @@ export const sendReservationNotification = onDocumentCreated({
 // Minimal health endpoint for emulator smoke checks only; it exposes no project data.
 export const backendHealth = onRequest({ region: 'us-central1', maxInstances: 2 }, (_request, response) => {
     response.status(200).json({ ok: true, service: 'briz-functions' });
+});
+
+const MOCK_PUBLIC_TRANSLATIONS: Record<string, string> = {
+    'Bicicleta ficticia de prueba': 'Fictional test bicycle',
+    'Descripción ficticia para pruebas': 'Fictional test description',
+    'Categoría ficticia de alquiler': 'Fictional rental category',
+    'Ruta ficticia': 'Fictional route',
+    'Descripción de ruta ficticia': 'Fictional route description',
+    'Plaza de prueba': 'Test plaza',
+    'Cerro de prueba': 'Test hill',
+    'Evento ficticio': 'Fictional event',
+    'Descripción de evento ficticia': 'Fictional event description',
+    'Sesión de prueba': 'Test session',
+};
+
+async function translatePublicCatalogDocument(collectionName: string, snapshot: DocumentSnapshot, before?: DocumentData): Promise<void> {
+    if (!snapshot.exists) return;
+    const mode = process.env.BRIZ_TRANSLATION_PROVIDER || 'disabled';
+    if (mode !== 'mock' && mode !== 'google') return;
+    const data = snapshot.data() || {};
+    const plan = planCatalogTranslations(collectionName, data).filter(item => {
+        if (!before) return true;
+        const oldSource = catalogSourceValue(collectionName, before, item.source);
+        const newSource = catalogSourceValue(collectionName, data, item.source);
+        return typeof oldSource !== 'undefined' && typeof newSource !== 'undefined'
+            ? catalogSourceHash(oldSource) !== catalogSourceHash(newSource)
+            : typeof newSource !== 'undefined';
+    });
+    if (plan.length === 0) return;
+
+    let translationPatch: Record<string, unknown>;
+    try {
+        const translatedParts = await translateWithCache(plan.flatMap(item => item.parts || [item.text]), mode);
+        const translated: Array<string | string[]> = [];
+        let outputIndex = 0;
+        for (const item of plan) {
+            const count = item.parts?.length || 1;
+            const outputs = translatedParts.slice(outputIndex, outputIndex + count);
+            translated.push(item.parts ? outputs : outputs[0]);
+            outputIndex += count;
+        }
+        translationPatch = buildTranslationPatch(plan, translated, data, new Date().toISOString(), mode === 'mock' ? 'emulator-mock' : 'google-cloud-translation');
+    } catch (error) {
+        const meta = data.translationMeta && typeof data.translationMeta === 'object' ? data.translationMeta as Record<string, Record<string, unknown>> : {};
+        for (const item of plan) meta[item.target] = { origin: 'automatic', status: 'failed', sourceHash: item.hash, errorCode: error instanceof Error ? error.name : 'TranslationError', updatedAt: new Date().toISOString() };
+        await snapshot.ref.update({ translationMeta: meta });
+        logger.warn('Catalog translation failed; Spanish content remains saved.', { collectionName, documentId: snapshot.id, fieldCount: plan.length });
+        return;
+    }
+    await db.runTransaction(async (transaction) => {
+        const current = await transaction.get(snapshot.ref);
+        if (!current.exists) return;
+        const currentData = current.data() || {};
+        const currentMeta = currentData.translationMeta && typeof currentData.translationMeta === 'object'
+            ? currentData.translationMeta as Record<string, Record<string, unknown>>
+            : {};
+        const accepted: Record<string, unknown> = {};
+        const acceptedMeta = { ...currentMeta };
+        for (const item of plan) {
+            const currentSource = catalogSourceValue(collectionName, currentData, item.source);
+            if (typeof currentSource === 'undefined' || catalogSourceHash(currentSource) !== item.hash) continue;
+            const existingEnglish = currentData[item.target];
+            const currentFieldMeta = currentMeta[item.target];
+            if (currentFieldMeta?.origin === 'manual') continue;
+            const hasEnglish = typeof existingEnglish === 'string' ? Boolean(existingEnglish.trim())
+                : Array.isArray(existingEnglish) && existingEnglish.some(value => typeof value === 'string' && value.trim());
+            if (hasEnglish) {
+                if (!currentFieldMeta) continue;
+                const currentOutputHash = Array.isArray(existingEnglish) ? sourceTextHash(JSON.stringify(existingEnglish)) : sourceTextHash(String(existingEnglish));
+                if (currentFieldMeta.origin === 'automatic' && currentFieldMeta.outputHash !== currentOutputHash) continue;
+            }
+            accepted[item.target] = translationPatch[item.target];
+            acceptedMeta[item.target] = (translationPatch.translationMeta as Record<string, Record<string, unknown>>)[item.target];
+        }
+        if (Object.keys(accepted).length > 0) {
+            transaction.update(snapshot.ref, { ...accepted, translationMeta: acceptedMeta });
+        }
+    });
+}
+
+async function translateWithCache(texts: string[], mode: 'mock' | 'google'): Promise<string[]> {
+    const provider = mode === 'mock'
+        ? { translateMany: async (sourceTexts: string[]) => sourceTexts.map(text => MOCK_PUBLIC_TRANSLATIONS[text] || `Mock EN: ${text}`) }
+        : createGoogleTranslationProvider(GOOGLE_TRANSLATE_API_KEY.value());
+    const providerKey = mode === 'mock' ? 'emulator-mock' : 'google-cloud-translation';
+    const results = new Array<string>(texts.length);
+    const pending: Array<{ index: number; ref: DocumentReference; text: string }> = [];
+    for (const [index, text] of texts.entries()) {
+        const ref = db.doc(`translationCache/${cacheKeyFor(text, providerKey)}`);
+        const claim = await db.runTransaction(async (transaction) => {
+            const cached = await transaction.get(ref);
+            const value = cached.data()?.translatedText;
+            if (typeof value === 'string' && value.trim()) return { status: 'cached' as const, value };
+            const leaseAt = Number(cached.data()?.leaseAt) || 0;
+            if (cached.data()?.status === 'pending' && Date.now() - leaseAt < 120_000) return { status: 'busy' as const };
+            transaction.set(ref, { status: 'pending', leaseAt: Date.now(), sourceHash: sourceTextHash(text), provider: 'google-cloud-translation', version: 1 }, { merge: true });
+            return { status: 'claimed' as const };
+        });
+        if (claim.status === 'cached') {
+            results[index] = claim.value;
+        } else if (claim.status === 'claimed') {
+            pending.push({ index, ref, text });
+        } else {
+            let available: string | undefined;
+            for (let attempt = 0; attempt < 20; attempt += 1) {
+                await new Promise(resolve => setTimeout(resolve, 250));
+                const cached = (await ref.get()).data()?.translatedText;
+                if (typeof cached === 'string' && cached.trim()) { available = cached; break; }
+            }
+            if (!available) throw new Error('TranslationCacheBusy');
+            results[index] = available;
+        }
+    }
+    if (pending.length) {
+        const charsToReserve = pending.reduce((sum, item) => sum + item.text.length, 0);
+        const dateKey = new Date().toISOString().slice(0, 10);
+        const usageRef = db.doc(`translationUsage/${dateKey}`);
+        try {
+            await db.runTransaction(async (transaction) => {
+                const usageSnapshot = await transaction.get(usageRef);
+                const reserved = Number(usageSnapshot.data()?.charactersReserved) || 0;
+                if (reserved + charsToReserve > MAX_TRANSLATION_CHARS_PER_DAY) throw new Error('TranslationDailyLimitExceeded');
+                transaction.set(usageRef, {
+                    charactersReserved: reserved + charsToReserve,
+                    dailyLimit: MAX_TRANSLATION_CHARS_PER_DAY,
+                    updatedAt: FieldValue.serverTimestamp(),
+                }, { merge: true });
+            });
+            const outputs = await provider.translateMany(pending.map(item => item.text));
+            for (const [outputIndex, item] of pending.entries()) {
+                const output = outputs[outputIndex];
+                results[item.index] = output;
+                await item.ref.set({ status: 'completed', translatedText: output, provider: providerKey, createdAt: FieldValue.serverTimestamp(), leaseAt: FieldValue.delete() }, { merge: true });
+            }
+        } catch (error) {
+            await Promise.all(pending.map(item => item.ref.set({ status: 'failed', errorCode: error instanceof Error ? error.name : 'TranslationError', leaseAt: FieldValue.delete(), updatedAt: FieldValue.serverTimestamp() }, { merge: true })));
+            throw error;
+        }
+    }
+    return results;
+}
+
+async function translateCategorySettings(snapshot: DocumentSnapshot, before?: DocumentData): Promise<void> {
+    if (!snapshot.exists) return;
+    const settingId = snapshot.id;
+    if (!['bike_categories', 'shop_categories', 'accessory_categories'].includes(settingId)) return;
+    const mode = process.env.BRIZ_TRANSLATION_PROVIDER || 'disabled';
+    if (mode !== 'mock' && mode !== 'google') return;
+    const data = snapshot.data() || {};
+    const oldCategories = Array.isArray(before?.categories) ? before.categories : [];
+    const plan = planCategoryTranslations(data).filter(item => !before || !oldCategories.includes(item.source));
+    if (!plan.length) return;
+    let categoryPatch: Record<string, unknown>;
+    try {
+        const translated = await translateWithCache(plan.map(item => item.text), mode);
+        categoryPatch = buildCategoryTranslationPatch(plan, translated, data, new Date().toISOString(), mode === 'mock' ? 'emulator-mock' : 'google-cloud-translation');
+    } catch (error) {
+        const meta = data.translationMeta && typeof data.translationMeta === 'object' ? data.translationMeta as Record<string, Record<string, unknown>> : {};
+        for (const item of plan) meta[item.source] = { origin: 'automatic', status: 'failed', sourceHash: item.hash, errorCode: error instanceof Error ? error.name : 'TranslationError', updatedAt: new Date().toISOString() };
+        await snapshot.ref.update({ translationMeta: meta });
+        logger.warn('Public category translation failed; Spanish category remains saved.', { settingId, categoryCount: plan.length });
+        return;
+    }
+    await db.runTransaction(async (transaction) => {
+        const current = await transaction.get(snapshot.ref);
+        if (!current.exists) return;
+        const currentData = current.data() || {};
+        const currentPlan = planCategoryTranslations(currentData);
+        const permitted = new Set(currentPlan.map(item => item.hash));
+        const existingTranslations = currentData.translations && typeof currentData.translations === 'object' ? currentData.translations as Record<string, unknown> : {};
+        const existingMeta = currentData.translationMeta && typeof currentData.translationMeta === 'object' ? currentData.translationMeta as Record<string, Record<string, unknown>> : {};
+        const nextTranslations = { ...existingTranslations };
+        const nextMeta = { ...existingMeta };
+        let hasChanges = false;
+        for (const item of plan) {
+            if (!permitted.has(item.hash)) continue;
+            if (typeof existingTranslations[item.source] === 'string' && !existingMeta[item.source]) continue;
+            const meta = (categoryPatch.translationMeta as Record<string, Record<string, unknown>>)[item.source];
+            const translatedText = (categoryPatch.translations as Record<string, string>)[item.source];
+            if (nextTranslations[item.source] !== translatedText) hasChanges = true;
+            nextTranslations[item.source] = translatedText;
+            nextMeta[item.source] = meta;
+        }
+        if (hasChanges) {
+            transaction.update(snapshot.ref, { translations: nextTranslations, translationMeta: nextMeta });
+        }
+    });
+}
+
+for (const catalogCollection of ['inventory', 'combos', 'routes', 'events']) {
+    // Provider is disabled unless explicitly configured. The secret must be created and bound
+    // before any production deployment; Emulator tests use an offline deterministic adapter.
+    exports[`translate${catalogCollection[0].toUpperCase()}${catalogCollection.slice(1)}Content`] = onDocumentWritten({
+        document: `${catalogCollection}/{documentId}`,
+        region: 'us-central1',
+        maxInstances: 2,
+        secrets: [GOOGLE_TRANSLATE_API_KEY],
+        retry: false,
+    }, async (event) => {
+        const after = event.data?.after;
+        if (!after) return;
+        await translatePublicCatalogDocument(catalogCollection, after, event.data?.before.exists ? event.data.before.data() : undefined);
+    });
+}
+
+exports.translatePublicCategories = onDocumentWritten({
+    document: 'settings/{settingId}',
+    region: 'us-central1',
+    maxInstances: 1,
+    secrets: [GOOGLE_TRANSLATE_API_KEY],
+    retry: false,
+}, async (event) => {
+    const after = event.data?.after;
+    if (!after) return;
+    await translateCategorySettings(after, event.data?.before.exists ? event.data.before.data() : undefined);
 });
