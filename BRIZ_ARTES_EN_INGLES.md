@@ -1,5 +1,24 @@
 # BRIZ (`briz.com.bo`) — INVENTARIO OFICIAL DE ARTES GRÁFICOS EN INGLÉS (PRIORIDAD 3)
 
+## Estado comprobado del registro (2026-11-24)
+
+`npm run test:artwork` confirma que los fallbacks resuelven a una ruta existente cuando el original está presente; no vuelve públicas imágenes ni cambia artes. Litzy aún debe entregar/verificar inglés en estos slots (cada uno puede necesitar variante móvil, escritorio o ambas; el estado preciso por variante está en `src/lib/artworkRegistry.ts`):
+
+| Slot | Ubicación en web | Archivo EN esperado / estado |
+|---|---|---|
+| `home_hero_vive` | Inicio, hero | `/live-cochabamba.webp`; pendiente, fallback `/vive.webp` |
+| `home_bento_1_rentals` | Inicio, menú de servicios | `/menu-principal-web/Ingles/1.png` y `/menu-principal-celular/Ingles/1.png`; falta marcar/verificar variantes |
+| `home_bento_2_service` | Inicio, menú de servicios | `/menu-principal-web/Ingles/2.png`, `/menu-principal-celular/Ingles/2.png`; pendiente de texto inglés verificado |
+| `home_bento_3_shop` | Inicio, menú de servicios | `/menu-principal-celular/Ingles/3.png`; móvil sin verificación; desktop está marcado traducido |
+| `home_bento_4_routes` | Inicio, menú de servicios | `/menu-principal-celular/Ingles/4.png`; móvil sin verificación; desktop está marcado traducido |
+| `about_slide_1`, `about_slide_2`, `about_slide_3` | Acerca de, historia/misión/valores | Variantes inglés desktop y móvil del registro; pendientes, el fallback evita 404 |
+| `home_brand_sticker` | Inicio, marca | No hay original en este checkout; pendiente de localizar fuente y crear EN |
+| `home_community_art` | Inicio, bloque Comunidad | Variantes EN aún no verificadas; revisar si incluyen texto incrustado |
+| `home_pedalea_art` | Inicio, cierre inspiracional | Pendiente de arte EN |
+| `home_experience_tours`, `home_experience_family`, `home_experience_urban`, `home_experience_accessible` | Inicio, tarjetas de experiencias | Fuentes originales no están en este checkout; localizar y diseñar variante EN |
+
+También hay 14 slots cuyo original gráfico ni siquiera existe en este checkout (`home_texture`, `home_why_tape`, `home_splash_red`, `home_splash_yellow`, `home_purpose_bike`, `home_hands_heart`, `home_brand_sticker`, cuatro `home_experience_*`, `about_texture`, `service_texture`, `routes_texture`). El arte de color amarillo `home_splash_yellow` es solo una posible coincidencia por nombre: el reporte “cuadro amarillo grande” no aparece en texto/documentación del repositorio, por lo que no debe asignarse a ese slot sin captura o ubicación. 
+
 > **Propósito:** Documentar todas las piezas gráficas con texto incrustado en el sitio web público de BRIZ (`HomePage.tsx` y `AboutPage.tsx`), distinguir cuáles ya tienen versión real en inglés, cuáles siguen en español dentro de las carpetas `/Ingles/` o no existen, y especificar las dimensiones y textos exactos en inglés natural para el equipo de diseño.
 
 ---

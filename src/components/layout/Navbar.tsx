@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { useLanguage } from '@/context/LanguageContext';
 import { getLocalizedCategory } from '@/lib/translations';
+import { tx, type AppLanguage } from '@/lib/localeCatalog';
 import ArtworkPicture from '@/components/ArtworkPicture';
 
 type NavLinkItem = {
@@ -27,17 +28,17 @@ type NavLinkItem = {
     icon: LucideIcon;
 };
 
-const getGroup1Links = (lang: string): NavLinkItem[] => [
-    { label: lang === 'es' ? 'Alquiler' : 'Rentals', href: '/rentals', icon: Bike },
-    { label: lang === 'es' ? 'Tienda' : 'Shop', href: '/shop', icon: Store },
-    { label: lang === 'es' ? 'Ciclotours' : 'Ciclotours', href: '/routes', icon: Route },
-    { label: lang === 'es' ? 'Mecánica' : 'Mechanics', href: '/service', icon: Wrench },
-    { label: lang === 'es' ? 'Comunidad' : 'Community', href: '/community', icon: HandHeart },
+const getGroup1Links = (lang: AppLanguage): NavLinkItem[] => [
+    { label: tx('navRentals', lang), href: '/rentals', icon: Bike },
+    { label: tx('navShop', lang), href: '/shop', icon: Store },
+    { label: tx('navTours', lang), href: '/routes', icon: Route },
+    { label: tx('navService', lang), href: '/service', icon: Wrench },
+    { label: tx('navCommunity', lang), href: '/community', icon: HandHeart },
 ];
 
-const getGroup2Links = (lang: string): NavLinkItem[] => [
-    { label: lang === 'es' ? 'Conócenos' : 'About Us', href: '/about', icon: Info },
-    { label: lang === 'es' ? 'Preguntas frecuentes' : 'FAQ', href: '/contact', icon: HelpCircle },
+const getGroup2Links = (lang: AppLanguage): NavLinkItem[] => [
+    { label: tx('navAbout', lang), href: '/about', icon: Info },
+    { label: tx('navFaq', lang), href: '/contact', icon: HelpCircle },
 ];
 
 const TireTrackSeparator = ({ className = '', style }: { className?: string; style?: React.CSSProperties }) => (
@@ -93,7 +94,7 @@ const translateLabel = (label: string, lang: string) => {
         case 'Triciclos': return 'Tricycles';
         case 'Cuatriciclos': return 'Quadricycles';
         case 'Accesorios': return 'Accessories';
-        case 'Eventos': return 'Events';
+        case 'Eventos': return tx('navEvents', 'en');
         // Tienda
         case 'Bicicletas a medio uso': return 'Pre-owned Bikes';
         case 'Bicicletas nuevas': return 'New Bikes';
@@ -103,12 +104,12 @@ const translateLabel = (label: string, lang: string) => {
         case 'Insumos y herramientas': return 'Tools & Supplies';
         case 'Alimentos': return 'Nutrition';
         // Mecánica
-        case 'Planes de mantenimiento': return 'Maintenance Plans';
-        case 'Servicios adicionales': return 'Additional Services';
-        case 'Cotizador en línea': return 'Online Quoter';
-        case 'Agendar turno': return 'Book Turn';
+        case 'Planes de mantenimiento': return tx('navMaintenancePlans', 'en');
+        case 'Servicios adicionales': return tx('navAdditionalServices', 'en');
+        case 'Cotizador en línea': return tx('navQuoteTool', 'en');
+        case 'Agendar turno': return tx('navBookAppointment', 'en');
         // Comunidad
-        case 'Noticias': return 'News';
+        case 'Noticias': return tx('navNews', 'en');
         default: return label;
     }
 };
@@ -194,11 +195,11 @@ export default function Navbar() {
     }, [routes]);
 
     const getLinkCategories = (label: string) => {
-        if (label === 'Alquiler' || label === 'Rentals') return rentalCategories;
-        if (label === 'Tienda' || label === 'Shop') return shopCategoriesLinks;
-        if (label === 'Ciclotours') return ciclotoursCategories;
-        if (label === 'Mecánica' || label === 'Mechanics') return MECANICA_CATEGORIES;
-        if (label === 'Comunidad' || label === 'Community') return COMUNIDAD_CATEGORIES;
+        if (label === tx('navRentals', language)) return rentalCategories;
+        if (label === tx('navShop', language)) return shopCategoriesLinks;
+        if (label === tx('navTours', language)) return ciclotoursCategories;
+        if (label === tx('navService', language)) return MECANICA_CATEGORIES;
+        if (label === tx('navCommunity', language)) return COMUNIDAD_CATEGORIES;
         return [];
     };
 
@@ -519,7 +520,7 @@ export default function Navbar() {
                                                 }}
                                                 className={`w-full flex items-center justify-between text-left px-3.5 py-2.5 text-xs font-bold rounded-xl transition-colors font-cocon cursor-pointer ${language === 'es' ? 'bg-brand-yellow text-brand-black font-black' : 'text-white/80 hover:bg-white/5 hover:text-white'}`}
                                             >
-                                                Español (ES)
+                                                {tx('languageSpanish', language)}
                                             </button>
                                             <button
                                                 onClick={() => {
@@ -528,7 +529,7 @@ export default function Navbar() {
                                                 }}
                                                 className={`w-full flex items-center justify-between text-left px-3.5 py-2.5 text-xs font-bold rounded-xl transition-colors font-cocon mt-1 cursor-pointer ${language === 'en' ? 'bg-brand-yellow text-brand-black font-black' : 'text-white/80 hover:bg-white/5 hover:text-white'}`}
                                             >
-                                                English (EN)
+                                                {tx('languageEnglish', language)}
                                             </button>
                                         </div>
                                     </>
@@ -591,7 +592,7 @@ export default function Navbar() {
                                     onClick={() => toggleMobileSection('services')}
                                     className="flex w-full items-center justify-between px-4 py-3 bg-white/12 hover:bg-white/18 rounded-2xl text-left font-black uppercase text-xs tracking-wider border border-transparent cursor-pointer transition-colors"
                                 >
-                                    <span>{language === 'es' ? 'NUESTROS SERVICIOS' : 'OUR SERVICES'}</span>
+                                    <span>{tx('navServicesGroup', language)}</span>
                                     <motion.span
                                         animate={{ rotate: mobileExpanded.services ? 180 : 0 }}
                                         transition={{ duration: 0.2 }}
@@ -613,7 +614,7 @@ export default function Navbar() {
                                         >
                                             {/* ── ALQUILER ── */}
                                             {renderCollapsibleMenuItem(
-                                                language === 'es' ? 'Alquiler' : 'Rentals', 
+                                                tx('navRentals', language),
                                                 '/rentals', 
                                                 Bike, 
                                                 'Alquiler', 
@@ -622,7 +623,7 @@ export default function Navbar() {
 
                                             {/* ── TIENDA ── */}
                                             {renderCollapsibleMenuItem(
-                                                language === 'es' ? 'Tienda' : 'Shop', 
+                                                tx('navShop', language),
                                                 '/shop', 
                                                 Store, 
                                                 'Tienda', 
@@ -631,7 +632,7 @@ export default function Navbar() {
 
                                             {/* ── CICLOTOURS ── */}
                                             {renderCollapsibleMenuItem(
-                                                language === 'es' ? 'Ciclotours' : 'Ciclotours', 
+                                                tx('navTours', language),
                                                 '/routes', 
                                                 Route, 
                                                 'Ciclotours', 
@@ -640,7 +641,7 @@ export default function Navbar() {
 
                                             {/* ── MECÁNICA ── */}
                                             {renderCollapsibleMenuItem(
-                                                language === 'es' ? 'Mecánica' : 'Mechanics', 
+                                                tx('navService', language),
                                                 '/service', 
                                                 Wrench, 
                                                 'Mecánica', 
@@ -649,7 +650,7 @@ export default function Navbar() {
 
                                             {/* ── COMUNIDAD ── */}
                                             {renderCollapsibleMenuItem(
-                                                language === 'es' ? 'Comunidad' : 'Community', 
+                                                tx('navCommunity', language),
                                                 '/community', 
                                                 HandHeart, 
                                                 'Comunidad', 
@@ -760,7 +761,7 @@ export default function Navbar() {
                                 }}
                                 className={`w-full flex items-center justify-between text-left px-3.5 py-2.5 text-xs font-bold rounded-xl transition-colors font-cocon cursor-pointer ${language === 'es' ? 'bg-brand-yellow text-brand-black font-black' : 'text-white/80 hover:bg-white/5 hover:text-white'}`}
                             >
-                                Español (ES)
+                                {tx('languageSpanish', language)}
                             </button>
                             <button
                                 onClick={() => {
@@ -769,7 +770,7 @@ export default function Navbar() {
                                 }}
                                 className={`w-full flex items-center justify-between text-left px-3.5 py-2.5 text-xs font-bold rounded-xl transition-colors font-cocon cursor-pointer ${language === 'en' ? 'bg-brand-yellow text-brand-black font-black' : 'text-white/80 hover:bg-white/5 hover:text-white'}`}
                             >
-                                English (EN)
+                                {tx('languageEnglish', language)}
                             </button>
                         </div>
                     </>
