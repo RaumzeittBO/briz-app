@@ -403,9 +403,9 @@ Para permitir que el administrador cambie banners y artes en español/inglés (W
 
 ## Actualización de solicitudes BRIZ — 2026-11-24
 
-- PR #21: `0ae48bb9c889c3dfd483e5e9e4d375399aa5b2c5`, Open/Draft/MERGEABLE. Build Production local y pruebas bilingües, galerías e inventario en Emulator pasan. Se mantiene sin fusionar porque aún hay artes públicos con texto español incrustado. Vercel Preview marca FAILURE; no se pudo consultar el log: la cuenta `pachax.bo@gmail.com` carece de acceso al scope `gfabrigtrf-7085s-projects` (403). No se debilitó su guard.
-- PR #22: `352338670537611cd078f2628300b37c2470751e`, Open/Draft/CONFLICTING hasta integrar #21. Provider disabled. Está pendiente corregir la reserva de cuota que no se libera cuando falla el proveedor. No validar ni habilitar Google Translation hasta conocer API, secreto, IAM, cuotas y coste.
-- PR #20: `befe0f584727fedb06ddc74d47533bf25efd3eb9`, Open/Draft, separada. Fase 1 y motor bruto de prorrateo probados con Emulator y Playwright 390×844/1280×900; no se agrega cobro, mínimo, redondeo ni límite. Requiere reglas comerciales de Ale.
+- PR #21: `d35ac2f9682f8ffc41c2c3a6973afe2d4e25cc1d`, Open/Draft. El check Vercel del SHA actual está PENDING. Build Production local y pruebas bilingües, galerías e inventario en Emulator pasan. Se mantiene sin fusionar porque aún hay artes públicos con texto español incrustado. El SHA anterior tuvo FAILURE; no se pudo consultar el log: la cuenta `pachax.bo@gmail.com` carece de acceso al scope `gfabrigtrf-7085s-projects` (403). No se debilitó su guard.
+- PR #22: `352338670537611cd078f2628300b37c2470751e`, Open/Draft/CONFLICTING hasta integrar #21; Preview FAILURE. Provider disabled. Está pendiente corregir la reserva de cuota que no se libera cuando falla el proveedor. No validar ni habilitar Google Translation hasta conocer API, secreto, IAM, cuotas y coste.
+- PR #20: `befe0f584727fedb06ddc74d47533bf25efd3eb9`, Open/Draft, separada; Preview FAILURE. Fase 1 y motor bruto de prorrateo probados con Emulator y Playwright 390×844/1280×900; no se agrega cobro, mínimo, redondeo ni límite. Requiere reglas comerciales de Ale.
 - La evidencia detallada, pendientes gráficos y matriz contractual están en `BRIZ_CIERRE_SOLICITUDES_2026-11-24.md`. No se halló el contrato en el checkout; no se afirma aceptación formal.
 
 ## Estado de release IAM/backup/Auth — 2026-10-21
