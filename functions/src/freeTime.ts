@@ -12,3 +12,21 @@ export function elapsedFreeTimeMilliseconds(startedAtMs: number, closedAtMs: num
     }
     return closedAtMs - startedAtMs;
 }
+
+export interface FreeTimeProration {
+    elapsedMilliseconds: number;
+    elapsedMinutes: number;
+    unroundedAmount: number;
+}
+
+/** Raw per-minute proration only. Minimums, rounding, caps and fees belong to confirmed business rules. */
+export function calculateFreeTimeProration(hourlyRate: number, startedAtMs: number, closedAtMs: number): FreeTimeProration {
+    if (!Number.isFinite(hourlyRate) || hourlyRate <= 0) throw new Error('La tarifa horaria debe ser válida.');
+    const elapsedMilliseconds = elapsedFreeTimeMilliseconds(startedAtMs, closedAtMs);
+    const elapsedMinutes = elapsedMilliseconds / 60_000;
+    return {
+        elapsedMilliseconds,
+        elapsedMinutes,
+        unroundedAmount: hourlyRate * elapsedMilliseconds / 3_600_000,
+    };
+}

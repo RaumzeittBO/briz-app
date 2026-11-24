@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
-import { isFreeTimeEmulatorRuntime, elapsedFreeTimeMilliseconds } from '../functions/src/freeTime';
+import { calculateFreeTimeProration, isFreeTimeEmulatorRuntime, elapsedFreeTimeMilliseconds } from '../functions/src/freeTime';
 import { isFreeTimeEmulatorUiEnabled } from '../src/lib/freeTimeFeature';
+import { calculatePrice } from '../functions/src/domain';
 
 assert.equal(isFreeTimeEmulatorRuntime({ FUNCTIONS_EMULATOR: 'true', GCLOUD_PROJECT: 'demo-briz-security' }), true);
 assert.equal(isFreeTimeEmulatorRuntime({ FUNCTIONS_EMULATOR: 'true', GCLOUD_PROJECT: 'briz-4ef3a' }), false);
@@ -12,4 +13,14 @@ assert.equal(isFreeTimeEmulatorUiEnabled({ development: true, emulatorEnabled: t
 assert.equal(isFreeTimeEmulatorUiEnabled({ development: true, emulatorEnabled: true, projectId: 'demo-briz-security', explicitFlag: undefined }), false);
 assert.equal(elapsedFreeTimeMilliseconds(1000, 1000 + 123_456), 123_456);
 assert.throws(() => elapsedFreeTimeMilliseconds(2000, 1000), /intervalo/i);
-console.log('PASS Free Time is disabled outside the exact Emulator runtime and UI opt-in; elapsed time uses integer milliseconds.');
+const quote = calculateFreeTimeProration(35, 0, 17 * 60_000);
+assert.equal(quote.elapsedMilliseconds, 1_020_000);
+assert.equal(quote.elapsedMinutes, 17);
+assert.equal(quote.unroundedAmount, 35 * 17 / 60, 'proration retains the raw amount without commercial rounding');
+assert.equal(calculateFreeTimeProration(35, 0, 0).unroundedAmount, 0, 'this engine does not impose an unapproved minimum');
+assert.throws(() => calculateFreeTimeProration(0, 0, 60_000), /tarifa horaria/i);
+assert.throws(() => calculateFreeTimeProration(-1, 0, 60_000), /tarifa horaria/i);
+const fixedDurationFixture = { pricePerHour: 35, price1Hour: 35, price24Hours: 70, pricePerDay: 70 };
+assert.equal(calculatePrice(fixedDurationFixture, '1 hora', 1), 35, 'fixed one-hour rental pricing remains unchanged');
+assert.equal(calculatePrice(fixedDurationFixture, '24 horas', 1), 70, 'fixed full-day rental pricing remains unchanged');
+console.log('PASS Free Time remains Emulator-gated; raw per-minute proration accepts an explicit rate without minimum or rounding, and fixed-duration fixture prices remain unchanged.');

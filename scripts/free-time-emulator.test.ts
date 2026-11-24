@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { createRequire } from 'node:module';
 import { spawn, type ChildProcess } from 'node:child_process';
+import { createServer } from 'node:net';
 import { initializeApp, deleteApp } from 'firebase/app';
 import { connectAuthEmulator, createUserWithEmailAndPassword, getAuth, reload } from 'firebase/auth';
 import { connectFunctionsEmulator, getFunctions, httpsCallable } from 'firebase/functions';
@@ -10,10 +11,17 @@ import { connectFirestoreEmulator, getFirestore } from 'firebase/firestore';
 import { chromium, type Browser } from 'playwright';
 
 const projectId = 'demo-briz-security';
+const emulatorHost = process.env.BRIZ_EMULATOR_HOST || '127.0.0.1';
+const authPort = Number(process.env.BRIZ_AUTH_EMULATOR_PORT || 9099);
+const firestorePort = Number(process.env.BRIZ_FIRESTORE_EMULATOR_PORT || 8080);
+const functionsPort = Number(process.env.BRIZ_FUNCTIONS_EMULATOR_PORT || 5001);
 process.env.GCLOUD_PROJECT = projectId;
-process.env.FIREBASE_AUTH_EMULATOR_HOST = '127.0.0.1:9099';
-process.env.FIRESTORE_EMULATOR_HOST = '127.0.0.1:8080';
+process.env.FIREBASE_AUTH_EMULATOR_HOST = `${emulatorHost}:${authPort}`;
+process.env.FIRESTORE_EMULATOR_HOST = `${emulatorHost}:${firestorePort}`;
 const require = createRequire(new URL('../functions/package.json', import.meta.url));
+const resolveFromTest = createRequire(import.meta.url);
+const viteEntry = resolveFromTest.resolve('vite');
+const viteScript = join(dirname(dirname(dirname(viteEntry))), 'bin', 'vite.js');
 const adminAppSdk = require('firebase-admin/app');
 const adminAuthSdk = require('firebase-admin/auth');
 const adminFirestoreSdk = require('firebase-admin/firestore');
@@ -23,11 +31,11 @@ const adminDb = adminFirestoreSdk.getFirestore(adminApp);
 const firebaseConfig = { apiKey: 'demo-key', authDomain: `${projectId}.firebaseapp.com`, projectId, appId: 'free-time-test', storageBucket: `${projectId}.appspot.com` };
 const app = initializeApp(firebaseConfig, `free-time-client-${Date.now()}`);
 const auth = getAuth(app);
-connectAuthEmulator(auth, 'http://127.0.0.1:9099', { disableWarnings: true });
+connectAuthEmulator(auth, `http://${emulatorHost}:${authPort}`, { disableWarnings: true });
 const firestore = getFirestore(app);
-connectFirestoreEmulator(firestore, '127.0.0.1', 8080);
+connectFirestoreEmulator(firestore, emulatorHost, firestorePort);
 const functions = getFunctions(app);
-connectFunctionsEmulator(functions, '127.0.0.1', 5001);
+connectFunctionsEmulator(functions, emulatorHost, functionsPort);
 const call = async <T>(name: string, payload?: unknown): Promise<T> => (await httpsCallable<unknown, T>(functions, name)(payload)).data;
 const unique = () => crypto.randomUUID().replaceAll('-', '');
 const futureDate = (days = 3) => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/La_Paz' }).format(new Date(Date.now() + days * 86_400_000));
@@ -40,6 +48,19 @@ async function waitForVite(baseUrl: string, server: ChildProcess): Promise<void>
     await new Promise((resolve) => setTimeout(resolve, 500));
   }
   throw new Error('Vite did not start within 40 seconds.');
+}
+
+async function getAvailablePort(): Promise<number> {
+  const server = createServer();
+  await new Promise<void>((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', () => resolve());
+  });
+  const address = server.address();
+  if (!address || typeof address === 'string') throw new Error('Could not allocate a local Vite port.');
+  const { port } = address;
+  await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+  return port;
 }
 
 async function seedBike(id: string, stock: number, store = 'Cochabamba', sizes?: Array<{ size: string; stock: number; maintenanceStock?: number }>) {
@@ -195,13 +216,18 @@ try {
   const viteEnvironment = {
     ...process.env,
     VITE_USE_FIREBASE_EMULATOR: 'true',
+    VITE_FIREBASE_EMULATOR_HOST: emulatorHost,
+    VITE_FIREBASE_EMULATOR_AUTH_PORT: String(authPort),
+    VITE_FIREBASE_EMULATOR_FIRESTORE_PORT: String(firestorePort),
+    VITE_FIREBASE_EMULATOR_FUNCTIONS_PORT: String(functionsPort),
     VITE_ENABLE_FREE_TIME_EMULATOR: 'true',
     VERCEL_ENV: 'local',
   };
-  const vite = spawn(process.execPath, ['node_modules/vite/bin/vite.js', '--host', '127.0.0.1', '--port', '5173', '--strictPort'], { env: viteEnvironment, stdio: 'ignore' });
+  const vitePort = await getAvailablePort();
+  const vite = spawn(process.execPath, [viteScript, '--host', '127.0.0.1', '--port', String(vitePort), '--strictPort'], { env: viteEnvironment, stdio: 'ignore' });
   let browser: Browser | null = null;
   try {
-    const baseUrl = 'http://127.0.0.1:5173';
+    const baseUrl = `http://127.0.0.1:${vitePort}`;
     await waitForVite(baseUrl, vite);
     browser = await chromium.launch({ headless: true });
     const page = await browser.newPage({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 1 });
