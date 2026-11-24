@@ -13,8 +13,15 @@ import { FileUploader } from '@/components/ui/file-uploader';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
+import { createInventoryDraftPatch, getInventoryContentFieldsToClear } from '@/lib/inventoryDraft';
 
 const WHEEL_OPTIONS = ['12','16','20','24','26','27','28','29'];
+type EditableWheelSize = Omit<WheelSizeEntry, 'stock'> & { stock: number | '' };
+type ShopDraft = Omit<InventoryItem, 'stock' | 'salePrice' | 'wheelSizes'> & Record<string, unknown> & {
+  stock?: number | '';
+  salePrice?: number | '';
+  wheelSizes?: EditableWheelSize[];
+};
 
 function defaultShopBike(): InventoryItem {
   return {
@@ -85,7 +92,11 @@ export default function AdminShopPage() {
   const [tab, setTab] = useState('bikes');
   const [search, setSearch] = useState('');
   const [modal, setModal] = useState<{open:boolean; mode:'add'|'edit'; type:'bike'|'accessory'}>({open:false,mode:'add',type:'bike'});
-  const [editItem, setEditItem] = useState<any>(null);
+  const [editItem, setEditItem] = useState<ShopDraft | null>(null);
+  const [editBaseline, setEditBaseline] = useState<ShopDraft | null>(null);
+  const [pendingImageUploads, setPendingImageUploads] = useState(0);
+  const [savingDraft, setSavingDraft] = useState(false);
+  const [saveError, setSaveError] = useState('');
   const [deleteConfirm, setDeleteConfirm] = useState<{id:string; name:string} | null>(null);
 
   const [categoryManagerOpen, setCategoryManagerOpen] = useState(false);
@@ -111,28 +122,66 @@ export default function AdminShopPage() {
   }, [shopCategories, inventory]);
 
   const openAdd = (type: 'bike'|'accessory') => {
-    setEditItem(type==='bike'?defaultShopBike():defaultShopAccessory());
+    setEditItem((type==='bike'?defaultShopBike():defaultShopAccessory()) as ShopDraft);
+    setEditBaseline(null);
+    setPendingImageUploads(0);
+    setSaveError('');
     setModal({open:true,mode:'add',type});
   };
   const openEdit = (item: any, type: 'bike'|'accessory') => {
-    setEditItem(JSON.parse(JSON.stringify(item)));
+    const snapshot = JSON.parse(JSON.stringify(item)) as ShopDraft;
+    setEditItem(snapshot);
+    setEditBaseline(snapshot);
+    setPendingImageUploads(0);
+    setSaveError('');
     setModal({open:true,mode:'edit',type});
+  };
+
+  const updateDraft = (updates: Partial<ShopDraft>) => {
+    setEditItem(current => current ? { ...current, ...updates } : current);
+  };
+
+  const trackImageUpload = (uploading: boolean) => {
+    setPendingImageUploads(current => Math.max(0, current + (uploading ? 1 : -1)));
+  };
+
+  const closeEditor = () => {
+    if (pendingImageUploads > 0 || savingDraft) return;
+    setModal({open:false,mode:'add',type:'bike'});
+    setEditItem(null);
+    setEditBaseline(null);
+    setSaveError('');
   };
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editItem) return;
+    if (!editItem || pendingImageUploads > 0 || savingDraft) return;
+    setSaveError('');
+    setSavingDraft(true);
     try {
-      const normalized = normalizeInventoryDraft(editItem);
       if (modal.mode === 'add') {
+        const normalized = normalizeInventoryDraft(editItem);
         await addInventoryItem(normalized);
       } else {
-        await updateInventoryItem(normalized.id, normalized);
+        if (!editBaseline) throw new Error('No hay una versión base para validar este producto. Cierra y vuelve a abrirlo.');
+        const draftPatch = createInventoryDraftPatch(editBaseline, editItem);
+        const normalizedDraft = normalizeInventoryDraft({ ...editBaseline, ...draftPatch });
+        const patch = Object.fromEntries(Object.keys(draftPatch).map(key => [key, normalizedDraft[key]]));
+        const fieldsToClear = getInventoryContentFieldsToClear(editBaseline, editItem);
+        if (fieldsToClear.length > 0 && !window.confirm(
+          `Vas a eliminar contenido existente (${fieldsToClear.join(', ')}). ¿Confirmas que deseas borrar estos campos?`,
+        )) return;
+        if (Object.keys(patch).length > 0) {
+          await updateInventoryItem(editItem.id, patch as Partial<InventoryItem>, editBaseline as Partial<InventoryItem>);
+        }
       }
       setModal({open:false,mode:'add',type:'bike'});
       setEditItem(null);
-    } catch (err: any) {
-      alert('Error al guardar producto: ' + (err.message || err));
+      setEditBaseline(null);
+    } catch (err) {
+      setSaveError(`Error al guardar producto: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setSavingDraft(false);
     }
   };
 
@@ -149,23 +198,28 @@ export default function AdminShopPage() {
 
 
   const addWheelSize = () => {
-    const current = editItem.wheelSizes || [];
-    setEditItem({
-      ...editItem,
-      wheelSizes: [...current, { size: '26', stock: 0 }]
-    });
+    setEditItem(current => current ? {
+      ...current,
+      wheelSizes: [...(current.wheelSizes || []), { size: '26', stock: 0 }],
+    } : current);
   };
 
   const updateWheelSize = (idx: number, field: keyof WheelSizeEntry, value: string|number) => {
-    const list = [...(editItem.wheelSizes || [])];
-    list[idx] = { ...list[idx], [field]: value };
-    setEditItem({ ...editItem, wheelSizes: list });
+    setEditItem(current => {
+      if (!current) return current;
+      const list = [...(current.wheelSizes || [])];
+      list[idx] = { ...list[idx], [field]: value };
+      return { ...current, wheelSizes: list };
+    });
   };
 
   const removeWheelSize = (idx: number) => {
-    const list = [...(editItem.wheelSizes || [])];
-    list.splice(idx, 1);
-    setEditItem({ ...editItem, wheelSizes: list });
+    setEditItem(current => {
+      if (!current) return current;
+      const list = [...(current.wheelSizes || [])];
+      list.splice(idx, 1);
+      return { ...current, wheelSizes: list };
+    });
   };
 
   return (
@@ -389,7 +443,7 @@ export default function AdminShopPage() {
                   {modal.type === 'bike' ? 'Bicicleta para venta' : 'Accesorio o repuesto para venta'}
                 </p>
               </div>
-              <Button type="button" variant="ghost" size="icon" onClick={() => setModal({open:false,mode:'add',type:'bike'})} className="w-8 h-8 rounded-lg text-white/40 hover:text-white hover:bg-white/10">
+              <Button type="button" variant="ghost" size="icon" disabled={pendingImageUploads > 0 || savingDraft} onClick={closeEditor} className="w-8 h-8 rounded-lg text-white/40 hover:text-white hover:bg-white/10">
                 <X className="w-4 h-4" />
               </Button>
             </div>
@@ -400,7 +454,7 @@ export default function AdminShopPage() {
               <div className="p-6 space-y-4">
                 <div>
                   <Label className="text-[10px] text-white/40 font-bold uppercase tracking-wider">Nombre del Producto</Label>
-                  <Input value={editItem.name} onChange={e=>setEditItem({...editItem,name:e.target.value})} className="bg-black/40 border-white/10 h-12 font-black text-lg rounded-xl mt-1 text-white" placeholder={modal.type==='bike'?'Ej: Urbana Aro 26 Bridgestone':'Ej: Inflador bombín de pie'} required/>
+                  <Input value={editItem.name} onChange={e=>updateDraft({ name: e.target.value })} className="bg-black/40 border-white/10 h-12 font-black text-lg rounded-xl mt-1 text-white" placeholder={modal.type==='bike'?'Ej: Urbana Aro 26 Bridgestone':'Ej: Inflador bombín de pie'} required/>
                 </div>
 
                 {/* Category Selection */}
@@ -415,7 +469,7 @@ export default function AdminShopPage() {
                           if (newCat && newCat.trim()) {
                             const trimmed = newCat.trim();
                             addShopCategory(trimmed).catch((err) => console.warn('No se pudo guardar la categoría:', err));
-                            setEditItem({ ...editItem, category: trimmed });
+                            updateDraft({ category: trimmed });
                           }
                         }}
                         className="text-[9px] font-black uppercase text-brand-yellow hover:underline cursor-pointer"
@@ -425,7 +479,7 @@ export default function AdminShopPage() {
                     </div>
                     <Select 
                       value={editItem.category || ''} 
-                      onValueChange={(val) => setEditItem({ ...editItem, category: val })}
+                      onValueChange={(val) => updateDraft({ category: val })}
                     >
                       <SelectTrigger className="h-12 bg-black/40 border-white/10 rounded-xl text-white">
                         <SelectValue placeholder="Seleccione una categoría" />
@@ -443,18 +497,18 @@ export default function AdminShopPage() {
 
                 <div>
                   <Label className="text-[10px] text-white/40 font-bold uppercase tracking-wider">Descripción</Label>
-                  <Textarea value={editItem.description} onChange={e=>setEditItem({...editItem,description:e.target.value})} className="bg-black/40 border-white/10 rounded-xl resize-none text-sm mt-1 text-white" rows={3}/>
+                  <Textarea value={editItem.description} onChange={e=>updateDraft({ description: e.target.value })} className="bg-black/40 border-white/10 rounded-xl resize-none text-sm mt-1 text-white" rows={3}/>
                 </div>
 
                 <div>
                   <Label className="text-[10px] text-white/40 font-bold uppercase tracking-wider">Detalles adicionales (Especificaciones)</Label>
-                  <Textarea value={editItem.details} onChange={e=>setEditItem({...editItem,details:e.target.value})} className="bg-black/40 border-white/10 rounded-xl resize-none text-sm mt-1 text-white" rows={2}/>
+                  <Textarea value={editItem.details} onChange={e=>updateDraft({ details: e.target.value })} className="bg-black/40 border-white/10 rounded-xl resize-none text-sm mt-1 text-white" rows={2}/>
                 </div>
 
                 {/* Toggles */}
                 <div className="flex flex-wrap gap-5 bg-black/30 p-4 rounded-xl border border-white/5">
                   <label className="flex items-center gap-2 cursor-pointer">
-                    <Checkbox checked={editItem.active} onCheckedChange={v=>setEditItem({...editItem,active:Boolean(v)})} className="data-[state=checked]:bg-green-500 data-[state=checked]:border-green-500"/>
+                    <Checkbox checked={editItem.active} onCheckedChange={v=>updateDraft({ active: Boolean(v) })} className="data-[state=checked]:bg-green-500 data-[state=checked]:border-green-500"/>
                     <span className="text-xs font-bold text-white/60">Activo</span>
                   </label>
                 </div>
@@ -474,7 +528,7 @@ export default function AdminShopPage() {
                       </Button>
                     </div>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      {(editItem.wheelSizes||[]).map((ws:WheelSizeEntry, idx:number)=>(
+                      {(editItem.wheelSizes||[]).map((ws:EditableWheelSize, idx:number)=>(
                         <div key={idx} className="flex gap-2 items-center bg-black/45 p-2 border border-white/5 rounded-xl">
                           <Select 
                             value={ws.size} 
@@ -524,7 +578,7 @@ export default function AdminShopPage() {
                         type="number"
                         min={0}
                         value={toEditableNumber(editItem.stock)}
-                        onChange={e => setEditItem({ ...editItem, stock: e.target.value === '' ? '' : Number(e.target.value) })}
+                        onChange={e => updateDraft({ stock: e.target.value === '' ? '' : Number(e.target.value) })}
                         className="bg-black/40 border-white/10 h-11 font-bold text-white rounded-xl"
                         placeholder="Ej: 15"
                         required
@@ -542,7 +596,7 @@ export default function AdminShopPage() {
                       type="number"
                       min={0}
                       value={toEditableNumber(editItem.salePrice)}
-                      onChange={e => setEditItem({ ...editItem, salePrice: e.target.value === '' ? '' : Number(e.target.value) })}
+                      onChange={e => updateDraft({ salePrice: e.target.value === '' ? '' : Number(e.target.value) })}
                       className="bg-black/40 border-white/10 h-11 font-bold text-blue-400 rounded-xl"
                       placeholder="Ej: 150"
                       required
@@ -561,8 +615,8 @@ export default function AdminShopPage() {
                       {editItem.imageUrl ? <img src={editItem.imageUrl} className="w-full h-full object-cover" alt="preview"/> : <ImageIcon className="w-8 h-8 text-white/10"/>}
                     </div>
                     <div className="flex gap-2 mt-2">
-                      <Input placeholder="URL de imagen..." value={editItem.imageUrl||''} onChange={e=>setEditItem({...editItem,imageUrl:e.target.value})} className="bg-black/40 border-white/10 h-10 text-sm rounded-xl text-white flex-1"/>
-                      <FileUploader onUpload={(url)=>setEditItem({...editItem,imageUrl:url})} folder="inventory" />
+                      <Input placeholder="URL de imagen..." value={editItem.imageUrl||''} onChange={e=>updateDraft({ imageUrl: e.target.value })} className="bg-black/40 border-white/10 h-10 text-sm rounded-xl text-white flex-1"/>
+                      <FileUploader onUploadingChange={trackImageUpload} onUpload={(url)=>updateDraft({ imageUrl: url })} folder="inventory" />
                     </div>
                   </div>
 
@@ -581,24 +635,34 @@ export default function AdminShopPage() {
                                 placeholder={`URL de imagen adicional #${index + 1}...`}
                                 value={url}
                                 onChange={e => {
-                                  const updatedUrls = [...urls];
-                                  updatedUrls[index] = e.target.value;
-                                  setEditItem({ ...editItem, additionalImageUrls: updatedUrls });
+                                  setEditItem(current => {
+                                    if (!current) return current;
+                                    const updatedUrls = [...(current.additionalImageUrls || [])];
+                                    updatedUrls[index] = e.target.value;
+                                    return { ...current, additionalImageUrls: updatedUrls };
+                                  });
                                 }}
                                 className="bg-black/40 border-white/10 h-10 text-xs rounded-xl text-white flex-1"
                               />
-                              <FileUploader onUpload={(newUrl)=>{
-                                const updatedUrls = [...urls];
-                                updatedUrls[index] = newUrl;
-                                setEditItem({ ...editItem, additionalImageUrls: updatedUrls });
+                              <FileUploader onUploadingChange={trackImageUpload} onUpload={(newUrl)=>{
+                                setEditItem(current => {
+                                  if (!current) return current;
+                                  const updatedUrls = [...(current.additionalImageUrls || [])];
+                                  if (index >= updatedUrls.length) return current;
+                                  updatedUrls[index] = newUrl;
+                                  return { ...current, additionalImageUrls: updatedUrls };
+                                });
                               }} folder="inventory" />
                               <Button
                                 type="button"
                                 variant="ghost"
                                 size="icon"
+                                disabled={pendingImageUploads > 0 || savingDraft}
                                 onClick={() => {
-                                  const updatedUrls = urls.filter((_: any, idx: number) => idx !== index);
-                                  setEditItem({ ...editItem, additionalImageUrls: updatedUrls });
+                                  setEditItem(current => current ? {
+                                    ...current,
+                                additionalImageUrls: (current.additionalImageUrls || []).filter((_url: string, idx: number) => idx !== index),
+                                  } : current);
                                 }}
                                 className="h-9 w-9 rounded-xl text-red-400 hover:text-red-300 hover:bg-red-500/10 shrink-0 cursor-pointer"
                               >
@@ -608,9 +672,12 @@ export default function AdminShopPage() {
                           ))}
                           <Button
                             type="button"
+                            disabled={pendingImageUploads > 0 || savingDraft}
                             onClick={() => {
-                              const updatedUrls = [...urls, ''];
-                              setEditItem({ ...editItem, additionalImageUrls: updatedUrls });
+                              setEditItem(current => current ? {
+                                ...current,
+                                additionalImageUrls: [...(current.additionalImageUrls || []), ''],
+                              } : current);
                             }}
                             className="bg-white/5 border border-white/5 hover:bg-white/10 text-white/80 font-bold h-9 px-3 text-xs rounded-lg w-full"
                           >
@@ -626,11 +693,12 @@ export default function AdminShopPage() {
 
             {/* Modal Footer */}
             <div className="p-6 border-t border-white/10 flex justify-end gap-3 bg-black/15">
-              <Button type="button" onClick={() => setModal({open:false,mode:'add',type:'bike'})} className="bg-white/5 border border-white/5 text-white/80 hover:bg-white/10 rounded-xl h-12 px-6 font-bold text-xs">
+              {saveError && <p role="alert" className="mr-auto max-w-xl self-center text-sm font-bold text-red-300">{saveError}</p>}
+              <Button type="button" disabled={pendingImageUploads > 0 || savingDraft} onClick={closeEditor} className="bg-white/5 border border-white/5 text-white/80 hover:bg-white/10 rounded-xl h-12 px-6 font-bold text-xs">
                 Cancelar
               </Button>
-              <Button type="submit" className="bg-brand-yellow text-brand-black hover:bg-brand-yellow/90 font-black rounded-xl h-12 px-6 text-xs">
-                Guardar Producto
+              <Button type="submit" disabled={pendingImageUploads > 0 || savingDraft} className="bg-brand-yellow text-brand-black hover:bg-brand-yellow/90 font-black rounded-xl h-12 px-6 text-xs">
+                {savingDraft ? 'Guardando…' : pendingImageUploads > 0 ? 'Esperando imágenes…' : 'Guardar Producto'}
               </Button>
             </div>
           </form>
