@@ -355,3 +355,11 @@ PR #20 sigue Draft y aislada. La Fase 1 Emulator no se publicó; no hay cobro ac
 - #22 permanece Open/Draft en `352338670537611cd078f2628300b37c2470751e`, apilada sobre #21 y marcada CONFLICTING; Preview FAILURE. Provider deshabilitado. Corregir la reserva de cuota ante fallo del proveedor; no activar servicio ni rebasear antes de que #21 llegue a main.
 - #20 permanece Open/Draft, separada, actualizada a `befe0f584727fedb06ddc74d47533bf25efd3eb9`; Preview FAILURE. Emulator, prorrateo puro sin reglas comerciales, build de Functions/web y Playwright 390×844/1280×900 pasan. No fusionar ni publicar antes de reglas de Ale.
 - La matriz recoge pruebas y requisitos aún pendientes. Contrato original no disponible en el checkout; aceptación formal no confirmada. No se modificó Firebase Production ni sus datos.
+
+## PR #22 — traducción automática de catálogo (estado 2026-11-25)
+
+- PR #21 ya está integrada y publicada en `main` (`f29b6ebb7f405c62ce1c52e08f9274becd334135`). La rama de traducción se sincroniza con ese `main`; #20 permanece separada.
+- El código cubre nombre, descripción y detalles de inventario/combinados; nombre y descripción de rutas/eventos; highlights y subcategorías; y categorías personalizadas. El proveedor predeterminado está desactivado. La API key del adaptador v2 se envía por header, nunca en la URL.
+- El secreto `GOOGLE_TRANSLATE_API_KEY` no existe en Secret Manager de `briz-4ef3a` (consulta de metadatos 404; no se leyó ningún valor). No se llamó a Google ni se desplegaron Functions. El proveedor y la facturación/API/IAM siguen pendientes de aprobación y verificación.
+- Las pruebas con Emulator usan un proveedor simulado. No hay backfill: los textos existentes no se traducen hasta que una actualización de fuente elegible los active, y no se modifican en bloque.
+- Se conservaron fotos, stock, importes, textos originales y traducciones manuales en los fixtures. La calidad natural del proveedor real queda pendiente de revisión humana cuando exista autorización.

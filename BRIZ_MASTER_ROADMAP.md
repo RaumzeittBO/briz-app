@@ -1,5 +1,16 @@
 # BRIZ (`briz.com.bo`) — MASTER ROADMAP & ENGINEERING LOG
 
+## Progreso local — bilingüismo y traducción dinámica (2026-11-24)
+
+- Rama de trabajo `codex/briz-translation-functions`, derivada de `main` `8ec37d9`. Sin cambios ni despliegues en Production.
+- Añadido un catálogo semántico ES/EN para navegación pública y controles de idioma. La traducción preexistente de UI sigue usando parte del diccionario heredado basado en frases; la migración y el barrido automatizado de todas las cadenas públicas quedan pendientes antes de afirmar cobertura completa.
+- Se corrigieron diferencias de significado en traducciones de garantía/deposito, horarios, requisitos de alquiler, tarifas y entrega. Las horas visibles de Contacto siguen viniendo de `settings/public_business` y su fallback configurado; no se inventan condiciones.
+- Preparado un disparador Functions para nombres, descripciones y detalles de inventario/combinados, categorías, puntos de rutas y subcategorías de eventos. Escribe solo campos ingleses autorizados y metadatos; usa hash, caché, deduplicación con lease, revalidación transaccional, cuota interna de 10,000 caracteres/día y preservación de texto inglés manual. Provider `google` apagado por defecto; Emulator usa adapter ficticio.
+- La traducción automática no está activa en Production: falta aprobar/habilitar Google Cloud Translation, configurar `GOOGLE_TRANSLATE_API_KEY` con acceso de secreto limitado y decidir cuotas/billing. No se pudo listar Secret Manager: Firebase CLI no reconoce el subcomando `functions:secrets:list` y `gcloud` no está instalado; no se leyeron valores. No ejecutar backfill de registros existentes aún; requiere dry-run/costo y autorización separados.
+- Emulator de Functions/Firestore aprobó crear/traducir contenido ficticio, reutilizar caché, regenerar tras editar español, preservar inglés manual, no tocar fotos/stock/precio y traducir categoría. Playwright + Firebase Emulator aprobó galería pública/admin y cambio ES→EN→ES sin recargar en 390×844 y 1440×900.
+- El registro de artes contiene variantes inglesas pendientes y fallbacks seguros; `BRIZ_ARTES_EN_INGLES.md` fue actualizado. El comentario “cuadro amarillo grande” no tiene referencia visual o textual identificable en el checkout; se necesita captura o ubicación concreta.
+- PR #21 (interfaz) está en Draft hacia `main`; PR #22 (traducción persistente) está en Draft sobre #21. Siguiente paso: revisar primero #21 y luego #22. No fusionar ni desplegar Functions hasta aprobar proveedor/secreto/cuotas y el alcance de traducción completo.
+
 ## Continuidad — galerías y contenido bilingüe de catálogo (2026-11-24)
 
 - La implementación de PR #19 agrega galerías públicas para fotos principales y adicionales, filtra referencias vacías/duplicadas/no HTTPS y conserva el caso histórico de una sola foto. Rentals y Tienda presentan el contenido en inglés disponible y usan el texto español como fallback.
