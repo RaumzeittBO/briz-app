@@ -340,13 +340,26 @@ Próximo paso ejecutable: el propietario rota token y agrega token/chat ID direc
 - Firestore backup sigue diario/7 días, PITR desactivado; tras refrescar la pantalla la tabla sigue vacía. En esa revisión faltaba una copia automática; esa ausencia no bloquea publicación. La copia puntual ya se restauró en Emulator, nunca en producción.
 - No se desplegó ni fusionó nada, no se modificaron datos/secretos y `briz-staging` no se utilizó. La Function separa identidades en código; build de Functions pasó en el commit local `77ce36b`. El commit está local y sin push para evitar Preview bloqueado por no haber staging.
 - Siguiente: iniciar ventana única para que el propietario rote y guarde secretos directamente, otorgar Secret Accessor solo a esos recursos, desplegar los componentes compatibles y verificar el trigger/outbox; sin esperar la copia diaria.
-# Continuidad — bilingüismo / traducción de contenido (2026-11-24)
 
-- PR #21 (`codex/briz-bilingual-ui`) está en Draft sobre `main`; PR #22 (`codex/briz-translation-functions`) está en Draft y apilada sobre #21. Base `main`: `8ec37d91429d9a22b5f1ee4fdf272c0065fe15b5`.
-- Nav público utiliza claves semánticas ES/EN; corregidos textos EN que antes cambiaban el sentido o datos comerciales. La localización de todas las cadenas públicas aún no se certificó de punta a punta.
-- `functions/src/catalogTranslation.ts` define campos traducibles, hashing, límites de texto/uso, preservación comercial, caché/proveedor y protección manual. Triggers cubren productos, combinados, categorías, highlights de rutas y subcategorías de eventos; revalidan el original antes de guardar.
-- Habilitación real apagada por defecto. Antes de desplegar: confirmar si el secreto existe, crear `GOOGLE_TRANSLATE_API_KEY` restringida a API si hace falta, otorgar acceso mínimo al runtime, habilitar facturación/API si corresponde y fijar cuotas; no activar en Preview. No se pudo consultar listado de Secret Manager: el subcomando de Firebase no existe y `gcloud` no está instalado; ningún valor secreto fue consultado.
-- Emulator prueba adapter ficticio, actualización, caché, categorías y conservación de campos ajenos. Las traducciones de contenido existente (aprox. conteos históricos 173/14 no revalidados en Production) siguen sin backfill.
-- `npm run test:pr19-gallery-visual` valida galería/admin en Emulator y Playwright en móvil/escritorio más ES→EN→ES sin recarga. No se consultó Storage ni documentos personales.
-- Vercel/Firebase Production no se modificaron; solo se intentó listar los nombres de secretos de Firebase y el CLI disponible no permite esa consulta. Cualquier eventual activación se hace después de revisión y autorización.
-- Artes pendientes y resolución del “cuadro amarillo grande”: ver `BRIZ_ARTES_EN_INGLES.md`; el término no aparece en los archivos del repo, así que pedir screenshot/URL antes de asignar un slot.
+## Cierre del trabajo BRIZ — 2026-11-24
+
+El estado y la matriz completos están en `BRIZ_CIERRE_SOLICITUDES_2026-11-24.md`. La #21 tiene pruebas visuales/Emulator ampliadas y un arreglo real del fallback de las variantes inglesas móviles de “Why Choose BRIZ” y “The Brand”. Se corrigieron textos del modal de acceso y recuperación al inglés. Se conserva como Draft y no se fusiona: faltan artes reales en inglés para hero “Vive”, collage “Una bicicleta”, portada del taller y láminas About; el fallo Vercel Preview sigue sin log verificable por falta de acceso al scope `gfabrigtrf-7085s-projects`.
+
+PR #22 continúa Draft sobre #21. El proveedor está deshabilitado; el contador de cuota no libera reserva si el proveedor falla, pendiente de corrección antes de activar. API/secret/IAM/cuotas/costo no pudieron verificarse con herramientas locales disponibles. No hubo despliegues ni escrituras en Firebase Production.
+
+PR #20 sigue Draft y aislada. La Fase 1 Emulator no se publicó; no hay cobro activo. Mínimo, redondeo y límites requieren decisión de Ale.
+
+### Estado verificado actualizado — 2026-11-24
+
+- #21 tiene validación funcional en `0ae48bb9c889c3dfd483e5e9e4d375399aa5b2c5`; los commits posteriores son solo documentación. Sigue Open/Draft y faltan artes ingleses. El último check Vercel consultado estaba PENDING; un SHA anterior falló y su causa sigue sin verificar: `pachax.bo@gmail.com` recibe 403 al scope `gfabrigtrf-7085s-projects`. Mantener protección; no fusionar ni declarar publicación.
+- #22 permanece Open/Draft en `352338670537611cd078f2628300b37c2470751e`, apilada sobre #21 y marcada CONFLICTING; Preview FAILURE. Provider deshabilitado. Corregir la reserva de cuota ante fallo del proveedor; no activar servicio ni rebasear antes de que #21 llegue a main.
+- #20 permanece Open/Draft, separada, actualizada a `befe0f584727fedb06ddc74d47533bf25efd3eb9`; Preview FAILURE. Emulator, prorrateo puro sin reglas comerciales, build de Functions/web y Playwright 390×844/1280×900 pasan. No fusionar ni publicar antes de reglas de Ale.
+- La matriz recoge pruebas y requisitos aún pendientes. Contrato original no disponible en el checkout; aceptación formal no confirmada. No se modificó Firebase Production ni sus datos.
+
+## PR #22 — traducción automática de catálogo (estado 2026-11-25)
+
+- PR #21 ya está integrada y publicada en `main` (`f29b6ebb7f405c62ce1c52e08f9274becd334135`). La rama de traducción se sincroniza con ese `main`; #20 permanece separada.
+- El código cubre nombre, descripción y detalles de inventario/combinados; nombre y descripción de rutas/eventos; highlights y subcategorías; y categorías personalizadas. El proveedor predeterminado está desactivado. La API key del adaptador v2 se envía por header, nunca en la URL.
+- El secreto `GOOGLE_TRANSLATE_API_KEY` no existe en Secret Manager de `briz-4ef3a` (consulta de metadatos 404; no se leyó ningún valor). No se llamó a Google ni se desplegaron Functions. El proveedor y la facturación/API/IAM siguen pendientes de aprobación y verificación.
+- Las pruebas con Emulator usan un proveedor simulado. No hay backfill: los textos existentes no se traducen hasta que una actualización de fuente elegible los active, y no se modifican en bloque.
+- Se conservaron fotos, stock, importes, textos originales y traducciones manuales en los fixtures. La calidad natural del proveedor real queda pendiente de revisión humana cuando exista autorización.

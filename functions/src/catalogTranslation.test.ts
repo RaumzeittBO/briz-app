@@ -56,12 +56,19 @@ assert.equal(protectedCopy.restore(protectedCopy.masked), 'BRIZ Mamachari 26" mo
 assert.throws(() => protectedCopy.restore('a translation without the protected tokens'), /protected name/);
 async function testProviderAdapter() {
     let requestBody = '';
-    const simulatedProvider = createGoogleTranslationProvider('never-log-this-test-key', async (_url, init) => {
+    let requestUrl = '';
+    let requestHeaders: HeadersInit = {};
+    const simulatedProvider = createGoogleTranslationProvider('never-log-this-test-key', async (url, init) => {
+        requestUrl = String(url);
+        requestHeaders = init?.headers || {};
         requestBody = String(init?.body || '');
         const request = JSON.parse(requestBody) as { q: string[] };
         return new Response(JSON.stringify({ data: { translations: request.q.map(text => ({ translatedText: text })) } }), { status: 200 });
     });
     assert.deepEqual(await simulatedProvider.translateMany(['BRIZ Mamachari 26" model ABC-123, Bs 850']), ['BRIZ Mamachari 26" model ABC-123, Bs 850']);
+    assert.equal(requestUrl, 'https://translation.googleapis.com/language/translate/v2');
+    assert.equal(new Headers(requestHeaders).get('x-goog-api-key'), 'never-log-this-test-key');
+    assert.ok(!requestUrl.includes('never-log-this-test-key'), 'API key is never placed in the request URL');
     assert.ok(!requestBody.includes('Bs 850'), 'amount is masked in the provider request');
     const failingProvider = createGoogleTranslationProvider('never-log-this-test-key', async () => new Response('provider body contains secret', { status: 503 }));
     await assert.rejects(() => failingProvider.translateMany(['texto ficticio']), /HTTP 503/);

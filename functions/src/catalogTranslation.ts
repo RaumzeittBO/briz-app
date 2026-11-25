@@ -219,9 +219,9 @@ export function createGoogleTranslationProvider(apiKey: string, fetcher: typeof 
     return {
         async translateMany(texts) {
             const guarded = texts.map(protectCommercialTokens);
-            const response = await fetcher(`https://translation.googleapis.com/language/translate/v2?key=${encodeURIComponent(apiKey)}`, {
+            const response = await fetcher('https://translation.googleapis.com/language/translate/v2', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 'Content-Type': 'application/json', 'X-Goog-Api-Key': apiKey },
                 body: JSON.stringify({ q: guarded.map(item => item.masked), source: 'es', target: 'en', format: 'text' }),
             });
             if (!response.ok) {

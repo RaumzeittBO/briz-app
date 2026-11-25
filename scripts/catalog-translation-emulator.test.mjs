@@ -158,6 +158,26 @@ try {
     product = (await itemRef.get()).data();
     assert.equal(product?.nameEn, 'Manual bicycle title', 'manual English is preserved when source changes');
 
+    const comboRef = db.doc('combos/emulator-translation-combo');
+    await comboRef.set({
+        name: 'Combinado ficticio',
+        description: 'Descripción ficticia del combinado',
+        details: 'Aro 26, modelo COMBO-42, Bs 950',
+        stock: 2,
+        price: 950,
+        imageUrl: 'fixture://combo',
+        additionalImageUrls: ['fixture://combo-side'],
+        components: [{ productId: 'emulator-component', quantity: 1 }],
+    });
+    const combo = await waitFor(async () => (await comboRef.get()).data(), value => value?.nameEn === 'Mock EN: Combinado ficticio', 'combo translation');
+    assert.equal(combo?.descriptionEn, 'Mock EN: Descripción ficticia del combinado');
+    assert.equal(combo?.detailsEn, 'Mock EN: Aro 26, modelo COMBO-42, Bs 950');
+    assert.equal(combo?.stock, 2);
+    assert.equal(combo?.price, 950);
+    assert.equal(combo?.imageUrl, 'fixture://combo');
+    assert.deepEqual(combo?.additionalImageUrls, ['fixture://combo-side']);
+    assert.deepEqual(combo?.components, [{ productId: 'emulator-component', quantity: 1 }]);
+
     const categoryRef = db.doc('settings/accessory_categories');
     await categoryRef.set({ categories: ['Categoría ficticia de alquiler'] });
     const categories = await waitFor(async () => (await categoryRef.get()).data(), value => value?.translations?.['Categoría ficticia de alquiler'] === 'Fictional rental category', 'dynamic category');
@@ -178,10 +198,11 @@ try {
     assert.deepEqual(event?.subcategories, [{ name: 'Sesión de prueba', images: ['fixture://event'] }]);
 
     await itemRef.delete();
+    await comboRef.delete();
     await categoryRef.delete();
     await routeRef.delete();
     await eventRef.delete();
-    console.log('PASS Functions + Firestore Emulator: automatic mock translation, persistent cache reuse, manual copy protection, partial writes, and categories');
+    console.log('PASS Functions + Firestore Emulator: product/combo translations, persistent cache, manual copy protection, field preservation, routes/events, and categories');
 } finally {
     await app.delete();
 }
