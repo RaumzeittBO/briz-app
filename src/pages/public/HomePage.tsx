@@ -31,6 +31,7 @@ import { useCart } from '@/context/CartContext';
 import { useArtwork } from '@/context/ArtworkContext';
 import ArtworkBackground from '@/components/ArtworkBackground';
 import ArtworkPicture from '@/components/ArtworkPicture';
+import { t } from '@/lib/translations';
 
 const designStorageKey = 'briz-home-design-editor-v4';
 const designEditorEnabled = import.meta.env.DEV;
@@ -618,25 +619,18 @@ function HeroSection() {
     const { totalItems } = useCart();
 
     const searchKeywords = [
-        { keyword: 'alquiler', label: 'Alquiler de Bicicletas', href: '/rentals' },
-        { keyword: 'rent', label: 'Bicycle Rentals', href: '/rentals' },
-        { keyword: 'tienda', label: 'Tienda de Accesorios y Bicicletas', href: '/shop' },
-        { keyword: 'shop', label: 'Accessories & Shop', href: '/shop' },
-        { keyword: 'taller', label: 'Taller de Mecánica / Servicios', href: '/service' },
-        { keyword: 'mecanica', label: 'Servicio Mecánico Profesional', href: '/service' },
-        { keyword: 'service', label: 'Mechanical Workshop', href: '/service' },
-        { keyword: 'ciclotours', label: 'Ciclotours y Rutas Turísticas', href: '/routes' },
-        { keyword: 'rutas', label: 'Rutas e Itinerarios', href: '/routes' },
-        { keyword: 'tours', label: 'Cycling Tours', href: '/routes' },
-        { keyword: 'comunidad', label: 'Eventos de la Comunidad Briz', href: '/community' },
-        { keyword: 'eventos', label: 'Próximos Eventos y Salidas', href: '/community' },
-        { keyword: 'opiniones', label: 'Opiniones y Reseñas de Clientes', href: '#reviews' },
-        { keyword: 'contacto', label: 'Contacto y Ubicación', href: '/contact' },
+        { keywords: ['alquiler', 'rent'], labelEs: 'Alquiler de bicicletas', labelEn: 'Bike rentals', href: '/rentals' },
+        { keywords: ['tienda', 'shop'], labelEs: 'Tienda de accesorios y bicicletas', labelEn: 'Accessories and bikes', href: '/shop' },
+        { keywords: ['taller', 'mecanica', 'service'], labelEs: 'Taller de mecánica y servicios', labelEn: 'Bike repair and service', href: '/service' },
+        { keywords: ['ciclotours', 'rutas', 'tours'], labelEs: 'Ciclotours y rutas turísticas', labelEn: 'Cycling tours and routes', href: '/routes' },
+        { keywords: ['comunidad', 'eventos', 'community', 'events'], labelEs: 'Eventos de la comunidad BRIZ', labelEn: 'BRIZ community events', href: '/community' },
+        { keywords: ['opiniones', 'reviews'], labelEs: 'Opiniones y reseñas de clientes', labelEn: 'Customer reviews', href: '#reviews' },
+        { keywords: ['contacto', 'contact'], labelEs: 'Contacto y ubicación', labelEn: 'Contact and location', href: '/contact' },
     ];
 
     const suggestions = searchQuery.trim() === '' ? [] : searchKeywords.filter(item => 
-        item.keyword.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        item.label.toLowerCase().includes(searchQuery.toLowerCase())
+        item.keywords.some(keyword => keyword.toLowerCase().includes(searchQuery.toLowerCase())) ||
+        (language === 'es' ? item.labelEs : item.labelEn).toLowerCase().includes(searchQuery.toLowerCase())
     );
 
 
@@ -685,7 +679,7 @@ function HeroSection() {
                         <button
                             onClick={handleCartClick}
                             className="absolute right-[4%] top-[3%] w-10 h-10 lg:right-[4%] lg:top-[5%] lg:w-14 lg:h-14 rounded-full bg-white border-2 border-brand-black shadow-[4px_4px_0_rgba(0,0,0,1)] hover:bg-brand-yellow flex items-center justify-center z-30 transition-all active:scale-95 cursor-pointer group/cart"
-                            aria-label="Ver Carrito"
+                            aria-label={language === 'es' ? 'Ver carrito' : 'View cart'}
                         >
                             <ShoppingCart className="w-4 h-4 lg:w-6 lg:h-6 text-brand-black group-hover/cart:scale-110 transition-transform" />
                             {totalItems > 0 && (
@@ -729,8 +723,8 @@ function HeroSection() {
                                             }}
                                             className="w-full px-3 py-2 rounded-xl text-left font-cocon text-[10px] sm:text-xs text-brand-black hover:bg-brand-yellow transition-colors flex items-center justify-between"
                                         >
-                                            <span>{s.label}</span>
-                                            <span className="text-[8px] uppercase tracking-wider text-brand-black/35 font-bold">Ir ➜</span>
+                                            <span>{language === 'es' ? s.labelEs : s.labelEn}</span>
+                                            <span className="text-[8px] uppercase tracking-wider text-brand-black/35 font-bold">{language === 'es' ? 'Ir' : 'Go'} ➜</span>
                                         </button>
                                     ))}
                                 </div>
@@ -750,7 +744,7 @@ function HeroSection() {
                                 ease: 'easeInOut'
                             }}
                             className="absolute left-[-7.5%] top-[-3.5%] w-[90%] sm:w-[65%] lg:left-[-13%] lg:top-[45%] lg:w-[72%] lg:-translate-y-1/2 z-30 pointer-events-none drop-shadow-[0_8px_16px_rgba(0,0,0,0.15)]"
-                        ><ArtworkPicture slotId="home_welcome_badge" language={language} alt="Bienvenidos" className="w-full" imageClassName="w-full" loading="eager" /></motion.div>
+                        ><ArtworkPicture slotId="home_welcome_badge" language={language} alt={language === 'es' ? 'Bienvenidos' : 'Welcome'} className="w-full" imageClassName="w-full" loading="eager" /></motion.div>
 
                         <motion.div
                             animate={{ 
@@ -765,13 +759,13 @@ function HeroSection() {
                                 delay: 0.5
                             }}
                             className="absolute bottom-[4%] left-1/2 -translate-x-1/2 w-[65%] sm:w-[45%] lg:bottom-[5%] lg:left-1/2 lg:-translate-x-1/2 lg:w-[22%] z-30 pointer-events-none drop-shadow-[0_8px_16px_rgba(0,0,0,0.15)]"
-                        ><ArtworkPicture slotId="home_hero_vive" language={language} alt="Vive la experiencia Briz" className="w-full" imageClassName="w-full" loading="eager" /></motion.div>
+                        ><ArtworkPicture slotId="home_hero_vive" language={language} alt={language === 'es' ? 'Vive la experiencia BRIZ' : 'Experience BRIZ'} className="w-full" imageClassName="w-full" loading="eager" /></motion.div>
 
                         {/* Inner image container */}
                         <div className="w-full h-full overflow-hidden rounded-[1.25rem] sm:rounded-[1.65rem] relative aspect-[10/17.5] md:aspect-auto">
                             <div className="pointer-events-none absolute inset-0 bg-gradient-to-tr from-transparent via-white/5 to-white/10 z-10 mix-blend-overlay" />
                             
-                            <ArtworkPicture slotId="home_bento_2_service" language={language} alt="Menú principal Briz" className="block h-auto w-full select-none" imageClassName="block h-auto w-full border-b-2 border-brand-black" loading="eager" style={{ transform: 'translateZ(0)', backfaceVisibility: 'hidden', WebkitFontSmoothing: 'antialiased' }} />
+                            <ArtworkPicture slotId="home_bento_2_service" language={language} alt={language === 'es' ? 'Menú principal BRIZ' : 'BRIZ main menu'} className="block h-auto w-full select-none" imageClassName="block h-auto w-full border-b-2 border-brand-black" loading="eager" style={{ transform: 'translateZ(0)', backfaceVisibility: 'hidden', WebkitFontSmoothing: 'antialiased' }} />
                         </div>
                     </motion.div>
                 </div>
@@ -954,7 +948,7 @@ function ServiceStrip() {
                         {/* Inner image container */}
                         <div className="w-full h-auto overflow-hidden rounded-[1.65rem] relative">
                             <div className="pointer-events-none absolute inset-0 bg-gradient-to-tr from-transparent via-white/5 to-white/10 z-10 mix-blend-overlay" />
-                            <ArtworkPicture slotId="home_bento_1_rentals" language={language} alt="Alquila una bicicleta" className="w-full" imageClassName="w-full h-auto border-b-2 border-brand-black" />
+                            <ArtworkPicture slotId="home_bento_1_rentals" language={language} alt={language === 'es' ? 'Alquila una bicicleta' : 'Rent a bike'} className="w-full" imageClassName="w-full h-auto border-b-2 border-brand-black" />
                         </div>
                     </motion.div>
                 </EditableLayer>
@@ -997,7 +991,7 @@ function MobileServicesCardSection() {
                         {/* Inner image container */}
                         <div className="w-full h-full overflow-hidden rounded-[1.25rem] relative aspect-[10/17.5]">
                             <div className="pointer-events-none absolute inset-0 bg-gradient-to-tr from-transparent via-white/5 to-white/10 z-10 mix-blend-overlay" />
-                            <ArtworkPicture slotId="home_bento_1_rentals" language={language} alt="Alquila una bicicleta" className="w-full" imageClassName="w-full h-auto border-b-2 border-brand-black" />
+                            <ArtworkPicture slotId="home_bento_1_rentals" language={language} alt={language === 'es' ? 'Alquila una bicicleta' : 'Rent a bike'} className="w-full" imageClassName="w-full h-auto border-b-2 border-brand-black" />
                         </div>
                     </motion.div>
                 </div>
@@ -1076,7 +1070,7 @@ function WhyChooseBrizSection() {
     const purposeBike = useArtwork('home_purpose_bike', language, 'desktop');
     const handsHeart = useArtwork('home_hands_heart', language, 'desktop');
 
-    return <AnimatedArtworkSection slotId="home_bento_3_shop" language={language} alt="Por qué elegir Briz y nuestro propósito" tone="green" />;
+    return <AnimatedArtworkSection slotId="home_bento_3_shop" language={language} alt={language === 'es' ? 'Por qué elegir BRIZ y nuestro propósito' : 'Why choose BRIZ and our purpose'} tone="green" />;
     return (
         <section className="relative isolate overflow-hidden scroll-mt-28 bg-[#50C879] pt-24 sm:pt-28 lg:pt-[112px]">
             <div className="absolute inset-y-0 right-0 -z-10 hidden w-[54%] rounded-l-[48%] border-y-2 border-l-2 border-white/80 bg-[#A45D33] lg:block" />
@@ -1269,7 +1263,7 @@ function BrandSection() {
     const brandLogo = useArtwork('home_brand_logo', language, 'desktop');
     const brandSticker = useArtwork('home_brand_sticker', language, 'desktop');
 
-    return <AnimatedArtworkSection slotId="home_bento_4_routes" language={language} alt="La marca Briz" tone="cream" />;
+    return <AnimatedArtworkSection slotId="home_bento_4_routes" language={language} alt={language === 'es' ? 'La marca BRIZ' : 'The BRIZ brand'} tone="cream" />;
     return (
         <section className="relative isolate overflow-hidden bg-[#FFD957] pt-20 lg:pt-24">
             <div className="pointer-events-none absolute inset-x-0 top-0 z-10 h-16 text-[#50C879]" aria-hidden="true">
@@ -1352,7 +1346,7 @@ function BrandSection() {
                         >
                             <OptionalSticker
                                 src={brandLogo.src}
-                                alt="Logo Briz"
+                                alt={language === 'es' ? 'Logo BRIZ' : 'BRIZ logo'}
                                 className="h-auto w-full object-contain brightness-0 invert opacity-90 drop-shadow-[0_18px_28px_rgba(0,0,0,0.08)]"
                             />
                         </motion.div>
@@ -1376,7 +1370,7 @@ function BrandSection() {
                         >
                             <OptionalSticker
                                 src={brandSticker.src}
-                                alt="Sticker de marca Briz"
+                                alt={language === 'es' ? 'Adhesivo de marca BRIZ' : 'BRIZ brand sticker'}
                                 className="block h-full w-full object-contain drop-shadow-[0_18px_35px_rgba(0,0,0,0.16)]"
                             />
                         </motion.div>
@@ -1444,7 +1438,7 @@ export function ExperienceSection({ embedded = false }: { embedded?: boolean }) 
                                     <ArtworkPicture
                                         slotId={experience.artwork}
                                         language={language}
-                                        alt={experience.title}
+                                        alt={language === 'es' ? experience.title : (t(experience.title, language) || experience.title)}
                                         placeholderLabel={experience.file}
                                         className="absolute inset-0 h-full w-full transition duration-500 group-hover:scale-105"
                                         imageClassName="h-full w-full object-cover"
@@ -1512,7 +1506,17 @@ function CommunityReviewsCarousel() {
         { id: 'demo-andrea', authorName: 'Andrea V.', rating: 5, content: 'Me encanta que Briz conecte movimiento, comunidad y cuidado por nuestra ciudad.' },
         { id: 'demo-diego', authorName: 'Diego P.', rating: 5, content: 'La atención fue increíble. Ya estoy organizando mi próxima rodada con amigos.' },
     ];
+    const demoReviewTranslations: Record<string, string> = {
+        'demo-lucia': 'BRIZ made it easy, safe, and so much fun to ride around the city again.',
+        'demo-mateo': 'We rented bikes to explore the city, and it was the best weekend plan.',
+        'demo-andrea': 'I love how BRIZ brings movement, community, and care for our city together.',
+        'demo-diego': 'The service was amazing. I am already planning my next ride with friends.',
+    };
     const visibleReviews = reviews.length ? reviews : demoReviews;
+    const getReviewContent = (review: CommunityItem | (typeof demoReviews)[number]) =>
+        language === 'en' && review.id.startsWith('demo-')
+            ? demoReviewTranslations[review.id] || review.content
+            : review.content;
 
     const openReview = () => {
         if (!currentCustomer) { setAuthOpen(true); return; }
@@ -1568,7 +1572,7 @@ function CommunityReviewsCarousel() {
                 <button 
                     onClick={scrollLeft}
                     className="absolute left-1 top-1/2 -translate-y-1/2 z-10 bg-white/95 text-brand-black hover:bg-brand-yellow shadow-md rounded-full w-8 h-8 flex items-center justify-center border border-gray-200 transition-all active:scale-95 opacity-0 group-hover/reviews:opacity-100 cursor-pointer"
-                    aria-label="Opinión anterior"
+                    aria-label={language === 'es' ? 'Opinión anterior' : 'Previous review'}
                 >
                     <ChevronLeft className="w-5 h-5 text-brand-black" strokeWidth={2.5} />
                 </button>
@@ -1577,7 +1581,7 @@ function CommunityReviewsCarousel() {
                 <button 
                     onClick={scrollRight}
                     className="absolute right-1 top-1/2 -translate-y-1/2 z-10 bg-white/95 text-brand-black hover:bg-brand-yellow shadow-md rounded-full w-8 h-8 flex items-center justify-center border border-gray-200 transition-all active:scale-95 opacity-0 group-hover/reviews:opacity-100 cursor-pointer"
-                    aria-label="Siguiente opinión"
+                    aria-label={language === 'es' ? 'Siguiente opinión' : 'Next review'}
                 >
                     <ChevronRight className="w-5 h-5 text-brand-black" strokeWidth={2.5} />
                 </button>
@@ -1597,8 +1601,8 @@ function CommunityReviewsCarousel() {
                                         <Star key={star} className="h-3.5 w-3.5 fill-current" />
                                     ))}
                                 </div>
-                                <p className="mt-2 line-clamp-3 min-h-[3.75rem] font-cocon text-sm leading-relaxed text-[#063D47]">
-                                    “{review.content}”
+                                <p data-user-generated-content className="mt-2 line-clamp-3 min-h-[3.75rem] font-cocon text-sm leading-relaxed text-[#063D47]">
+                                    “{getReviewContent(review)}”
                                 </p>
                             </div>
                             <div className="mt-3 flex items-center gap-2 border-t border-[#063D47]/10 pt-3">
@@ -1660,8 +1664,8 @@ function CommunityReviewsCarousel() {
                                         <Star key={star} className="h-3 w-3 fill-current" />
                                     ))}
                                 </div>
-                                <p className="mt-3 text-xs leading-relaxed text-brand-charcoal font-medium italic">
-                                    “{review.content}”
+                                <p data-user-generated-content className="mt-3 text-xs leading-relaxed text-brand-charcoal font-medium italic">
+                                    “{getReviewContent(review)}”
                                 </p>
                             </div>
                             <div className="mt-4 flex items-center gap-2 border-t border-gray-50 pt-3 shrink-0">
@@ -1794,7 +1798,7 @@ function CommunitySection() {
 
                         {/* Interactive Polaroid Image */}
                         <div className="overflow-hidden bg-[#E6F5F2] relative aspect-[1.15/1]">
-                            <ArtworkPicture slotId="home_community_art" language={language} alt="Ciclistas en la comunidad Briz" className="h-full w-full" imageClassName="w-full h-full object-cover rounded-sm grayscale-[15%] group-hover:grayscale-0 transition-all duration-500 scale-102 group-hover:scale-105" />
+                            <ArtworkPicture slotId="home_community_art" language={language} alt={language === 'es' ? 'Ciclistas en la comunidad BRIZ' : 'Cyclists in the BRIZ community'} className="h-full w-full" imageClassName="w-full h-full object-cover rounded-sm grayscale-[15%] group-hover:grayscale-0 transition-all duration-500 scale-102 group-hover:scale-105" />
                         </div>
 
                         {/* Caption in Gochi Hand */}
@@ -1820,7 +1824,7 @@ function CommunitySection() {
                             transition={{ duration: 4.8, repeat: Infinity, ease: "easeInOut" }}
                             className="absolute -left-1.5 sm:-left-7 -bottom-4 sm:-bottom-6 w-16 h-16 sm:w-20 sm:h-20 bg-brand-yellow border-3 border-brand-black rounded-full flex items-center justify-center shadow-[5px_5px_0_rgba(0,0,0,1)] z-20"
                         >
-                            <ArtworkPicture slotId="home_bike_logo" language={language} alt="Bicicleta Briz Sticker" className="h-10 w-10 sm:h-12 sm:w-12" imageClassName="h-full w-full object-contain" />
+                            <ArtworkPicture slotId="home_bike_logo" language={language} alt={language === 'es' ? 'Adhesivo de bicicleta BRIZ' : 'BRIZ bicycle sticker'} className="h-10 w-10 sm:h-12 sm:w-12" imageClassName="h-full w-full object-contain" />
                         </motion.div>
                     </motion.div>
 
@@ -1956,7 +1960,7 @@ function FinalInspirationalSection() {
                         transition={{ duration: 0.6, ease: 'easeOut' }}
                         className="relative w-full max-w-[88vw] sm:max-w-[440px] z-20"
                     >
-                        <ArtworkPicture slotId="home_hero_vive" language={language} alt="Vive la experiencia Briz" className="w-full" imageClassName="h-auto w-full object-contain rotate-[-2deg]" />
+                        <ArtworkPicture slotId="home_hero_vive" language={language} alt={language === 'es' ? 'Vive la experiencia BRIZ' : 'Experience BRIZ'} className="w-full" imageClassName="h-auto w-full object-contain rotate-[-2deg]" />
                     </motion.div>
 
                     {/* Main Polaroid Image Container */}
@@ -1969,7 +1973,7 @@ function FinalInspirationalSection() {
                     >
                         {/* Polaroid Image Area */}
                         <div className="overflow-hidden bg-[#FFEEC7] relative aspect-[1.12/1]">
-                            <ArtworkPicture slotId="home_pedalea_art" language={language} alt="Pedalea Conecta Inspira" className="h-full w-full" imageClassName="w-full h-full object-cover scale-102 group-hover:scale-105 transition-transform duration-500 rounded-sm" />
+                            <ArtworkPicture slotId="home_pedalea_art" language={language} alt={language === 'es' ? 'Pedalea, conecta e inspira' : 'Ride, connect, inspire'} className="h-full w-full" imageClassName="w-full h-full object-cover scale-102 group-hover:scale-105 transition-transform duration-500 rounded-sm" />
                         </div>
 
                         {/* Small hand-written sticker on Polaroid */}

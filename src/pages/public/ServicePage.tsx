@@ -119,6 +119,74 @@ const popularServices = [
     },
 ];
 
+const serviceCopyEn: Record<string, string> = {
+    'Servicio 3': 'Service 3',
+    'Regulado general': 'General tune-up',
+    'Ideal para bicicletas con componentes en buen estado que requieren regulado para su buen funcionamiento.': 'For bicycles with components in good condition that need adjustments to work properly.',
+    'Diagnóstico rápido externo': 'Quick external inspection',
+    'Ajuste de ejes': 'Axle adjustment',
+    'Regulado de frenos': 'Brake adjustment',
+    'Regulado de caja de cambios': 'Gear adjustment',
+    'Ajuste de sillín': 'Saddle adjustment',
+    'Otros ajustes menores': 'Other minor adjustments',
+    'Reparaciones': 'Repairs',
+    'Desarme de componentes': 'Component disassembly',
+    'Sustitución de piezas': 'Part replacement',
+    'Repuestos': 'Replacement parts',
+    'Mantenimiento general profundo': 'Full general maintenance',
+    'Bicicletas de gama baja a media que necesitan una revisión completa y mantenimiento integral.': 'For entry to mid-range bicycles that need a complete inspection and full maintenance service.',
+    'Diagnóstico mecánico general': 'General mechanical inspection',
+    'Desmontaje integral de componentes principales': 'Full disassembly of major components',
+    'Limpieza técnica completa del cuadro y componentes': 'Thorough technical cleaning of the frame and components',
+    'Mantenimiento, limpieza, engrase y ajuste del buje delantero': 'Front hub service, cleaning, lubrication, and adjustment',
+    'Mantenimiento, limpieza, engrase y ajuste del buje trasero': 'Rear hub service, cleaning, lubrication, and adjustment',
+    'Mantenimiento, limpieza, engrase y ajuste de la caja pedalera / eje central': 'Bottom bracket service, cleaning, lubrication, and adjustment',
+    'Mantenimiento, limpieza, engrase y ajuste del juego de dirección': 'Headset service, cleaning, lubrication, and adjustment',
+    'Revisión, mantenimiento y ajuste de frenos delanteros y traseros': 'Inspection, service, and adjustment of front and rear brakes',
+    'Revisión y lubricación de cables y fundas': 'Inspection and lubrication of cables and housings',
+    'Ajuste y regulación del cambio trasero': 'Rear derailleur adjustment',
+    'Ajuste y regulación del desviador delantero (si aplica)': 'Front derailleur adjustment, when applicable',
+    'Limpieza y mantenimiento de transmisión: cadena, piñón, platos y bielas': 'Drivetrain cleaning and service: chain, cassette, chainrings, and cranks',
+    'Centrado básico de ruedas': 'Basic wheel truing',
+    'Revisión de tensión de radios': 'Spoke tension check',
+    'Ajuste general de tornillería': 'General bolt check and adjustment',
+    'Instalación de repuestos necesarios': 'Installation of required replacement parts',
+    'Ajustes menores complementarios': 'Additional minor adjustments',
+    'Prueba final de funcionamiento y seguridad': 'Final function and safety check',
+    'Mantenimiento de horquilla': 'Fork service',
+    'Mantenimiento de frenos hidráulicos': 'Hydraulic brake service',
+    'Líquido de frenos': 'Brake fluid',
+    'Mantenimiento gama alta': 'Premium-level maintenance',
+    'Bicicletas de alta gama, MTB avanzadas, bicicletas de ruta y bicicletas con componentes premium.': 'For high-end bicycles, advanced mountain bikes, road bikes, and bicycles with premium components.',
+    'Mantenimiento horquilla básica': 'Basic fork service',
+    'Mantenimiento horquilla gama alta sin aire': 'High-end coil fork service',
+    'Mantenimiento horquilla gama alta con aire': 'High-end air fork service',
+    'Mantenimiento frenos hidráulicos completo': 'Full hydraulic brake service',
+    'Mantenimiento frenos hidráulicos (aumento de líquido)': 'Hydraulic brake service (fluid top-up)',
+    'Inflado de llantas': 'Tire inflation',
+    'Blindaje antipinchazo (ambas llantas)': 'Puncture protection (both tires)',
+    'Instalación de líquido autosellante': 'Tubeless sealant installation',
+    'Diagnóstico externo': 'External inspection',
+    'Blindaje antipinchazo': 'Puncture protection',
+    'Protección para ambas llantas, ideal para reducir pinchazos durante tus recorridos.': 'Protection for both tires, designed to help reduce punctures while riding.',
+    'Aplicación de blindaje antipinchazo en ambas llantas': 'Puncture protection applied to both tires',
+    'Reparación de llantas dañadas': 'Repair of damaged tires',
+    'Cámaras o cubiertas nuevas': 'New inner tubes or tires',
+};
+
+function serviceText(value: string, language: string): string {
+    return language === 'en' ? (serviceCopyEn[value] || value) : value;
+}
+
+function serviceQuoteName(value: string, language: string): string {
+    return value.split(' - ').map(part => serviceText(part, language)).join(' - ');
+}
+
+function servicePrice(value: string, language: string): string {
+    if (language === 'en' && value === '1,5 - 2 Bs por llanta') return '1.5 - 2 Bs per tire';
+    return value.startsWith('Bs.') || value.endsWith(' Bs') ? value : `Bs. ${value}`;
+}
+
 type QuoteItem = { id: string; name: string; price: string };
 
 function priceRange(price: string) {
@@ -141,12 +209,14 @@ export default function ServicePage() {
     }, { min: 0, max: 0 });
     const addToQuote = (item: QuoteItem) => setQuoteItems(current => current.some(entry => entry.id === item.id) ? current : [...current, item]);
     const removeFromQuote = (id: string) => setQuoteItems(current => current.filter(item => item.id !== id));
-    const quoteLink = businessWhatsAppUrl(publicBusinessConfig.whatsapp, `Hola ${publicBusinessConfig.businessName}, deseo una cotización mecánica.\n\nServicios:\n${quoteItems.map(item => `- ${item.name}: Bs. ${item.price}`).join('\n')}\n\nTotal estimado: Bs. ${quoteTotal.min}${quoteTotal.max !== quoteTotal.min ? ` - ${quoteTotal.max}` : ''}`);
+    const quoteLink = businessWhatsAppUrl(publicBusinessConfig.whatsapp, language === 'es'
+        ? `Hola ${publicBusinessConfig.businessName}, deseo una cotización mecánica.\n\nServicios:\n${quoteItems.map(item => `- ${serviceQuoteName(item.name, language)}: ${servicePrice(item.price, language)}`).join('\n')}\n\nTotal estimado: Bs. ${quoteTotal.min}${quoteTotal.max !== quoteTotal.min ? ` - ${quoteTotal.max}` : ''}`
+        : `Hello ${publicBusinessConfig.businessName}, I would like a bicycle service quote.\n\nServices:\n${quoteItems.map(item => `- ${serviceQuoteName(item.name, language)}: ${servicePrice(item.price, language)}`).join('\n')}\n\nEstimated total: Bs. ${quoteTotal.min}${quoteTotal.max !== quoteTotal.min ? ` - ${quoteTotal.max}` : ''}`);
 
     const handleBikeImage = (event: ChangeEvent<HTMLInputElement>) => {
         const file = event.target.files?.[0];
         if (!file) return;
-        if (!file.type.startsWith('image/')) { alert('Selecciona una imagen de la bicicleta.'); event.target.value = ''; return; }
+        if (!file.type.startsWith('image/')) { alert(language === 'es' ? 'Selecciona una imagen de la bicicleta.' : 'Choose an image of the bicycle.'); event.target.value = ''; return; }
         const reader = new FileReader();
         reader.onload = () => {
             const image = new Image();
@@ -178,10 +248,10 @@ export default function ServicePage() {
             });
             setRequest({ name: '', phone: '', bikeType: '', issue: '', date: '' });
             setBikeImageUrl(''); setQuoteItems([]);
-            alert('Solicitud enviada. Te contactaremos para confirmar tu turno.');
+            alert(language === 'es' ? 'Solicitud enviada. Te contactaremos para confirmar tu turno.' : 'Request sent. We will contact you to confirm your appointment.');
         } catch (error) {
             console.error('Error al agendar servicio:', error);
-            alert('No pudimos enviar la solicitud. Intenta nuevamente.');
+            alert(language === 'es' ? 'No pudimos enviar la solicitud. Intenta nuevamente.' : 'We could not send your request. Please try again.');
         } finally { setIsSending(false); }
     };
 
@@ -198,7 +268,7 @@ export default function ServicePage() {
                         transition={{ duration: 0.7, ease: 'easeOut' }}
                         className="group relative overflow-hidden rounded-[2rem] bg-brand-charcoal shadow-[0_28px_80px_rgba(0,0,0,0.12)] sm:rounded-[2.6rem]"
                     >
-                        <ArtworkPicture slotId="service_hero" language={language} alt="Taller mecanico Briz" className="h-full w-full transition duration-700 group-hover:scale-105" imageClassName="h-[340px] w-full object-cover sm:h-[430px] lg:h-[500px]" />
+                        <ArtworkPicture slotId="service_hero" language={language} alt={language === 'es' ? 'Taller mecánico BRIZ' : 'BRIZ bike repair workshop'} className="h-full w-full transition duration-700 group-hover:scale-105" imageClassName="h-[340px] w-full object-cover sm:h-[430px] lg:h-[500px]" />
                     </motion.div>
 
                 </div>
@@ -229,8 +299,8 @@ export default function ServicePage() {
                                 >
                                     <div className="flex items-center justify-between gap-4 sm:block">
                                         <div>
-                                            <p className="text-[10px] font-black uppercase tracking-widest opacity-80">{pkg.name}</p>
-                                            <p className="mt-1 text-base font-black leading-tight sm:mt-2 sm:text-lg">{pkg.title}</p>
+                                            <p className="text-[10px] font-black uppercase tracking-widest opacity-80">{serviceText(pkg.name, language)}</p>
+                                            <p className="mt-1 text-base font-black leading-tight sm:mt-2 sm:text-lg">{serviceText(pkg.title, language)}</p>
                                         </div>
                                         <p className="shrink-0 text-lg font-black sm:mt-3 sm:text-2xl">Bs. {pkg.price}</p>
                                     </div>
@@ -247,14 +317,14 @@ export default function ServicePage() {
                     >
                         <div className="flex flex-col gap-4 border-b border-brand-charcoal/10 pb-5 sm:flex-row sm:items-start sm:justify-between">
                             <div>
-                                <p className="text-[10px] font-black uppercase tracking-widest text-brand-charcoal/45">{selectedPlan.name}</p>
-                                <h3 className="mt-1 text-2xl sm:text-3xl font-black uppercase leading-tight text-brand-charcoal">{selectedPlan.title}</h3>
+                                <p className="text-[10px] font-black uppercase tracking-widest text-brand-charcoal/45">{serviceText(selectedPlan.name, language)}</p>
+                                <h3 className="mt-1 text-2xl sm:text-3xl font-black uppercase leading-tight text-brand-charcoal">{serviceText(selectedPlan.title, language)}</h3>
                             </div>
                             <p className="shrink-0 text-xl sm:text-2xl font-black text-brand-charcoal">Bs. {selectedPlan.price}</p>
                         </div>
                         <div className="mt-5 rounded-2xl bg-white p-4">
                             <p className="text-[10px] font-black uppercase tracking-widest text-brand-charcoal/45">{language === 'es' ? 'Ideal para' : 'Ideal for'}</p>
-                            <p className="mt-2 text-sm font-bold leading-relaxed text-brand-charcoal/75">{selectedPlan.ideal}</p>
+                            <p className="mt-2 text-sm font-bold leading-relaxed text-brand-charcoal/75">{serviceText(selectedPlan.ideal, language)}</p>
                         </div>
                         <div className="mt-6 grid gap-6 lg:grid-cols-[1fr_0.36fr]">
                             <div>
@@ -262,7 +332,7 @@ export default function ServicePage() {
                                 <ul className="mt-4 grid gap-3 sm:grid-cols-2">
                                     {selectedPlan.includes.map(item => (
                                         <li key={item} className="flex items-start gap-2 text-sm font-bold leading-snug text-brand-charcoal/75">
-                                            <CheckCircle className="mt-0.5 h-4 w-4 shrink-0 text-brand-cyan" strokeWidth={2.5} /> {item}
+                                            <CheckCircle className="mt-0.5 h-4 w-4 shrink-0 text-brand-cyan" strokeWidth={2.5} /> {serviceText(item, language)}
                                         </li>
                                     ))}
                                 </ul>
@@ -272,7 +342,7 @@ export default function ServicePage() {
                                 <ul className="mt-4 space-y-2">
                                     {selectedPlan.excludes.map(item => (
                                         <li key={item} className="flex items-start gap-2 text-xs font-bold text-brand-charcoal/65">
-                                            <XCircle className="h-4 w-4 shrink-0 text-brand-pink" /> {item}
+                                            <XCircle className="h-4 w-4 shrink-0 text-brand-pink" /> {serviceText(item, language)}
                                         </li>
                                     ))}
                                 </ul>
@@ -314,11 +384,11 @@ export default function ServicePage() {
                                     <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-brand-yellow/15 text-brand-yellow-vibrant">
                                         <Wrench className="h-4 w-4" strokeWidth={2.3} />
                                     </div>
-                                    <p className="text-xs font-black leading-snug text-brand-charcoal">{service}</p>
+                                            <p className="text-xs font-black leading-snug text-brand-charcoal">{serviceText(service, language)}</p>
                                 </div>
                                 <div className="w-full border-t border-brand-yellow/15 pt-2">
                                     <p className="text-[8px] font-black uppercase tracking-widest text-brand-charcoal/40">{language === 'es' ? 'Precio' : 'Price'}</p>
-                                    <p className="mt-0.5 text-sm font-black text-brand-charcoal">{price}</p>
+                                    <p className="mt-0.5 text-sm font-black text-brand-charcoal">{servicePrice(price, language)}</p>
                                     <button
                                         type="button"
                                         onClick={() => addToQuote({ id: `extra_${index}`, name: service, price })}
@@ -348,10 +418,10 @@ export default function ServicePage() {
                             <div className="mt-3 space-y-2">
                                 {quoteItems.map(item => (
                                     <div key={item.id} className="flex items-center justify-between gap-3 text-sm">
-                                        <span className="font-bold text-brand-charcoal/75">{item.name}</span>
+                                        <span className="font-bold text-brand-charcoal/75">{serviceQuoteName(item.name, language)}</span>
                                         <div className="flex shrink-0 items-center gap-2">
-                                            <span className="font-black text-brand-charcoal">Bs. {item.price}</span>
-                                            <button type="button" onClick={() => removeFromQuote(item.id)} className="rounded-lg p-1 text-brand-pink hover:bg-brand-pink/10" aria-label={`Eliminar ${item.name}`}>
+                                            <span className="font-black text-brand-charcoal">{servicePrice(item.price, language)}</span>
+                                            <button type="button" onClick={() => removeFromQuote(item.id)} className="rounded-lg p-1 text-brand-pink hover:bg-brand-pink/10" aria-label={`${language === 'es' ? 'Eliminar' : 'Remove'} ${serviceQuoteName(item.name, language)}`}>
                                                 <Trash2 className="h-4 w-4" />
                                             </button>
                                         </div>
@@ -420,8 +490,8 @@ export default function ServicePage() {
                                 <form onSubmit={handleRequest} className="space-y-8">
                                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-8">
                                         <div className="space-y-3">
-                                            <Label className="text-brand-charcoal font-black text-xs uppercase tracking-widest ml-1 opacity-60">{language === 'es' ? 'Nombre Completo' : 'Full Name'}</Label>
-                                            <Input value={request.name} onChange={event => setRequest(current => ({ ...current, name: event.target.value }))} placeholder="Tu nombre" required className="h-16 rounded-2xl bg-gray-50 border-0 focus-visible:ring-2 focus-visible:ring-brand-yellow/50 focus-visible:bg-white transition-all text-base font-bold shadow-inner" />
+                                    <Label className="text-brand-charcoal font-black text-xs uppercase tracking-widest ml-1 opacity-60">{language === 'es' ? 'Nombre Completo' : 'Full Name'}</Label>
+                                    <Input value={request.name} onChange={event => setRequest(current => ({ ...current, name: event.target.value }))} placeholder={language === 'es' ? 'Tu nombre' : 'Your name'} required className="h-16 rounded-2xl bg-gray-50 border-0 focus-visible:ring-2 focus-visible:ring-brand-yellow/50 focus-visible:bg-white transition-all text-base font-bold shadow-inner" />
                                         </div>
                                         <div className="space-y-3">
                                             <Label className="text-brand-charcoal font-black text-xs uppercase tracking-widest ml-1 opacity-60">{language === 'es' ? 'Teléfono WhatsApp' : 'WhatsApp Phone'}</Label>
@@ -430,11 +500,11 @@ export default function ServicePage() {
                                     </div>
                                     <div className="space-y-3">
                                         <Label className="text-brand-charcoal font-black text-xs uppercase tracking-widest ml-1 opacity-60">{language === 'es' ? 'Tipo de bicicleta' : 'Bicycle Type'}</Label>
-                                        <Input value={request.bikeType} onChange={event => setRequest(current => ({ ...current, bikeType: event.target.value }))} placeholder="Ej: Mountain bike, urbana, ruta..." required className="h-16 rounded-2xl bg-gray-50 border-0 focus-visible:ring-2 focus-visible:ring-brand-yellow/50 focus-visible:bg-white transition-all text-base font-bold shadow-inner" />
+                                    <Input value={request.bikeType} onChange={event => setRequest(current => ({ ...current, bikeType: event.target.value }))} placeholder={language === 'es' ? 'Ej: Mountain bike, urbana, ruta...' : 'e.g. mountain, city, or road bike'} required className="h-16 rounded-2xl bg-gray-50 border-0 focus-visible:ring-2 focus-visible:ring-brand-yellow/50 focus-visible:bg-white transition-all text-base font-bold shadow-inner" />
                                     </div>
                                     <div className="space-y-3">
                                         <Label className="text-brand-charcoal font-black text-xs uppercase tracking-widest ml-1 opacity-60">{language === 'es' ? 'Falla o Servicio Necesitado' : 'Issue or Service Needed'}</Label>
-                                        <Textarea value={request.issue} onChange={event => setRequest(current => ({ ...current, issue: event.target.value }))} placeholder="Describe brevemente qué necesita tu bicicleta..." rows={4} required className="rounded-2xl bg-gray-50 border-0 focus-visible:ring-2 focus-visible:ring-brand-yellow/50 focus-visible:bg-white transition-all text-base font-bold shadow-inner resize-none p-5" />
+                                    <Textarea value={request.issue} onChange={event => setRequest(current => ({ ...current, issue: event.target.value }))} placeholder={language === 'es' ? 'Describe brevemente qué necesita tu bicicleta...' : 'Briefly describe what your bicycle needs...'} rows={4} required className="rounded-2xl bg-gray-50 border-0 focus-visible:ring-2 focus-visible:ring-brand-yellow/50 focus-visible:bg-white transition-all text-base font-bold shadow-inner resize-none p-5" />
                                     </div>
                                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-8">
                                         <div className="space-y-3">
@@ -450,7 +520,7 @@ export default function ServicePage() {
                                             </label>
                                         </div>
                                     </div>
-                                    {bikeImageUrl && <img src={bikeImageUrl} alt="Vista previa de la bicicleta" className="h-40 w-full rounded-2xl object-cover" />}
+                                    {bikeImageUrl && <img src={bikeImageUrl} alt={language === 'es' ? 'Vista previa de la bicicleta' : 'Bicycle photo preview'} className="h-40 w-full rounded-2xl object-cover" />}
                                     <Button disabled={isSending} type="submit" className="w-full h-16 bg-brand-charcoal text-white hover:bg-brand-yellow hover:text-brand-black shadow-2xl hover:shadow-brand-yellow/30 hover:-translate-y-2 transition-all duration-500 rounded-2xl font-black text-xl border-0 uppercase tracking-tighter disabled:opacity-60">
                                         {isSending ? (language === 'es' ? 'Agendando...' : 'Booking...') : (language === 'es' ? 'Agendar Ahora' : 'Book Now')}
                                     </Button>

@@ -252,7 +252,9 @@ export default function CustomerAuthModal({ isOpen, onClose, onSuccess }: Custom
             setCameraActive(true);
         } catch (err) {
             console.error("Camera access blocked:", err);
-            setError("No se pudo acceder a la cámara. Por favor otorga permisos o intenta en otro navegador.");
+            setError(language === 'es'
+                ? 'No se pudo acceder a la cámara. Otorga permisos o intenta con otro navegador.'
+                : 'Camera access failed. Allow camera permissions or try another browser.');
         }
     };
 
@@ -344,7 +346,9 @@ export default function CustomerAuthModal({ isOpen, onClose, onSuccess }: Custom
                     onClose();
                 }, 1500);
             } else {
-                setError("Correo electrónico o contraseña incorrectos. Revisa e intenta nuevamente.");
+                setError(language === 'es'
+                    ? 'El correo o la contraseña no son correctos. Revisa los datos e inténtalo nuevamente.'
+                    : 'The email or password is incorrect. Check your details and try again.');
             }
         } catch (err) {
             console.error(err);
@@ -564,9 +568,13 @@ export default function CustomerAuthModal({ isOpen, onClose, onSuccess }: Custom
             await verifyCustomerRecovery(recoveryEmail);
             setEmail(recoveryEmail.trim().toLowerCase());
             setMode('login');
-            setSuccessMessage('Si existe una cuenta con ese correo, recibirás un enlace para restablecer la contraseña.');
+            setSuccessMessage(language === 'es'
+                ? 'Si existe una cuenta con ese correo, recibirás un enlace seguro para restablecer la contraseña.'
+                : 'If an account exists for this email, you will receive a secure password reset link.');
         } catch {
-            setError("No se pudo verificar la cuenta en este momento.");
+            setError(language === 'es'
+                ? 'No se pudo verificar la cuenta en este momento.'
+                : 'We could not verify the account right now.');
         } finally {
             setLoading(false);
         }
@@ -703,7 +711,7 @@ export default function CustomerAuthModal({ isOpen, onClose, onSuccess }: Custom
                                         required 
                                         value={email}
                                         onChange={e => { setEmail(e.target.value); setVerificationPending(false); }}
-                                        placeholder="ejemplo@briz.com" 
+                                        placeholder={language === 'es' ? 'ejemplo@briz.com' : 'name@example.com'}
                                         className="pl-12 bg-white border border-brand-charcoal/15 h-12 text-sm text-brand-black font-bold rounded-xl focus-visible:ring-brand-yellow focus-visible:border-brand-yellow font-sans shadow-sm"
                                     />
                                 </div>
@@ -1058,7 +1066,9 @@ export default function CustomerAuthModal({ isOpen, onClose, onSuccess }: Custom
                     ) : mode === 'forgot' ? (
                         <form onSubmit={handleVerifyRecovery} className="space-y-5">
                             <p className="text-xs text-brand-charcoal/70 font-maiandra leading-relaxed">
-                                Ingresa el correo vinculado a tu cuenta. Si existe, recibirás un enlace seguro para restablecer la contraseña.
+                                {language === 'es'
+                                    ? 'Ingresa el correo vinculado a tu cuenta. Si existe, recibirás un enlace seguro para restablecer la contraseña.'
+                                    : 'Enter the email linked to your account. If an account exists, you will receive a secure password reset link.'}
                             </p>
                             <div className="space-y-2">
                                 <Label className="text-[10px] text-brand-charcoal/60 font-bold uppercase tracking-widest font-maiandra">{language === 'es' ? 'Correo Electrónico' : 'Email Address'}</Label>
@@ -1069,7 +1079,7 @@ export default function CustomerAuthModal({ isOpen, onClose, onSuccess }: Custom
                                         required 
                                         value={recoveryEmail}
                                         onChange={e => setRecoveryEmail(e.target.value)}
-                                        placeholder="ejemplo@briz.com" 
+                                        placeholder={language === 'es' ? 'ejemplo@briz.com' : 'name@example.com'}
                                         className="pl-12 bg-white border border-brand-charcoal/15 h-12 text-sm text-brand-black font-bold rounded-xl focus-visible:ring-brand-yellow focus-visible:border-brand-yellow font-sans shadow-sm"
                                     />
                                 </div>
@@ -1086,14 +1096,14 @@ export default function CustomerAuthModal({ isOpen, onClose, onSuccess }: Custom
                                     onClick={() => setMode('login')} 
                                     className="bg-brand-charcoal/5 hover:bg-brand-yellow hover:text-brand-black text-brand-charcoal rounded-xl h-11 text-xs font-black uppercase tracking-widest px-6 w-full sm:w-auto font-sans transition-all border border-transparent cursor-pointer"
                                 >
-                                    {language === 'es' ? 'VOLVER AL LOGIN' : 'BACK TO SIGN IN'}
+                                    {language === 'es' ? 'VOLVER AL INICIO DE SESIÓN' : 'BACK TO SIGN IN'}
                                 </Button>
                             </div>
                         </form>
                     ) : (
                         <form onSubmit={handleResetPasswordSubmit} className="space-y-5">
-                            <p className="text-xs text-brand-charcoal/70 font-maiandra leading-relaxed">Usa el enlace seguro enviado por correo para establecer una contraseña nueva.</p>
-                            <Button type="button" onClick={() => setMode('login')} className="w-full">VOLVER AL LOGIN</Button>
+                            <p className="text-xs text-brand-charcoal/70 font-maiandra leading-relaxed">{language === 'es' ? 'Usa el enlace seguro enviado por correo para establecer una contraseña nueva.' : 'Use the secure link sent to your email to set a new password.'}</p>
+                            <Button type="button" onClick={() => setMode('login')} className="w-full">{language === 'es' ? 'VOLVER AL INICIO DE SESIÓN' : 'BACK TO SIGN IN'}</Button>
                         </form>
                     )}
                 </div>

@@ -30,6 +30,7 @@ export interface CyclingRoute {
     description: string;
     descriptionEn?: string;
     highlights: string[];
+    highlightsEn?: string[];
     image: string;
     mapUrl?: string;
 }

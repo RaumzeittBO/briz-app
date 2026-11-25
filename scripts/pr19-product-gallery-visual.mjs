@@ -6,6 +6,7 @@ import { chromium } from 'playwright';
 
 const port = 5189;
 const baseUrl = `http://127.0.0.1:${port}`;
+const storageOrigin = `http://${process.env.VITE_FIREBASE_EMULATOR_HOST || '127.0.0.1'}:${process.env.VITE_FIREBASE_EMULATOR_STORAGE_PORT || '9199'}`;
 const server = spawn(process.execPath, ['node_modules/vite/bin/vite.js', '--host', '127.0.0.1', '--port', String(port), '--strictPort'], {
   cwd: process.cwd(),
   env: { ...process.env, VITE_USE_FIREBASE_EMULATOR: 'true' },
@@ -65,15 +66,29 @@ try {
     assert.equal(await reloadedDialog.getByRole('button', { name: 'Mostrar imagen 3' }).count(), 2, 'Firestore gallery references still render after a page reload');
 
     if (viewport.width === 390) {
+      const timeOrigin = await page.evaluate(() => performance.timeOrigin);
       await page.keyboard.press('Escape');
       await page.locator('button[title="Cambiar idioma"]:visible').last().click();
       await page.getByRole('button', { name: 'English (EN)' }).click();
+      assert.equal(await page.evaluate(() => document.documentElement.lang), 'en');
+      await page.getByRole('button', { name: 'Open menu' }).click();
+      await page.getByText('Our services', { exact: true }).waitFor({ state: 'visible' });
+      await page.getByRole('button', { name: 'Our services' }).click();
+      assert.ok(await page.getByText('Bike Rentals', { exact: true }).count() >= 1, 'mobile service navigation is localized in English');
+      await page.keyboard.press('Escape');
       await page.getByRole('button', { name: 'View details', exact: true }).first().click();
       const englishDialog = page.getByRole('dialog');
       await englishDialog.getByRole('heading', { name: 'Fictional Bike Gallery' }).waitFor({ state: 'visible' });
       assert.equal(await englishDialog.getByText('Fictional English description.', { exact: true }).count(), 1);
       assert.equal(await englishDialog.getByText('Fictional specifications.', { exact: true }).count(), 1);
       await page.screenshot({ path: 'test-results/pr19-shop-gallery-en-390x844.png', fullPage: false });
+      await page.keyboard.press('Escape');
+      await page.locator('button[title="Change language"]:visible').last().click();
+      await page.getByRole('button', { name: 'Español (ES)' }).click();
+      assert.equal(await page.evaluate(() => document.documentElement.lang), 'es');
+      assert.equal(await page.evaluate(() => performance.timeOrigin), timeOrigin, 'switching ES → EN → ES does not reload the page');
+      await page.getByRole('button', { name: 'Ver detalles', exact: true }).first().click();
+      await page.getByRole('dialog').getByRole('heading', { name: 'Bicicleta demo para tienda' }).waitFor({ state: 'visible' });
     }
     await context.close();
     console.log(`PASS gallery, reload-ready references, and responsive ${viewport.name}`);
@@ -111,7 +126,7 @@ try {
   let notifyUpload;
   const uploadReached = new Promise(resolve => { notifyUpload = resolve; });
   const uploadGate = new Promise(resolve => { releaseUpload = resolve; });
-  await page.route('http://127.0.0.1:9199/**', async route => {
+  await page.route(`${storageOrigin}/**`, async route => {
     if (route.request().method() === 'POST') {
       notifyUpload();
       await uploadGate;
@@ -131,8 +146,8 @@ try {
   await page.getByText('Editar Producto de Tienda', { exact: true }).waitFor({ state: 'hidden' });
 
   await page.getByRole('row').filter({ hasText: 'Bicicleta demo para tienda' }).getByRole('button').first().click();
-  await page.unroute('http://127.0.0.1:9199/**');
-  await page.route('http://127.0.0.1:9199/**', async route => {
+  await page.unroute(`${storageOrigin}/**`);
+  await page.route(`${storageOrigin}/**`, async route => {
     if (route.request().method() === 'POST') {
       return route.fulfill({ status: 403, contentType: 'application/json', body: JSON.stringify({ error: { code: 403, message: 'Permission denied' } }) });
     }

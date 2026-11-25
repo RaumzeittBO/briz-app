@@ -1,0 +1,20 @@
+{
+  "firestore": {
+    "rules": "firestore.rules",
+    "indexes": "firestore.indexes.json"
+  },
+  "storage": {
+    "rules": "storage.rules"
+  },
+  "functions": {
+    "source": "functions",
+    "runtime": "nodejs22"
+  },
+  "emulators": {
+    "auth": { "port": 19099 },
+    "firestore": { "port": 18080 },
+    "storage": { "port": 19199 },
+    "ui": { "enabled": false },
+    "singleProjectMode": true
+  }
+}
