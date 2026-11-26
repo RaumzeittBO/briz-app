@@ -11,6 +11,8 @@ export function describeComboAvailabilityIssue(
     if (!bottleneck) return report.bottleneckReason || 'Sin disponibilidad';
 
     switch (bottleneck.reasonCode) {
+        case 'inactive_item':
+            return `Componente inactivo: ${bottleneck.name}`;
         case 'missing_item':
             return /bike|bici|mamachari/i.test(bottleneck.inventoryItemId)
                 ? 'Falta vincular bicicleta'
