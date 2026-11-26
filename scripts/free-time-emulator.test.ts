@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { filterRentalMoneyByStore, summarizeRentalMoney, summarizeRentalReceiptsByMethod } from '../src/lib/rentalReportMoney';
 import { dirname, join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { createRequire } from 'node:module';
@@ -165,7 +166,36 @@ try {
   }
   assert.equal((await payableRef.get()).get('freeTimePayment.pendingAmount'), 0);
   assert.equal((await payableRef.get()).get('paymentStatus'), 'paid');
-  assert.equal((await adminDb.collection('rentalPaymentMovements').where('reservationCode', '==', payable.reservationCode).get()).size, 3);
+  const payableMovements = await adminDb.collection('rentalPaymentMovements').where('reservationCode', '==', payable.reservationCode).get();
+  assert.equal(payableMovements.size, 3);
+  const financialRow = { id: payable.sessionId, ...(await payableRef.get()).data() };
+  const movements = payableMovements.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Parameters<typeof summarizeRentalMoney>[4];
+  const rows = filterRentalMoneyByStore([financialRow], 'Cochabamba');
+  assert.equal(rows.length, 1);
+  assert.equal(filterRentalMoneyByStore([financialRow], 'La Paz').length, 0);
+  const reportMoney = summarizeRentalMoney(rows, '2000-01-01', '2099-12-31', true, movements);
+  assert.equal(reportMoney.contracted, 35);
+  assert.equal(reportMoney.collected, 35);
+  assert.equal(reportMoney.pending, 0);
+  const cash = summarizeRentalReceiptsByMethod(rows, movements ?? [], '2000-01-01', '2099-12-31');
+  assert.equal(cash.total, 35);
+  assert.equal(cash.byMethod.Efectivo, 10);
+  assert.equal(cash.byMethod.QR, 10);
+  assert.equal(cash.byMethod.Transferencia, 15);
+  await seedBike('ft-excess-bike', 1);
+  await adminDb.doc('inventory/ft-excess-bike').update({ price4Hours: 100, priceFrom5thHour: 20, price8Hours: 160 });
+  const excess = await call<{ sessionId: string }>('startFreeTimeRental', { idempotencyKey: `ft_${unique()}`, itemId: 'ft-excess-bike', store: 'Cochabamba' });
+  const excessRef = adminDb.doc(`rentals/${excess.sessionId}`);
+  await excessRef.update({ startTimestamp: Date.now() - 9 * 3_600_000 });
+  await call('finishFreeTimeRental', { sessionId: excess.sessionId, idempotencyKey: `ft_${unique()}`, damaged: false });
+  const returned = await excessRef.get();
+  assert.equal(returned.get('freeTimePricing.status'), 'excess_review');
+  assert.equal(returned.get('total'), 160);
+  assert.ok(returned.get('freeTimeElapsedMilliseconds') >= 9 * 3_600_000);
+  assert.equal((await adminDb.doc('inventory/ft-excess-bike').get()).get('stock'), 1);
+  await call('recordRentalPaymentMovement', { rentalIds: [excess.sessionId], type: 'receipt', method: 'Efectivo', amount: 160, idempotencyKey: `ft_${unique()}` });
+  assert.notEqual((await excessRef.get()).get('paymentStatus'), 'paid');
+  report('Ledger por método y sede, saldo sin duplicados y exceso pendiente verificados');
   report('8 doble finalización idempotente no repone stock ni agrega otra auditoría');
 
   await seedBike('ft-concurrent-close-bike', 1);
@@ -263,6 +293,7 @@ try {
 
   // Headless real-browser smoke against the same Emulator, never Production.
   await seedBike('ft-ui-bike', 1);
+  await adminDb.doc('inventory/ft-ui-bike').update({ price4Hours: 100, priceFrom5thHour: 20, price8Hours: 160 });
   const viteEnvironment = {
     ...process.env,
     VITE_USE_FIREBASE_EMULATOR: 'true',
@@ -302,7 +333,15 @@ try {
     await page.getByRole('button', { name: 'Confirmar devolución' }).click();
     await page.getByText('Sesión cerrada.', { exact: false }).waitFor({ timeout: 20_000 });
     assert.equal((await adminDb.doc('inventory/ft-ui-bike').get()).get('stock'), 1);
-    report('Responsive Playwright 390x844 and 1280x900: UI opt-in, login, start, live session, close and stock recovery passed');
+    await page.locator('summary').filter({ hasText: 'Fixture ft-ui-bike' }).click();
+    await page.getByRole('button', { name: 'Registrar abono' }).click();
+    await page.getByLabel('Importe en Bs').fill('10');
+    await page.getByLabel('Método').selectOption('QR');
+    await page.getByText('Confirmo que recibí el pago').click();
+    await page.getByRole('button', { name: 'Guardar abono' }).click();
+    await page.getByText('Abono registrado.', { exact: true }).waitFor({ timeout: 20_000 });
+    await page.getByText(/Saldo conocido: Bs 25.00/).waitFor({ timeout: 20_000 });
+    report('Responsive Playwright 390x844 and 1280x900: inicio, cronómetro, devolución, abono QR y saldo verificados');
   } finally {
     if (browser) await browser.close();
     vite.kill();

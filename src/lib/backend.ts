@@ -172,8 +172,11 @@ export interface FreeTimeSessionView {
     damagedOnReturn: boolean;
     returnConditionNotes: string;
     createdAt: string;
-    total: 0;
-    paymentStatus: 'unpaid';
+    total: number;
+    amountPaid: number;
+    paymentStatus: string;
+    pricingStatus: string | null;
+    tariffSnapshot: { firstHour: number | null; halfDay: number | null; additionalHour: number | null; fullDay: number | null } | null;
 }
 
 export async function startFreeTimeRental(input: { idempotencyKey: string; itemId: string; store: string; wheelSize?: string; customerId?: string }): Promise<{ sessionId: string; reservationCode: string; duplicate: boolean }> {

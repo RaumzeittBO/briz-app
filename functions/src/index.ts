@@ -1658,8 +1658,11 @@ function freeTimeRentalView(snapshot: QueryDocumentSnapshot<DocumentData>): Reco
         damagedOnReturn: rental.damagedOnReturn === true,
         returnConditionNotes: cleanString(rental.returnConditionNotes, 500),
         createdAt: rental.createdAt,
-        total: 0,
-        paymentStatus: 'unpaid',
+        total: Number(rental.total) || 0,
+        amountPaid: Number(rental.amountPaid) || 0,
+        paymentStatus: rental.paymentStatus || 'unpaid',
+        pricingStatus: rental.freeTimePricing?.status || null,
+        tariffSnapshot: rental.freeTimePricing?.tariffSnapshot || null,
     };
 }
 
@@ -2149,7 +2152,7 @@ export const recordRentalPaymentMovement = onCall(callable(), async (request) =>
             availableForReference = Math.round((Number(reference.amount) - (correctionByReference.get(referenceMovementId) || 0) - (refundByReference.get(referenceMovementId) || 0)) * 100) / 100;
             if (amount > availableForReference) throw new HttpsError('failed-precondition', `El importe supera el disponible para esta referencia (Bs. ${Math.max(0, availableForReference)}).`);
         }
-        if (type === 'receipt' && amount > Math.max(0, groupTotal - grossReceipts)) {
+        if (type === 'receipt' && Math.round(amount * 100) > Math.max(0, Math.round(groupTotal * 100) - Math.round(grossReceipts * 100))) {
             throw new HttpsError('failed-precondition', 'El abono supera el saldo contractual pendiente.');
         }
         const now = new Date().toISOString();
@@ -2174,8 +2177,9 @@ export const recordRentalPaymentMovement = onCall(callable(), async (request) =>
         // nor reverse a payment status. Only a newly received receipt can move
         // a group to paid; refunds/corrections preserve the current projection.
         const currentPaymentStatus = String(rows.find((row) => row.paymentStatus)?.paymentStatus || 'unpaid');
+        const excessPending = rows.some(row => row.freeTimeMode === true && row.freeTimePricing?.status === 'excess_review');
         const paymentStatus = type === 'receipt'
-            ? afterAmounts.receipts + 0.001 >= groupTotal ? 'paid' : currentPaymentStatus
+            ? !excessPending && afterAmounts.receipts + 0.001 >= groupTotal ? 'paid' : currentPaymentStatus
             : currentPaymentStatus;
         legacyToCreate.forEach(({ ref, data }) => tx.create(ref, data));
         tx.create(movementRef, movement);

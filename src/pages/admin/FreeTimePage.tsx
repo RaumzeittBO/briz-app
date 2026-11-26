@@ -5,7 +5,7 @@ import { useStore } from '@/context/StoreContext';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { firebaseConfig, isFirebaseEmulatorEnabled } from '@/lib/firebase';
-import { finishFreeTimeRental, listFreeTimeRentals, startFreeTimeRental, type FreeTimeSessionView } from '@/lib/backend';
+import { finishFreeTimeRental, listFreeTimeRentals, recordRentalPaymentMovement, startFreeTimeRental, type FreeTimeSessionView, type RecordRentalPaymentMovementInput } from '@/lib/backend';
 import { isFreeTimeEmulatorUiEnabled } from '@/lib/freeTimeFeature';
 
 const uiEnabled = isFreeTimeEmulatorUiEnabled({
@@ -41,7 +41,7 @@ function readPendingStart(): PendingStart | null {
 
 export default function FreeTimePage() {
   const { adminProfile } = useAuth();
-  const { inventory, customers } = useStore();
+  const { inventory, customers, rentalPaymentMovements } = useStore();
   const [storedStartAttempt] = useState<PendingStart | null>(readPendingStart);
   const [sessions, setSessions] = useState<FreeTimeSessionView[]>([]);
   const [loading, setLoading] = useState(true);
@@ -57,6 +57,11 @@ export default function FreeTimePage() {
   const [finishTarget, setFinishTarget] = useState<FreeTimeSessionView | null>(null);
   const [damaged, setDamaged] = useState(false);
   const [conditionNotes, setConditionNotes] = useState('');
+  const [paymentSession, setPaymentSession] = useState<string | null>(null);
+  const [paymentAmount, setPaymentAmount] = useState('');
+  const [paymentMethod, setPaymentMethod] = useState<RecordRentalPaymentMovementInput['method']>('Efectivo');
+  const [paymentConfirmed, setPaymentConfirmed] = useState(false);
+  const [paymentBusy, setPaymentBusy] = useState(false);
   const [serverClock, setServerClock] = useState({ now: Date.now(), performance: performance.now() });
   const [, setTick] = useState(0);
 
@@ -74,6 +79,8 @@ export default function FreeTimePage() {
     : 0;
   const activeSessions = sessions.filter((session) => session.freeTimeState === 'active');
   const historySessions = sessions.filter((session) => session.freeTimeState === 'closed');
+  const paymentTarget = historySessions.find(session => session.id === paymentSession);
+  const pendingPaymentKey = 'briz_free_time_payment_pending';
 
   const refresh = useCallback(async (quiet = false) => {
     if (quiet) setRefreshing(true); else setLoading(true);
@@ -97,6 +104,37 @@ export default function FreeTimePage() {
     const tickTimer = window.setInterval(() => setTick((value) => value + 1), 1_000);
     return () => { window.clearInterval(refreshTimer); window.clearInterval(tickTimer); };
   }, [refresh]);
+
+  async function recordPayment() {
+    if (!paymentTarget || paymentBusy) return;
+    const amount = Number(paymentAmount);
+    if (!Number.isFinite(amount) || amount <= 0 || (paymentMethod !== 'Efectivo' && !paymentConfirmed)) return;
+    setPaymentBusy(true);
+    setError('');
+    try {
+      const pending = JSON.parse(sessionStorage.getItem(pendingPaymentKey) || 'null') as RecordRentalPaymentMovementInput | null;
+      if (pending && (pending.rentalIds[0] !== paymentTarget.id || pending.amount !== amount || pending.method !== paymentMethod)) {
+        throw new Error('Hay un abono pendiente de confirmar. Reintenta con el mismo alquiler, importe y método.');
+      }
+      const input: RecordRentalPaymentMovementInput = pending ?? {
+        rentalIds: [paymentTarget.id], type: 'receipt', amount, method: paymentMethod,
+        confirmedReceived: paymentConfirmed, actualAt: new Date().toISOString(), idempotencyKey: crypto.randomUUID(),
+      };
+      sessionStorage.setItem(pendingPaymentKey, JSON.stringify(input));
+      await recordRentalPaymentMovement(input);
+      sessionStorage.removeItem(pendingPaymentKey);
+      setPaymentSession(null);
+      setNotice('Abono registrado.');
+      await refresh(true);
+    } catch (err) {
+      if (err && typeof err === 'object' && 'code' in err && [
+        'functions/invalid-argument', 'functions/failed-precondition', 'functions/permission-denied',
+      ].includes(String(err.code))) sessionStorage.removeItem(pendingPaymentKey);
+      setError(errorMessage(err));
+    } finally {
+      setPaymentBusy(false);
+    }
+  }
 
   useEffect(() => {
     if (adminProfile?.store && adminProfile.store !== 'all') setSelectedStore(adminProfile.store);
@@ -167,7 +205,7 @@ export default function FreeTimePage() {
   return (
     <main className="mx-auto w-full max-w-7xl space-y-5 p-4 pb-12 sm:p-6 lg:p-8">
       <header className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-        <div><p className="text-xs font-black uppercase tracking-[0.2em] text-amber-700">Modo Emulator — no Production</p><h1 className="mt-1 text-2xl font-black text-stone-950 sm:text-3xl">Tiempo Libre</h1><p className="mt-2 max-w-2xl text-sm text-stone-600">Control operativo de entrega y devolución. Esta fase no calcula importes ni registra pagos.</p></div>
+        <div><p className="text-xs font-black uppercase tracking-[0.2em] text-amber-700">Modo Emulator — no Production</p><h1 className="mt-1 text-2xl font-black text-stone-950 sm:text-3xl">Tiempo Libre</h1><p className="mt-2 max-w-2xl text-sm text-stone-600">Control de entrega, devolución y liquidación.</p></div>
         <Button variant="outline" onClick={() => void refresh(true)} disabled={refreshing} className="min-h-11 self-start sm:self-auto"><RefreshCw className={`mr-2 h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />Actualizar</Button>
       </header>
 
@@ -235,9 +273,27 @@ export default function FreeTimePage() {
 
       <Card className="border-stone-200"><CardContent className="p-4 sm:p-6">
         <h2 className="text-lg font-black text-stone-950">Historial de Tiempo Libre</h2>
-        {historySessions.length === 0 ? <p className="mt-3 text-sm text-stone-500">Las sesiones finalizadas aparecerán aquí.</p> : <div className="mt-3 space-y-2">{historySessions.map((session) => <details key={session.id} className="rounded-xl border border-stone-200 bg-white p-3"><summary className="cursor-pointer list-none"><span className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between"><span className="font-bold text-stone-900">{session.productName} · {session.customerName}</span><span className="text-xs text-stone-600">{session.closedAt ? new Date(session.closedAt).toLocaleString('es-BO') : 'Cerrado'} · {formatElapsed(session.elapsedMilliseconds || 0)}{session.damagedOnReturn ? ' · Daño reportado' : ''}</span></span></summary>{session.returnConditionNotes && <p className="mt-2 text-sm text-stone-600">{session.returnConditionNotes}</p>}</details>)}</div>}
+        {historySessions.length === 0 ? <p className="mt-3 text-sm text-stone-500">Las sesiones finalizadas aparecerán aquí.</p> : <div className="mt-3 space-y-2">{historySessions.map((session) => <details key={session.id} className="rounded-xl border border-stone-200 bg-white p-3"><summary className="cursor-pointer list-none"><span className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between"><span className="font-bold text-stone-900">{session.productName} · {session.customerName}</span><span className="text-xs text-stone-600">{session.closedAt ? new Date(session.closedAt).toLocaleString('es-BO') : 'Cerrado'} · {formatElapsed(session.elapsedMilliseconds || 0)}{session.damagedOnReturn ? ' · Daño reportado' : ''}</span></span></summary>{session.returnConditionNotes && <p className="mt-2 text-sm text-stone-600">{session.returnConditionNotes}</p>}
+          <p className="mt-2 text-sm">Total liquidado: Bs {session.total.toFixed(2)} · Abonado: Bs {session.amountPaid.toFixed(2)} · Saldo conocido: Bs {Math.max(0, session.total - session.amountPaid).toFixed(2)}</p>
+          {session.tariffSnapshot && <p className="text-sm">Tarifas en Bs: 1 h {session.tariffSnapshot.firstHour ?? '—'} · 4 h {session.tariffSnapshot.halfDay ?? '—'} · hora adicional {session.tariffSnapshot.additionalHour ?? '—'} · 8 h {session.tariffSnapshot.fullDay ?? '—'}</p>}
+          {session.pricingStatus === 'excess_review' && <p className="text-sm text-amber-800">El tiempo superior a ocho horas queda pendiente de revisión.</p>}
+          {['incompatible_rates', 'rate_unavailable'].includes(session.pricingStatus ?? '') && <p className="text-sm text-amber-800">Cobro bloqueado. Revisa las tarifas del modelo.</p>}
+          <ul className="text-sm" aria-label="Movimientos registrados">{rentalPaymentMovements.filter(m => m.reservationCode === session.reservationCode).map(m => <li key={m.id}>{m.type} · {m.method} · Bs {Number(m.amount).toFixed(2)}</li>)}</ul>
+          {session.total > session.amountPaid && ['settled', 'excess_review'].includes(session.pricingStatus ?? '') && <Button onClick={() => {
+            setPaymentSession(session.id); setPaymentAmount(''); setPaymentMethod('Efectivo'); setPaymentConfirmed(false);
+          }}>Registrar abono</Button>}
+          </details>)}</div>}
       </CardContent></Card>
-      <p className="flex items-start gap-2 text-xs text-stone-500"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />No se generan tarifas, pagos, multas ni liquidaciones en Fase 1. Ante una pérdida de conexión, consulta/actualiza la sesión antes de iniciar otra operación.</p>
+      {paymentTarget && <Card><CardContent className="space-y-3 p-4">
+        <h2 className="font-bold">Abono · {paymentTarget.reservationCode}</h2>
+        <label className="block">Importe en Bs <input className="block rounded border p-2" type="number" min="0.01" step="0.01" value={paymentAmount} onChange={e => setPaymentAmount(e.target.value)} disabled={paymentBusy} /></label>
+        <label className="block">Método <select className="block rounded border p-2" value={paymentMethod} onChange={e => { setPaymentMethod(e.target.value as RecordRentalPaymentMovementInput['method']); setPaymentConfirmed(false); }} disabled={paymentBusy}>
+          <option>Efectivo</option><option>QR</option><option>Transferencia</option>
+        </select></label>
+        {paymentMethod !== 'Efectivo' && <label className="block"><input type="checkbox" checked={paymentConfirmed} onChange={e => setPaymentConfirmed(e.target.checked)} disabled={paymentBusy} /> Confirmo que recibí el pago</label>}
+        <div className="flex gap-2"><Button onClick={() => void recordPayment()} disabled={paymentBusy || Number(paymentAmount) <= 0 || (paymentMethod !== 'Efectivo' && !paymentConfirmed)}>Guardar abono</Button><Button variant="outline" onClick={() => setPaymentSession(null)} disabled={paymentBusy}>Cerrar</Button></div>
+      </CardContent></Card>}
+      <p className="flex items-start gap-2 text-xs text-stone-500"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />Si se interrumpe el registro de un abono, reintenta con el mismo alquiler, importe y método.</p>
     </main>
   );
 }
