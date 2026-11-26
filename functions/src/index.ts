@@ -34,7 +34,7 @@ import {
 import { DEFAULT_RENTAL_HOURS, validateRentalBusinessHours } from './businessHours';
 import { CUSTOMER_PRIVATE_FILE_SPECS, bucketNamesMatch, getPathVariants, ownedCustomerStoragePath, resolveCustomerPrivateFiles } from './customerPrivateFiles';
 import { Resend } from 'resend';
-import { calculateFreeTimeProration, elapsedFreeTimeMilliseconds, isFreeTimeEmulatorRuntime } from './freeTime';
+import { calculateFreeTimeProration, elapsedFreeTimeMilliseconds, freeTimeMinimum, isFreeTimeEmulatorRuntime, quoteFreeTime } from './freeTime';
 import { buildBrizVerificationUrl, createVerificationEmail, deliverVerificationEmail, nextVerificationRateState, rollbackDefinitiveVerificationAttempt, VerificationDeliveryError, type EmailLanguage, type VerificationRateState } from './customerVerificationEmail';
 
 if (getApps().length === 0) initializeApp();
@@ -1743,6 +1743,13 @@ export const startFreeTimeRental = onCall(callable(), async (request) => {
             freeTimePricing: {
                 status: hourlyRateSnapshot ? 'awaiting_return' : 'rate_unavailable', currency: 'BOB',
                 ...(hourlyRateSnapshot ? { hourlyRateSnapshot } : {}),
+                tariffSnapshot: {
+                    firstHour: item.price1Hour ?? null,
+                    halfDay: item.price4Hours ?? null,
+                    additionalHour: item.priceFrom5thHour ?? null,
+                    fullDay: item.price8Hours ?? null,
+                },
+                minimumSnapshot: freeTimeMinimum(item.category),
             },
             store: input.store, total: 0, amountPaid: 0, paymentStatus: 'unpaid', paymentMethod: 'Sin especificar',
             notes: 'Tiempo Libre — sesión operativa sin liquidación monetaria en esta fase.',
@@ -1840,6 +1847,19 @@ export const finishFreeTimeRental = onCall(callable(), async (request) => {
                 unroundedAmount: quote.unroundedAmount,
             }
             : { status: 'rate_unavailable', currency: 'BOB', elapsedMilliseconds, elapsedMinutes: elapsedMilliseconds / 60_000 };
+        let settledTotal: number | null = null;
+        if (pricing.tariffSnapshot && (pricing.minimumSnapshot === 'one_hour' || pricing.minimumSnapshot === 'actual_time')) {
+            finalPricing.tariffSnapshot = pricing.tariffSnapshot;
+            finalPricing.minimumSnapshot = pricing.minimumSnapshot;
+            const commercialQuote = quoteFreeTime(pricing.tariffSnapshot, elapsedMilliseconds, pricing.minimumSnapshot);
+            finalPricing.commercialQuote = commercialQuote;
+            if (commercialQuote.status === 'calculated') {
+                const divisor = BigInt(commercialQuote.centavoDenominator);
+                const cents = (BigInt(commercialQuote.centavoNumerator) + divisor / 2n) / divisor;
+                settledTotal = Number(cents) / 100;
+                finalPricing.status = commercialQuote.excessMilliseconds ? 'excess_review' : 'settled';
+            } else finalPricing.status = commercialQuote.status;
+        }
         let nextItem: CatalogItem;
         if (damaged) {
             if (item.itemType !== 'bike') throw new HttpsError('failed-precondition', 'Solo las bicicletas pueden marcarse dañadas en esta operación.');
@@ -1869,7 +1889,7 @@ export const finishFreeTimeRental = onCall(callable(), async (request) => {
                 status: 'unpaid', confirmedAmount: 0,
                 ...(quote ? { unroundedBalanceQuote: quote.unroundedAmount } : {}),
             },
-            total: 0, amountPaid: 0, paymentStatus: 'unpaid',
+            total: settledTotal ?? 0, amountPaid: 0, paymentStatus: 'unpaid',
         };
         tx.update(itemRef, item.hasWheelSizes
             ? { wheelSizes: nextItem.wheelSizes, ...(damaged ? { maintenanceStock: nextItem.maintenanceStock } : {}) }
@@ -2073,7 +2093,14 @@ export const recordRentalPaymentMovement = onCall(callable(), async (request) =>
         }
         const rows = rentalSnaps.filter((snap) => snap.exists).map((snap) => ({ ...snap.data()!, id: snap.id } as DocumentData));
         if (!rows.length || rows.length !== rentalIds.length) throw new HttpsError('not-found', 'No se encontró el grupo completo.');
-        if (rows.some((row) => row.freeTimeMode === true)) throw new HttpsError('failed-precondition', 'Tiempo Libre no admite movimientos monetarios en esta fase.');
+        if (rows.some((row) => row.freeTimeMode === true)) {
+            requireFreeTimeEmulator();
+            if (rows.length !== 1 || rows[0].freeTimeState !== 'closed'
+                || !['settled', 'excess_review'].includes(rows[0].freeTimePricing?.status)
+                || !(Number(rows[0].total) > 0)) {
+                throw new HttpsError('failed-precondition', 'Tiempo Libre no admite movimientos monetarios sin una liquidación válida.');
+            }
+        }
         const codes = new Set(rows.map((row) => String(row.reservationCode || row.id)));
         if (codes.size !== 1) throw new HttpsError('failed-precondition', 'El movimiento debe corresponder a un solo pedido.');
         const reservationCode = [...codes][0];
@@ -2154,6 +2181,14 @@ export const recordRentalPaymentMovement = onCall(callable(), async (request) =>
         tx.create(movementRef, movement);
         rows.forEach((row, index) => tx.update(rentalSnaps[index].ref, {
             updatedAt: now, lastUpdatedBy: uid, paymentStatus,
+            ...(row.freeTimeMode === true ? {
+                amountPaid: Math.round(afterAmounts.receipts * 100) / 100,
+                freeTimePayment: {
+                    status: paymentStatus === 'paid' ? 'paid' : afterAmounts.receipts > 0 ? 'partial' : 'unpaid',
+                    confirmedAmount: Math.round(afterAmounts.receipts * 100) / 100,
+                    pendingAmount: Math.max(0, Math.round((groupTotal - afterAmounts.receipts) * 100) / 100),
+                },
+            } : {}),
             ...appendRentalAudit(row, uid, `payment_${type}`, beforeAmounts, afterAmounts, now),
         }));
         return { movementId: movementRef.id, duplicate: false };

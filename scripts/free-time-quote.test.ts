@@ -1,0 +1,26 @@
+import assert from 'node:assert/strict';
+import { freeTimeMinimum, quoteFreeTime } from '../functions/src/freeTime';
+const rates = { firstHour: 60, halfDay: 180, additionalHour: 30, fullDay: 240 };
+const amount = (minutes: number, minimum: 'one_hour' | 'actual_time' = 'one_hour') => {
+    const quote = quoteFreeTime(rates, minutes * 60_000, minimum);
+    assert.equal(quote.status, 'calculated');
+    return BigInt(quote.centavoNumerator) / BigInt(quote.centavoDenominator);
+};
+assert.equal(amount(20), 6000n);
+assert.equal(amount(61), 6100n);
+assert.equal(amount(20, 'actual_time'), 2000n);
+for (const category of ['Triciclos', 'Tándem', 'Cuadriciclos']) assert.equal(freeTimeMinimum(category), 'actual_time');
+assert.equal(freeTimeMinimum('Urbanas'), 'one_hour');
+assert.equal(amount(239), 18000n);
+assert.equal(amount(240), 18000n);
+assert.equal(amount(241), 18050n);
+assert.equal(amount(360), 24000n);
+assert.equal(amount(479), 24000n);
+assert.equal(amount(480), 24000n);
+assert.equal(amount(481), 24000n);
+const over = quoteFreeTime(rates, 481 * 60_000, 'one_hour');
+assert.equal(over.status, 'calculated');
+assert.equal(over.excessMilliseconds, 60_000);
+assert.equal(quoteFreeTime({ ...rates, fullDay: null }, 0, 'one_hour').status, 'rate_unavailable');
+assert.equal(quoteFreeTime({ ...rates, fullDay: 400 }, 0, 'one_hour').status, 'incompatible_rates');
+console.log('PASS exact provisional Free Time quote');

@@ -67,7 +67,7 @@ async function seedBike(id: string, stock: number, store = 'Cochabamba', sizes?:
   await adminDb.doc(`inventory/${id}`).set({
     id, itemType: 'bike', name: `Fixture ${id}`, active: true, availableForRental: true, availableForSale: false,
     hasWheelSizes: Boolean(sizes), ...(sizes ? { wheelSizes: sizes } : { stock }), store,
-    pricePerHour: 35, price1Hour: 35, price24Hours: 70, pricePerDay: 70,
+    pricePerHour: 35, price1Hour: 35, price8Hours: 65, price24Hours: 70, pricePerDay: 70,
   });
 }
 
@@ -97,6 +97,9 @@ try {
   assert.equal(firstRecord.paymentStatus, 'unpaid');
   assert.equal(firstRecord.freeTimePricing.status, 'awaiting_return');
   assert.equal(firstRecord.freeTimePricing.hourlyRateSnapshot, 35);
+  assert.deepEqual(firstRecord.freeTimePricing.tariffSnapshot, {
+    firstHour: 35, halfDay: null, additionalHour: null, fullDay: 65,
+  });
   assert.equal(typeof firstRecord.startTimestamp, 'number');
   assert.equal((await adminDb.doc('inventory/ft-basic-bike').get()).get('stock'), 2);
   const retryStart = await call<typeof started>('startFreeTimeRental', baseInput);
@@ -113,6 +116,7 @@ try {
   report('6 recarga/consulta recupera la sesión activa y su hora de servidor');
 
   const finishKey = `ft_${unique()}`;
+  await adminDb.doc('inventory/ft-basic-bike').update({ price1Hour: 45, pricePerHour: 45, pricePerDay: 95 });
   const finished = await call<{ duplicate: boolean; elapsedMilliseconds: number; elapsedSeconds: number; pricing: Record<string, unknown> }>('finishFreeTimeRental', {
     sessionId: started.sessionId, idempotencyKey: finishKey, damaged: false,
   });
@@ -123,17 +127,20 @@ try {
   assert.equal(closedDoc.get('paymentStatus'), 'unpaid');
   assert.equal(closedDoc.get('total'), 0);
   const quote = closedDoc.get('freeTimePricing');
-  assert.equal(quote.status, 'awaiting_commercial_policy');
+  assert.equal(quote.status, 'rate_unavailable');
   assert.equal(quote.hourlyRateSnapshot, 35);
+  assert.deepEqual(quote.tariffSnapshot, firstRecord.freeTimePricing.tariffSnapshot);
   assert.equal(quote.elapsedMilliseconds, finished.elapsedMilliseconds);
   assert.equal(quote.unroundedAmount, 35 * finished.elapsedMilliseconds / 3_600_000);
   assert.equal(closedDoc.get('freeTimePayment.status'), 'unpaid');
   assert.equal(closedDoc.get('freeTimePayment.confirmedAmount'), 0);
   assert.equal(closedDoc.get('freeTimePayment.unroundedBalanceQuote'), quote.unroundedAmount);
   assert.equal((await adminDb.collection('rentalPaymentMovements').where('reservationCode', '==', started.reservationCode).get()).size, 0);
-  await assert.rejects(() => call('recordRentalPaymentMovement', {
-    rentalIds: [started.sessionId], type: 'receipt', amount: 1, method: 'Efectivo', idempotencyKey: `ft_${unique()}`,
-  }), /Tiempo Libre no admite movimientos monetarios/i);
+  for (const method of ['Efectivo', 'QR', 'Transferencia']) {
+    await assert.rejects(() => call('recordRentalPaymentMovement', {
+      rentalIds: [started.sessionId], type: 'receipt', amount: 1, method, confirmedReceived: true, idempotencyKey: `ft_${unique()}`,
+    }), /Tiempo Libre no admite movimientos monetarios/i);
+  }
   assert.equal((await adminDb.collection('rentalPaymentMovements').where('reservationCode', '==', started.reservationCode).get()).size, 0);
   assert.equal((await adminDb.doc('inventory/ft-basic-bike').get()).get('stock'), 3);
   const repeatedFinish = await call<typeof finished>('finishFreeTimeRental', { sessionId: started.sessionId, idempotencyKey: finishKey, damaged: false });
@@ -144,6 +151,21 @@ try {
   const closedHistory = await call<{ sessions: Array<Record<string, unknown>> }>('listFreeTimeRentals');
   assert.equal(closedHistory.sessions.find((session) => session.id === started.sessionId)?.freeTimeState, 'closed');
   report('7 cierre transaccional registra prorrateo bruto de tarifa snapshot, conserva unpaid y restaura stock; el ledger rechaza cobros hasta definir políticas');
+  await seedBike('ft-payable-bike', 1);
+  await adminDb.doc('inventory/ft-payable-bike').update({ price4Hours: 100, priceFrom5thHour: 20, price8Hours: 160 });
+  const payable = await call<{ sessionId: string; reservationCode: string }>('startFreeTimeRental', { idempotencyKey: `ft_${unique()}`, itemId: 'ft-payable-bike', store: 'Cochabamba' });
+  await call('finishFreeTimeRental', { sessionId: payable.sessionId, idempotencyKey: `ft_${unique()}`, damaged: false });
+  const payableRef = adminDb.doc(`rentals/${payable.sessionId}`);
+  assert.equal((await payableRef.get()).get('total'), 35);
+  for (const [method, amount] of [['Efectivo', 10], ['QR', 10], ['Transferencia', 15]] as const) {
+    const input = { rentalIds: [payable.sessionId], type: 'receipt', method, amount, confirmedReceived: true, idempotencyKey: `ft_${unique()}` };
+    await call('recordRentalPaymentMovement', input);
+    const duplicate = await call<{ duplicate: boolean }>('recordRentalPaymentMovement', input);
+    assert.equal(duplicate.duplicate, true);
+  }
+  assert.equal((await payableRef.get()).get('freeTimePayment.pendingAmount'), 0);
+  assert.equal((await payableRef.get()).get('paymentStatus'), 'paid');
+  assert.equal((await adminDb.collection('rentalPaymentMovements').where('reservationCode', '==', payable.reservationCode).get()).size, 3);
   report('8 doble finalización idempotente no repone stock ni agrega otra auditoría');
 
   await seedBike('ft-concurrent-close-bike', 1);
