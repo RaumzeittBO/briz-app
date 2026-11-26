@@ -18,7 +18,15 @@ for (const item of Object.values(ARTWORK_REGISTRY)) {
 assert.equal(ARTWORK_REGISTRY.home_bento_1_rentals.defaults.enDesktop.translated, false);
 assert.equal(resolveArtwork('home_bento_1_rentals', 'en', 'desktop').status, 'spanish-fallback');
 assert.equal(resolveArtwork('home_bento_3_shop', 'en', 'desktop').src, '/menu-principal-web/Ingles/3.png');
-assert.equal(resolveArtwork('home_bento_3_shop', 'en', 'mobile').src, '/menu-principal-celular/3.webp');
+assert.deepEqual(resolveArtwork('home_bento_3_shop', 'en', 'mobile'), {
+    src: '/menu-principal-celular/Ingles/3.png', status: 'own', translated: true, sourceVariant: 'enMobile', sourceAvailable: true,
+    fallbackSrc: '/menu-principal-celular/3.webp', fallbackAvailable: true,
+});
+assert.equal(resolveArtwork('home_bento_4_routes', 'en', 'desktop').translated, true);
+assert.deepEqual(resolveArtwork('home_bento_4_routes', 'en', 'mobile'), {
+    src: '/menu-principal-celular/Ingles/4.png', status: 'own', translated: true, sourceVariant: 'enMobile', sourceAvailable: true,
+    fallbackSrc: '/menu-principal-celular/4.webp', fallbackAvailable: true,
+});
 
 const overrides: ArtworkOverrides = {
     home_hero_vive: {

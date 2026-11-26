@@ -95,7 +95,7 @@ export default function RoutesPage() {
                                                 <div className="flex flex-wrap gap-2">
                                                     {route.highlights.map((h, j) => (
                                                         <Badge key={j} variant="secondary" className="text-[9px] font-black uppercase tracking-widest bg-gray-50 text-gray-400 hover:bg-brand-yellow hover:text-brand-black transition-all px-3 py-1.5 rounded-full border-0">
-                                                            {t(h, language)}
+                                                            {t(route.highlightsEn?.[j] || h, language)}
                                                         </Badge>
                                                     ))}
                                                 </div>

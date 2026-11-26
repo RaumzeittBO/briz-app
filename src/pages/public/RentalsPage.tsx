@@ -865,10 +865,13 @@ function EventSpecialView({ event, onClose, language, businessPhone, businessNam
 
     const eventName = getLocalizedField(event.name, event.nameEn, language);
     const eventDesc = getLocalizedField(event.description, event.descriptionEn, language);
+    const activeSubcategoryName = hasSubcategories
+        ? getLocalizedField(subcategories[activeSubIndex]?.name, event.subcategoryNamesEn?.[activeSubIndex], language)
+        : (language === 'es' ? 'General' : 'General');
 
     const waLink = businessWhatsAppUrl(businessPhone, language === 'es'
-        ? `Hola ${businessName}, deseo consultar sobre el evento especial de alquiler: ${event.name} (Subcategoría: ${hasSubcategories ? subcategories[activeSubIndex]?.name : 'General'})`
-        : `Hello ${businessName}, I want to inquire about the special rental event: ${eventName} (Subcategory: ${hasSubcategories ? subcategories[activeSubIndex]?.name : 'General'})`);
+        ? `Hola ${businessName}, deseo consultar sobre el evento especial de alquiler: ${event.name} (Subcategoría: ${activeSubcategoryName})`
+        : `Hello ${businessName}, I want to inquire about the special rental event: ${eventName} (Subcategory: ${activeSubcategoryName})`);
 
     return (
         <div className="py-6">
@@ -895,7 +898,7 @@ function EventSpecialView({ event, onClose, language, businessPhone, businessNam
                                         : 'bg-gray-50 text-gray-500 hover:bg-gray-100 hover:text-brand-black'
                                 }`}
                             >
-                                {t(sub.name, language)}
+                                {getLocalizedField(sub.name, event.subcategoryNamesEn?.[idx], language)}
                             </button>
                         );
                     })}

@@ -467,9 +467,26 @@ Para permitir que el administrador cambie banners y artes en español/inglés (W
 2. Ejecuta `npx tsx scripts/verify-briz-core.ts` y `npx tsc --noEmit` para comprobar que los tests unitarios del motor y la compilación están en verde.
 3. **Siguiente tarea ejecutable inmediata:** el propietario completa [`BRIZ_ADMIN_MANUAL_VALIDATION.md`](./BRIZ_ADMIN_MANUAL_VALIDATION.md) en Emulator, ya que la política de URL impidió al agente volver a abrir localhost. Después preparar dry-run de conciliación de datos sintéticos/protegidos, sin migrar producción. Mantener las fases futuras al inicio de este roadmap; no iniciar el gestor de imágenes todavía.
 
+## Actualización de solicitudes BRIZ — 2026-11-24
+
+- PR #21: validada funcionalmente en `0ae48bb9c889c3dfd483e5e9e4d375399aa5b2c5`; los commits posteriores solo actualizan documentación. Open/Draft. Build Production local y pruebas bilingües, galerías e inventario en Emulator pasan. Se mantiene sin fusionar porque aún hay artes públicos con texto español incrustado. El último check consultado estaba PENDING; un SHA anterior tuvo FAILURE y no se pudo consultar su log: la cuenta `pachax.bo@gmail.com` carece de acceso al scope `gfabrigtrf-7085s-projects` (403). No se debilitó su guard.
+- PR #22: `352338670537611cd078f2628300b37c2470751e`, Open/Draft/CONFLICTING hasta integrar #21; Preview FAILURE. Provider disabled. Está pendiente corregir la reserva de cuota que no se libera cuando falla el proveedor. No validar ni habilitar Google Translation hasta conocer API, secreto, IAM, cuotas y coste.
+- PR #20: `befe0f584727fedb06ddc74d47533bf25efd3eb9`, Open/Draft, separada; Preview FAILURE. Fase 1 y motor bruto de prorrateo probados con Emulator y Playwright 390×844/1280×900; no se agrega cobro, mínimo, redondeo ni límite. Requiere reglas comerciales de Ale.
+- La evidencia detallada, pendientes gráficos y matriz contractual están en `BRIZ_CIERRE_SOLICITUDES_2026-11-24.md`. No se halló el contrato en el checkout; no se afirma aceptación formal.
+
 ## Estado de release IAM/backup/Auth — 2026-10-21
 
 - `briz-functions-runtime` y `briz-telegram-runtime` ya existen en `briz-4ef3a` con los roles mínimos aprobados y sin Editor, Owner ni claves descargables. `sendReservationNotification` usa el runtime Telegram independiente. El operador ya tiene `actAs` por su rol Owner existente; no se añadieron permisos de impersonación adicionales.
 - `www.briz.com.bo` está autorizado en Firebase Auth. Apex omitido porque redirige a www y los flujos actuales usan el manejador predeterminado de Firebase.
 - Backup Firestore diario con retención de siete días continúa sin copia listada tras recarga. Histórico: la copia aún no se había materializado en esa revisión. Estado vigente: la copia puntual de catálogo/configuración está restaurada y verificada en Emulator; el primer backup diario no es gate.
 - Estado en esa revisión, ya supersedido: los secretos vacíos ya existen con acceso limitado al runtime Telegram. La intervención de rotación no depende del backup diario. No desplegar, fusionar ni escribir datos operativos como parte de esta preparación.
+
+## Cierre de solicitudes BRIZ — 2026-11-24
+
+- PR #21 sigue Draft y no se publicó. El smoke del build Production + Emulator + Playwright pasó en 390×844 y 1440×900 para diez rutas públicas, incluidos menú, formulario de taller, acceso y recuperación. Las capturas detectaron español incrustado que el DOM no puede escanear: `vive.webp`, la lámina “UNA bicicleta…” y el letrero de la foto del taller. Los PNG “WHY CHOOSE BRIZ” y el cuadro amarillo “THE BRAND” existen en inglés web/móvil; sus variantes móviles estaban deshabilitadas en el registro y se corrigieron. Ver `BRIZ_ARTES_EN_INGLES.md`.
+- Galería pública/admin Emulator pasó en 390×844 y 1440×900 con fixtures; también pasó `inventory-draft-protection`. No se escribió Production. ESLint dirigido reporta cuatro errores ya presentes en líneas no modificadas de `Navbar.tsx` y `HomePage.tsx`.
+- Vercel sigue inaccesible bajo el scope de BRIZ para consultar logs; la causa del fallo Preview continúa sin verificar. Build Production local reproducible; guard intacto.
+- PR #22 sigue Draft y apilada sobre #21. `translationUsage.charactersReserved` no se libera tras error del proveedor y puede bloquear nuevas traducciones ese día. Corregir antes de activar. Proveedor deshabilitado por defecto; API, secreto, IAM, cuotas y costo sin confirmar porque `gcloud` no está instalado. No activar/desplegar.
+- PR #20 permanece Draft y separada, sin cobro. Faltan reglas comerciales de mínimo, redondeo y duración máxima.
+- Contrato de desarrollo/entrega no encontrado en el checkout; tampoco hay constancia de aceptación formal del cliente.
+- Matriz de cierre: `BRIZ_CIERRE_SOLICITUDES_2026-11-24.md`.

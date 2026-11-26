@@ -17,6 +17,8 @@
     "test:mamachari-workshop": "npx tsx scripts/mamachari-workshop-documents.test.ts",
     "test:rental-schedule": "npx tsx scripts/rental-schedule.test.ts",
     "test:product-gallery": "npx tsx scripts/product-gallery.test.ts",
+    "test:i18n-ui": "npx tsx scripts/locale-catalog.test.ts && npx tsx scripts/static-translation-coverage.test.ts",
+    "test:i18n-visual": "node scripts/run-public-bilingual-smoke.cjs",
     "test:pr19-gallery-visual": "firebase emulators:exec --project demo-briz-security --only auth,firestore,storage \"npx tsx scripts/seed-admin-visual.ts && node scripts/pr19-product-gallery-visual.mjs\"",
     "test:customer-private-files": "npx tsx scripts/customer-private-files.test.ts",
     "test:customer-profile-completion": "npx tsx scripts/customer-profile-completion.test.ts",

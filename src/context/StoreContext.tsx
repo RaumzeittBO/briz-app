@@ -342,6 +342,7 @@ export interface EventItem {
     description: string;
     descriptionEn?: string;
     subcategories: EventSubcategory[];
+    subcategoryNamesEn?: string[];
     price?: number;
     images?: string[];
 }
@@ -708,7 +709,9 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
             if (snap.exists()) {
                 setBikeCategories(snap.data().categories || []);
                 const savedTranslations = snap.data().translations;
-                setCategoryTranslations(savedTranslations && typeof savedTranslations === 'object' && !Array.isArray(savedTranslations) ? savedTranslations : {});
+                if (savedTranslations && typeof savedTranslations === 'object' && !Array.isArray(savedTranslations)) {
+                    setCategoryTranslations(current => ({ ...current, ...savedTranslations }));
+                }
             } else {
                 const defaults = RENTAL_SEED_CATEGORIES;
                 setDoc(doc(db, 'settings', 'bike_categories'), { categories: defaults }, { merge: true }).catch(() => undefined);
@@ -722,6 +725,10 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
             if (snap.exists()) {
                 const cats = snap.data().categories;
                 setShopCategories(Array.isArray(cats) ? cats : []);
+                const savedTranslations = snap.data().translations;
+                if (savedTranslations && typeof savedTranslations === 'object' && !Array.isArray(savedTranslations)) {
+                    setCategoryTranslations(current => ({ ...current, ...savedTranslations }));
+                }
             } else {
                 const defaults = SHOP_SEED_CATEGORIES;
                 setDoc(doc(db, 'settings', 'shop_categories'), { categories: defaults }, { merge: true }).catch(() => undefined);
@@ -733,6 +740,10 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
 
         const unsubAccessoryCats = onSnapshot(doc(db, 'settings', 'accessory_categories'), (snap) => {
             setAccessoryCategories(snap.exists() && Array.isArray(snap.data().categories) ? snap.data().categories : []);
+            const savedTranslations = snap.data()?.translations;
+            if (savedTranslations && typeof savedTranslations === 'object' && !Array.isArray(savedTranslations)) {
+                setCategoryTranslations(current => ({ ...current, ...savedTranslations }));
+            }
         }, (error) => console.error('Error fetching accessory categories:', error));
 
         const unsubAdminNav = onSnapshot(doc(db, 'settings', 'admin_navigation'), (snap) => {
