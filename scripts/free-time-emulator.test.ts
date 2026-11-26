@@ -158,7 +158,7 @@ try {
   const payableRef = adminDb.doc(`rentals/${payable.sessionId}`);
   assert.equal((await payableRef.get()).get('total'), 35);
   for (const [method, amount] of [['Efectivo', 10], ['QR', 10], ['Transferencia', 15]] as const) {
-    const input = { rentalIds: [payable.sessionId], type: 'receipt', method, amount, confirmedReceived: true, idempotencyKey: `ft_${unique()}` };
+    const input = { rentalIds: [payable.sessionId], type: 'receipt', method, amount, actualAt: new Date().toISOString(), confirmedReceived: true, idempotencyKey: `ft_${unique()}` };
     await call('recordRentalPaymentMovement', input);
     const duplicate = await call<{ duplicate: boolean }>('recordRentalPaymentMovement', input);
     assert.equal(duplicate.duplicate, true);

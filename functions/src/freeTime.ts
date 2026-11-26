@@ -9,7 +9,7 @@ export type FreeTimeRates = {
 
 export function freeTimeMinimum(category: string | undefined): 'one_hour' | 'actual_time' {
     const normalized = (category ?? '').normalize('NFD').replace(/\p{M}/gu, '').trim().toLowerCase();
-    return /^(triciclos?|tandems?|cuatriciclos?)$/.test(normalized) ? 'actual_time' : 'one_hour';
+    return /^(triciclos?|tandems?|cua(?:tri|dri)ciclos?)$/.test(normalized) ? 'actual_time' : 'one_hour';
 }
 
 /** Returns an exact reference quote in fractional centavos. It is never a ledger amount. */
