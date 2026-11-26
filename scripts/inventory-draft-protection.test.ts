@@ -10,6 +10,7 @@ const app = initializeApp({ projectId }, `inventory-protection-${Date.now()}`);
 const db = getFirestore(app);
 const itemRef = db.collection('_inventoryDraftProtectionTests').doc(`draft-${Date.now()}`);
 const shopItemRef = db.collection('_inventoryDraftProtectionTests').doc(`shop-draft-${Date.now()}`);
+const comboRef = db.collection('_inventoryDraftProtectionTests').doc(`combo-draft-${Date.now()}`);
 
 try {
   const original = {
@@ -96,8 +97,24 @@ try {
   assert.equal(afterTranslation?.descriptionEn, undefined, 'editing a name translation must not invent or overwrite another translation');
   assert.equal(afterTranslation?.imageUrl, 'inventory/new-fictitious-photo.jpg');
 
-  console.log('PASS stale inventory drafts only update explicitly changed fields');
+  const combo = { ...original, components: [{ inventoryItemId: 'old-bike', quantity: 1 }] };
+  await comboRef.set(combo);
+  const relink = { components: [{ inventoryItemId: 'replacement-bike', quantity: 1 }] };
+  await comboRef.update({ components: [{ inventoryItemId: 'old-bike', quantity: 2 }] });
+  await db.runTransaction(async transaction => {
+    const current = (await transaction.get(comboRef)).data() || {};
+    assert.deepEqual(findInventoryDraftConflicts({ components: combo.components }, current, relink), ['components']);
+    const tariffPatch = createInventoryDraftPatch(combo, { ...combo, pricePerDay: 90 });
+    assert.deepEqual(findInventoryDraftConflicts(combo, current, tariffPatch), []);
+    transaction.update(comboRef, tariffPatch);
+  });
+  assert.deepEqual((await comboRef.get()).data(), {
+    ...combo, components: [{ inventoryItemId: 'old-bike', quantity: 2 }], pricePerDay: 90,
+  });
+
+  console.log('PASS stale inventory and combo drafts preserve concurrent edits');
 } finally {
+  await comboRef.delete();
   await shopItemRef.delete();
   await itemRef.delete();
   await deleteApp(app);

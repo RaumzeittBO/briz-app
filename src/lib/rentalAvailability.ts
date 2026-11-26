@@ -312,7 +312,7 @@ export interface ComboComponentDiagnostic {
     availableStock: number;
     capacity: number;
     isBottleneck: boolean;
-    reasonCode: 'ok' | 'missing_item' | 'out_of_stock' | 'reserved' | 'in_maintenance' | 'wheel_size_unavailable' | 'store_mismatch';
+    reasonCode: 'ok' | 'missing_item' | 'inactive_item' | 'out_of_stock' | 'reserved' | 'in_maintenance' | 'wheel_size_unavailable' | 'store_mismatch';
     reasonMessage: string;
 }
 
@@ -404,15 +404,15 @@ export function getComboAvailabilityDiagnostics(params: {
         if (!item || !item.active) {
             componentReports.push({
                 inventoryItemId: comp.inventoryItemId,
-                resolvedItemId: undefined,
-                isAliasMatch: false,
+                resolvedItemId: item?.id,
+                isAliasMatch,
                 name: item?.name || comp.inventoryItemId,
                 requiredQuantity: reqQty,
                 availableStock: 0,
                 capacity: 0,
                 isBottleneck: true,
-                reasonCode: 'missing_item',
-                reasonMessage: `Componente inexistente o inactivo en inventario (${comp.inventoryItemId})`,
+                reasonCode: item ? 'inactive_item' : 'missing_item',
+                reasonMessage: item ? 'Componente inactivo en inventario' : `Componente inexistente en inventario (${comp.inventoryItemId})`,
             });
             minCapacity = 0;
             continue;
@@ -500,6 +500,8 @@ export function getComboAvailabilityDiagnostics(params: {
         if (bottleneck) {
             if (bottleneck.reasonCode === 'store_mismatch') {
                 bottleneckReason = `Stock registrado en otra sucursal (${bottleneck.name})`;
+            } else if (bottleneck.reasonCode === 'inactive_item') {
+                bottleneckReason = `Componente inactivo (${bottleneck.name})`;
             } else if (bottleneck.reasonCode === 'missing_item') {
                 bottleneckReason = `Componente no registrado (${bottleneck.name})`;
             } else if (bottleneck.reasonCode === 'in_maintenance') {

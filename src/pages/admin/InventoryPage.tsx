@@ -1226,7 +1226,7 @@ export default function InventoryPage() {
                               try {
                                 setStockManagerError('');
                                 const updatedComps = stockManagerCombo.components.map((c, i) => i === index ? { ...c, inventoryItemId: item.id } : c);
-                                await updateCombo(stockManagerCombo.id, { components: updatedComps });
+                                await updateCombo(stockManagerCombo.id, { components: updatedComps }, { components: stockManagerCombo.components });
                                 setStockManagerCombo({ ...stockManagerCombo, components: updatedComps });
                                 setStockManagerNotice(`Se actualizó permanentemente la referencia del componente a "${item.name}" (${item.id}).`);
                               } catch (err: any) {
