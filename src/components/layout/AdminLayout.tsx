@@ -12,9 +12,12 @@ import { useAuth } from '@/context/AuthContext';
 import { useStore, DEFAULT_ADMIN_LINKS, type AdminNavigationLink } from '@/context/StoreContext';
 import { useCommunity } from '@/context/CommunityContext';
 import { firebaseConfig, isFirebaseEmulatorEnabled } from '@/lib/firebase';
-import { isFreeTimeEmulatorUiEnabled } from '@/lib/freeTimeFeature';
+import { isFreeTimeUiEnabled } from '@/lib/freeTimeFeature';
 
-const freeTimeEmulatorUiEnabled = isFreeTimeEmulatorUiEnabled({
+declare const __BRIZ_DEPLOYMENT_ENV__: string;
+
+const freeTimeUiEnabled = isFreeTimeUiEnabled({
+    deployment: __BRIZ_DEPLOYMENT_ENV__,
     development: import.meta.env.DEV,
     emulatorEnabled: isFirebaseEmulatorEnabled,
     projectId: firebaseConfig.projectId,
@@ -56,8 +59,8 @@ export default function AdminLayout() {
             ? configuredLinks.map((link) => link.key === 'artworks' ? { ...link, href: artworkLink.href, icon: artworkLink.icon } : link)
             : [...configuredLinks, artworkLink]
         : configuredLinks.filter((link) => link.key !== 'artworks');
-    const visibleLinks = freeTimeEmulatorUiEnabled && !permissionLinks.some((link) => link.key === 'free-time')
-        ? [...permissionLinks, { key: 'free-time', label: 'Tiempo Libre (Emulator)', href: '/admin/free-time', icon: 'Bike' }]
+    const visibleLinks = freeTimeUiEnabled && !permissionLinks.some((link) => link.key === 'free-time')
+        ? [...permissionLinks, { key: 'free-time', label: 'Tiempo Libre', href: '/admin/free-time', icon: 'Bike' }]
         : permissionLinks;
 
     const [isEditingMenu, setIsEditingMenu] = useState(false);

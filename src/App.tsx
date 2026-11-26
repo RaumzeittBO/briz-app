@@ -35,10 +35,13 @@ import AdminCommunityPage from '@/pages/admin/AdminCommunityPage';
 import AdminEventsPage from '@/pages/admin/AdminEventsPage';
 import AdminArtworksPage from '@/pages/admin/AdminArtworksPage';
 import { firebaseConfig, isFirebaseEmulatorEnabled } from '@/lib/firebase';
-import { isFreeTimeEmulatorUiEnabled } from '@/lib/freeTimeFeature';
+import { isFreeTimeUiEnabled } from '@/lib/freeTimeFeature';
 
-const freeTimeEmulatorUiEnabled = isFreeTimeEmulatorUiEnabled({
-  development: import.meta.env.DEV,
+declare const __BRIZ_DEPLOYMENT_ENV__: string;
+
+const freeTimeUiEnabled = isFreeTimeUiEnabled({
+  deployment: __BRIZ_DEPLOYMENT_ENV__,
+    development: import.meta.env.DEV,
   emulatorEnabled: isFirebaseEmulatorEnabled,
   projectId: firebaseConfig.projectId,
   explicitFlag: import.meta.env.VITE_ENABLE_FREE_TIME_EMULATOR,
@@ -94,8 +97,8 @@ function AppRoutes() {
       <Route path="/admin" element={<ProtectedRoute><AdminLayout /></ProtectedRoute>}>
         <Route index element={<DashboardPage />} />
         <Route path="rentals" element={<AdminRentalsPage />} />
-        <Route path="free-time" element={freeTimeEmulatorUiEnabled
-          ? <Suspense fallback={<div role="status" className="p-8 text-center">Cargando herramienta de Emulator…</div>}><AdminCommercialRoute><FreeTimePage /></AdminCommercialRoute></Suspense>
+        <Route path="free-time" element={freeTimeUiEnabled
+          ? <Suspense fallback={<div role="status" className="p-8 text-center">Cargando Tiempo Libre…</div>}><AdminCommercialRoute><FreeTimePage /></AdminCommercialRoute></Suspense>
           : <Navigate to="/admin/rentals" replace />} />
         <Route path="shop" element={<AdminShopPage />} />
         <Route path="events" element={<AdminEventsPage />} />

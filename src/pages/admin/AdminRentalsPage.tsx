@@ -2477,6 +2477,7 @@ export default function AdminRentalsPage() {
                     variant="ghost" 
                     size="icon" 
                     className="w-9 h-9 rounded-xl bg-white/5 text-white/40 hover:bg-brand-yellow hover:text-brand-black" 
+                    aria-label={`Ver detalles de ${g.reservationCode || g.id}`}
                     onClick={() => setSelected(g)}
                   >
                     <Info className="w-4 h-4" />

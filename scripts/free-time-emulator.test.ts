@@ -102,6 +102,7 @@ try {
     firstHour: 35, halfDay: null, additionalHour: null, fullDay: 65,
   });
   assert.equal(typeof firstRecord.startTimestamp, 'number');
+  assert.equal(firstRecord.createdDate, firstRecord.createdAt, 'Caja and Reportes order rentals by createdDate');
   assert.equal((await adminDb.doc('inventory/ft-basic-bike').get()).get('stock'), 2);
   const retryStart = await call<typeof started>('startFreeTimeRental', baseInput);
   assert.equal(retryStart.sessionId, started.sessionId);
@@ -341,6 +342,49 @@ try {
     await page.getByRole('button', { name: 'Guardar abono' }).click();
     await page.getByText('Abono registrado.', { exact: true }).waitFor({ timeout: 20_000 });
     await page.getByText(/Saldo conocido: Bs 25.00/).waitFor({ timeout: 20_000 });
+    await page.getByRole('button', { name: 'Ver comprobante' }).click();
+    const receipt = page.locator('#free-time-receipt');
+    await receipt.getByRole('heading', { name: 'Comprobante de alquiler' }).waitFor();
+    await receipt.getByText(/Abono · QR · Bs 10.00/).waitFor();
+    await receipt.getByText(/Saldo conocido: Bs 25.00/).waitFor();
+    await page.evaluate(() => { window.print = () => window.document.documentElement.setAttribute('data-print-requested', 'true'); });
+    await page.getByRole('button', { name: 'Imprimir comprobante' }).click();
+    assert.equal(await page.locator('html').getAttribute('data-print-requested'), 'true');
+    await page.getByRole('button', { name: 'Cerrar comprobante' }).click();
+    for (const [method, amount] of [['Efectivo', '10'], ['Transferencia', '15']]) {
+      await page.getByRole('button', { name: 'Registrar abono' }).click();
+      await page.getByLabel('Importe en Bs').fill(amount);
+      await page.getByLabel('Método').selectOption(method);
+      if (method !== 'Efectivo') await page.getByText('Confirmo que recibí el pago').click();
+      await page.getByRole('button', { name: 'Guardar abono' }).click();
+      await page.getByRole('button', { name: 'Guardar abono' }).waitFor({ state: 'hidden' });
+    }
+    await page.locator('details').filter({ has: page.locator('summary').filter({ hasText: 'Fixture ft-ui-bike' }) })
+      .getByText(/Saldo conocido: Bs 0\.00/).waitFor();
+    const uiRental = (await adminDb.collection('rentals').where('productId', '==', 'ft-ui-bike').get()).docs[0];
+    const uiCode = String(uiRental.get('reservationCode'));
+    await page.goto(`${baseUrl}/admin/rentals`);
+    await page.getByRole('button', { name: 'Devueltos', exact: true }).click();
+    await page.getByPlaceholder('Buscar por cliente, código...').fill(uiCode);
+    await page.getByRole('button', { name: `Ver detalles de ${uiCode}`, exact: true }).click();
+    await page.getByRole('button', { name: 'Caja / Registrar Pago' }).click();
+    const cashDialog = page.getByRole('dialog').filter({ hasText: `Movimiento de caja · ${uiCode}` });
+    await cashDialog.getByText(/Cobrado.*35[.]00/).waitFor();
+    await cashDialog.getByText(/Pendiente.*0[.]00/).waitFor();
+    await page.goto(`${baseUrl}/admin/reports`);
+    await page.getByRole('heading', { name: 'Cobros por método' }).waitFor({ timeout: 20_000 });
+    await page.getByRole('button', { name: 'Todo el historial' }).click();
+    const storeFilter = page.locator('select').filter({ has: page.getByRole('option', { name: 'Todas las Sedes' }) });
+    await storeFilter.selectOption('Cochabamba');
+    const paymentSummary = page.getByRole('heading', { name: 'Cobros por método' }).locator('..');
+    const qrTotal = paymentSummary.getByText('QR', { exact: true }).locator('..');
+    await qrTotal.getByText('Bs. 20.00', { exact: true }).waitFor();
+    await page.getByRole('button', { name: 'Ayer' }).click();
+    await qrTotal.getByText('Bs. 0.00', { exact: true }).waitFor();
+    await page.getByRole('button', { name: 'Todo el historial' }).click();
+    const download = page.waitForEvent('download');
+    await page.getByRole('button', { name: /Exportar Excel/ }).click();
+    assert.match((await download).suggestedFilename(), /\.csv$/i);
     report('Responsive Playwright 390x844 and 1280x900: inicio, cronómetro, devolución, abono QR y saldo verificados');
   } finally {
     if (browser) await browser.close();

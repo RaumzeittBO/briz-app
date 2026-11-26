@@ -6,10 +6,14 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { firebaseConfig, isFirebaseEmulatorEnabled } from '@/lib/firebase';
 import { finishFreeTimeRental, listFreeTimeRentals, recordRentalPaymentMovement, startFreeTimeRental, type FreeTimeSessionView, type RecordRentalPaymentMovementInput } from '@/lib/backend';
-import { isFreeTimeEmulatorUiEnabled } from '@/lib/freeTimeFeature';
+import { isFreeTimeUiEnabled } from '@/lib/freeTimeFeature';
+import { getReservationReceiptCopy } from '@/lib/reservationReceiptCopy';
 
-const uiEnabled = isFreeTimeEmulatorUiEnabled({
-  development: import.meta.env.DEV,
+declare const __BRIZ_DEPLOYMENT_ENV__: string;
+
+const uiEnabled = isFreeTimeUiEnabled({
+  deployment: __BRIZ_DEPLOYMENT_ENV__,
+    development: import.meta.env.DEV,
   emulatorEnabled: isFirebaseEmulatorEnabled,
   projectId: firebaseConfig.projectId,
   explicitFlag: import.meta.env.VITE_ENABLE_FREE_TIME_EMULATOR,
@@ -62,6 +66,7 @@ export default function FreeTimePage() {
   const [paymentMethod, setPaymentMethod] = useState<RecordRentalPaymentMovementInput['method']>('Efectivo');
   const [paymentConfirmed, setPaymentConfirmed] = useState(false);
   const [paymentBusy, setPaymentBusy] = useState(false);
+  const [receiptId, setReceiptId] = useState<string | null>(null);
   const [serverClock, setServerClock] = useState({ now: Date.now(), performance: performance.now() });
   const [, setTick] = useState(0);
 
@@ -79,6 +84,8 @@ export default function FreeTimePage() {
     : 0;
   const activeSessions = sessions.filter((session) => session.freeTimeState === 'active');
   const historySessions = sessions.filter((session) => session.freeTimeState === 'closed');
+  const receipt = historySessions.find(session => session.id === receiptId);
+  const receiptCopy = getReservationReceiptCopy('es', 'freeTime');
   const paymentTarget = historySessions.find(session => session.id === paymentSession);
   const pendingPaymentKey = 'briz_free_time_payment_pending';
 
@@ -205,7 +212,7 @@ export default function FreeTimePage() {
   return (
     <main className="mx-auto w-full max-w-7xl space-y-5 p-4 pb-12 sm:p-6 lg:p-8">
       <header className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-        <div><p className="text-xs font-black uppercase tracking-[0.2em] text-amber-700">Modo Emulator — no Production</p><h1 className="mt-1 text-2xl font-black text-stone-950 sm:text-3xl">Tiempo Libre</h1><p className="mt-2 max-w-2xl text-sm text-stone-600">Control de entrega, devolución y liquidación.</p></div>
+        <div><p className="text-xs font-black uppercase tracking-[0.2em] text-amber-700">{isFirebaseEmulatorEnabled ? 'Firebase Emulator' : 'Alquiler en mostrador'}</p><h1 className="mt-1 text-2xl font-black text-stone-950 sm:text-3xl">Tiempo Libre</h1><p className="mt-2 max-w-2xl text-sm text-stone-600">Control de entrega, devolución y liquidación.</p></div>
         <Button variant="outline" onClick={() => void refresh(true)} disabled={refreshing} className="min-h-11 self-start sm:self-auto"><RefreshCw className={`mr-2 h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />Actualizar</Button>
       </header>
 
@@ -279,11 +286,29 @@ export default function FreeTimePage() {
           {session.pricingStatus === 'excess_review' && <p className="text-sm text-amber-800">El tiempo superior a ocho horas queda pendiente de revisión.</p>}
           {['incompatible_rates', 'rate_unavailable'].includes(session.pricingStatus ?? '') && <p className="text-sm text-amber-800">Cobro bloqueado. Revisa las tarifas del modelo.</p>}
           <ul className="text-sm" aria-label="Movimientos registrados">{rentalPaymentMovements.filter(m => m.reservationCode === session.reservationCode).map(m => <li key={m.id}>{m.type} · {m.method} · Bs {Number(m.amount).toFixed(2)}</li>)}</ul>
+          <Button variant="outline" onClick={() => setReceiptId(session.id)}>Ver comprobante</Button>
           {session.total > session.amountPaid && ['settled', 'excess_review'].includes(session.pricingStatus ?? '') && <Button onClick={() => {
             setPaymentSession(session.id); setPaymentAmount(''); setPaymentMethod('Efectivo'); setPaymentConfirmed(false);
           }}>Registrar abono</Button>}
           </details>)}</div>}
       </CardContent></Card>
+      {receipt && <Card><CardContent className="space-y-3 p-4">
+        <style>{'@media print { body * { visibility: hidden } #free-time-receipt, #free-time-receipt * { visibility: visible } #free-time-receipt { position: absolute; inset: 0; padding: 1rem } }'}</style>
+        <section id="free-time-receipt" className="space-y-2">
+          <h2 className="text-lg font-black">{receiptCopy.title}</h2>
+          <p>{receiptCopy.description} · {receipt.reservationCode}</p>
+          <p>{receipt.productName}{receipt.wheelSize ? ` · Aro ${receipt.wheelSize}` : ''} · {receipt.store}</p>
+          <p>Salida: {new Date(receipt.startedAt).toLocaleString('es-BO', { timeZone: 'America/La_Paz' })}</p>
+          <p>Devolución: {receipt.closedAt ? new Date(receipt.closedAt).toLocaleString('es-BO', { timeZone: 'America/La_Paz' }) : 'Pendiente'}</p>
+          <p>Tiempo utilizado: {formatElapsed(receipt.elapsedMilliseconds ?? 0)}</p>
+          {receipt.tariffSnapshot && <p>Tarifas en Bs: 1 h {receipt.tariffSnapshot.firstHour ?? '—'} · 4 h {receipt.tariffSnapshot.halfDay ?? '—'} · hora adicional {receipt.tariffSnapshot.additionalHour ?? '—'} · 8 h {receipt.tariffSnapshot.fullDay ?? '—'}</p>}
+          <p>{receipt.pricingStatus === 'settled' ? 'Importe definitivo' : 'Importe conocido'}: Bs {receipt.total.toFixed(2)}</p>
+          <ul aria-label="Abonos del comprobante">{rentalPaymentMovements.filter(m => m.reservationCode === receipt.reservationCode).map(m => <li key={m.id}>{m.type === 'receipt' ? 'Abono' : m.type === 'refund' ? 'Reembolso' : 'Ajuste'} · {m.method} · Bs {Number(m.amount).toFixed(2)}</li>)}</ul>
+          <p>Saldo conocido: Bs {Math.max(0, receipt.total - receipt.amountPaid).toFixed(2)}</p>
+          <p>Estado: {receipt.pricingStatus === 'excess_review' ? 'Exceso pendiente de revisión' : receipt.pricingStatus !== 'settled' ? 'Liquidación pendiente de revisar' : receipt.paymentStatus === 'paid' ? 'Pagado' : 'Saldo pendiente'}</p>
+        </section>
+        <div className="flex gap-2"><Button onClick={() => window.print()}>Imprimir comprobante</Button><Button variant="outline" onClick={() => setReceiptId(null)}>Cerrar comprobante</Button></div>
+      </CardContent></Card>}
       {paymentTarget && <Card><CardContent className="space-y-3 p-4">
         <h2 className="font-bold">Abono · {paymentTarget.reservationCode}</h2>
         <label className="block">Importe en Bs <input className="block rounded border p-2" type="number" min="0.01" step="0.01" value={paymentAmount} onChange={e => setPaymentAmount(e.target.value)} disabled={paymentBusy} /></label>

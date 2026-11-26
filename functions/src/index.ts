@@ -34,7 +34,7 @@ import {
 import { DEFAULT_RENTAL_HOURS, validateRentalBusinessHours } from './businessHours';
 import { CUSTOMER_PRIVATE_FILE_SPECS, bucketNamesMatch, getPathVariants, ownedCustomerStoragePath, resolveCustomerPrivateFiles } from './customerPrivateFiles';
 import { Resend } from 'resend';
-import { calculateFreeTimeProration, elapsedFreeTimeMilliseconds, freeTimeMinimum, isFreeTimeEmulatorRuntime, quoteFreeTime } from './freeTime';
+import { calculateFreeTimeProration, elapsedFreeTimeMilliseconds, freeTimeMinimum, isFreeTimeRuntimeEnabled, quoteFreeTime } from './freeTime';
 import { buildBrizVerificationUrl, createVerificationEmail, deliverVerificationEmail, nextVerificationRateState, rollbackDefinitiveVerificationAttempt, VerificationDeliveryError, type EmailLanguage, type VerificationRateState } from './customerVerificationEmail';
 
 if (getApps().length === 0) initializeApp();
@@ -87,9 +87,9 @@ function requireAuth(request: CallableRequest<unknown>, requireVerifiedEmail = f
     return { uid: request.auth.uid, email };
 }
 
-function requireFreeTimeEmulator(): void {
-    if (!isFreeTimeEmulatorRuntime(process.env)) {
-        throw new HttpsError('failed-precondition', 'Tiempo Libre está deshabilitado fuera de Firebase Emulator en esta fase.');
+function requireFreeTimeRuntime(): void {
+    if (!isFreeTimeRuntimeEnabled(process.env)) {
+        throw new HttpsError('failed-precondition', 'Tiempo Libre no está habilitado en este entorno.');
     }
 }
 
@@ -1668,7 +1668,7 @@ function freeTimeRentalView(snapshot: QueryDocumentSnapshot<DocumentData>): Reco
 
 /** Emulator-only non-commercial start. Rental creation and stock deduction are atomic. */
 export const startFreeTimeRental = onCall(callable(), async (request) => {
-    requireFreeTimeEmulator();
+    requireFreeTimeRuntime();
     const { uid } = requireAuth(request);
     const input = validateFreeTimeStart(request.data);
     const roleRef = db.doc(`adminUsers/${uid}`);
@@ -1756,7 +1756,7 @@ export const startFreeTimeRental = onCall(callable(), async (request) => {
             },
             store: input.store, total: 0, amountPaid: 0, paymentStatus: 'unpaid', paymentMethod: 'Sin especificar',
             notes: 'Tiempo Libre — sesión operativa sin liquidación monetaria en esta fase.',
-            createdAt: startedAt, updatedAt: startedAt, lastUpdatedBy: uid,
+            createdAt: startedAt, createdDate: startedAt, updatedAt: startedAt, lastUpdatedBy: uid,
             auditLog: [{ action: 'free_time_start', actorUid: uid, actorLabel, store: input.store, at: startedAt }],
         };
         tx.update(itemRef, item.hasWheelSizes ? { wheelSizes: nextItem.wheelSizes } : { stock: nextItem.stock });
@@ -1771,7 +1771,7 @@ export const startFreeTimeRental = onCall(callable(), async (request) => {
 
 /** Returns sanitized session data and enforces the actor's branch scope. */
 export const listFreeTimeRentals = onCall(callable(), async (request) => {
-    requireFreeTimeEmulator();
+    requireFreeTimeRuntime();
     const { uid } = requireAuth(request);
     const role = (await db.doc(`adminUsers/${uid}`).get()).data();
     requireRentalAdmin(role);
@@ -1787,7 +1787,7 @@ export const listFreeTimeRentals = onCall(callable(), async (request) => {
 
 /** Operational close only. No tariff, charge, payment movement, or paid status is produced. */
 export const finishFreeTimeRental = onCall(callable(), async (request) => {
-    requireFreeTimeEmulator();
+    requireFreeTimeRuntime();
     const { uid } = requireAuth(request);
     if (!exactObject(request.data) || Object.keys(request.data).some((key) => !['sessionId', 'idempotencyKey', 'damaged', 'conditionNotes'].includes(key))) throw new HttpsError('invalid-argument', 'Los datos de devolución no son válidos.');
     const sessionId = cleanString(request.data.sessionId, 150);
@@ -2097,7 +2097,7 @@ export const recordRentalPaymentMovement = onCall(callable(), async (request) =>
         const rows = rentalSnaps.filter((snap) => snap.exists).map((snap) => ({ ...snap.data()!, id: snap.id } as DocumentData));
         if (!rows.length || rows.length !== rentalIds.length) throw new HttpsError('not-found', 'No se encontró el grupo completo.');
         if (rows.some((row) => row.freeTimeMode === true)) {
-            requireFreeTimeEmulator();
+            requireFreeTimeRuntime();
             if (rows.length !== 1 || rows[0].freeTimeState !== 'closed'
                 || !['settled', 'excess_review'].includes(rows[0].freeTimePricing?.status)
                 || !(Number(rows[0].total) > 0)) {

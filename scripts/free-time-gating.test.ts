@@ -1,11 +1,17 @@
 import assert from 'node:assert/strict';
-import { calculateFreeTimeProration, isFreeTimeEmulatorRuntime, elapsedFreeTimeMilliseconds } from '../functions/src/freeTime';
-import { isFreeTimeEmulatorUiEnabled } from '../src/lib/freeTimeFeature';
+import { calculateFreeTimeProration, isFreeTimeEmulatorRuntime, isFreeTimeRuntimeEnabled, elapsedFreeTimeMilliseconds } from '../functions/src/freeTime';
+import { isFreeTimeEmulatorUiEnabled, isFreeTimeUiEnabled } from '../src/lib/freeTimeFeature';
 import { calculatePrice } from '../functions/src/domain';
 
 assert.equal(isFreeTimeEmulatorRuntime({ FUNCTIONS_EMULATOR: 'true', GCLOUD_PROJECT: 'demo-briz-security' }), true);
 assert.equal(isFreeTimeEmulatorRuntime({ FUNCTIONS_EMULATOR: 'true', GCLOUD_PROJECT: 'briz-4ef3a' }), false);
 assert.equal(isFreeTimeEmulatorRuntime({ GCLOUD_PROJECT: 'demo-briz-security' }), false);
+assert.equal(isFreeTimeRuntimeEnabled({ GCLOUD_PROJECT: 'briz-4ef3a', K_SERVICE: 'startfreetimerental' }), true);
+assert.equal(isFreeTimeRuntimeEnabled({ GCLOUD_PROJECT: 'briz-4ef3a', K_SERVICE: 'startfreetimerental', FUNCTIONS_EMULATOR: 'true' }), false);
+assert.equal(isFreeTimeRuntimeEnabled({ GCLOUD_PROJECT: 'other-project', K_SERVICE: 'startfreetimerental' }), false);
+const productionUi = { deployment: 'production', development: false, emulatorEnabled: false, projectId: 'briz-4ef3a', explicitFlag: undefined };
+assert.equal(isFreeTimeUiEnabled(productionUi), true);
+assert.equal(isFreeTimeUiEnabled({ ...productionUi, deployment: 'preview' }), false);
 assert.equal(isFreeTimeEmulatorUiEnabled({ development: true, emulatorEnabled: true, projectId: 'demo-briz-security', explicitFlag: 'true' }), true);
 assert.equal(isFreeTimeEmulatorUiEnabled({ development: false, emulatorEnabled: true, projectId: 'demo-briz-security', explicitFlag: 'true' }), false);
 assert.equal(isFreeTimeEmulatorUiEnabled({ development: true, emulatorEnabled: false, projectId: 'demo-briz-security', explicitFlag: 'true' }), false);

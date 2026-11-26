@@ -49,6 +49,14 @@ export function isFreeTimeEmulatorRuntime(environment: FreeTimeEnvironment): boo
         && environment.GCLOUD_PROJECT === 'demo-briz-security';
 }
 
+export function isFreeTimeRuntimeEnabled(environment: FreeTimeEnvironment): boolean {
+    return isFreeTimeEmulatorRuntime(environment) || (
+        environment.FUNCTIONS_EMULATOR !== 'true'
+        && Boolean(environment.K_SERVICE)
+        && (environment.GCLOUD_PROJECT || environment.GOOGLE_CLOUD_PROJECT) === 'briz-4ef3a'
+    );
+}
+
 export function elapsedFreeTimeMilliseconds(startedAtMs: number, closedAtMs: number): number {
     if (!Number.isSafeInteger(startedAtMs) || !Number.isSafeInteger(closedAtMs) || closedAtMs < startedAtMs) {
         throw new Error('El intervalo de la sesión no es válido.');
