@@ -236,6 +236,13 @@ export interface Rental {
     updatedAt: string;
     deliveredAt?: string;
     returnedAt?: string;
+    freeTimeMode?: boolean;
+    freeTimeState?: 'active' | 'closed';
+    startTimestamp?: number;
+    endTimestamp?: number;
+    freeTimeElapsedMilliseconds?: number;
+    freeTimeElapsedSeconds?: number;
+    freeTimeElapsedMinutes?: number;
     damagedOnReturn?: boolean;
     returnConditionNotes?: string;
     lastUpdatedBy?: string;

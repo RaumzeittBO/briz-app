@@ -1,4 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { lazy, Suspense } from 'react';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { AuthProvider, useAuth } from '@/context/AuthContext';
 import { CommunityProvider } from '@/context/CommunityContext';
@@ -33,6 +34,19 @@ import AdminRoutesPage from '@/pages/admin/AdminRoutesPage';
 import AdminCommunityPage from '@/pages/admin/AdminCommunityPage';
 import AdminEventsPage from '@/pages/admin/AdminEventsPage';
 import AdminArtworksPage from '@/pages/admin/AdminArtworksPage';
+import { firebaseConfig, isFirebaseEmulatorEnabled } from '@/lib/firebase';
+import { isFreeTimeUiEnabled } from '@/lib/freeTimeFeature';
+
+declare const __BRIZ_DEPLOYMENT_ENV__: string;
+
+const freeTimeUiEnabled = isFreeTimeUiEnabled({
+  deployment: __BRIZ_DEPLOYMENT_ENV__,
+    development: import.meta.env.DEV,
+  emulatorEnabled: isFirebaseEmulatorEnabled,
+  projectId: firebaseConfig.projectId,
+  explicitFlag: import.meta.env.VITE_ENABLE_FREE_TIME_EMULATOR,
+});
+const FreeTimePage = lazy(() => import('@/pages/admin/FreeTimePage'));
 
 // Protected route wrapper
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -50,6 +64,15 @@ function AdminRoleRoute({ children }: { children: React.ReactNode }) {
   const { adminProfile, isLoading } = useAuth();
   if (isLoading) return <div role="status" className="min-h-screen flex items-center justify-center bg-brand-charcoal text-white/70">Verificando acceso al panel…</div>;
   if (adminProfile?.role !== 'admin') return <div role="alert" className="min-h-screen grid place-items-center bg-[#FFF9E8] p-6 text-center"><div><h1 className="text-xl font-black">Acceso reservado a Admin</h1><p className="mt-2 text-sm text-stone-600">Tu perfil no tiene permiso para administrar artes públicos.</p></div></div>;
+  return <>{children}</>;
+}
+
+function AdminCommercialRoute({ children }: { children: React.ReactNode }) {
+  const { adminProfile, isLoading } = useAuth();
+  if (isLoading) return <div role="status" className="min-h-screen grid place-items-center">Verificando permisos…</div>;
+  if (!['admin', 'manager'].includes(String(adminProfile?.role)) || adminProfile?.active !== true) {
+    return <div role="alert" className="min-h-screen grid place-items-center p-6 text-center"><p>Acceso reservado a Administración y Managers.</p></div>;
+  }
   return <>{children}</>;
 }
 
@@ -74,6 +97,9 @@ function AppRoutes() {
       <Route path="/admin" element={<ProtectedRoute><AdminLayout /></ProtectedRoute>}>
         <Route index element={<DashboardPage />} />
         <Route path="rentals" element={<AdminRentalsPage />} />
+        <Route path="free-time" element={freeTimeUiEnabled
+          ? <Suspense fallback={<div role="status" className="p-8 text-center">Cargando Tiempo Libre…</div>}><AdminCommercialRoute><FreeTimePage /></AdminCommercialRoute></Suspense>
+          : <Navigate to="/admin/rentals" replace />} />
         <Route path="shop" element={<AdminShopPage />} />
         <Route path="events" element={<AdminEventsPage />} />
         <Route path="inventory" element={<InventoryPage />} />

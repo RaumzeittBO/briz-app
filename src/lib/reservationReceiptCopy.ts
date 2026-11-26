@@ -1,6 +1,11 @@
 export type ReceiptLanguage = 'es' | 'en';
 
-export function getReservationReceiptCopy(language: ReceiptLanguage) {
+export function getReservationReceiptCopy(language: ReceiptLanguage, mode: 'reservation' | 'freeTime' = 'reservation') {
+  if (mode === 'freeTime') {
+    return language === 'es'
+      ? { title: 'Comprobante de alquiler', description: 'Tiempo Libre · BRIZ' }
+      : { title: 'Rental receipt', description: 'Free Time · BRIZ' };
+  }
   if (language === 'es') {
     return {
       title: 'Solicitud recibida',

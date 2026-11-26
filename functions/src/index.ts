@@ -34,6 +34,7 @@ import {
 import { DEFAULT_RENTAL_HOURS, validateRentalBusinessHours } from './businessHours';
 import { CUSTOMER_PRIVATE_FILE_SPECS, bucketNamesMatch, getPathVariants, ownedCustomerStoragePath, resolveCustomerPrivateFiles } from './customerPrivateFiles';
 import { Resend } from 'resend';
+import { calculateFreeTimeProration, elapsedFreeTimeMilliseconds, freeTimeMinimum, isFreeTimeRuntimeEnabled, quoteFreeTime } from './freeTime';
 import { buildBrizVerificationUrl, createVerificationEmail, deliverVerificationEmail, nextVerificationRateState, rollbackDefinitiveVerificationAttempt, VerificationDeliveryError, type EmailLanguage, type VerificationRateState } from './customerVerificationEmail';
 
 if (getApps().length === 0) initializeApp();
@@ -84,6 +85,12 @@ function requireAuth(request: CallableRequest<unknown>, requireVerifiedEmail = f
         throw new HttpsError('failed-precondition', 'Verifica tu correo electrónico antes de continuar.');
     }
     return { uid: request.auth.uid, email };
+}
+
+function requireFreeTimeRuntime(): void {
+    if (!isFreeTimeRuntimeEnabled(process.env)) {
+        throw new HttpsError('failed-precondition', 'Tiempo Libre no está habilitado en este entorno.');
+    }
 }
 
 function digest(value: string): string {
@@ -244,6 +251,7 @@ function normalizeLegacyRental(doc: QueryDocumentSnapshot<DocumentData>): Rental
         duration: typeof value.duration === 'string' || typeof value.duration === 'number' ? value.duration : '1 Hora',
         startTimestamp: typeof value.startTimestamp === 'number' ? value.startTimestamp : undefined,
         endTimestamp: typeof value.endTimestamp === 'number' ? value.endTimestamp : undefined,
+        freeTimeMode: value.freeTimeMode === true,
     };
 }
 
@@ -1594,6 +1602,310 @@ function appendRentalAudit(row: DocumentData, uid: string, action: string, befor
     return { auditLog: [...history, { action, actorUid: uid, at: now, before, after }] };
 }
 
+type FreeTimeStartInput = {
+    idempotencyKey: string;
+    itemId: string;
+    store: string;
+    wheelSize?: string;
+    customerId?: string;
+};
+
+function validateFreeTimeStart(data: unknown): FreeTimeStartInput {
+    const allowed = new Set(['idempotencyKey', 'itemId', 'store', 'wheelSize', 'customerId']);
+    if (!exactObject(data) || Object.keys(data).some((key) => !allowed.has(key))) throw new HttpsError('invalid-argument', 'Los datos de inicio no son válidos.');
+    const idempotencyKey = cleanString(data.idempotencyKey, 100);
+    const itemId = cleanString(data.itemId, 150);
+    const store = cleanString(data.store, 80);
+    const wheelSize = cleanString(data.wheelSize, 20);
+    const customerId = cleanString(data.customerId, 150);
+    if (!/^[A-Za-z0-9_-]{16,100}$/.test(idempotencyKey) || !itemId || itemId.includes('/')
+        || !store || store.toLowerCase() === 'all' || store.includes('/')
+        || (data.wheelSize !== undefined && !wheelSize)
+        || (data.customerId !== undefined && (!customerId || customerId.includes('/')))) {
+        throw new HttpsError('invalid-argument', 'Selecciona una bicicleta, sucursal e identificador de operación válidos.');
+    }
+    return { idempotencyKey, itemId, store, ...(wheelSize ? { wheelSize } : {}), ...(customerId ? { customerId } : {}) };
+}
+
+function isFreeTimeRequestPending(rental: DocumentData, nowMs: number): boolean {
+    if (rental.freeTimeMode === true) return false;
+    const status = String(rental.status || '');
+    const needsUnallocatedCapacity = ['pending', 'Pendiente'].includes(status)
+        || (['confirmed', 'Confirmado', 'delivered', 'Entregado'].includes(status) && rental.stockDeducted !== true);
+    if (!needsUnallocatedCapacity) return false;
+    try { return getRentalWindow(rental as unknown as RentalLike).endMs > nowMs; }
+    catch { return true; }
+}
+
+function freeTimeRentalView(snapshot: QueryDocumentSnapshot<DocumentData>): Record<string, unknown> {
+    const rental = snapshot.data();
+    return {
+        id: snapshot.id,
+        reservationCode: rental.reservationCode,
+        status: rental.status,
+        freeTimeState: rental.freeTimeState,
+        itemId: rental.productId,
+        productName: rental.productNameSnapshot || rental.productName,
+        store: rental.store,
+        wheelSize: rental.selectedWheelSize || null,
+        customerName: rental.customerName || 'Cliente pendiente',
+        customerId: rental.customerId || null,
+        startedAt: rental.freeTimeStartedAt || rental.deliveredAt || null,
+        startedAtMs: Number(rental.startTimestamp) || null,
+        closedAt: rental.freeTimeClosedAt || rental.returnedAt || null,
+        elapsedMilliseconds: Number(rental.freeTimeElapsedMilliseconds) || null,
+        elapsedSeconds: Number(rental.freeTimeElapsedSeconds) || null,
+        damagedOnReturn: rental.damagedOnReturn === true,
+        returnConditionNotes: cleanString(rental.returnConditionNotes, 500),
+        createdAt: rental.createdAt,
+        total: Number(rental.total) || 0,
+        amountPaid: Number(rental.amountPaid) || 0,
+        paymentStatus: rental.paymentStatus || 'unpaid',
+        pricingStatus: rental.freeTimePricing?.status || null,
+        tariffSnapshot: rental.freeTimePricing?.tariffSnapshot || null,
+    };
+}
+
+/** Emulator-only non-commercial start. Rental creation and stock deduction are atomic. */
+export const startFreeTimeRental = onCall(callable(), async (request) => {
+    requireFreeTimeRuntime();
+    const { uid } = requireAuth(request);
+    const input = validateFreeTimeStart(request.data);
+    const roleRef = db.doc(`adminUsers/${uid}`);
+    const itemRef = db.doc(`inventory/${input.itemId}`);
+    const customerRef = input.customerId ? db.doc(`customers/${input.customerId}`) : null;
+    const requestRef = db.doc(`_freeTimeRequests/${digest(`${uid}:${input.idempotencyKey}`)}`);
+    const rentalRef = db.collection('rentals').doc();
+    const auditRef = db.doc(`freeTimeEvents/start_${rentalRef.id}`);
+    const lockRef = db.doc(`_availabilityLocks/${resourceKey({ itemId: input.itemId, wheelSize: input.wheelSize, quantity: 1 })}`);
+    const requestFingerprint = digest(JSON.stringify({ itemId: input.itemId, store: input.store, wheelSize: input.wheelSize || '', customerId: input.customerId || '' }));
+
+    return db.runTransaction(async (tx) => {
+        const [roleSnap, itemSnap, requestSnap, rentalsSnap, inventorySnap, combosSnap, lockSnap, customerSnap] = await Promise.all([
+            tx.get(roleRef), tx.get(itemRef), tx.get(requestRef),
+            tx.get(db.collection('rentals').where('status', 'in', ACTIVE_STATUSES)),
+            tx.get(db.collection('inventory')), tx.get(db.collection('combos')), tx.get(lockRef),
+            customerRef ? tx.get(customerRef) : Promise.resolve(null),
+        ]);
+        const role = roleSnap.data();
+        requireRentalAdmin(role);
+        if (role?.role === 'manager' && role.store !== 'all' && role.store !== input.store) throw new HttpsError('permission-denied', 'No tienes acceso a esa sucursal.');
+        if (requestSnap.exists) {
+            if (requestSnap.get('requestFingerprint') !== requestFingerprint) throw new HttpsError('already-exists', 'La clave de inicio ya se utilizó con otra bicicleta o cliente.');
+            return { sessionId: String(requestSnap.get('sessionId')), reservationCode: String(requestSnap.get('reservationCode')), duplicate: true };
+        }
+        if (!itemSnap.exists) throw new HttpsError('not-found', 'No se encontró la bicicleta seleccionada.');
+        const item = { id: itemSnap.id, ...itemSnap.data() } as CatalogItem;
+        if (item.active !== true || item.itemType !== 'bike' || item.availableForRental !== true) throw new HttpsError('failed-precondition', 'La bicicleta no está habilitada para alquiler.');
+        if (item.store && item.store !== 'all' && item.store !== input.store) throw new HttpsError('permission-denied', 'La bicicleta pertenece a otra sucursal.');
+        if (item.hasWheelSizes && (!input.wheelSize || !item.wheelSizes?.some((wheel) => wheel.size === input.wheelSize))) throw new HttpsError('invalid-argument', 'Selecciona un aro disponible para esta bicicleta.');
+        if (!item.hasWheelSizes && input.wheelSize) throw new HttpsError('invalid-argument', 'Esta bicicleta no utiliza stock separado por aro.');
+        if (customerRef && (!customerSnap?.exists || !customerSnap.data())) throw new HttpsError('not-found', 'No se encontró el cliente seleccionado.');
+        const customer = customerSnap?.data() || {};
+        if (customerRef && role?.role === 'manager' && role.store !== 'all' && customer.store !== role.store) throw new HttpsError('permission-denied', 'El cliente pertenece a otra sucursal.');
+
+        const currentStock = stockFor(item, input.wheelSize);
+        if (currentStock < 1) throw new HttpsError('failed-precondition', 'No hay una bicicleta disponible en esa sucursal y aro.');
+        const inventory = inventorySnap.docs.map((snapshot) => ({ id: snapshot.id, ...snapshot.data() } as CatalogItem));
+        const combos = combosSnap.docs.map((snapshot) => ({ id: snapshot.id, ...snapshot.data() } as Combo));
+        const now = Timestamp.now();
+        const nowMs = now.toMillis();
+        // Pending or unmaterialized reservations are kept safe even though this session has no end time.
+        const pendingDemand = rentalsSnap.docs.reduce((sum, snapshot) => {
+            const data = snapshot.data();
+            if (!isFreeTimeRequestPending(data, nowMs)) return sum;
+            const rental = normalizeLegacyRental(snapshot);
+            if (!rental) return sum;
+            return sum + rentalDemands(rental, inventory, combos)
+                .filter((demand) => demand.itemId === input.itemId && (demand.wheelSize || '') === (input.wheelSize || ''))
+                .reduce((quantity, demand) => quantity + demand.quantity, 0);
+        }, 0);
+        if (currentStock - 1 < pendingDemand) throw new HttpsError('failed-precondition', 'No se puede iniciar: una reserva existente necesita esta bicicleta y no es posible garantizar su disponibilidad futura.');
+
+        const nextItem = alterStock(item, input.wheelSize, -1);
+        const year = new Intl.DateTimeFormat('en', { timeZone: 'America/La_Paz', year: 'numeric' }).format(now.toDate());
+        const localDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/La_Paz' }).format(now.toDate());
+        const localTime = new Intl.DateTimeFormat('en-GB', { timeZone: 'America/La_Paz', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(now.toDate());
+        const startedAt = now.toDate().toISOString();
+        const reservationCode = `TL-${year}-${rentalRef.id.slice(0, 10).toUpperCase()}`;
+        const availabilityGroupId = rentalRef.id;
+        const demand = { itemId: input.itemId, wheelSize: input.wheelSize, quantity: 1 };
+        const slotRef = db.doc(`rentals_busy_slots/${availabilityGroupId}_${resourceKey(demand)}`);
+        const actorLabel = cleanString(role?.name, 120) || uid;
+        const configuredHourlyRate = Number(item.pricePerHour);
+        const hourlyRateSnapshot = Number.isFinite(configuredHourlyRate) && configuredHourlyRate > 0 ? configuredHourlyRate : undefined;
+        const rental: DocumentData = {
+            reservationCode, availabilityGroupId, freeTimeMode: true, freeTimeState: 'active',
+            productType: 'single', productId: input.itemId, productName: item.name, productNameSnapshot: item.name,
+            quantity: 1, selectedWheelSize: input.wheelSize || '', date: localDate, pickupTime: localTime,
+            duration: 'Tiempo Libre', startTimestamp: nowMs, endTimestamp: Number.MAX_SAFE_INTEGER,
+            freeTimeStartedAt: startedAt, freeTimeStartedBy: uid, freeTimeStartedByLabel: actorLabel,
+            customerId: input.customerId || '', customerName: input.customerId ? cleanString(customer.name, 120) : 'Cliente pendiente',
+            customerPhone: input.customerId ? cleanString(customer.phone, 40) : '', customerCI: input.customerId ? cleanString(customer.ci, 40) : '',
+            customerPending: !input.customerId, status: 'delivered', deliveredAt: startedAt, stockDeducted: true,
+            freeTimePricing: {
+                status: hourlyRateSnapshot ? 'awaiting_return' : 'rate_unavailable', currency: 'BOB',
+                ...(hourlyRateSnapshot ? { hourlyRateSnapshot } : {}),
+                tariffSnapshot: {
+                    firstHour: item.price1Hour ?? null,
+                    halfDay: item.price4Hours ?? null,
+                    additionalHour: item.priceFrom5thHour ?? null,
+                    fullDay: item.price8Hours ?? null,
+                },
+                minimumSnapshot: freeTimeMinimum(item.category),
+            },
+            store: input.store, total: 0, amountPaid: 0, paymentStatus: 'unpaid', paymentMethod: 'Sin especificar',
+            notes: 'Tiempo Libre — sesión operativa sin liquidación monetaria en esta fase.',
+            createdAt: startedAt, createdDate: startedAt, updatedAt: startedAt, lastUpdatedBy: uid,
+            auditLog: [{ action: 'free_time_start', actorUid: uid, actorLabel, store: input.store, at: startedAt }],
+        };
+        tx.update(itemRef, item.hasWheelSizes ? { wheelSizes: nextItem.wheelSizes } : { stock: nextItem.stock });
+        tx.create(rentalRef, rental);
+        tx.create(requestRef, { sessionId: rentalRef.id, reservationCode, requestFingerprint, actorUid: uid, createdAt: now });
+        tx.create(auditRef, { sessionId: rentalRef.id, action: 'start', actorUid: uid, store: input.store, at: now, itemId: input.itemId, wheelSize: input.wheelSize || null });
+        tx.create(slotRef, { availabilityGroupId, resourceKey: resourceKey(demand), itemId: input.itemId, ...(input.wheelSize ? { wheelSize: input.wheelSize } : {}), quantity: 1, startMs: nowMs, endMs: Number.MAX_SAFE_INTEGER, openEnded: true, status: 'delivered' });
+        tx.set(lockRef, { revision: (Number(lockSnap.data()?.revision) || 0) + 1, updatedAt: now });
+        return { sessionId: rentalRef.id, reservationCode, duplicate: false };
+    });
+});
+
+/** Returns sanitized session data and enforces the actor's branch scope. */
+export const listFreeTimeRentals = onCall(callable(), async (request) => {
+    requireFreeTimeRuntime();
+    const { uid } = requireAuth(request);
+    const role = (await db.doc(`adminUsers/${uid}`).get()).data();
+    requireRentalAdmin(role);
+    const [activeSnapshot, historySnapshot] = await Promise.all([
+        db.collection('rentals').where('freeTimeState', '==', 'active').get(),
+        db.collection('rentals').where('freeTimeState', '==', 'closed').limit(250).get(),
+    ]);
+    const scoped = [...activeSnapshot.docs, ...historySnapshot.docs]
+        .filter((doc) => doc.get('freeTimeMode') === true)
+        .filter((doc) => role?.role === 'admin' || role?.store === 'all' || doc.get('store') === role?.store);
+    return { sessions: scoped.map(freeTimeRentalView).sort((a, b) => Number(b.startedAtMs || 0) - Number(a.startedAtMs || 0)), serverNowMs: Date.now() };
+});
+
+/** Operational close only. No tariff, charge, payment movement, or paid status is produced. */
+export const finishFreeTimeRental = onCall(callable(), async (request) => {
+    requireFreeTimeRuntime();
+    const { uid } = requireAuth(request);
+    if (!exactObject(request.data) || Object.keys(request.data).some((key) => !['sessionId', 'idempotencyKey', 'damaged', 'conditionNotes'].includes(key))) throw new HttpsError('invalid-argument', 'Los datos de devolución no son válidos.');
+    const sessionId = cleanString(request.data.sessionId, 150);
+    const idempotencyKey = cleanString(request.data.idempotencyKey, 100);
+    const damaged = request.data.damaged === true;
+    const conditionNotes = cleanString(request.data.conditionNotes, 500);
+    if (!sessionId || sessionId.includes('/') || !/^[A-Za-z0-9_-]{16,100}$/.test(idempotencyKey)
+        || (request.data.damaged !== undefined && typeof request.data.damaged !== 'boolean')) throw new HttpsError('invalid-argument', 'Selecciona una sesión e identificador de devolución válidos.');
+    const roleRef = db.doc(`adminUsers/${uid}`);
+    const rentalRef = db.doc(`rentals/${sessionId}`);
+    const requestRef = db.doc(`_freeTimeRequests/${digest(`${uid}:${idempotencyKey}`)}`);
+    const requestFingerprint = digest(JSON.stringify({ sessionId, damaged, conditionNotes }));
+
+    return db.runTransaction(async (tx) => {
+        const [roleSnap, rentalSnap, requestSnap] = await Promise.all([tx.get(roleRef), tx.get(rentalRef), tx.get(requestRef)]);
+        const role = roleSnap.data();
+        requireRentalAdmin(role);
+        if (!rentalSnap.exists || rentalSnap.get('freeTimeMode') !== true) throw new HttpsError('not-found', 'No se encontró la sesión Tiempo Libre.');
+        const rental = rentalSnap.data()!;
+        if (role?.role === 'manager' && role.store !== 'all' && rental.store !== role.store) throw new HttpsError('permission-denied', 'La sesión pertenece a otra sucursal.');
+        if (requestSnap.exists) {
+            if (requestSnap.get('requestFingerprint') !== requestFingerprint) throw new HttpsError('already-exists', 'La clave de devolución ya se usó con otra operación.');
+            return {
+                duplicate: true,
+                elapsedMilliseconds: Number(requestSnap.get('elapsedMilliseconds')) || 0,
+                pricing: requestSnap.get('pricing') || null,
+            };
+        }
+        if (rental.freeTimeState !== 'active' || !['delivered', 'Entregado'].includes(String(rental.status))) {
+            if (rental.freeTimeState === 'closed') throw new HttpsError('already-exists', 'Esta sesión ya fue finalizada. No se repuso stock otra vez.');
+            throw new HttpsError('failed-precondition', 'La sesión ya no está activa.');
+        }
+        const itemId = cleanString(rental.productId, 150);
+        const wheelSize = cleanString(rental.selectedWheelSize, 20);
+        const itemRef = db.doc(`inventory/${itemId}`);
+        const lockRef = db.doc(`_availabilityLocks/${resourceKey({ itemId, wheelSize: wheelSize || undefined, quantity: 1 })}`);
+        const demand = { itemId, wheelSize: wheelSize || undefined, quantity: 1 };
+        const slotRef = db.doc(`rentals_busy_slots/${sessionId}_${resourceKey(demand)}`);
+        const eventRef = db.doc(`freeTimeEvents/finish_${sessionId}`);
+        const [itemSnap, lockSnap, slotSnap] = await Promise.all([tx.get(itemRef), tx.get(lockRef), tx.get(slotRef)]);
+        if (!itemSnap.exists) throw new HttpsError('failed-precondition', 'No se encontró el artículo vinculado a esta sesión.');
+        const item = { id: itemSnap.id, ...itemSnap.data() } as CatalogItem;
+        if (role?.role === 'manager' && role.store !== 'all' && item.store && item.store !== role.store) throw new HttpsError('permission-denied', 'La bicicleta pertenece a otra sucursal.');
+        const startedAtMs = Number(rental.startTimestamp);
+        if (!Number.isSafeInteger(startedAtMs)) throw new HttpsError('failed-precondition', 'La hora de inicio no tiene una referencia verificable.');
+        const closedAt = Timestamp.now();
+        const elapsedMilliseconds = elapsedFreeTimeMilliseconds(startedAtMs, closedAt.toMillis());
+        const elapsedSeconds = Math.floor(elapsedMilliseconds / 1000);
+        const pricing = rental.freeTimePricing && typeof rental.freeTimePricing === 'object'
+            ? rental.freeTimePricing as DocumentData
+            : {};
+        const hourlyRateSnapshot = Number(pricing.hourlyRateSnapshot);
+        const quote = Number.isFinite(hourlyRateSnapshot) && hourlyRateSnapshot > 0
+            ? calculateFreeTimeProration(hourlyRateSnapshot, startedAtMs, closedAt.toMillis())
+            : null;
+        const finalPricing: DocumentData = quote
+            ? {
+                status: 'awaiting_commercial_policy', currency: 'BOB', hourlyRateSnapshot,
+                elapsedMilliseconds: quote.elapsedMilliseconds, elapsedMinutes: quote.elapsedMinutes,
+                unroundedAmount: quote.unroundedAmount,
+            }
+            : { status: 'rate_unavailable', currency: 'BOB', elapsedMilliseconds, elapsedMinutes: elapsedMilliseconds / 60_000 };
+        let settledTotal: number | null = null;
+        if (pricing.tariffSnapshot && (pricing.minimumSnapshot === 'one_hour' || pricing.minimumSnapshot === 'actual_time')) {
+            finalPricing.tariffSnapshot = pricing.tariffSnapshot;
+            finalPricing.minimumSnapshot = pricing.minimumSnapshot;
+            const commercialQuote = quoteFreeTime(pricing.tariffSnapshot, elapsedMilliseconds, pricing.minimumSnapshot);
+            finalPricing.commercialQuote = commercialQuote;
+            if (commercialQuote.status === 'calculated') {
+                const divisor = BigInt(commercialQuote.centavoDenominator);
+                const cents = (BigInt(commercialQuote.centavoNumerator) + divisor / 2n) / divisor;
+                settledTotal = Number(cents) / 100;
+                finalPricing.status = commercialQuote.excessMilliseconds ? 'excess_review' : 'settled';
+            } else finalPricing.status = commercialQuote.status;
+        }
+        let nextItem: CatalogItem;
+        if (damaged) {
+            if (item.itemType !== 'bike') throw new HttpsError('failed-precondition', 'Solo las bicicletas pueden marcarse dañadas en esta operación.');
+            nextItem = structuredClone(item);
+            nextItem.maintenanceStock = (Number(nextItem.maintenanceStock) || 0) + 1;
+            if (nextItem.hasWheelSizes && nextItem.wheelSizes) {
+                const wheelIndex = nextItem.wheelSizes.findIndex((entry) => entry.size === wheelSize);
+                if (wheelIndex < 0) throw new HttpsError('failed-precondition', 'No se encontró el aro de la bicicleta para registrar el daño.');
+                nextItem.wheelSizes[wheelIndex].maintenanceStock = (Number(nextItem.wheelSizes[wheelIndex].maintenanceStock) || 0) + 1;
+            }
+        } else nextItem = alterStock(item, wheelSize || undefined, 1);
+        const closedAtIso = closedAt.toDate().toISOString();
+        const actorLabel = cleanString(role?.name, 120) || uid;
+        const auditLog = Array.isArray(rental.auditLog) ? rental.auditLog.slice(-49) : [];
+        const patch: DocumentData = {
+            status: 'returned', freeTimeState: 'closed', freeTimeClosedAt: closedAtIso,
+            freeTimeClosedAtMs: closedAt.toMillis(), freeTimeClosedBy: uid,
+            freeTimeElapsedMilliseconds: elapsedMilliseconds, freeTimeElapsedSeconds: elapsedSeconds,
+            freeTimeElapsedMinutes: elapsedMilliseconds / 60_000,
+            returnedAt: closedAtIso, returnedBy: uid, returnCondition: damaged ? 'damaged' : 'ok',
+            damagedOnReturn: damaged, damagedUnits: damaged ? 1 : 0, stockDeducted: false,
+            updatedAt: closedAtIso, lastUpdatedBy: uid,
+            ...(conditionNotes ? { returnConditionNotes: conditionNotes } : {}),
+            auditLog: [...auditLog, { action: 'free_time_finish', actorUid: uid, actorLabel, store: rental.store, at: closedAtIso, damaged, elapsedMilliseconds }],
+            freeTimePricing: finalPricing,
+            freeTimePayment: {
+                status: 'unpaid', confirmedAmount: 0,
+                ...(quote ? { unroundedBalanceQuote: quote.unroundedAmount } : {}),
+            },
+            total: settledTotal ?? 0, amountPaid: 0, paymentStatus: 'unpaid',
+        };
+        tx.update(itemRef, item.hasWheelSizes
+            ? { wheelSizes: nextItem.wheelSizes, ...(damaged ? { maintenanceStock: nextItem.maintenanceStock } : {}) }
+            : damaged ? { maintenanceStock: nextItem.maintenanceStock } : { stock: nextItem.stock });
+        tx.update(rentalRef, patch);
+        if (slotSnap.exists) tx.update(slotRef, { endMs: closedAt.toMillis(), openEnded: false, status: 'returned', updatedAt: closedAt });
+        tx.set(lockRef, { revision: (Number(lockSnap.data()?.revision) || 0) + 1, updatedAt: closedAt });
+        tx.create(eventRef, { sessionId, action: 'finish', actorUid: uid, store: rental.store, at: closedAt, itemId, wheelSize: wheelSize || null, damaged, elapsedMilliseconds, elapsedSeconds, conditionNotes, pricing: finalPricing });
+        tx.create(requestRef, { sessionId, requestFingerprint, actorUid: uid, createdAt: closedAt, elapsedMilliseconds, pricing: finalPricing });
+        return { duplicate: false, elapsedMilliseconds, elapsedSeconds, closedAt: closedAtIso, pricing: finalPricing };
+    });
+});
+
 export const adminRentalAction = onCall(callable(), async (request) => {
     const { uid } = requireAuth(request);
     if (!exactObject(request.data)) throw new HttpsError('invalid-argument', 'Solicitud inválida.');
@@ -1610,6 +1922,7 @@ export const adminRentalAction = onCall(callable(), async (request) => {
         const refs = rentalSnaps.filter((snap) => snap.exists).map((snap) => snap.ref);
         const rows: DocumentData[] = rentalSnaps.filter((snap) => snap.exists).map((snap) => ({ ...snap.data()!, id: snap.id } as DocumentData));
         if (!rows.length || rows.length !== ids.length) throw new HttpsError('not-found', 'No se encontró el grupo completo.');
+        if (rows.some((row) => row.freeTimeMode === true)) throw new HttpsError('failed-precondition', 'Las sesiones Tiempo Libre solo se finalizan desde su operación de devolución segura.');
         if (new Set(rows.map((row) => String(row.reservationCode || row.id))).size !== 1) throw new HttpsError('failed-precondition', 'La operación debe incluir líneas de un solo pedido.');
         if (role?.role === 'manager' && role.store !== 'all' && rows.some((row) => !row.store || row.store !== role.store)) {
             throw new HttpsError('permission-denied', 'El alquiler pertenece a otra tienda.');
@@ -1783,6 +2096,14 @@ export const recordRentalPaymentMovement = onCall(callable(), async (request) =>
         }
         const rows = rentalSnaps.filter((snap) => snap.exists).map((snap) => ({ ...snap.data()!, id: snap.id } as DocumentData));
         if (!rows.length || rows.length !== rentalIds.length) throw new HttpsError('not-found', 'No se encontró el grupo completo.');
+        if (rows.some((row) => row.freeTimeMode === true)) {
+            requireFreeTimeRuntime();
+            if (rows.length !== 1 || rows[0].freeTimeState !== 'closed'
+                || !['settled', 'excess_review'].includes(rows[0].freeTimePricing?.status)
+                || !(Number(rows[0].total) > 0)) {
+                throw new HttpsError('failed-precondition', 'Tiempo Libre no admite movimientos monetarios sin una liquidación válida.');
+            }
+        }
         const codes = new Set(rows.map((row) => String(row.reservationCode || row.id)));
         if (codes.size !== 1) throw new HttpsError('failed-precondition', 'El movimiento debe corresponder a un solo pedido.');
         const reservationCode = [...codes][0];
@@ -1831,7 +2152,7 @@ export const recordRentalPaymentMovement = onCall(callable(), async (request) =>
             availableForReference = Math.round((Number(reference.amount) - (correctionByReference.get(referenceMovementId) || 0) - (refundByReference.get(referenceMovementId) || 0)) * 100) / 100;
             if (amount > availableForReference) throw new HttpsError('failed-precondition', `El importe supera el disponible para esta referencia (Bs. ${Math.max(0, availableForReference)}).`);
         }
-        if (type === 'receipt' && amount > Math.max(0, groupTotal - grossReceipts)) {
+        if (type === 'receipt' && Math.round(amount * 100) > Math.max(0, Math.round(groupTotal * 100) - Math.round(grossReceipts * 100))) {
             throw new HttpsError('failed-precondition', 'El abono supera el saldo contractual pendiente.');
         }
         const now = new Date().toISOString();
@@ -1856,13 +2177,22 @@ export const recordRentalPaymentMovement = onCall(callable(), async (request) =>
         // nor reverse a payment status. Only a newly received receipt can move
         // a group to paid; refunds/corrections preserve the current projection.
         const currentPaymentStatus = String(rows.find((row) => row.paymentStatus)?.paymentStatus || 'unpaid');
+        const excessPending = rows.some(row => row.freeTimeMode === true && row.freeTimePricing?.status === 'excess_review');
         const paymentStatus = type === 'receipt'
-            ? afterAmounts.receipts + 0.001 >= groupTotal ? 'paid' : currentPaymentStatus
+            ? !excessPending && afterAmounts.receipts + 0.001 >= groupTotal ? 'paid' : currentPaymentStatus
             : currentPaymentStatus;
         legacyToCreate.forEach(({ ref, data }) => tx.create(ref, data));
         tx.create(movementRef, movement);
         rows.forEach((row, index) => tx.update(rentalSnaps[index].ref, {
             updatedAt: now, lastUpdatedBy: uid, paymentStatus,
+            ...(row.freeTimeMode === true ? {
+                amountPaid: Math.round(afterAmounts.receipts * 100) / 100,
+                freeTimePayment: {
+                    status: paymentStatus === 'paid' ? 'paid' : afterAmounts.receipts > 0 ? 'partial' : 'unpaid',
+                    confirmedAmount: Math.round(afterAmounts.receipts * 100) / 100,
+                    pendingAmount: Math.max(0, Math.round((groupTotal - afterAmounts.receipts) * 100) / 100),
+                },
+            } : {}),
             ...appendRentalAudit(row, uid, `payment_${type}`, beforeAmounts, afterAmounts, now),
         }));
         return { movementId: movementRef.id, duplicate: false };
@@ -1898,6 +2228,7 @@ export const updateRentalGroup = onCall(callable(), async (request) => {
         if (!groupDocs.length && requestedIds.length) groupDocs = await Promise.all(requestedIds.map((id) => tx.get(db.doc(`rentals/${id}`)))).then((snaps) => snaps.filter((snap) => snap.exists));
         const oldRows: DocumentData[] = groupDocs.map((snap) => ({ ...snap.data(), id: snap.id } as DocumentData));
         if (!oldRows.length) throw new HttpsError('not-found', 'No se encontró el grupo que deseas editar.');
+        if (oldRows.some((row) => row.freeTimeMode === true)) throw new HttpsError('failed-precondition', 'Una sesión Tiempo Libre no se puede editar como reserva de duración fija.');
         const groupCode = String(oldRows[0].reservationCode || oldRows[0].id);
         if (oldRows.some((row) => String(row.reservationCode || row.id) !== groupCode)) throw new HttpsError('failed-precondition', 'Las líneas no pertenecen al mismo pedido.');
         if (role.role === 'manager' && role.store !== 'all' && oldRows.some((row) => !row.store || row.store !== role.store)) throw new HttpsError('permission-denied', 'No se puede validar la tienda de una línea histórica de este grupo.');

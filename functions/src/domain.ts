@@ -94,6 +94,7 @@ export interface RentalLike {
     duration: string | number;
     startTimestamp?: number;
     endTimestamp?: number;
+    freeTimeMode?: boolean;
 }
 
 export interface RentalWindow {

@@ -225,7 +225,9 @@ export function getAvailableStockForInterval(params: {
             if (excludeRentalId && r.id === excludeRentalId) continue;
             if (excludeReservationCode && r.reservationCode === excludeReservationCode) continue;
 
-            const rWindow = computeRentalWindow(r.date, r.pickupTime || '09:00', r.duration || '1 Hora');
+            const rWindow = r.freeTimeMode === true && typeof r.startTimestamp === 'number' && typeof r.endTimestamp === 'number'
+                ? { startMs: r.startTimestamp, endMs: r.endTimestamp }
+                : computeRentalWindow(r.date, r.pickupTime || '09:00', r.duration || '1 Hora');
             const overlaps = doWindowsOverlap(reqWindow, rWindow);
 
             // Also treat overdue unreturned rentals as blocking if the request is for today

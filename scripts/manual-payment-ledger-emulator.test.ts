@@ -6,9 +6,13 @@ import { connectFirestoreEmulator, getFirestore } from 'firebase/firestore';
 import { connectFunctionsEmulator, getFunctions, httpsCallable } from 'firebase/functions';
 
 const projectId = 'demo-briz-manual-payments';
+const emulatorHost = process.env.BRIZ_EMULATOR_HOST || '127.0.0.1';
+const authPort = Number(process.env.BRIZ_AUTH_EMULATOR_PORT || 9099);
+const firestorePort = Number(process.env.BRIZ_FIRESTORE_EMULATOR_PORT || 8080);
+const functionsPort = Number(process.env.BRIZ_FUNCTIONS_EMULATOR_PORT || 5001);
 process.env.GCLOUD_PROJECT = projectId;
-process.env.FIREBASE_AUTH_EMULATOR_HOST = '127.0.0.1:9099';
-process.env.FIRESTORE_EMULATOR_HOST = '127.0.0.1:8080';
+process.env.FIREBASE_AUTH_EMULATOR_HOST = `${emulatorHost}:${authPort}`;
+process.env.FIRESTORE_EMULATOR_HOST = `${emulatorHost}:${firestorePort}`;
 const require = createRequire(new URL('../functions/package.json', import.meta.url));
 const { initializeApp: initializeAdminApp } = require('firebase-admin/app');
 const { getAuth: getAdminAuth } = require('firebase-admin/auth');
@@ -19,11 +23,11 @@ const adminDb = getAdminFirestore(adminApp);
 const firebaseConfig = { apiKey: 'demo-key', authDomain: `${projectId}.firebaseapp.com`, projectId, appId: 'manual-payment-test', storageBucket: `${projectId}.appspot.com` };
 const app = initializeApp(firebaseConfig, `manual-payment-client-${Date.now()}`);
 const auth = getAuth(app);
-connectAuthEmulator(auth, 'http://127.0.0.1:9099', { disableWarnings: true });
+connectAuthEmulator(auth, `http://${emulatorHost}:${authPort}`, { disableWarnings: true });
 const db = getFirestore(app);
-connectFirestoreEmulator(db, '127.0.0.1', 8080);
+connectFirestoreEmulator(db, emulatorHost, firestorePort);
 const functions = getFunctions(app);
-connectFunctionsEmulator(functions, '127.0.0.1', 5001);
+connectFunctionsEmulator(functions, emulatorHost, functionsPort);
 
 async function call<T>(name: string, payload: unknown): Promise<T> {
   return (await httpsCallable<unknown, T>(functions, name)(payload)).data;
